@@ -21,10 +21,12 @@ import database.mcp_token_cache as mcp_token_cache_db
 from utils.executors import ExecutorSaturatedError, cimd_executor, critical_executor, db_executor, run_blocking
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_server.metadata import MCP_AUTHORIZATION_SERVER_URL, SCOPE_PERMISSION_TEXT
+from utils.metrics import OMI_MCP_OAUTH_TOKEN_TOTAL
 from utils.other.endpoints import check_rate_limit_inline
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+TOKEN_RESPONSE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
 
 class McpSseAuthMethodResponse(BaseModel):
@@ -69,17 +71,20 @@ class McpTokenResponse(BaseModel):
 
 
 def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": error, "error_description": description})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": error, "error_description": description},
+        headers=TOKEN_RESPONSE_HEADERS,
+    )
 
 
 def _oauth_temporarily_unavailable() -> JSONResponse:
-    # RFC 6749 §5.2 temporarily_unavailable: the Redis revocation store is
-    # fail-closed, so a refresh whose replay-revoke cannot be written is a
-    # retryable 503 — never a silent skip and never a 401.
+    # Firestore rotation and the fail-closed Redis revocation store must
+    # surface transient outages as retryable 503s.
     return JSONResponse(
         status_code=503,
         content={"error": "temporarily_unavailable", "error_description": "Token store is unavailable"},
-        headers={"Retry-After": "30"},
+        headers={**TOKEN_RESPONSE_HEADERS, "Retry-After": "30"},
     )
 
 
@@ -89,7 +94,7 @@ def _oauth_cimd_saturated() -> JSONResponse:
     return JSONResponse(
         status_code=503,
         content={"error": "temporarily_unavailable", "error_description": "Client metadata lookups are busy"},
-        headers={"Retry-After": "30"},
+        headers={**TOKEN_RESPONSE_HEADERS, "Retry-After": "30"},
     )
 
 
@@ -366,14 +371,24 @@ async def mcp_authorize_consent(
 
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
+    metric_grant_type = "unknown"
+
+    def record_outcome(outcome: str) -> None:
+        OMI_MCP_OAUTH_TOKEN_TOTAL.labels(grant_type=metric_grant_type, outcome=outcome).inc()
+
+    def token_error(error: str, description: str, status_code: int = 400, *, outcome: str = "invalid"):
+        record_outcome(outcome)
+        return _oauth_error(error, description, status_code)
+
     try:
         request_data = await get_token_request_data(request)
     except Exception:
-        return _oauth_error("invalid_request", "Invalid request body")
+        return token_error("invalid_request", "Invalid request body")
 
     client_secret = request_data.get("client_secret")
     client_id = request_data.get("client_id")
     grant_type = request_data.get("grant_type")
+    metric_grant_type = grant_type if grant_type in ("authorization_code", "refresh_token") else "unknown"
     code = request_data.get("code")
     redirect_uri = request_data.get("redirect_uri")
     # RFC 8707: at the token endpoint an omitted resource indicator keeps the audience
@@ -388,49 +403,65 @@ async def mcp_token(request: Request):
     try:
         client = await run_blocking(_client_lookup_executor(client_id), mcp_oauth_db.get_client, client_id or "")
     except (ExecutorSaturatedError, mcp_client_metadata.McpCimdUnavailable):
+        record_outcome("unavailable")
         return _oauth_cimd_saturated()
     if (
         not client
         or client.get("disabled_at")
         or not await run_blocking(db_executor, mcp_oauth_db.verify_client_auth, client, client_secret)
     ):
-        return _oauth_error("invalid_client", "Invalid client", status_code=401)
+        return token_error("invalid_client", "Invalid client", status_code=401)
 
     if grant_type == "authorization_code":
         if not code or not redirect_uri or not code_verifier:
-            return _oauth_error("invalid_request", "code, redirect_uri, and code_verifier are required")
+            return token_error("invalid_request", "code, redirect_uri, and code_verifier are required")
         if resource is not None and not await run_blocking(
             db_executor, mcp_oauth_db.validate_resource, client, resource
         ):
-            return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor,
-            mcp_oauth_db.exchange_authorization_code_for_tokens,
-            code,
-            cast(str, client_id),
-            redirect_uri,
-            resource,
-            code_verifier,
-        )
+            return token_error("invalid_target", "Invalid resource")
+        try:
+            token_pair = await run_blocking(
+                db_executor,
+                mcp_oauth_db.exchange_authorization_code_for_tokens,
+                code,
+                cast(str, client_id),
+                redirect_uri,
+                resource,
+                code_verifier,
+            )
+        except mcp_token_cache_db.McpTokenStoreUnavailable:
+            record_outcome("unavailable")
+            return _oauth_temporarily_unavailable()
         if not token_pair:
-            return _oauth_error("invalid_grant", "Invalid authorization code")
-        return token_pair
+            return token_error("invalid_grant", "Invalid authorization code")
+        record_outcome("issued")
+        return JSONResponse(content=token_pair, headers=TOKEN_RESPONSE_HEADERS)
 
     if grant_type == "refresh_token":
         if not refresh_token:
-            return _oauth_error("invalid_request", "refresh_token is required")
+            return token_error("invalid_request", "refresh_token is required")
         if resource is not None and not await run_blocking(
             db_executor, mcp_oauth_db.validate_resource, client, resource
         ):
-            return _oauth_error("invalid_target", "Invalid resource")
+            return token_error("invalid_target", "Invalid resource")
+        outcomes: List[str] = []
         try:
             token_pair = await run_blocking(
-                db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
+                db_executor,
+                mcp_oauth_db.rotate_refresh_token,
+                refresh_token,
+                cast(str, client_id),
+                resource,
+                scope,
+                on_outcome=outcomes.append,
             )
-        except mcp_token_cache_db.McpTokenStoreUnavailable:
+        except (mcp_token_cache_db.McpTokenStoreUnavailable, mcp_oauth_db.RefreshRotationUnavailable):
+            record_outcome("unavailable")
             return _oauth_temporarily_unavailable()
+        outcome = outcomes[0] if outcomes else ("rotated" if token_pair else "invalid")
         if not token_pair:
-            return _oauth_error("invalid_grant", "Invalid refresh token")
-        return token_pair
+            return token_error("invalid_grant", "Invalid refresh token", outcome=outcome)
+        record_outcome(outcome)
+        return JSONResponse(content=token_pair, headers=TOKEN_RESPONSE_HEADERS)
 
-    return _oauth_error("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
+    return token_error("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")

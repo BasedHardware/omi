@@ -73,8 +73,8 @@ def _cleanup(saved):
     harness.cleanup(saved)
 
 
-def test_v2_messages_records_quota_question_after_human_message_persisted():
-    client, module, saved = _make_chat_client()
+def test_v2_messages_records_quota_question_after_human_message_persisted(chat_environment):
+    client, module, saved = chat_environment
     try:
         with patch.object(module.uuid, 'uuid4', side_effect=['human-msg-id', 'ai-msg-id']):
             response = client.post(
@@ -99,8 +99,8 @@ def test_v2_messages_records_quota_question_after_human_message_persisted():
         _cleanup(saved)
 
 
-def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
-    client, module, saved = _make_chat_client()
+def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question(chat_environment):
+    client, module, saved = chat_environment
     try:
         quota_detail = {
             'error': 'quota_exceeded',
@@ -124,11 +124,11 @@ def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
         _cleanup(saved)
 
 
-def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
+def test_v2_messages_fails_closed_when_quota_accounting_write_fails(chat_environment):
     """A Firestore/outage failure recording the Free-plan counter must not start the LLM,
     must not persist the human turn (retry would otherwise orphan copies), and must emit an
     SSE ``done:`` frame mobile can render — not a bare HTTP 503."""
-    client, module, saved = _make_chat_client()
+    client, module, saved = chat_environment
     try:
         stream_calls = {'n': 0}
 
@@ -137,7 +137,7 @@ def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
             kwargs['callback_data']['answer'] = 'should not run'
             yield ''
 
-        module.execute_chat_stream = tracking_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = tracking_stream
         module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
 
         response = client.post(
@@ -156,8 +156,8 @@ def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
         _cleanup(saved)
 
 
-def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded():
-    client, module, saved = _make_chat_client()
+def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded(chat_environment):
+    client, module, saved = chat_environment
     try:
         response = client.post(
             '/v2/messages',
@@ -178,8 +178,8 @@ def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded():
         _cleanup(saved)
 
 
-def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure():
-    client, module, saved = _make_chat_client()
+def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure(chat_environment):
+    client, module, saved = chat_environment
     try:
 
         async def in_band_failure(*_args, **kwargs):
@@ -188,7 +188,7 @@ def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure():
             yield 'error: Unable to complete the response. Please try again.'
             yield None
 
-        module.execute_chat_stream = in_band_failure
+        sys.modules['utils.chat_turn'].execute_chat_stream = in_band_failure
         response = client.post(
             '/v2/messages',
             json={'text': 'hello', 'file_ids': []},
@@ -205,15 +205,15 @@ def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure():
         _cleanup(saved)
 
 
-def test_v2_messages_records_failure_when_the_production_stream_errors():
-    client, module, saved = _make_chat_client()
+def test_v2_messages_records_failure_when_the_production_stream_errors(chat_environment):
+    client, module, saved = chat_environment
     try:
 
         async def failing_stream(*_args, **_kwargs):
             raise RuntimeError('provider unavailable')
             yield ''
 
-        module.execute_chat_stream = failing_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = failing_stream
 
         with pytest.raises(RuntimeError, match='provider unavailable'):
             client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
@@ -224,8 +224,8 @@ def test_v2_messages_records_failure_when_the_production_stream_errors():
         _cleanup(saved)
 
 
-def test_v2_voice_messages_records_quota_question_from_visible_message_chunk():
-    client, module, saved = _make_chat_client()
+def test_v2_voice_messages_records_quota_question_from_visible_message_chunk(chat_environment):
+    client, module, saved = chat_environment
     try:
         human_message = module.Message(
             id='voice-human-msg-id',
@@ -263,8 +263,8 @@ def test_v2_voice_messages_records_quota_question_from_visible_message_chunk():
         _cleanup(saved)
 
 
-def test_v2_voice_messages_without_visible_message_does_not_record_quota_question():
-    client, module, saved = _make_chat_client()
+def test_v2_voice_messages_without_visible_message_does_not_record_quota_question(chat_environment):
+    client, module, saved = chat_environment
     try:
 
         async def fake_voice_stream(*args, **kwargs):
@@ -285,9 +285,45 @@ def test_v2_voice_messages_without_visible_message_does_not_record_quota_questio
         _cleanup(saved)
 
 
-def test_voice_message_multipart_decode_failure_is_typed_and_cleans_staged_input():
+def test_v2_voice_messages_silence_emits_typed_no_speech_frame(chat_environment):
+    client, module, saved = chat_environment
+    try:
+        attempt = MagicMock(finished=False)
+
+        def finish(outcome):
+            attempt.finished = True
+            attempt.outcome = outcome
+
+        attempt.finish.side_effect = finish
+
+        async def silent_voice_stream(*args, **kwargs):
+            if False:
+                yield ''
+
+        with patch.object(module, 'TranscriptionAttempt', return_value=attempt):
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/upload.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/decoded.wav']):
+                    with patch.object(module, 'process_voice_message_segment_stream', side_effect=silent_voice_stream):
+                        response = client.post(
+                            '/v2/voice-messages',
+                            files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                            headers={'X-App-Platform': 'ios'},
+                        )
+
+        assert response.status_code == 200
+        assert response.text == (
+            'error: {"error":"no_speech","outcome":"expected_silence",'
+            '"provider":"parakeet","retryable":true,"message":"No speech was detected."}\n\n'
+        )
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        assert attempt.outcome == module.TranscriptionOutcome.EXPECTED_SILENCE
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_message_multipart_decode_failure_is_typed_and_cleans_staged_input(chat_environment):
     """Corrupt upload decoding must not bypass the semantic error boundary."""
-    client, module, saved = _make_chat_client()
+    client, module, saved = chat_environment
     try:
         cleanup = MagicMock()
         with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test-uid_input.opus']):
@@ -312,9 +348,9 @@ def test_voice_message_multipart_decode_failure_is_typed_and_cleans_staged_input
         _cleanup(saved)
 
 
-def test_voice_message_sse_decode_failure_is_typed_and_cleans_staged_input():
+def test_voice_message_sse_decode_failure_is_typed_and_cleans_staged_input(chat_environment):
     """The chat SSE upload path shares the same safe preprocessing boundary."""
-    client, module, saved = _make_chat_client()
+    client, module, saved = chat_environment
     try:
         cleanup = MagicMock()
         with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test-uid_stream.opus']):
@@ -332,3 +368,113 @@ def test_voice_message_sse_decode_failure_is_typed_and_cleans_staged_input():
         cleanup.assert_called_once_with(['/tmp/test-uid_stream.opus'], 'test-uid')
     finally:
         _cleanup(saved)
+
+
+_QUOTA_DETAIL = {
+    'error': 'quota_exceeded',
+    'plan': 'Free',
+    'unit': 'questions',
+    'used': 30,
+    'limit': 30,
+}
+
+_QUOTA_ERROR_FRAME = 'error: {"error":"quota_exceeded","message":"quota_exceeded"}'
+_ACCOUNTING_ERROR_FRAME = 'error: {"error":"server_error","message":"quota_accounting_unavailable"}'
+_PROTOCOL_HEADER = {'X-Omi-Chat-Failure-Protocol': '1'}
+
+
+def _post_message(client, **headers):
+    return client.post(
+        '/v2/messages',
+        json={'text': 'hello', 'file_ids': []},
+        headers={'X-App-Platform': 'ios', **headers},
+    )
+
+
+def test_quota_exceeded_emits_typed_error_frame_before_done_for_protocol_clients(chat_environment):
+    client, module, saved = chat_environment
+    try:
+        module.enforce_chat_quota.side_effect = module.HTTPException(status_code=402, detail=dict(_QUOTA_DETAIL))
+        sys.modules['utils.chat_turn'].execute_chat_stream = MagicMock()
+
+        response = _post_message(client, **_PROTOCOL_HEADER)
+
+        assert response.status_code == 200
+        assert _QUOTA_ERROR_FRAME in response.text
+        assert 'done: ' in response.text
+        assert response.text.index(_QUOTA_ERROR_FRAME) < response.text.index('done: ')
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        sys.modules['utils.chat_turn'].execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_exceeded_keeps_legacy_done_only_contract_without_protocol(chat_environment):
+    client, module, saved = chat_environment
+    try:
+        module.enforce_chat_quota.side_effect = module.HTTPException(status_code=402, detail=dict(_QUOTA_DETAIL))
+        sys.modules['utils.chat_turn'].execute_chat_stream = MagicMock()
+
+        for headers in ({}, {'X-Omi-Chat-Failure-Protocol': '2'}):
+            response = _post_message(client, **headers)
+
+            assert response.status_code == 200, headers
+            assert 'error: ' not in response.text
+            assert response.text.count('done: ') == 1
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        sys.modules['utils.chat_turn'].execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_accounting_unavailable_emits_typed_error_frame_before_done_for_protocol_clients(chat_environment):
+    client, module, saved = chat_environment
+    try:
+        stream_calls = {'n': 0}
+
+        async def tracking_stream(*args, **kwargs):
+            stream_calls['n'] += 1
+            kwargs['callback_data']['answer'] = 'should not run'
+            yield ''
+
+        sys.modules['utils.chat_turn'].execute_chat_stream = tracking_stream
+        module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
+
+        response = _post_message(client, **_PROTOCOL_HEADER)
+
+        assert response.status_code == 200
+        assert _ACCOUNTING_ERROR_FRAME in response.text
+        assert 'done: ' in response.text
+        assert response.text.index(_ACCOUNTING_ERROR_FRAME) < response.text.index('done: ')
+        assert stream_calls['n'] == 0
+        module.chat_db.add_message.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_accounting_unavailable_keeps_legacy_done_only_contract_without_protocol(chat_environment):
+    client, module, saved = chat_environment
+    try:
+        module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
+        sys.modules['utils.chat_turn'].execute_chat_stream = MagicMock()
+
+        for headers in ({}, {'X-Omi-Chat-Failure-Protocol': '2'}):
+            response = _post_message(client, **headers)
+
+            assert response.status_code == 200, headers
+            assert 'error: ' not in response.text
+            assert response.text.count('done: ') == 1
+        module.chat_db.add_message.assert_not_called()
+        sys.modules['utils.chat_turn'].execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+@pytest.fixture
+def chat_environment():
+    # Import and wire the isolated app in setup; the call-phase budget measures the request.
+    environment = _make_chat_client()
+    try:
+        yield environment
+    finally:
+        _cleanup(environment[-1])

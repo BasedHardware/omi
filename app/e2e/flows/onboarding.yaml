@@ -1,5 +1,5 @@
 # E2E Flow: Onboarding — full new-user journey
-# Tests: Auth → Name → Language → Found Omi → Permissions → User Review → Speech Profile → Knowledge Graph → Complete
+# Tests: Auth → Name → Language → Found Omi → Permissions → User Review → Speech Profile → Complete (Knowledge Graph step hidden since Oct 2026)
 # Note: Steps 6-7 (Welcome/FindDevices) are skipped by the app. UserReview jumps to SpeechProfile.
 
 version: 2
@@ -68,11 +68,11 @@ steps:
     do: "Verify speech profile page. Tap Skip to skip audio capture."
     evidence:
       - screenshot: step-S6.webp
-    note: "Can skip without recording. Skip goes to Knowledge Graph."
+    note: "Can skip without recording. Skip goes straight to Complete (the Knowledge Graph step is hidden)."
 
   - id: S7
-    name: Knowledge graph preview
-    do: "Verify knowledge graph / memory graph preview page. Tap Continue or Skip."
+    name: Knowledge graph preview (HIDDEN since Oct 2026 — kKnowledgeGraphStepEnabled=false in wrapper.dart; the flow goes Speech Profile → Complete)
+    do: "Skipped while the step is hidden; nothing to verify."
     evidence:
       - screenshot: step-S7.webp
 

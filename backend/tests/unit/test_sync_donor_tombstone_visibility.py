@@ -20,6 +20,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_capture_continuity import capture
 from tests.unit.test_sync_cross_job_assignment import intake
 from utils.other.list_budget import ListReadBudget
+from routers import conversations as routes
 
 
 class _ListingDoc:
@@ -308,6 +309,24 @@ def test_donor_id_still_redirects_late_sync_chunks() -> None:
     assert result['id'] == survivor_id
     assert not created
     assert store.rows[('users', 'u', 'conversations', donor_id)]['sync_merged_into'] == survivor_id
+
+
+def test_detail_redirect_follows_only_live_survivor(monkeypatch: pytest.MonkeyPatch) -> None:
+    from database import conversations as conversations_db
+
+    store, survivor_id, donor_id = _merge_pair()
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        lambda uid, cid, **_: _rows_from_store(store).get(cid) if uid == 'u' else None,
+    )
+    result = routes._get_valid_conversation_by_id('u', donor_id, follow_sync_bridge=True)
+    assert result['id'] == survivor_id
+    assert conversations_db.resolve_sync_conversation_redirect('other', donor_id) is None
+
+    store.rows[('users', 'u', 'conversations', survivor_id)]['deleted'] = True
+    assert conversations_db.resolve_sync_conversation_redirect('u', donor_id) is None
 
 
 def test_budgeted_include_discarded_page_does_not_count_donor_against_limit(

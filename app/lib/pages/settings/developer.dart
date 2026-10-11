@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -26,8 +27,8 @@ import 'package:omi/utils/other/temp.dart';
 /// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
 /// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
 ///
-/// Every switch applies when flipped. The webhook URL fields are the one editor on the page: they
-/// wait for Save, and leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
+/// Every switch applies when flipped. Webhook URLs and the custom backend URL wait for Save, and
+/// leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
 class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -66,7 +67,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
-  /// Asks before throwing away unsaved webhook edits. Resolves whether the page may close.
+  /// Asks before throwing away unsaved webhook or backend URL edits. Resolves whether the page may close.
   Future<bool> _confirmDiscard(DeveloperModeProvider provider) async {
     final l10n = context.l10n;
     final discard = await showOmiConfirm(
@@ -205,6 +206,22 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  Widget _buildCustomBackendUrl(DeveloperModeProvider provider) {
+    return OmiSettingsGroup(
+      header: context.l10n.customBackendUrlTitle,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: _DeveloperTextField(
+            controller: provider.customBackendUrl,
+            label: context.l10n.backendUrlLabel,
+            hint: 'https://omi.example.com/',
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildWebhooks(DeveloperModeProvider provider) {
     final l10n = context.l10n;
     return Column(
@@ -280,13 +297,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           subtitle: l10n.detailedDiagnosticMessages,
           value: provider.transcriptionDiagnosticEnabled,
           onChanged: provider.onTranscriptionDiagnosticChanged,
-        ),
-        OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.userPlus),
-          title: l10n.autoCreateSpeakers,
-          subtitle: l10n.autoCreateWhenNameDetected,
-          value: provider.autoCreateSpeakersEnabled,
-          onChanged: provider.onAutoCreateSpeakersChanged,
         ),
         OmiSettingsRow.toggle(
           leading: const FaIcon(FontAwesomeIcons.microphoneSlash),
@@ -376,6 +386,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   const SizedBox(height: OmiSpacing.xxl),
                   const DeveloperMcpSection(),
                   const SizedBox(height: OmiSpacing.xxl),
+                  if (!kReleaseMode) ...[_buildCustomBackendUrl(provider), const SizedBox(height: OmiSpacing.xxl)],
                   _buildWebhooks(provider),
                   const SizedBox(height: OmiSpacing.xxl),
                   _buildExperimental(provider),
@@ -391,10 +402,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
 }
 
 class _DeveloperTextField extends StatelessWidget {
-  const _DeveloperTextField({required this.controller, required this.label, this.keyboardType});
+  const _DeveloperTextField({required this.controller, required this.label, this.hint, this.keyboardType});
 
   final TextEditingController controller;
   final String label;
+  final String? hint;
   final TextInputType? keyboardType;
 
   @override
@@ -407,13 +419,14 @@ class _DeveloperTextField extends StatelessWidget {
       style: OmiType.subhead,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         labelStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
         filled: true,
         fillColor: OmiColors.surface2,
         contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         border: border,
         enabledBorder: border,
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: OmiRadius.mdAll,
           borderSide: BorderSide(color: OmiColors.textTertiary),
         ),

@@ -93,7 +93,9 @@ def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     with patch('utils.sync.pipeline.get_wav_duration', return_value=60), patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch('utils.sync.pipeline.identify_speakers_for_segments'):
+    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ):
         result = process_segment('seg_123.wav', 'u', response, MagicMock(), errors, target_conversation_id='deleted')
     assert result and errors == []
     mock_closest.assert_not_called()

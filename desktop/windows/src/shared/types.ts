@@ -1,3 +1,18 @@
+export type SignGloss = {
+  gloss: string
+  duration: number
+  timestamp: number
+  swr?: string
+}
+
+export type TranslationResult = {
+  originalText: string
+  poseUrl?: string
+  assetType?: 'video' | 'pose'
+  glosses: SignGloss[]
+  swrFull?: string
+}
+
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 import type { ChatContentBlock } from './chatContent'
@@ -902,28 +917,6 @@ export type OmiBridgeApi = {
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
   focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
-  /** Dev/QA only: run the REAL Insight Phase-1 activity aggregate over the last 24h
-   *  with `denylist` and return ONLY the distinct app names (never OCR/titles).
-   *  Proves a denylisted app is excluded at the SQL layer. Absent in production. */
-  insightDebugActivity: (denylist: string[]) => Promise<{ apps: string[]; rowCount: number }>
-  /** Dev/QA only: run the REAL execute_sql closure with `denylist` and return ONLY
-   *  the row count (or a content-free error). Proves the denylist CTE-shadow filters
-   *  a denylisted app to zero rows. Absent in production. */
-  insightDebugSql: (
-    query: string,
-    denylist: string[]
-  ) => Promise<{ rowCount: number; error?: string }>
-  /** Dev/QA only: optionally apply a notifications patch, then return the REAL
-   *  insightAssistant.isEnabled() and the inputs deciding it. Absent in production. */
-  insightDebugIsEnabled: (patch?: {
-    notificationsEnabled?: boolean
-    notificationFrequency?: number
-  }) => Promise<{
-    isEnabled: boolean
-    insightEnabled: boolean
-    notificationsEnabled: boolean
-    notificationFrequency: number
-  }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>
@@ -961,15 +954,6 @@ export type OmiBridgeApi = {
   // browser (main owns the loopback callback + token exchange; the renderer
   // finishes with signInWithCustomToken on the returned custom token).
   signInWithProvider: (provider: SignInProvider) => Promise<SignInResult>
-  // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
-  // and REST reads; the renderer synthesizes the returned items and writes
-  // /v3/memories + /v1/action-items itself (it holds the Firebase token).
-  googleConnect: () => Promise<GoogleStatus>
-  googleDisconnect: () => Promise<GoogleStatus>
-  googleStatus: () => Promise<GoogleStatus>
-  googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
-  googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   // Gmail session connector (Option B): an Omi-owned login window + own-session
   // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
   // `gmailSessionConnect` opens the login window and resolves once signed in;
@@ -1062,17 +1046,12 @@ export type OmiBridgeApi = {
   relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
-  insightAdd: (p: InsightPayload) => Promise<void>
-  insightRecent: (limit: number) => Promise<InsightRecord[]>
-  /** Insights page: mark one record dismissed (read/handled). */
-  insightDismissRecord: (id: number) => Promise<boolean>
-  /** Insights page: mark all records dismissed (Mac's "Mark All Read"). */
-  insightDismissAll: () => Promise<number>
-  /** Insights page: delete all insight history (Mac's "Clear All History"). */
-  insightClearAll: () => Promise<number>
-  /** Engine → main: deliver this insight in the user's chosen style. */
-  insightShow: (p: InsightPayload) => void
-  /** Toast renderer → main: dismiss now. */
+  proactivityNotificationRendered: (itemID: string) => void
+  proactivityNotificationFeedback: (itemID: string, action: 'thumbs_up' | 'thumbs_down') => void
+  proactivityNotificationPending: () => Promise<InsightPayload | null>
+  onProactivityNavigate: (callback: (target: { kind: string; id: string }) => void) => () => void
+  proactivityTargetRendered: (target: { kind: string; id: string }) => void
+  proactivityNotificationOpen: (itemID: string) => void
   insightDismiss: () => void
   /** Toast renderer → main: pause/resume the auto-dismiss while hovered. */
   insightHoverStart: () => void
@@ -1080,16 +1059,7 @@ export type OmiBridgeApi = {
   /** Settings → main: deliver an example insight (a test). */
   insightTest: () => void
   /** Explicit JIT feedback; silence is never interpreted as feedback. */
-  jitFeedback: (input: {
-    eventId: string
-    lane: 'planned' | 'ambient'
-    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
-    subjectId: string
-    triggerRevision: number | null
-    accountGeneration: number
-    snoozedUntil?: string | null
-  }) => Promise<{ queued: true }>
-  jitFeedbackDrain: () => Promise<{ sent: number; failed: number }>
+
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
   // --- Meeting detection (Phase 5) ---
@@ -1164,6 +1134,9 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
+  signLanguageSetEnabled: (enabled: boolean) => void
+  signLanguageGetEnabled: () => Promise<boolean>
   // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */
@@ -1962,45 +1935,6 @@ export type SignInResult =
   | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
   | { ok: false; error: string }
 
-// --- Integrations: Google (Gmail + Calendar) OAuth (parity 3d) ---
-
-export type GoogleSource = 'gmail' | 'calendar'
-
-/** Connection status surfaced to Settings. */
-export type GoogleStatus = {
-  connected: boolean
-  email?: string
-  /** ms epoch of the most recent successful sync (either source); undefined if never. */
-  lastSyncAt?: number
-}
-
-/** One Gmail message, metadata only — never the full body. */
-export type GmailItem = {
-  id: string
-  subject: string
-  from: string
-  snippet: string
-  internalDateMs: number
-}
-
-/** One upcoming Calendar event. */
-export type CalendarItem = {
-  id: string
-  title: string
-  startMs: number
-  endMs: number
-  location?: string
-  description?: string
-  updatedMs: number
-}
-
-/** Result of a fetch-new call. `ok:false` + error:'not_connected' when no grant. */
-export type FetchNewResult<T> = {
-  ok: boolean
-  items: T[]
-  error?: string
-}
-
 // --- Integrations: Gmail via an Omi-owned Electron session (Option B) ---
 // Windows can't harvest system-browser cookies the way macOS does (Chrome 127+
 // App-Bound Encryption), so the user signs into Google once inside an Omi-owned
@@ -2271,28 +2205,14 @@ export type AssistantSettingsView = {
 }
 
 export type InsightPayload = {
+  /** Main-owned v2 identity; renderer sends only this ID back, never a destination. */
+  proactivityItemID?: string
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars
   reasoning: string
   category: InsightCategory
   sourceApp: string
   confidence: number // 0..1
-  /** Present only for a JIT toast with a supported feedback receipt (currently
-   * planned triggers; ambient candidates have no trigger revision fence yet).
-   * Explicit user actions are the sole feedback source and are sent through the
-   * durable main-process outbox. */
-  jit?: {
-    lane: 'planned' | 'ambient'
-    eventId: string
-    subjectId: string
-    candidateId: string
-    triggerRevision: number | null
-    accountGeneration: number
-    /** HashRouter-compatible Rewind link for the single attached keyframe. */
-    rewindDeepLink?: string
-    /** Frame id consumed by the main-process navigation bridge. */
-    rewindFrameId?: number
-  }
 }
 
 // Stored row: powers both toast dedupe and the Insights history page. `dismissed`
@@ -2681,14 +2601,9 @@ export type GoalGenerateResult =
       reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' | 'stale' | 'error'
     }
 
+/** Shared toast presentation and screen privacy preferences. */
 export type InsightSettings = {
-  enabled: boolean // default ON
-  intervalMin: number // default 15 (picker offers 15/20/30/60)
-  // 'omi' = the in-app acrylic toast (richer, branded); 'native' = a Windows
-  // notification (kept in the Action Center). Default 'omi'.
   notificationStyle: InsightNotificationStyle
-  denylist: string[]
-  lastRunAt: number | null
 }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────

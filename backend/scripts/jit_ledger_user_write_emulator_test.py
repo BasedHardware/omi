@@ -20,7 +20,6 @@ PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOU
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_jit_user_write_emulator_key_32_bytes")
 os.environ.setdefault("MEMORY_ENABLED", "on")
-os.environ.setdefault("MEMORY_MODE", "read")
 os.environ.setdefault("PROVIDER_MODE", "offline")
 os.environ.setdefault("GOOGLE_AUTH_DISABLE_GCE_CHECK", "true")
 os.environ.setdefault("GCE_METADATA_HOST", "127.0.0.1:9")

@@ -84,6 +84,11 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.artifacts.manage",
   "desktop.automation.read",
   "desktop.automation.act_dev_only",
+  "desktop.automation.act",
+  "desktop.contacts.read",
+  "desktop.mail.read",
+  "desktop.messaging.read",
+  "desktop.messaging.send",
   "external.write_prepare",
   "external.write_send",
 ]);
@@ -91,8 +96,9 @@ const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).stri
 
 const listAgentSessionsSchema = strictObject({
   ownerId: z.string().min(1).optional(),
+  sessionId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
-  surfaceKind: agentSurfaceKindSchema.optional(),
+  surfaceKind: agentSurfaceKindSchema.or(z.literal("workstream")).optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
   beforeUpdatedAtMs: z.coerce.number().int().positive().optional(),
 });
@@ -2868,6 +2874,7 @@ function serializeSessionListSummary(summary: {
       externalRefKind: session.externalRefKind,
       externalRefId: session.externalRefId,
       defaultAdapterId: session.defaultAdapterId,
+      executionProfileGeneration: session.executionProfileGeneration,
       modelProfile: session.modelProfile,
       createdAtMs: session.createdAtMs,
       updatedAtMs: session.updatedAtMs,
@@ -2898,6 +2905,7 @@ function serializeRunListSummary(run: AgentRun): Record<string, unknown> {
     {
       runId: run.runId,
       sessionId: run.sessionId,
+      profileGeneration: run.profileGeneration,
       parentRunId: run.parentRunId,
       status: run.status,
       mode: run.mode,

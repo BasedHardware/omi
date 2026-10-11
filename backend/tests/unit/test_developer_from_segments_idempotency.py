@@ -142,9 +142,9 @@ _drop_stale_module('utils.conversations.render', BACKEND_DIR / 'utils' / 'conver
 import database.conversations as conversations_db  # noqa: E402
 from database.firestore_read_metrics import FirestoreReadSite  # noqa: E402
 import routers.developer as developer  # noqa: E402
-import utils.task_intelligence.proactive_engine as proactive_engine  # noqa: E402
 import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
+from models.structured import Structured  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 from utils.conversations.meeting_treatment import meeting_treatment_verdict  # noqa: E402
 
@@ -158,6 +158,7 @@ def _passthrough_resolve_geolocation(monkeypatch):
     # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
     # through unchanged, matching production for the None / already-resolved cases these tests exercise.
     monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: False)
 
     def record_receipt(uid, conversation, **_kwargs):
         external_data = (
@@ -168,26 +169,13 @@ def _passthrough_resolve_geolocation(monkeypatch):
         if source != 'desktop' or external_data.get('conversation_role') != 'meeting':
             return None
         verdict = meeting_treatment_verdict(conversation)
-        if verdict.eligible:
-            conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
-            structured = (
-                conversation.get('structured') if isinstance(conversation, dict) else conversation.structured
-            ) or {}
-            title = structured.get('title') if isinstance(structured, dict) else structured.title
-            proactive_engine.persist_capture_arrival_intent(
-                uid,
-                conversation_id=conversation_id,
-                summary=title or '',
-                is_desktop_meeting=True,
-                recommended_action_items=[],
-            )
         return {
             'status': 'recorded',
             'meeting_treatment_eligible': verdict.eligible,
             'meeting_treatment_reason': verdict.reason,
         }
 
-    monkeypatch.setattr(developer, 'record_and_persist_finalized_meeting_receipt', record_receipt)
+    monkeypatch.setattr(developer, 'record_finalized_meeting_receipt', record_receipt)
 
 
 def _segment():
@@ -214,7 +202,7 @@ def _eligible_meeting_request(**overrides):
                 'speaker': 'SPEAKER_00',
                 'is_user': True,
                 'start': 0.0,
-                'end': 60.0,
+                'end': 300.0,
             }
         ],
         'started_at': NOW,
@@ -250,8 +238,6 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer, 'process_conversation', _process)
 
-    arrival = MagicMock()
-    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
     response = developer._create_conversation_from_segments('uid1', _eligible_meeting_request())
 
     assert response.id == 'random-process-id'
@@ -259,13 +245,6 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     assert captured['conversation'].external_data == {'conversation_role': 'meeting'}
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
-    arrival.assert_called_once_with(
-        'uid1',
-        conversation_id='random-process-id',
-        summary='Design review',
-        is_desktop_meeting=True,
-        recommended_action_items=[],
-    )
 
 
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
@@ -302,6 +281,47 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     persisted.assert_called_once()
 
 
+@pytest.mark.parametrize('source', ['workflow', 'external_integration', None])
+@pytest.mark.parametrize('client_session_id', [None, 'integration-segments-session'])
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatch, source, client_session_id, path):
+    captured = []
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+
+    def process(_uid, _language, conversation):
+        captured.append(conversation)
+        return Conversation(
+            **conversation.model_dump(exclude={'id', 'created_at', 'structured', 'status'}),
+            id='integration-segments-result',
+            created_at=NOW,
+            structured={'title': 'Synthetic summary'},
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    response = TestClient(app).post(
+        path, json=_request(source=source, client_session_id=client_session_id).model_dump(mode='json')
+    )
+
+    assert response.status_code == 200
+    assert len(captured) == 1
+    conversation = captured[0]
+    assert isinstance(conversation, Conversation if client_session_id else CreateConversation)
+    assert conversation.source.value == (source or 'phone')
+    assert conversation.transcript_segments[0].text == _segment()['text']
+    assert not hasattr(conversation, 'text_source')
+
+
 def test_client_session_id_persists_when_processor_returns_without_saving(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
@@ -323,7 +343,7 @@ def test_client_session_id_persists_when_processor_returns_without_saving(monkey
     assert persisted.call_args.args[1]['id'] == expected_id
 
 
-def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypatch):
+def test_completed_desktop_meeting_preserves_treatment_projection(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -335,8 +355,6 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
         return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
-    arrival = MagicMock()
-    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     response = developer._create_conversation_from_segments(
         'uid1', _eligible_meeting_request(client_session_id='meeting-session-1')
@@ -344,16 +362,9 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
 
     assert response.id == expected_id
     assert response.meeting_treatment_eligible is True
-    arrival.assert_called_once_with(
-        'uid1',
-        conversation_id=expected_id,
-        summary='Design review',
-        is_desktop_meeting=True,
-        recommended_action_items=[],
-    )
 
 
-def test_real_2026_08_19_from_segments_shape_writes_exactly_one_durable_conversation_link(monkeypatch):
+def test_real_from_segments_shape_records_audit_without_posting_to_chat(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'production-session-1588')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -373,16 +384,13 @@ def test_real_2026_08_19_from_segments_shape_writes_exactly_one_durable_conversa
             'meeting_treatment_reason': 'eligible',
         }
     )
-    intent = SimpleNamespace(intent_id='turn_cfi_production_shape')
-    persist = MagicMock(return_value=intent)
     mark = MagicMock(return_value=True)
     monkeypatch.setattr(meeting_receipt.jobs_db, 'record_meeting_receipt', record)
-    monkeypatch.setattr(meeting_receipt, 'persist_capture_arrival_intent', persist)
     monkeypatch.setattr(meeting_receipt.jobs_db, 'mark_meeting_receipt_intent_persisted', mark)
     monkeypatch.setattr(
         developer,
-        'record_and_persist_finalized_meeting_receipt',
-        meeting_receipt.record_and_persist_finalized_meeting_receipt,
+        'record_finalized_meeting_receipt',
+        meeting_receipt.record_finalized_meeting_receipt,
     )
 
     request = _eligible_meeting_request(
@@ -403,14 +411,8 @@ def test_real_2026_08_19_from_segments_shape_writes_exactly_one_durable_conversa
 
     assert response.id == expected_id
     assert response.meeting_treatment_eligible is True
-    persist.assert_called_once_with(
-        'uid1',
-        conversation_id=expected_id,
-        summary='Hardware startup collaboration',
-        is_desktop_meeting=True,
-        recommended_action_items=[],
-    )
-    mark.assert_called_once_with('job-production-shape', 'turn_cfi_production_shape')
+    record.assert_called_once()
+    mark.assert_not_called()
 
 
 def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch):
@@ -426,7 +428,7 @@ def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch)
         return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
-    monkeypatch.setattr(developer, 'record_and_persist_finalized_meeting_receipt', MagicMock(return_value=None))
+    monkeypatch.setattr(developer, 'record_finalized_meeting_receipt', MagicMock(return_value=None))
 
     response = developer._create_conversation_from_segments(
         'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
@@ -454,7 +456,7 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
     process.assert_not_called()
 
 
-def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
+def test_completed_desktop_meeting_retry_preserves_treatment_without_chat_arrival(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(
         conversations_db,
@@ -467,7 +469,10 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
                 'discarded': False,
                 'started_at': NOW,
                 'finished_at': NOW + timedelta(minutes=5),
-                'transcript_segments': [{'text': 'substantive meeting discussion', 'start': 0.0, 'end': 60.0}],
+                'transcript_segments': [
+                    {'text': 'opening discussion', 'start': 0.0, 'end': 30.0},
+                    {'text': 'closing discussion', 'start': 270.0, 'end': 300.0},
+                ],
                 'structured': {'title': 'Design review'},
                 'external_data': {'conversation_role': 'meeting'},
             }
@@ -475,8 +480,6 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
     )
     process = MagicMock()
     monkeypatch.setattr(developer, 'process_conversation', process)
-    arrival = MagicMock()
-    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     response = developer._create_conversation_from_segments(
         'uid1', _eligible_meeting_request(client_session_id='meeting-session-1')
@@ -485,13 +488,6 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
     assert response.id == expected_id
     assert response.meeting_treatment_eligible is True
     process.assert_not_called()
-    arrival.assert_called_once_with(
-        'uid1',
-        conversation_id=expected_id,
-        summary='Design review',
-        is_desktop_meeting=True,
-        recommended_action_items=[],
-    )
 
 
 def test_short_desktop_meeting_stays_ordinary_conversation(monkeypatch):
@@ -513,14 +509,11 @@ def test_short_desktop_meeting_stays_ordinary_conversation(monkeypatch):
         )
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
-    arrival = MagicMock()
-    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     response = developer._create_conversation_from_segments('uid1', _request(conversation_role='meeting'))
 
     assert response.status == 'completed'
     assert response.meeting_treatment_eligible is False
-    arrival.assert_not_called()
 
 
 def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monkeypatch):
@@ -540,14 +533,10 @@ def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monke
         ),
     )
     monkeypatch.setattr(developer, 'process_conversation', MagicMock())
-    arrival = MagicMock()
-    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     developer._create_conversation_from_segments(
         'uid1', _request(client_session_id='ambient-session-1', conversation_role='meeting')
     )
-
-    arrival.assert_not_called()
 
 
 def test_client_session_id_concurrent_claim_loser_returns_existing_without_processing(monkeypatch):
@@ -736,6 +725,33 @@ def _request_data():
     }
 
 
+@pytest.mark.parametrize(
+    'reason',
+    [
+        'recording_disabled',
+        'system_sleep',
+        'app_terminated',
+        'paywall',
+        'microphone_unavailable',
+        'device_unavailable',
+        'silent_mic_exhausted',
+        'rotation_failed',
+        'stt_fallback',
+        'settings_change',
+    ],
+)
+def test_from_segments_accepts_newer_desktop_finalization_reasons(reason):
+    """GH #19328: the desktop client's TranscriptionFinalizationReason enum grew
+    these ten cases without the backend's Literal being updated, so every
+    local_segments upload carrying one of them 422'd silently and the recording
+    was lost. The field is opaque client metadata (only 'max_duration_rotation'
+    is ever compared downstream), so it must accept any string, not a closed set."""
+    request = developer.CreateConversationFromTranscriptRequest.model_validate(
+        {**_request_data(), 'conversation_finalization_reason': reason}
+    )
+    assert request.conversation_finalization_reason == reason
+
+
 def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
     """GH #13505: the developer from-segments route must not ride the bare
     conversations:write dependency — it needs the dedicated
@@ -827,3 +843,169 @@ def test_failed_creation_does_not_record_product_metric(monkeypatch):
     with pytest.raises(RuntimeError, match='processing failed'):
         developer._create_conversation_from_segments('uid1', _request())
     record.assert_not_called()
+
+
+def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_identical(monkeypatch):
+    claim = MagicMock(return_value=True)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    lineage = {
+        'version': 1,
+        'capability': 'stable_artifact',
+        'capture_root': 'local-session-1',
+        'clock_domain': 'desktop_session_ms',
+        'lineage': 'complete',
+        'units': [{'id': '42', 'start_ms': 0, 'end_ms': 1500}],
+    }
+    request = _request(client_session_id='local-session-1', capture_evidence=lineage)
+    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
+    developer._create_conversation_from_segments('uid1', request)
+    assert 'capture_evidence' not in claim.call_args.args[1]['external_data']
+
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', '1')
+    developer._create_conversation_from_segments('uid1', request)
+    assert claim.call_args.args[1]['external_data']['capture_evidence'] == lineage
+    assert claim.call_count == 2  # no new Firestore claim/write operation
+
+    mismatched = _request(client_session_id='local-session-1', capture_evidence={**lineage, 'capture_root': 'foreign'})
+    developer._create_conversation_from_segments('uid1', mismatched)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['capability'] == 'unknown'
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'ineligible'
+
+    oversized = _request(
+        client_session_id='local-session-1',
+        capture_evidence={
+            **lineage,
+            'units': [
+                {'id': f'{index:02d}-' + 'x' * 50, 'start_ms': index, 'end_ms': index + 1} for index in range(64)
+            ],
+        },
+    )
+    developer._create_conversation_from_segments('uid1', oversized)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'overflow'
+
+
+def test_deleted_session_ack_skips_existing_row_and_processing(monkeypatch):
+    cid = developer._from_segments_conversation_id('uid1', 'deleted-session')
+    lookup = MagicMock(return_value=True)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='deleted-session'))
+    assert response.model_dump() == {
+        'id': cid,
+        'status': 'deleted',
+        'discarded': True,
+        'meeting_treatment_eligible': False,
+    }
+    lookup.assert_called_once_with('uid1', cid)
+    read.assert_not_called()
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+def test_deleted_ack_through_both_http_entrypoints(monkeypatch, path):
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: True)
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    payload = _request(client_session_id='deleted-session').model_dump(mode='json')
+    for _ in range(2):
+        response = TestClient(app).post(path, json=payload)
+        assert response.status_code == 200
+        assert response.json()['status'] == 'deleted'
+        assert response.json()['id'] == developer._from_segments_conversation_id('uid1', 'deleted-session')
+    process.assert_not_called()
+
+
+def test_deleted_ack_also_matches_raw_session_id_tombstone(monkeypatch):
+    """A live conversation deleted elsewhere is tombstoned under its raw ws doc id
+    (== client_conversation_id alias), not the derived uuid5 — the create guard
+    must check both identities."""
+    seen = []
+
+    def lookup(uid, key):
+        seen.append(key)
+        return key == 'raw-ws-doc-id'
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='raw-ws-doc-id'))
+    assert response.status == 'deleted'
+    assert response.id == developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id')
+    assert 'raw-ws-doc-id' in seen and developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id') in seen
+    read.assert_not_called()
+    process.assert_not_called()
+
+
+def test_pre_persist_tombstone_check_suppresses_delete_race_winner(monkeypatch):
+    """A delete committing while processing runs must win: the final persist is
+    preceded by a re-check (both identities), and a hit returns the deleted ack,
+    purges the processing row, and never reaches the final persist."""
+    cid = developer._from_segments_conversation_id('uid1', 'race-session')
+    # The tombstone appears only AFTER processing started (the delete committed
+    # in that window), so admission passes and the pre-persist re-check fires.
+    tombstoned = {'after_process': False}
+
+    def lookup(uid, key):
+        return tombstoned['after_process'] and key in (cid, 'race-session')
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    persisted = MagicMock()
+    purged = []
+
+    def fake_process(uid, language, obj, **kwargs):
+        # The delete commits while processing runs.
+        tombstoned['after_process'] = True
+        conv = Conversation(
+            id=cid,
+            created_at=obj.created_at,
+            started_at=obj.started_at,
+            finished_at=obj.finished_at,
+            language=obj.language,
+            source=obj.source,
+            structured=Structured(),
+        )
+        return conv
+
+    monkeypatch.setattr(developer, 'process_conversation', fake_process)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
+    # The admission path's create-if-absent must stay hermetic: stub the whole
+    # admission so the race window is simulated without Firestore.
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', lambda uid, key: purged.append(key))
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='race-session'))
+    assert response.status == 'deleted'
+    persisted.assert_not_called()
+    assert purged == [cid]
+
+
+def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
+    monkeypatch.setattr(
+        developer.conversation_tombstones, 'is_deleted', MagicMock(side_effect=RuntimeError('unavailable'))
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    with pytest.raises(RuntimeError, match='unavailable'):
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='session'))
+    process.assert_not_called()

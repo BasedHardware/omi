@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/speaker_names.dart';
@@ -22,12 +27,8 @@ TranscriptSegment seg(int speakerId, {bool isUser = false, String? personId, Str
       translations: const [],
     );
 
-Person person(String id, String name) => Person(
-      id: id,
-      name: name,
-      createdAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-    );
+Person person(String id, String name) =>
+    Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
 /// One speaker vocabulary on every surface: "You", people's names, "Omi", and dense "Speaker N".
 void main() {
@@ -63,6 +64,20 @@ void main() {
     expect(names.forSegment(segments[0], person: person('x', 'Grace')), 'Grace');
   });
 
+  test('unresolved chunk ids do not appear as dozens of people', () {
+    final segments = [seg(0, isUser: true), seg(27), seg(28, personId: 'p1'), seg(30)];
+    final names = SpeakerNames.forSegments(segments, people: [person('p1', 'Ada')], unresolved: true, l10n: en);
+    expect(segments.map(names.forSegment), ['You', 'Speaker', 'Ada', 'Speaker']);
+    expect(names.anonymousName(27), 'Speaker');
+    expect(names.anonymousName(30), 'Speaker');
+  });
+
+  test('unresolved keeps Omi and falls back on a missing or blank name', () {
+    final segments = [seg(omiSpeakerId), seg(27, personId: 'gone'), seg(28, personId: 'blank')];
+    final names = SpeakerNames.forSegments(segments, people: [person('blank', '  ')], unresolved: true, l10n: en);
+    expect(segments.map(names.forSegment), ['Omi', 'Speaker', 'Speaker']);
+  });
+
   test('owner name replaces "You" only when given', () {
     final segments = [seg(0, isUser: true)];
     expect(SpeakerNames.forSegments(segments, l10n: en).forSegment(segments[0]), 'You');
@@ -87,11 +102,7 @@ void main() {
     tearDown(() => Intl.defaultLocale = null);
 
     test('uses the same names as the screen, localized, owner by given name', () {
-      final segments = [
-        seg(0, isUser: true, text: 'Hello'),
-        seg(3, text: 'Hi'),
-        seg(omiSpeakerId, text: 'Noted'),
-      ];
+      final segments = [seg(0, isUser: true, text: 'Hello'), seg(3, text: 'Hi'), seg(omiSpeakerId, text: 'Noted')];
       final de = lookupAppLocalizations(const Locale('de'));
       final out = TranscriptSegment.segmentsAsString(segments, l10n: de, ownerName: 'Dana', people: const []);
       expect(out, contains('Dana: Hello'));
@@ -114,6 +125,40 @@ void main() {
       final all = [seg(1, text: 'a'), seg(2, text: 'b')];
       final out = TranscriptSegment.segmentsAsString([all[1]], l10n: en, numberingSegments: all, people: const []);
       expect(out, 'Speaker 2: b');
+    });
+
+    test('an unavailable resolution exports the neutral "Speaker" label', () async {
+      final now = DateTime.now();
+      SharedPreferences.setMockInitialValues({
+        'cachedPeople': [
+          jsonEncode({
+            'id': 'p1',
+            'name': 'Ada',
+            'created_at': now.toUtc().toIso8601String(),
+            'updated_at': now.toUtc().toIso8601String(),
+          }),
+        ],
+      });
+      await SharedPreferencesUtil.init();
+
+      final conversation = ServerConversation(
+        id: 'c-export',
+        createdAt: DateTime(2026),
+        structured: Structured('Title', 'Summary'),
+        transcriptSegments: [
+          seg(0, isUser: true, text: 'Mine'),
+          seg(27, text: 'Unsure voice'),
+          seg(28, personId: 'p1', text: 'Known voice'),
+        ],
+        speakerResolution: const ConversationSpeakers(status: 'unavailable'),
+      );
+      final out = conversation.getTranscript();
+
+      expect(out, contains('You: Mine'));
+      expect(out, contains('Ada: Known voice'));
+      expect(out, contains('Speaker: Unsure voice'));
+      expect(out, isNot(contains('Speaker ?')));
+      expect(out, isNot(contains('Speaker 1')));
     });
   });
 }

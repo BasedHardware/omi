@@ -53,7 +53,7 @@ elif [ "${2:-}" = build ]; then
   fi
 elif [ "${2:-}" = test ]; then
   [ -f "$FAKE_RELEASE_BUILD" ] || exit 20
-  expected="swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/"
+  expected="swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/"
   [ "$*" = "$expected" ] || exit 21
 fi
 SH
@@ -83,6 +83,24 @@ if ! grep -qx "$TMPDIR/$PIN_APP_NAME/Contents/Developer|4" "$FAKE_SUITE_LOG"; th
   fail "Swift suite did not inherit the selected toolchain and four worker default"
 fi
 
+# Generated-only PRs compile both targets in one debug build and execute no suites.
+: > "$FAKE_XCRUN_LOG"
+: > "$FAKE_SUITE_LOG"
+"$TMPDIR/macos/scripts/run-swift-ci.sh" --test-compile
+if ! grep -qx 'swift build -c debug --package-path Desktop --build-tests' "$FAKE_RELEASE_BUILD"; then
+  fail "debug app and test targets must compile together"
+fi
+if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ] || grep -q 'swift test ' "$FAKE_XCRUN_LOG" || [ -s "$FAKE_SUITE_LOG" ]; then
+  fail "compile-only mode must invoke one build and no test execution"
+fi
+if FAKE_BUILD_FAILURE=1 "$TMPDIR/macos/scripts/run-swift-ci.sh" --test-compile; then
+  fail "runner hid a debug test compilation failure"
+fi
+if "$TMPDIR/macos/scripts/run-swift-ci.sh" --test-compile --unexpected; then
+  fail "runner accepted unrecognized debug compile options"
+fi
+rm "$FAKE_RELEASE_BUILD"
+
 "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-compile
 if ! grep -q -- 'swift build -c release --package-path Desktop --triple arm64-apple-macosx' "$FAKE_XCRUN_LOG"; then
   fail "release compile did not use the CI release command"
@@ -98,10 +116,10 @@ fi
 if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ]; then
   fail "release test compile and regression must invoke exactly one build"
 fi
-if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --build-tests' "$FAKE_RELEASE_BUILD"; then
-  fail "release app and test targets must build together with the same destination"
+if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --build-tests' "$FAKE_RELEASE_BUILD"; then
+  fail "release app and test targets must build together with the stable runner's default concurrency"
 fi
-if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
+if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
   fail "release notification regression did not reuse the compiled tests"
 fi
 if FAKE_BUILD_FAILURE=1 "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-test-compile; then

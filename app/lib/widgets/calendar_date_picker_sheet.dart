@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
@@ -36,12 +38,12 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
     // Neutral accent (INV-UI-1): a white selection with black text, today in bold white.
     selectedDayHighlightColor: OmiColors.accent,
     selectedRangeHighlightColor: OmiColors.surface3,
-    dayTextStyle: const TextStyle(color: OmiColors.textPrimary),
-    selectedDayTextStyle: const TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.bold),
-    todayTextStyle: const TextStyle(color: OmiColors.textPrimary, fontWeight: FontWeight.w800),
-    weekdayLabelTextStyle: const TextStyle(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
+    dayTextStyle: TextStyle(color: OmiColors.textPrimary),
+    selectedDayTextStyle: TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.bold),
+    todayTextStyle: TextStyle(color: OmiColors.textPrimary, fontWeight: FontWeight.w800),
+    weekdayLabelTextStyle: TextStyle(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
     controlsTextStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
-    disabledDayTextStyle: const TextStyle(color: OmiColors.textDisabled),
+    disabledDayTextStyle: TextStyle(color: OmiColors.textDisabled),
   );
 }
 
@@ -52,15 +54,25 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
 /// button never silently switches what it filters. The active filter is also
 /// shown as a removable chip under the search bar (`ConversationDateFilterChip`).
 /// Colours are neutral per INV-UI-1 (product/invariants/brand-ui.md).
-Future<void> showConversationDateRangePicker(BuildContext context) async {
-  final provider = Provider.of<ConversationProvider>(context, listen: false);
+Future<void> showConversationDateRangePicker(
+  BuildContext context, {
+  DateTime? initialStartDate,
+  DateTime? initialEndDate,
+  bool singleDayOnly = false,
+  FutureOr<void> Function(DateTime start, DateTime end)? onSelected,
+  FutureOr<void> Function()? onClear,
+}) async {
+  final provider = onSelected == null ? Provider.of<ConversationProvider>(context, listen: false) : null;
   final l10n = context.l10n;
-  final hasExistingFilter = provider.selectedStartDate != null;
+  final hasExistingFilter =
+      onSelected == null ? provider!.selectedStartDate != null : onClear != null && initialStartDate != null;
   final now = DateTime.now();
-  List<DateTime?> range = [
-    provider.selectedStartDate ?? now,
-    provider.selectedEndDate ?? provider.selectedStartDate ?? now,
-  ];
+  List<DateTime?> range = singleDayOnly
+      ? [(onSelected == null ? provider!.selectedStartDate : initialStartDate) ?? now]
+      : [
+          (onSelected == null ? provider!.selectedStartDate : initialStartDate) ?? now,
+          (onSelected == null ? provider!.selectedEndDate ?? provider.selectedStartDate : initialEndDate) ?? now,
+        ];
 
   await showOmiSheet<void>(
     context: context,
@@ -80,9 +92,10 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
                     firstDate: DateTime(2020),
                     lastDate: now,
                     currentDate: now,
-                    calendarType: CalendarDatePicker2Type.range,
+                    calendarType: singleDayOnly ? CalendarDatePicker2Type.single : CalendarDatePicker2Type.range,
                   ),
                   value: range,
+                  displayedMonthDate: range.first ?? now,
                   onValueChanged: (dates) => range = dates,
                 ),
               ),
@@ -98,8 +111,12 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
                         label: l10n.removeFilter,
                         onPressed: () async {
                           Navigator.of(sheetContext).pop();
-                          await provider.clearDateFilter();
-                          PlatformManager.instance.analytics.calendarFilterCleared();
+                          if (onClear != null) {
+                            await onClear();
+                          } else {
+                            await provider!.clearDateFilter();
+                            PlatformManager.instance.analytics.calendarFilterCleared();
+                          }
                         },
                       ),
                     ),
@@ -113,8 +130,12 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
                         Navigator.of(sheetContext).pop();
                         if (start == null) return;
                         final end = closedCalendarRangeEnd(start, range.length > 1 ? range[1] : null);
-                        await provider.filterConversationsByDateRange(start, end);
-                        PlatformManager.instance.analytics.calendarFilterApplied(start, end);
+                        if (onSelected != null) {
+                          await onSelected(start, end);
+                        } else {
+                          await provider!.filterConversationsByDateRange(start, end);
+                          PlatformManager.instance.analytics.calendarFilterApplied(start, end);
+                        }
                       },
                     ),
                   ),

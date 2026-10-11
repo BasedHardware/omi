@@ -18,6 +18,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
+import 'widgets/offline_sync_storage_sheet.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
@@ -75,6 +76,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, l.failedStatus);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -97,7 +100,8 @@ class WalListItem extends StatelessWidget {
     // leads to a detail page with nothing actionable on it.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
+        state == WalSyncDisplayState.unsupportedAudio ||
+        state == WalSyncDisplayState.uploadRejected) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -133,7 +137,7 @@ class WalListItem extends StatelessWidget {
 
         return Container(
           clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
             direction:
@@ -175,7 +179,8 @@ class WalListItem extends StatelessWidget {
                             children: [
                               Text(
                                 source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
-                                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                                style:
+                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -202,7 +207,7 @@ class WalListItem extends StatelessWidget {
                               borderRadius: BorderRadius.circular(2),
                               child: LinearProgressIndicator(
                                 value: _calcProgress(wal),
-                                backgroundColor: const Color(0xFF3C3C43),
+                                backgroundColor: OmiColors.border,
                                 color: OmiColors.accent,
                                 minHeight: 3,
                               ),
@@ -265,7 +270,7 @@ class _SyncPageState extends State<SyncPage> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400),
               ),
             ),
             if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
@@ -285,7 +290,7 @@ class _SyncPageState extends State<SyncPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: GestureDetector(
           onTap: () => routeToPage(context, const SyncedConversationsPage()),
           child: Padding(
@@ -297,10 +302,10 @@ class _SyncPageState extends State<SyncPage> {
                 Expanded(
                   child: Text(
                     context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+                Icon(Icons.chevron_right, color: OmiColors.border, size: 20),
               ],
             ),
           ),
@@ -313,7 +318,7 @@ class _SyncPageState extends State<SyncPage> {
     final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           Builder(
@@ -328,7 +333,7 @@ class _SyncPageState extends State<SyncPage> {
               );
             },
           ),
-          const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
+          Divider(height: 1, color: OmiColors.border, indent: 52),
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
               final isCloudOn = userProvider.privateCloudSyncEnabled;
@@ -366,8 +371,10 @@ class _SyncPageState extends State<SyncPage> {
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
-        provider: provider,
+      builder: (sheetContext) => OfflineSyncStorageSheet(
+        syncedCount: provider.syncedWals.length,
+        pendingCount: provider.pendingDeletableWals.length,
+        totalCount: provider.clearableWalsCount,
         onClearSynced: () async {
           Navigator.of(sheetContext).pop();
           final confirmed = await showOmiConfirm(
@@ -475,7 +482,7 @@ class _SyncPageState extends State<SyncPage> {
 
     String title;
     String? subtitle;
-    Color titleColor = Colors.white;
+    Color titleColor = OmiColors.textPrimary;
     Widget? action;
 
     if (isActive) {
@@ -531,12 +538,12 @@ class _SyncPageState extends State<SyncPage> {
       });
     } else {
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           if (showSpinner) ...[
@@ -596,13 +603,13 @@ class _SyncPageState extends State<SyncPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              color: selected ? OmiColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               count > 0 ? '$label  $count' : label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade500,
+                color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
               ),
@@ -614,7 +621,7 @@ class _SyncPageState extends State<SyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingStatusCount),
@@ -923,148 +930,4 @@ class _PendingListItem {
         icon = null,
         color = null,
         count = null;
-}
-
-class _ManageStorageSheet extends StatelessWidget {
-  final SyncProvider provider;
-  final VoidCallback onClearSynced;
-  final VoidCallback onClearPending;
-  final VoidCallback onClearAll;
-
-  const _ManageStorageSheet({
-    required this.provider,
-    required this.onClearSynced,
-    required this.onClearPending,
-    required this.onClearAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = provider.clearableWalsCount;
-
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Synced row
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: context.l10n.synced,
-            subtitle: context.l10n.safelyBackedUp,
-            count: syncedCount,
-            onClear: syncedCount > 0 ? onClearSynced : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          // Pending row
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: context.l10n.pending,
-            subtitle: context.l10n.notYetSynced,
-            count: pendingCount,
-            onClear: pendingCount > 0 ? onClearPending : null,
-            clearLabel: context.l10n.clear,
-            isWarning: true,
-          ),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final int count;
-  final VoidCallback? onClear;
-  final String clearLabel;
-  final bool isWarning;
-
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.count,
-    required this.onClear,
-    required this.clearLabel,
-    this.isWarning = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text('$count', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              ],
-            ),
-          ),
-          if (onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(
-                  clearLabel,
-                  style: TextStyle(
-                    color: isWarning ? Colors.orange.shade300 : Colors.red.shade300,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }

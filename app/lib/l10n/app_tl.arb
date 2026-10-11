@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Sigurado ka na bang gustong i-report ang mensaheng ito?",
+    "reportMessageConfirm": "I-report ang mensaheng ito?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Sigurado ka na bang gustong burahin ang chat? Hindi maaaring bawiin ang aksyong ito.",
+    "clearChatConfirm": "Mabubura ang lahat ng mensahe sa chat na ito. Hindi ito maaaring bawiin.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -409,10 +409,6 @@
     "createYourOwnApp": "Lumikha ng Iyong Sariling App",
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
-    },
-    "buildAndShareApp": "Bumuo at ibahagi ang iyong custom app",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
     },
     "searchApps": "Maghanap ng mga app",
     "@searchApps": {
@@ -450,10 +446,6 @@
     "@joinCommunity": {
         "description": "Discord community link"
     },
-    "membersAndCounting": "8000+ miyembro at patuloy na dumarami.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
-    },
     "deleteAccountTitle": "Tanggalin ang Account",
     "@deleteAccountTitle": {
         "description": "Delete account page title"
@@ -466,11 +458,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Lahat ng iyong mga alaala at pag-uusap ay permanenteng buburahin.",
+    "allDataErased": "Mabubura ang iyong mga alaala at conversation.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Ang iyong Mga App at Integrations ay mawawalan ng koneksyon kaagad.",
+    "appsDisconnected": "Madidiskonekta ang iyong mga app at integration.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Sa Omi, kami ay nakatuon sa pagprotekta ng iyong privacy. Ang pahina na ito ay nagbibigay-daan sa iyo na kontrolin kung paano ginagamit at iniimbak ang iyong data.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "Matutunan ang higit pa…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "Antas ng Proteksyon ng Data",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "Ang iyong data ay protektado ng default gamit ang mataas na encryption. Suriin ang iyong mga setting at hinaharap na privacy options sa ibaba.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "Pag-access ng App",
     "@appAccess": {
@@ -845,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "I-configure ang STT provider",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "Conversation Timeout",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "Itakda kung kailan auto-end ang mga pag-uusap",
+    "conversationTimeoutConfig": "Gaano katagal maghihintay ang Omi sa katahimikan bago tapusin ang conversation",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "I-import ang Data",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "I-import ang data mula sa ibang pinagkukunan",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "Debug & Diagnostics",
     "@debugDiagnostics": {
@@ -929,10 +905,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "Mga salitang nauunawaan mula sa iyong mga pag-uusap.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "Nagbibigay",
     "@providing": {
         "description": "Providing stat title"
@@ -944,10 +916,6 @@
     "remembering": "Naaalala",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "Mga katotohanan at detalye na naaalala para sa iyo.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "Unlimited Plan",
     "@unlimitedPlan": {
@@ -1065,7 +1033,6 @@
     },
     "debugLogs": "Debug Logs",
     "debugLogsAutoDelete": "Awtomatikong buburahin pagkatapos ng 3 araw.",
-    "debugLogsDesc": "Tumutulong sa pag-diagnose ng mga isyu",
     "noLogFilesFound": "Walang log files na nahanap.",
     "omiDebugLog": "Omi debug log",
     "logShared": "Log ay na-share",
@@ -1078,7 +1045,6 @@
     "exportedConversations": "Mga Exported Conversations mula sa Omi",
     "exportShared": "Export ay na-share",
     "deleteKnowledgeGraphTitle": "Tanggalin ang Knowledge Graph?",
-    "deleteKnowledgeGraphMessage": "Ito ay tatanggal ang lahat ng derived knowledge graph data (nodes at connections). Ang iyong orihinal na mga alaala ay manatiling ligtas. Ang graph ay muling bubuo sa paglipas ng panahon o sa susunod na request.",
     "knowledgeGraphDeleted": "Knowledge Graph ay natanggal",
     "deleteGraphFailed": "Nabigo ang pagtanggal ng graph: {error}",
     "@deleteGraphFailed": {
@@ -1090,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "Tanggalin ang Knowledge Graph",
-    "deleteKnowledgeGraphDesc": "Burahin ang lahat ng nodes at connections",
     "mcp": "MCP",
     "mcpServer": "MCP Server",
     "mcpServerDesc": "Ikonekta ang AI assistants sa iyong data",
@@ -1195,7 +1160,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Sigurado ka na bang gustong mag-disconnect mula sa {appName}? Maaari kang muling kumonekta anumang oras.",
+    "disconnectAppMessage": "Puwede mong ikonekta muli ang {appName} anumang oras.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "Tukuyin ang Mga Profil para sa Mga Kaibigan at Pamilya",
     "trainFamilyProfilesDesc": "Ang iyong mga recording ay tumutulong sa amin na kilalanin at lumikha ng mga profil para sa iyong mga kaibigan at pamilya.",
     "enhanceTranscriptAccuracy": "Pahusayin ang Accuracy ng Transcript",
-    "enhanceTranscriptAccuracyDesc": "Habang umuunlad ang aming modelo, maaari kaming magbigay ng mas mahusay na resulta ng transkeribsyon para sa iyong mga recording.",
     "legalNotice": "Legal Notice: Ang legality ng pag-record at pag-store ng voice data ay maaaring magkakaiba depende sa iyong lokasyon at paano mo ginagamit ang feature na ito. Ang iyong responsibilidad na matiyak ang compliance sa local laws at regulations.",
     "alreadyAuthorized": "Naauthorize Na",
     "authorize": "I-authorize",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "Sabihin sa amin ang iyong pangunahing wika",
-    "languageForTranscription": "Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan.",
+    "languageForTranscription": "Ginagamit ng Omi ang wikang ito para sa transcription, buod, at alaala.",
     "singleLanguageModeInfo": "Ang Single Language Mode ay pinagana na. Ang pagsasalin ay hindi pinagana para sa mas mataas na accuracy.",
     "searchLanguageHint": "Maghanap ng wika ayon sa pangalan o code",
     "noLanguagesFound": "Walang mga wikang nahanap",
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "Ang integration sa {appName} ay paparating na! Nagsusumikap kami na magdala ng mas maraming opsyon sa pamamahala ng gawain.",
+    "integrationComingSoon": "Hindi pa suportado ang {appName}.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "I-import ang Configuration",
     "exportConfiguration": "I-export ang configuration",
     "bringYourOwn": "Dalhin ang iyong sarili",
-    "payYourSttProvider": "Gamitin ang Omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
+    "payYourSttProvider": "Libre sa Omi. Direkta mong binabayaran ang iyong transcription provider.",
     "freeMinutesMonth": "300 libreng minuto/buwan kasama. Unlimited sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Ang Host ay kinakailangan",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "Ilagay ang iyong live STT WebSocket endpoint",
     "apiKey": "API key",
     "enterApiKey": "Ilagay ang iyong API key",
-    "storedLocallyNeverShared": "Nakatipid sa lokal, hindi kailanman ibinabahagi",
+    "storedLocallyNeverShared": "Naka-save sa telepono na ito. Ipinapadala lang sa iyong transcription provider.",
     "host": "Host",
     "port": "Port",
     "advanced": "Advanced",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "I-reset ang request config sa default",
     "logs": "Mga Log",
     "logsCopied": "Ang mga log ay nakopya",
-    "noLogsYet": "Walang mga log pa. Magsimula ng recording para makita ang custom STT activity.",
-    "deviceUsesCodec": "Ang {device} ay gumagamit ng {reason}. Ang Omi ay gagamitin.",
+    "noLogsYet": "Wala pang log. Mag-record ng isang bagay para makita ang mga request sa iyong transcription provider.",
+    "deviceUsesCodec": "Ang {device} ay nagre-record sa format na hindi mabasa ng provider na ito ({reason}), kaya gagamitin ang transcription ng Omi.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,13 +1509,9 @@
         }
     },
     "omiTranscription": "Omi Transcription",
-    "bestInClassTranscription": "Best in class transcription na walang setup",
     "instantSpeakerLabels": "Instant speaker labels",
     "languageTranslation": "100+ language translation",
-    "optimizedForConversation": "Naka-optimize para sa pag-usap",
     "autoLanguageDetection": "Auto language detection",
-    "highAccuracy": "High accuracy",
-    "privacyFirst": "Privacy first",
     "saveChanges": "I-save ang Mga Pagbabago",
     "resetToDefault": "I-reset sa default",
     "viewTemplate": "Tingnan ang Template",
@@ -1705,10 +1665,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "Patuloy, ang iyong ginagawa ay napakaganda",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "I-skip ang tanong na ito",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1812,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "Kunan ang bawat sandali. Makakuha ng AI-powered\nsummaries. Hindi na kailangan mag-notes.",
+    "captureEveryMoment": "Nire-record ng Omi ang iyong mga conversation at isinusulat\nang buod at to-do para sa iyo.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1881,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan",
+    "languageBenefits": "Ginagamit ng Omi ang wikang ito para sa transcription, buod, at alaala.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1898,10 +1854,6 @@
     "selectYourLanguage": "Pumili ng iyong wika",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "Mga Gawain",
     "@actionItemsTitle": {
@@ -1951,7 +1903,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Sigurado ka ba na gusto mong i-delete ang gawaing ito?",
+    "deleteActionItemMessage": "I-delete ang task na ito?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1911,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Sigurado ka ba na gusto mong i-delete ang {count} piniling task{s}?",
+    "deleteSelectedItemsMessage": "I-delete ang {count} piniling task{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2002,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Walang mga alaala pa",
+    "noMemoriesYet": "Walang mga alaala pa",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2018,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Walang mga alaala na nahanap",
+    "noMemoriesFound": "Walang mga alaala na nahanap",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2030,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Sigurado ka ba na gusto mong i-clear ang alaala ng Omi? Ang aksyon na ito ay hindi mababawi.",
+    "clearMemoryMessage": "Mabubura ang lahat ng iyong alaala. Hindi ito maaaring bawiin.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2211,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Sigurado ka ba na gusto mong i-delete ang gawaing ito?",
+    "deleteActionItemConfirmMessage": "I-delete ang task na ito?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2267,15 +2219,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App Interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & Transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Ang App Language ay nagbabago ng mga menu at button. Ang Speech Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.",
+    "languageSettingsHelperText": "Ang App Language ay nagbabago ng mga menu at button. Ang Primary Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2348,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "Ang aksyong ito ay hindi maaaring bawiin.",
+    "thisActionCannotBeUndone": "Hindi ito maaaring bawiin.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -2553,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "I-configure ang STT provider",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "Itakda kung kailan ang mga conversation ay awtomatikong magtatapos",
+    "setWhenConversationsAutoEnd": "Gaano katagal maghihintay ang Omi sa katahimikan bago tapusin ang conversation",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2606,9 +2554,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "Knowledge Graph ay matagumpay na nabura",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2624,10 +2569,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "Burahin ang lahat ng nodes at connections",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2711,14 +2652,6 @@
     "detailedDiagnosticMessages": "Detailed na mga diagnostic messages",
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
-    },
-    "autoCreateSpeakers": "Awtomatikong Lumikha ng Speakers",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Awtomatikong lumikha kapag ang pangalan ay natuklasan",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
     },
     "followUpQuestions": "Follow-up Questions",
     "@followUpQuestions": {
@@ -2829,10 +2762,6 @@
     "youreAllSet": "Lahat ay handa na!",
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
-    },
-    "welcomeToOmiDescription": "Maligayang pagdating sa Omi! Ang iyong AI companion ay handa nang tulungan ka sa mga conversation, gawain, at marami pa.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
     },
     "startUsingOmi": "Magsimulang Gumamit ng Omi",
     "@startUsingOmi": {
@@ -2947,14 +2876,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "Ang mga conversation ay awtomatikong napoproseso",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Makakuha ng mga insight at summary kaagad",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "Ipakita ang Lahat",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2966,10 +2887,6 @@
     "dailyScore": "PANG-ARAW-ARAW NA PUNTUASYON",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "Isang puntuasyon upang tulungan kang mas mahusay\ntumuon sa pagpapatupad.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "Mga resulta ng paghahanap",
     "@searchResults": {
@@ -3091,7 +3008,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Sigurado ka na ba na nais mong burahin ang gawaing ito? Ang aksyong ito ay hindi maaaring bawiin.",
+    "deleteActionItemConfirmation": "I-delete ang task na ito? Hindi ito maaaring bawiin.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3484,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "Magsimula ng isang conversation at hayaan ang magic na magsimula",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "Pakisuri ang iyong koneksyon sa internet",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3540,7 +3453,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Sigurado ka na ba na nais mong i-report ang mensaheng ito?",
+    "confirmReportMessage": "I-report ang mensaheng ito?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3560,7 +3473,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Sigurado ka na ba na nais mong i-clear ang chat? Ang aksyong ito ay hindi maaaring bawiin.",
+    "confirmClearChat": "I-clear ang chat na ito? Hindi ito maaaring bawiin.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3746,10 +3659,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "Wearable AI companion",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "Kumakarga ng mga memories…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3810,7 +3719,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Sigurado ka na ba na nais mong burahin ang memory na ito? Ang aksyong ito ay hindi maaaring bawiin.",
+    "deleteMemoryConfirmation": "I-delete ang alaalang ito? Hindi ito maaaring bawiin.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3821,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "Mag-organize at kontrol ang iyong mga memories",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "Total",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3833,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "Itakda ang lahat ng memories sa private visibility",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "Gawing Public ang Lahat ng Memories",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "Itakda ang lahat ng memories sa public visibility",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Permanenteng alisin ang lahat ng memories mula sa Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3861,7 +3758,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Sigurado ka na ba na nais mong burahin ang memory ng Omi? Ang aksyong ito ay hindi maaaring bawiin at permanenteng magsasabing lahat ng {count} memories.",
+    "clearMemoryConfirmation": "Mabubura ang lahat ng {count} alaala. Hindi ito maaaring bawiin.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -3928,7 +3825,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "Piliin ang iyong pangunahing wika",
     "chooseYourLanguage": "Piliin ang iyong wika",
-    "selectPreferredLanguageForBestExperience": "Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience",
     "searchLanguages": "Maghanap ng mga wika",
     "selectALanguage": "Pumili ng isang wika",
     "tryDifferentSearchTerm": "Subukan ang ibang search term",
@@ -3943,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "Paganahin ang mga features para sa pinakamahusay na Omi experience sa iyong device.",
     "microphoneAccess": "Microphone Access",
     "recordAudioConversations": "I-record ang audio conversations",
     "microphoneAccessDescription": "Kailangan ng Omi ang microphone access upang i-record ang iyong mga conversation at magbigay ng mga transcription.",
@@ -4031,7 +3926,7 @@
         }
     },
     "letOmiChooseAutomatically": "Hayaan ang Omi na pumili ng pinakamahusay na app nang awtomatiko",
-    "deleteConversationConfirmation": "Sigurado ka na ba na gusto mong burahin ang conversation na ito? Ang aksyong ito ay hindi mababawi.",
+    "deleteConversationConfirmation": "I-delete ang usapang ito? Hindi ito maaaring bawiin.",
     "conversationDeleted": "Conversation na nabura",
     "generatingLink": "Gumagawa ng link…",
     "editConversation": "I-edit ang conversation",
@@ -4309,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "Kailan makakatanggap ng iyong daily summary",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "Subscription",
     "@subscription": {
         "description": "Subscription section title"
@@ -4338,14 +4229,10 @@
     "checkingNext7Days": "Sinusuri ang susunod na 7 araw",
     "shortcuts": "Mga Shortcut",
     "shortcutChangeInstruction": "I-click sa isang shortcut upang baguhin ito. Pindutin ang Escape upang kanselahin.",
-    "configureSTTProvider": "I-configure ang STT provider",
-    "setConversationEndDescription": "Itakda kung kailan mag-auto-end ang mga conversation",
     "importDataDescription": "Mag-import ng data mula sa ibang mga source",
     "exportConversationsDescription": "I-export ang mga conversation sa JSON",
     "exportingConversations": "Nag-export ng mga conversation…",
-    "clearNodesDescription": "I-clear ang lahat ng nodes at connections",
     "deleteKnowledgeGraphQuestion": "Burahin ang Knowledge Graph?",
-    "deleteKnowledgeGraphWarning": "Ito ay buburahin ang lahat ng derived knowledge graph data. Ang iyong original na mga memory ay manatiling ligtas.",
     "connectOmiWithAI": "Ikonekta ang Omi sa AI assistants",
     "noAPIKeys": "Walang API keys. Lumikha ng isa upang magsimula.",
     "autoCreateWhenDetected": "Auto-create kapag na-detect ang pangalan",
@@ -4391,7 +4278,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Sigurado ka na ba na gusto mong i-update ang iyong app? Ang mga pagbabago ay makikita kapag na-review na ng aming team.",
+    "updateAppConfirmation": "Makikita ang mga pagbabago kapag na-review na ng aming team.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4429,10 +4316,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "Ang Bagong Bersyon ay Available",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "Hindi",
     "@no": {
@@ -4486,7 +4369,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Sigurado ka na ba na gusto mong i-cancel ang iyong subscription? Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.",
+    "cancelSubscriptionConfirmation": "Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4746,7 +4629,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "Ang aksyong ito ay hindi mababawi. Ang anumang aplikasyon na gumagamit ng key na ito ay hindi na makakapag-access sa API.",
+    "revokeApiKeyWarning": "Mawawalan ng access sa API ang mga app na gumagamit ng key na ito. Hindi ito maaaring bawiin.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4761,10 +4644,6 @@
     "createAnApp": "Lumikha ng App",
     "@createAnApp": {
         "description": "Option to create an app"
-    },
-    "createAndShareYourApp": "Lumikha at ibahagi ang iyong app",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
     },
     "itemApp": "App",
     "@itemApp": {
@@ -4837,7 +4716,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Sigurado ka na ba na gusto mong burahin ang {item}? Ang aksyong ito ay hindi mababawi.",
+    "deleteItemConfirmation": "Hindi na mababawi ang pagbura sa {item} na ito.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4850,7 +4729,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Sigurado ka na ba na gusto mong mag-revoke ng key na \"{keyName}\"? Ang aksyong ito ay hindi mababawi.",
+    "revokeKeyConfirmation": "Mawawalan ng access ang lahat ng gumagamit ng \"{keyName}\". Hindi ito maaaring bawiin.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -4912,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "Ang end-to-end encryption ay ang gold standard para sa privacy. Kapag na-enable ito, ang iyong data ay naka-encrypt sa iyong device bago ipadala sa aming mga server. Ito ay nangangahulugang walang isa, hindi pa naman ang Omi, ay makaka-access sa iyong content.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "Mga Mahalagang Trade-offs:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4968,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "Ang iyong data ay naka-encrypt gamit ang isang key na natatangi sa iyo sa aming mga server, hosted sa Google Cloud. Ito ay nangangahulugang ang iyong raw na content ay hindi accessible sa sinuman, kabilang ang Omi staff o Google, direkta mula sa database.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "End-to-End Encryption",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "Paganahin para sa maximum security kung saan lamang ikaw ay maka-access sa iyong data. Itap upang matuto pa.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "Anuman ang level, ang iyong data ay laging encrypted sa rest at in transit.",
     "@dataAlwaysEncrypted": {
@@ -5077,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• Ang iyong data ay tumutulong na mapabuti ang AI models\n• Lamang ang non-sensitive data ang ibabahagi\n• Fully transparent na proseso",
+    "trainingDataBullets": "• Nakakatulong ang iyong data na mapabuti ang mga AI model\n• Tanging ang mga hindi sensitibong data lang ang ibinabahagi",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5097,7 +4964,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Ang iyong plan ay manatiling aktibo hanggang sa {date}. Pagkatapos, mawawalan ka ng access sa iyong unlimited features. Sigurado ka na ba?",
+    "planRemainsActiveUntil": "Ang iyong plan ay manatiling aktibo hanggang sa {date}. Pagkatapos, mawawalan ka ng access sa iyong unlimited features.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5187,10 +5054,6 @@
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
     },
-    "yourOmiUnleashed": "Ang iyong Omi, na walang hanggan. Maging unlimited para sa walang hanggang posibilidad.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
-    },
     "planEndedOn": "Ang iyong plano ay nagtapos noong {date}.\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
@@ -5233,7 +5096,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "I-unlock ang walang hanggang memorya ng Omi",
+    "unlockOmiInfiniteMemory": "Walang limitasyong alaala",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5249,7 +5112,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Suriin ang koneksyon at subukan ulit",
+    "checkConnectionTryAgain": "Suriin ang iyong koneksyon at subukang muli.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5307,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Sa Omi, seryoso kami ang kinuha ang iyong privacy. Nais naming maging transparent tungkol sa data na aming kinukuha at kung paano namin ito ginagamit upang mapabuti ang aming produkto para sa iyo. Narito kung ano ang kailangan mong malaman:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "Ano ang Aming Sinusubaybayan",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5326,14 +5185,6 @@
     "ourCommitment": "Ang Aming Pangako",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "Kami ay nakatuon sa paggamit ng data na aming kinukuha lamang upang gawing mas mahusay na produkto ang Omi para sa iyo. Ang iyong privacy at tiwala ay pangunahin para sa amin.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Salamat sa pagiging valued user ng Omi. Kung mayroon kang anumang mga katanungan o alalahanin, huwag mag-atubiling makipag-ugnayan sa amin sa team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "Password",
     "@password": {
@@ -5396,10 +5247,6 @@
     "exportStartedMayTakeFewSeconds": "Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "Ito ay magbabura ng lahat ng derived knowledge graph data (nodes at connections). Ang iyong mga orihinal na memories ay magiging ligtas. Ang graph ay muling mabubuo sa paglipas ng panahon o sa susunod na request.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "I-configure ang iyong pang-araw-araw na digest ng mga gawain",
     "@configureDailySummaryDigest": {
@@ -5505,7 +5352,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "Ito ay permanenteng magbabura ng lahat ng mga pag-uusap na na-import mula sa Limitless. Ang aksyon na ito ay hindi maaaring i-undo.",
+    "deleteAllLimitlessWarning": "Mabubura ang lahat ng usapang na-import mula sa Limitless. Hindi ito maaaring bawiin.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5563,7 +5410,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Sigurado ka ba na gusto mong burahin ang {name}'s sample?",
+    "deleteSampleConfirmation": "Aalisin ang voice sample ni {name}. Hindi ito maaaring bawiin.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5576,7 +5423,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Sigurado ka ba na gusto mong burahin ang {name}? Ito rin ay magtatanggal ng lahat ng associated speech samples.",
+    "deletePersonConfirmation": "Aalisin nito ang mga voice sample ni {name} at hindi na ito maibabalik. Ang mga sinabi niya sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5588,10 +5435,6 @@
     "howItWorksTitle": "Paano ito gumagana?",
     "@howItWorksTitle": {
         "description": "Help dialog title"
-    },
-    "howPeopleWorks": "Kapag lumikha ng isang tao, maaari kang pumunta sa isang conversation transcript, at italaan sa kanila ang kanilang corresponding segments, sa ganitong paraan ang Omi ay makakapag-recognize ng kanilang speech din!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
     },
     "tapToDelete": "I-tap upang burahin",
     "@tapToDelete": {
@@ -5671,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "I-store ang iyong real-time recordings sa private cloud storage habang nagsasalita ka. Ang audio ay kina-capture at ina-save nang secure sa real-time.",
+    "storeAudioCloudDescription": "Ina-upload ang mga recording mo habang nagsasalita ka para mapakinggan mo ulit mamaya.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -5938,7 +5781,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.",
+    "tasksEmptyStateMessage": "Magsimula ng pag-uusap para gumawa ng gawain.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6040,7 +5883,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Sigurado ka ba na gusto mong ihinto ang pag-record at i-summarize ang pag-uusap ngayon?",
+    "stopRecordingConfirmation": "Ihinto ang pagre-record at ibuod ang usapan ngayon?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -6784,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "Bumuo at ibahagi ang iyong custom na app",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "Maghanap ng 1500+ Apps",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6824,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "Kritikal lamang na mga reminder",
+    "frequencyDescMinimal": "Mga urgent lang, mga 1–3 sa isang araw",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "Mahalagang update lamang",
+    "frequencyDescLow": "Mga mahalaga lang, mga 3–5 sa isang araw",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "Regular na nakakatulong na empuye",
+    "frequencyDescBalanced": "Mga kapaki-pakinabang na suhestiyon, mga 5–8 sa isang araw",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "Madalas na check-in",
+    "frequencyDescHigh": "Mas maraming suhestiyon, mga 6–9 sa isang araw",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "Manatiling patuloy na engaged",
+    "frequencyDescMaximum": "Bawat kapaki-pakinabang na koneksyon, hanggang 9 sa isang araw",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -7223,7 +7062,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
+    "premiumMinutesInfo": "300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7334,7 +7173,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
+    "premiumMinutesMonth": "300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7422,7 +7261,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Ang built-in live transcription ng Omi ay na-optimize para sa real-time na pag-usap na may automatic speaker detection at diarization.",
+    "omiTranscriptionOptimized": "Ang live transcription ng Omi ay ginawa para sa mga real-time na usapan at minamarkahan kung sino ang nagsabi ng ano.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8088,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "Pribado at secure sa iyong device",
+    "privateAndSecureOnDevice": "Naka-save sa telepono na ito",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8104,7 +7943,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Sigurado ka na gusto mong permanenteng tanggalin ang recording na ito? Hindi na ito mababawi.",
+    "deleteRecordingConfirmation": "Hindi ito maaaring bawiin.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8618,7 +8457,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "Ikaw ay gumagalit ng iyong Unlimited Plan sa {title}. Sigurado ka na bang gusto mong magpatuloy?",
+    "planSwitchingDescriptionWithTitle": "Inililipat mo ang iyong Unlimited Plan sa {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -8748,14 +8587,6 @@
     "onboardingTellUsAboutYourself": "Sabihin sa amin tungkol sa iyo",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "Piliin ang iyong kagustuhan",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Bigyan ng kinakailangang access",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "Handa ka na",
     "@onboardingYoureAllSet": {
@@ -9692,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "Pumili kung aling backend ang kukonektahan",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "Production",
     "@production": {
         "description": "Label for production API environment"
@@ -9867,10 +9694,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "Ang iyong mga call ay nananatiling private at secure",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "I-upgrade sa Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9972,7 +9795,7 @@
     "fairUse3Day": "3-Day Rolling",
     "fairUseWeekly": "Weekly Rolling",
     "fairUseAboutTitle": "Tungkol sa Fair Use",
-    "fairUseAboutBody": "Ang Omi ay dinisenyo para sa personal conversations, meetings, at live interactions. Ang usage ay sinusukat ng real speech time detected, hindi ang connection time. Kung ang usage ay significantly lumalampas sa normal patterns para sa non-personal content, ang mga adjustments ay maaaring mag-apply.",
+    "fairUseAboutBody": "Dinisenyo ang Omi para sa personal na conversation, meeting, at live na interaksyon. Sinusukat ang paggamit base sa oras ng pagsasalita, hindi sa oras ng koneksyon. Kung lampas na lampas ang paggamit mo sa normal na personal na gamit, makakatanggap ka muna ng babala. Ang tuloy-tuloy na mabigat na paggamit ay maaaring magpabagal o maglimita sa transcription.",
     "fairUseCaseRefCopied": "{caseRef} copied",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10077,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "Kapag ang iyong Omi ay hindi konektado sa iyong phone, ito ay nag-store ng audio locally sa built-in memory nito. Hindi mo kailanman mawawalan ng recording.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Kapag muling kumokonekta ang Omi, ang mga recording ay automatic na inilipat sa iyong phone bilang isang temporary holding area bago i-upload.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10101,7 +9920,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10117,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "Ang mga permissions na ito ay core sa kung paano gumagana ang Omi. Pinapahintulutan nila ang mga key features tulad ng notifications, location-based experiences, at audio capture.",
+    "permissionsPageDescription": "Ginagamit ito ng Omi para kumonekta sa iyong device, mag-record ng audio, manatiling gumagana sa background, magpadala ng reminder, at itala kung saan nangyari ang mga conversation.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10128,10 +9947,6 @@
     "permissionsSetupTitle": "Makakuha ng pinakamahusay na experience",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "I-enable ang ilang permissions upang ang Omi ay gumawa ng mahika.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "Maaari mong baguhin ang mga ito anumang oras sa Settings > Permissions",
     "@permissionsChangeAnytime": {
@@ -10423,8 +10238,8 @@
     "deleteFlowFeedbackTitle": "Sabihin mo sa amin ang higit pa",
     "deleteFlowFeedbackSubtitle": "Ano ang magiging dahilan para gumana ang Omi para sa iyo?",
     "deleteFlowFeedbackHint": "Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.",
-    "deleteFlowConfirmTitle": "Ito ay permanente",
-    "deleteFlowConfirmSubtitle": "Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.",
+    "deleteFlowConfirmTitle": "I-delete ang Iyong Account?",
+    "deleteFlowConfirmSubtitle": "Hindi na ito maibabalik, kahit ng support.",
     "deleteConsequenceSubscription": "Ang anumang aktibong subscription ay ikakansela.",
     "deleteConsequenceNoRecovery": "Hindi maibabalik ang iyong account — kahit ng support team.",
     "deleteTypeToConfirm": "I-type ang DELETE para kumpirmahin",
@@ -10464,7 +10279,6 @@
     "currentPlan": "Kasalukuyan",
     "neoSubtitle": "{count} tanong bawat buwan",
     "operatorSubtitle": "{count} tanong bawat buwan",
-    "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation",
     "chatUsageCost": "Chat: ${used} / ${limit} nagamit ngayong buwan",
     "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
     "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
@@ -10491,7 +10305,7 @@
     "record": "Mag-record",
     "stop": "Itigil",
     "recordWithPhoneMic": "Mag-record gamit ang mikropono ng telepono",
-    "recordWithPhoneMicSubtitle": "Kunan ang audio sa paligid mo",
+    "recordWithPhoneMicSubtitle": "Mag-record at mag-transcribe gamit ang mikropono ng telepono na ito",
     "phoneCall": "Tawag sa telepono",
     "phoneCallSubtitle": "Mag-record ng tawag na may live na transkripsyon",
     "bulkExportInProgress": "Nag-e-export…",
@@ -10562,7 +10376,6 @@
     "invalidPromotionCode": "Hindi valid na promo code.",
     "backgroundModeTitle": "Background Mode",
     "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
-    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
     "regenerateRecap": "Buuin muli ang buod",
     "recapRegeneratedSnackbar": "Nabuo muli ang buod",
     "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
@@ -10571,7 +10384,7 @@
     "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
     "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
     "transcribeLaterTitle": "I-transcribe Mamaya",
-    "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
+    "transcribeLaterDescription": "Mag-record ngayon, i-transcribe kapag gusto mo. Hanggang doon, nasa phone mo lang ang audio.",
     "transcribeLaterNote": "Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
     "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
     "unmute": "I-unmute",
@@ -10618,7 +10431,7 @@
     "deviceOnboardingContinue": "Magpatuloy",
     "deviceOnboardingFinish": "Tapusin",
     "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
-    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroSubtitle": "Subukan ang live transcription, magtanong, at ang double-tap shortcut.",
     "deviceOnboardingIntroDuration": "Mga 1 minuto",
     "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
     "latest": "Pinakabago",
@@ -10676,7 +10489,7 @@
     "cloudTranscription": "Transkripsyon sa Cloud",
     "copyMessage": "Kopyahin ang mensahe",
     "deleteOnDeviceModel": "Tanggalin ang Modelo",
-    "deleteOnDeviceModelConfirm": "Sigurado ka bang gusto mong tanggalin ang modelong ito?",
+    "deleteOnDeviceModelConfirm": "I-delete ang model na ito?",
     "downgradeAnyway": "I-downgrade Pa Rin",
     "downgradeLimitBattery": "7x na paggamit ng baterya",
     "downgradeLimitDelay": "5-7 segundong pagkaantala",
@@ -10722,7 +10535,7 @@
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
     "whisperModelSizeTiny": "Napakaliit",
-    "planSheetChooseYourPlan": "Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.",
+    "planSheetChooseYourPlan": "Piliin ang plan na bagay sa iyo.",
     "availableOnMacMobileWeb": "Available sa Mac, mobile, at web",
     "popularBadge": "SIKAT",
     "worksOnDesktop": "Gumagana sa desktop",
@@ -10738,7 +10551,6 @@
     "pinAsBaseline": "I-pin bilang baseline",
     "unpinAsBaseline": "Alisin sa baseline",
     "baselineMemory": "Baseline na memorya",
-    "alwaysInContext": "Palaging nasa konteksto",
     "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
     "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
@@ -10763,7 +10575,6 @@
     "prerecordedTranscript": "Paunang-rekord",
     "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
     "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
-    "conversationsNotCapturedCount": "Hindi na-record ({count})",
     "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
     "chatBlockTask": "Gawain",
     "chatBlockGoal": "Layunin",
@@ -10794,20 +10605,18 @@
     "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
-    "failedToUpdateBaselineStatus": "Hindi na-update ang status ng baseline.",
+    "failedToUpdateBaselineStatus": "Hindi ma-update ang alaalang ito. Subukan ulit.",
     "memoryAllowUse": "Payagan ang paggamit",
     "memoryDontUse": "Huwag gamitin",
     "unstarConversation": "Alisin ang bituin sa pag-uusap",
     "moreOptions": "Higit pang mga opsyon",
     "filterByDate": "I-filter ayon sa petsa",
     "memoryGraph": "Graph ng mga alaala",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{Handa na ang boses para makilala} saved_sample_awaiting_embedding{Na-save ang sample; kailangan pa ng pagproseso ng boses} not_learned{Hindi pa natutunan ang boses} other{Hindi alam ang katayuan ng boses}}",
     "tagSpeakerIncludingLaterSpeech": "I-tag din ang susunod na pananalita ng speaker na ito",
     "updateSummaryWithNewNames": "I-update ang buod gamit ang mga bagong pangalan",
     "syncStatusUnsupportedAudio": "Hindi mabasa ang audio — hindi ma-sync",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ano ang magagawa mo para sa akin?} goal{Tulungan mo akong magtakda ng layunin} activity{Ibuod ang mga kamakailan kong aktibidad} improve{Paano pa ako mapapabuti?} other{}}",
     "nextWeek": "Sa susunod na linggo",
     "clearSearch": "I-clear ang paghahanap",
@@ -10852,8 +10661,8 @@
     "memoryReviewRight": "Tama",
     "memoryReviewWrong": "Mali",
     "memoryReviewFix": "Ayusin",
-    "memoryReviewConfirmed": "Nakumpirma. Isasaalang-alang ko ito.",
-    "memoryReviewDropped": "Tinanggal. Iiwasan ko ang ganitong mga detalye.",
+    "memoryReviewConfirmed": "Nakumpirma.",
+    "memoryReviewDropped": "Tinanggal sa iyong mga alaala.",
     "memoryReviewUpdated": "Na-update.",
     "memoryReviewSaveFailed": "Hindi ma-save, subukan ulit",
     "indentTask": "I-indent",
@@ -10898,7 +10707,7 @@
     "phoneNoVerifiedNumbersMessage": "I-verify ang iyong numero para tumawag gamit ang Omi.",
     "phoneDeleteNumberFailed": "Hindi ma-delete ang numerong ito",
     "forgetDeviceConfirmTitle": "Kalimutan ang Device?",
-    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.",
+    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito.",
     "deviceForgottenMessage": "Nakalimutan na ang device",
     "unpairDeviceConfirmTitle": "I-unpair ang Device?",
     "rollBack": "Ibalik",
@@ -10928,7 +10737,7 @@
     "homeScreen": "Home Screen",
     "phoneCalls": "Mga Tawag sa Telepono",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text",
+    "vadGateDescription": "Nilalaktawan ang tahimik na audio bago ang transcription para mabawasan ang gastos.",
     "flashCustomFirmware": "I-flash ang Custom na Firmware",
     "flashCustomFirmwareDescription": "Mag-flash ng custom na firmware build",
     "selectFirmwareZip": "Piliin ang ZIP file ng firmware",
@@ -10947,7 +10756,7 @@
     "permissionBlockedHint": "Naka-off sa Settings. Payagan ito doon para magamit ito.",
     "useDifferentAccount": "Gumamit ng Ibang Account",
     "onboardingStepOf": "Hakbang {current} sa {total}",
-    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.",
+    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi nang ilang araw. Magsisimulang mapuno ang iyong mga conversation, alaala, at to-do.",
     "cantFindDeviceHint": "Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.",
     "scanAgain": "Mag-scan Ulit",
     "howToPair": "Paano Mag-pair",
@@ -11068,7 +10877,6 @@
     "notificationsAndDisplay": "Mga Notipikasyon at Display",
     "helpAndAbout": "Tulong at Tungkol",
     "speakerTagPromptTitle": "Tulungan ang Omi na makilala ang mga boses",
-    "speakerTagPromptSubtitle": "Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw",
     "speakerTagPromptIsThisYou": "Ikaw ba ito?",
     "speakerTagPromptIsThisPerson": "Si {name} ba ito?",
     "speakerTagPromptWhoIsThis": "Sino ito?",
@@ -11094,9 +10902,7 @@
     "addToClaudeCodeConfig": "Idagdag sa ~/.claude.json",
     "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
     "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
-    "transcriptionUnavailableSavingOnDevice": "Hindi available ang transcript · naka-save sa device",
     "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
-    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
     "captureSourceCall": "Tawag",
     "captureSourcePhoneMic": "Mic ng telepono",
     "captureStatusWithSource": "{status} · {source}",
@@ -11111,5 +10917,524 @@
     "keepUsingPendant": "Ituloy ang paggamit ng pendant",
     "recordWith": "Mag-record gamit ang",
     "moreWaysToRecord": "Iba pang paraan ng pag-record",
-    "openCall": "Buksan ang tawag"
+    "openCall": "Buksan ang tawag",
+    "captureRecoveryBanner": "Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta",
+    "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
+    "captureNotTranscribing": "Hindi nagta-transcribe",
+    "captureAudioSavedTranscribesLater": "Na-save ang audio, ita-transcribe mamaya",
+    "captureStillRecording": "Nagre-record pa rin",
+    "captureMicInUseElsewhere": "Ginagamit ng ibang app ang mic",
+    "captureMicInterruptedDetail": "Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.",
+    "captureCustomSttUnreachableDetail": "Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.",
+    "captureStarting": "Nagsisimula…",
+    "capturePhoneStorageFull": "Puno na ang storage ng telepono",
+    "captureStorageAlmostFull": "Halos puno na ang storage",
+    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
+    "participantsSummaryUncounted": "{name} at iba pa",
+    "deviceOnboardingVoiceReplyTitle": "Pakinggan ang mga sagot ni Omi",
+    "deviceOnboardingVoiceReplySample": "Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.",
+    "deviceOnboardingAllSetTitle": "Handa Ka Na",
+    "deviceOnboardingAllSetSubtitle": "I-tap ang isang row para suriin o baguhin ito.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Pakinggan ang iyong huling sagot",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Pinapatugtog ang iyong huling sagot...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Sa pamamagitan ng {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Sa pamamagitan ng speaker ng telepono",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Sa pamamagitan ng kasalukuyang output ng audio",
+    "deviceOnboardingVoiceReplyOffDescription": "Mananatili sa screen ang mga sagot. Walang sinasabi.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} konektado. Omi ang magsasalita dito.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Nagpe-play sa pamamagitan ng {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.",
+    "deviceOnboardingVoiceReplySettingsHint": "Maaari mo itong baguhin anumang oras sa {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "I-replay ang tour na ito anumang oras sa {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minutes",
+    "usageWords": "Words",
+    "usageTasks": "Mga Gawain",
+    "usageMonth": "Sa Buwan Na Ito",
+    "usageYear": "Sa Taong Ito",
+    "usageAll": "Lahat ng Panahon",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Hitsura",
+    "appearanceSystem": "System",
+    "appearanceLight": "Maliwanag",
+    "appearanceDark": "Madilim",
+    "chatDiscardRecording": "Itapon",
+    "voiceQuestionNoSpeech": "Hindi ko narinig iyon — subukan ulit",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "Give feedback",
+    "feedbackAllGood": "All good",
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "feedbackReasonSummaryOther": "Something else",
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Maghanap ng mga tao",
+    "addQueryAsNewPerson": "Idagdag ang \"{query}\" bilang bagong tao",
+    "showAllPeople": "Ipakita ang lahat ng {count} na tao",
+    "chatGreeting": "Hi {name}, magtanong ng kahit ano",
+    "activity": "Aktibidad",
+    "places": "Mga lugar",
+    "recaps": "Mga buod",
+    "recent": "Kamakailan",
+    "searchPartialFailure": "Hindi ma-load ang ilang resulta",
+    "peopleSearchPlaceholder": "Maghanap ng tao",
+    "peopleNotHeardYet": "Hindi pa naririnig",
+    "peopleRecent": "Kamakailan",
+    "deletePeopleMessage": "Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.",
+    "personTalkTime": "Oras ng pagsasalita",
+    "personLastHeard": "Huling narinig",
+    "deletePeopleTitle": "{count, plural, =1{Burahin ang 1 tao?} other{Burahin ang {count} tao?}}",
+    "peopleFilterNeedsVoice": "Kailangan ng Boses",
+    "peopleCount": "{count, plural, =1{1 tao} other{{count} tao}}",
+    "noMatchingPeople": "Walang Tugmang Tao",
+    "deselectAll": "Alisin ang Lahat ng Pili",
+    "voiceRecognitionSettings": "Pagkilala sa Boses",
+    "greetingMorning": "Magandang umaga",
+    "greetingAfternoon": "Magandang hapon",
+    "greetingEvening": "Magandang gabi",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Ano ang gusto mong malaman?",
+    "askSuggestDecide": "Ano ang napagpasyahan ko ngayon?",
+    "askSuggestOwe": "Ano pa ang utang ko sa mga tao?",
+    "askSuggestNotice": "Ano ang napansin ni Omi?",
+    "pastChats": "Mga nakaraang chat",
+    "newChat": "Bagong chat",
+    "startFresh": "Magsimula ulit",
+    "noPastChats": "Dito lumalabas ang mga chat mo kay Omi.",
+    "deleteChatQuestion": "Burahin ang chat na ito?",
+    "deleteChatMessage": "Mawawala ito sa mga nakaraang chat nang tuluyan.",
+    "deleteChat": "Burahin ang chat",
+    "appsAskWith": "Tanungin si Omi gamit ang",
+    "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}",
+    "meetingScreenshotsTitle": "Ano ang nasa screen",
+    "meetingScreenshotFallbackCaption": "Screenshot mula sa meeting na ito",
+    "deleteMeetingScreenshotTitle": "Burahin ang Screenshot?",
+    "deleteMeetingScreenshotMessage": "Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.",
+    "conversationSummaryFailed": "Nabigo ang buod",
+    "reconnectionsRecent": "Muling pagkonekta (nakaraang 7 araw)",
+    "failedConnections": "Mga bigong koneksyon",
+    "failedConnectionsRecent": "Mga bigong koneksyon (nakaraang 7 araw)",
+    "diagnosticsCountSincePairing": "{count} mula nang ipares",
+    "peopleFilterLowConfidence": "Mababang kumpiyansa",
+    "peopleFilterPinned": "Naka-pin",
+    "peoplePinnedCount": "{count, plural, =1{1 naka-pin} other{{count} naka-pin}}",
+    "confidenceConfirmed": "Kumpirmado",
+    "confidenceLikely": "Malamang",
+    "confidenceUnverified": "Hindi pa kumpirmado",
+    "confidenceMeterLabel": "Kumpiyansa: {level}",
+    "confidenceReasonLabeled": "{count, plural, =1{Nilagyan mo ng label nang isang beses} other{Nilagyan mo ng label nang {count} beses}}",
+    "confidenceReasonPicked": "{count, plural, =1{Pinili sa 1 mungkahi} other{Pinili sa {count} mungkahi}}",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Kinumpirma mo ang 1 awtomatikong label} other{Kinumpirma mo ang {count} awtomatikong label}}",
+    "confidenceReasonAutoOnly": "Awtomatikong nilagyan ng label, hindi pa nakukumpirma",
+    "confidenceReasonNeverConfirmed": "Hindi pa nakumpirma",
+    "confidenceReasonCorrected": "Itinama mo ang tugma nito",
+    "confidenceReasonVoiceReady": "naka-save ang boses",
+    "confidenceReasonNeedsVoice": "wala pang voice sample",
+    "confidenceReasonNotHeard": "hindi pa naririnig",
+    "confidenceSheetTitle": "Kumpiyansa",
+    "confidenceSummaryConfirmed": "Nakikilala ni Omi ang boses ni {name}, at kinumpirma mo ito.",
+    "confidenceSummaryLikely": "Karaniwang nakikilala ni Omi ang boses ni {name}, pero ilang beses mo pa lang itong nakumpirma.",
+    "confidenceSummaryUnverified": "Hindi mo pa na-label o nakukumpirma si {name}, kaya hindi sigurado si Omi kung kilala nito ang kanyang boses.",
+    "confidenceEvidenceHeader": "Ebidensya",
+    "evidenceManualLabels": "{count, plural, =1{Nilagyan mo ng label sa 1 usapan} other{Nilagyan mo ng label sa {count} usapan}}",
+    "evidenceCardConfirms": "{count, plural, =1{Oo sa 1 mungkahi} other{Oo sa {count} mungkahi}}",
+    "evidenceCardPicks": "{count, plural, =1{Pinili sa 1 mungkahi} other{Pinili sa {count} mungkahi}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Kinumpirma mo ang 1 awtomatikong label} other{Kinumpirma mo ang {count} awtomatikong label}}",
+    "evidenceAutoCorrected": "{count, plural, =1{Inilipat mo sa iba ang 1 awtomatikong label} other{Inilipat mo sa iba ang {count} awtomatikong label}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 awtomatikong label na hindi pa nakukumpirma} other{{count} awtomatikong label na hindi pa nakukumpirma}}",
+    "evidenceVoiceReady": "Handa na ang sample ng boses",
+    "evidenceNoVoice": "Wala pang sample ng boses",
+    "evidenceNotHeard": "Hindi pa naririnig sa usapan",
+    "evidenceNothing": "Hindi mo pa sila nilagyan ng label o kinumpirma",
+    "effectCountsALot": "Malaking tulong",
+    "effectCounts": "Nakakatulong",
+    "effectCountsALittle": "Kaunting tulong",
+    "effectBarelyCounts": "Halos hindi nakakatulong",
+    "effectCountsAgainst": "Nakakasama",
+    "effectNeeded": "Kailangan para maging Kumpirmado",
+    "confidenceToReachConfirmed": "Para Maging Kumpirmado",
+    "confidenceNextVoice": "Kailangan din ni Omi ng sample ng boses ni {name}. Lagyan sila ng label habang naka-on ang Tandaan ang mga boses.",
+    "confidenceIsConfirmed": "Kumpirmado na si {name}. Wala ka nang kailangang gawin.",
+    "confidenceFootnote": "Pinakamahalaga ang mga label at kumpirmasyon mula sa iyo. Kaunti lang ang bigat ng mga awtomatikong label hangga't hindi mo ito kinukumpirma.",
+    "personWhyConfidence": "Bakit?",
+    "pinPersonTitle": "I-pin si {name}",
+    "pinAction": "I-pin",
+    "unpinAction": "I-unpin",
+    "personPinnedToast": "Na-pin si {name}",
+    "personUnpinnedToast": "Na-unpin si {name}",
+    "whyConfidenceMenu": "Bakit {level}?",
+    "deletePersonNamedTitle": "I-delete si {name}?",
+    "deletePinnedPersonMessage": "Naka-pin si {name}. Made-delete ang mga sample ng boses nila, hindi na sila makikilala ni Omi, at lalabas silang hindi pinangalanang speaker sa mga lumang transcript. Hindi na ito maibabalik.",
+    "deleteNamedPerson": "I-delete si {name}",
+    "selectPeople": "Pumili ng mga tao",
+    "cleanUpEllipsis": "Linisin…",
+    "cleanUpUnsureCount": "{count, plural, =1{1 taong hindi sigurado si Omi} other{{count} taong hindi sigurado si Omi}}",
+    "cleanUpBannerBody": "Karamihan ay maling narinig na pangalan. Suriin at alisin ang mga hindi totoo.",
+    "reviewAction": "Suriin",
+    "cleanUpTitle": "Linisin",
+    "cleanUpLead": "{count, plural, =1{Hindi sigurado si Omi sa taong ito. Alisin ang check para panatilihin sila.} other{Hindi sigurado si Omi sa {count} taong ito. Karamihan ay mga pangalang maling narinig sa mga transcript. Alisin ang check ng sinumang gusto mong panatilihin.}}",
+    "cleanUpPinnedNote": "Hindi kailanman isinasama sa Paglilinis ang mga naka-pin na tao.",
+    "deletePeopleCountAction": "{count, plural, =1{I-delete ang 1 tao} other{I-delete ang {count} tao}}",
+    "peopleDeletedToast": "{count, plural, =1{Na-delete ang 1 tao} other{Na-delete ang {count} tao}}",
+    "cleanUpNothingTitle": "Walang Lilinisin",
+    "cleanUpNothingMessage": "Sa ngayon, sigurado si Omi sa lahat.",
+    "selectAllSkipsPinned": "Nilalaktawan ng Piliin Lahat ang mga naka-pin na tao. I-delete sila nang isa-isa mula sa page nila.",
+    "pinnedNotSelectable": "Naka-pin, hindi mapipili",
+    "ignoredVoicesTitle": "Mga Binalewalang Boses",
+    "ignoredVoicesSubtitle": "TV, podcast, at iba pang boses na minarkahan mong Hindi Tao",
+    "ignoredVoicesEmpty": "Walang binalewalang boses",
+    "restoreAction": "Ibalik",
+    "voiceRestoredToast": "Maaaring magtanong ulit si Omi tungkol sa boses na ito",
+    "speakerTagPromptSomeoneElse": "Iba Pa…",
+    "speakerTagPromptNotAPerson": "Hindi Tao",
+    "speakerTagPromptNotSureAction": "Hindi Sigurado",
+    "speakerTagPromptThatsMeAction": "Ako Ito",
+    "speakerTagPromptClosestVoices": "Pinakamalapit na boses",
+    "speakerTagPromptRecentPeople": "Mga taong kausap mo kamakailan",
+    "voiceMatchClose": "Malapit na tugma",
+    "voiceMatchPossible": "Posibleng tugma",
+    "voiceMatchWeak": "Mahinang tugma",
+    "voiceMatchMeterLabel": "Tugma ng boses: {level}",
+    "speakerTagPromptHintIdentify": "Ang sagot mo ay tumutulong kay Omi na makilala ang boses na ito sa susunod.",
+    "speakerTagPromptHintOwner": "Ang sagot mo ay para lang sa pinatugtog na bahagi.",
+    "speakerTagPromptSavedAs": "Na-save bilang {name}",
+    "speakerTagPromptSavedAsYou": "Na-save bilang ikaw",
+    "speakerTagPromptIgnoredNote": "Hindi na magtatanong si Omi tungkol sa boses na ito",
+    "speakerTagPromptLabeledToast": "Nilagyan ng label bilang {name}",
+    "speakerTagPromptLabeledYouToast": "Nilagyan ng label bilang ikaw",
+    "speakerTagPromptNotAPersonToast": "Minarkahang hindi tao",
+    "speakerTagPromptRejectedToast": "Inalis ang label",
+    "whoIsItTitle": "Sino Ito?",
+    "newPersonEllipsis": "Bagong Tao…",
+    "addNamedPersonAction": "Idagdag ang “{name}”",
+    "everyoneHeader": "Lahat",
+    "speakerSuggestionChip": "{name}?",
+    "speakerSuggestionAppliesToSpeaker": "Nalalapat sa bawat linya mula sa speaker na ito",
+    "collapseAction": "I-collapse",
+    "speakerTagPromptNotMeAction": "Hindi ako",
+    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}",
+    "siriShortcutsSetupHint": "I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “{askPhrase}” o “{questionPhrase}”, pagkatapos ay itanong ang tanong mo.",
+    "siriShortcutsSearchHint": " Maaari mo ring sabihin ang “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "May available na update",
+    "updateAvailableMessage": "Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.",
+    "updateRequiredTitle": "Kailangang mag-update",
+    "updateRequiredMessage": "Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.",
+    "exportingAllData": "Ini-export ang iyong data… Panatilihing bukas ang Omi; ang malalaking account ay maaaring tumagal ng ilang minuto.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 nagsasalita} other{{count} nagsasalita}}",
+    "autoRemoveSyncedCopiesTitle": "Awtomatikong Tanggalin ang mga Naka-sync na Kopya",
+    "autoRemoveSyncedCopiesDays": "Binubura ang mga naka-sync na kopya pagkatapos ng {days} araw",
+    "autoRemoveSyncedCopiesDescription": "Binubura ang mga lokal na kopya {days} araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.",
+    "localCopiesSection": "Mga Lokal na Kopya",
+    "speakerLabelLinesLabeled": "{count, plural, =1{Nilagyan ng label ang 1 linya} other{Nilagyan ng label ang {count} linya}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Natutunan na ang boses} pending{Tinututunan ang boses…} disabled{Naka-off ang pag-save ng boses} other{Hindi pa natutunan ang boses}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{Nakita sa 1 naunang usapan} other{Nakita sa {count} naunang usapan}}",
+    "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
+    "speakerLabelTalkTime": "{duration} ng boses na ito",
+    "findDeviceNoneTitle": "Walang Nahanap na Omi",
+    "findDeviceNoneMessage": "I-on ito at hawakan malapit sa iyong telepono.",
+    "startupFailedDetails": "Mga Detalye",
+    "couldNotLoadApiKeys": "Hindi ma-load ang mga API key.",
+    "speakerTagPromptNoAction": "Hindi…",
+    "diagnosticsRightNow": "Ngayon",
+    "diagnosticsLast7Days": "Nakaraang 7 Araw",
+    "diagnosticsConnectedFor": "Nakakonekta nang",
+    "diagnosticsVerdictReconnects": "Kusang muling kumokonekta",
+    "diagnosticsVerdictReconnectsDetail": "Maiikling pagputol, bumabalik sa loob ng mga {duration} bawat beses",
+    "diagnosticsVerdictNoDrops": "Walang pagputol ngayong linggo",
+    "diagnosticsVerdictTrouble": "Nahihirapang kumonekta",
+    "diagnosticsVerdictTroubleDetail": "Mga bigong koneksyon sa nakaraang 24 na oras: {count}",
+    "diagnosticsDrops": "Mga pagputol",
+    "diagnosticsDropsPerHour": "mga {count} kada oras",
+    "diagnosticsLongestGap": "Pinakamahabang puwang",
+    "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
+    "diagnosticsLastDuration": "Nakaraang {duration}",
+    "chatReplyOffline": "Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.",
+    "chatReplyServerError": "May nangyaring mali sa aming panig. Subukan muli.",
+    "chatReplyTimeout": "Napakatagal ng sagot. Subukan muli.",
+    "chatReplyNotSignedIn": "Hindi ka naka-sign in. Mag-sign in at subukan muli.",
+    "chatAppsLoadFailed": "Hindi ma-load ang mga chat app. Subukan muli.",
+    "assistantVoiceSettingsTitle": "Boses",
+    "assistantVoice": "Boses ng Assistant",
+    "voiceSharedAcrossDevices": "Ang napili mong boses ay ibinabahagi sa mobile at desktop.",
+    "readChatRepliesAloud": "Basahin nang malakas ang mga sagot sa chat",
+    "readChatRepliesAloudDescription": "Magsasalita lamang kapag pinapayagan ng Voice response.",
+    "voicePreviewSample": "Hi, ako si Omi. Ito ang boses ko.",
+    "peopleStatsIncomplete": "Maaaring hindi kumpleto ang mga bilang.",
+    "previousDay": "Nakaraang araw",
+    "nextDay": "Susunod na araw",
+    "noTasksOnDate": "Walang gawain noong {date}",
+    "reprocessingConversationProgress": "Muling pinoproseso ang pag-uusap…",
+    "conversationReprocessed": "Na-update ang pag-uusap",
+    "loadingTranscript": "Kumakarga ng transcript…",
+    "transcriptLoadFailed": "Hindi ma-load ang transcript.",
+    "processingConversationProgress": "Pinoproseso ang pag-uusap…",
+    "conversationProcessingFailedMessage": "Hindi maproseso ang pag-uusap na ito.",
+    "waitForReprocessing": "Hintaying matapos ang muling pagproseso.",
+    "unnamedSpeakerLabel": "Speaker",
+    "unresolvedSpeakersNotice": "Maaaring hindi magtugma ang mga label ng speaker sa mga recording sa conversation na ito.",
+    "unresolvedSpeakersTitle": "Tungkol sa mga Label ng Speaker",
+    "unresolvedSpeakersMessage": "Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.",
+    "nameSpeakerTitle": "Pangalanan ang Speaker",
+    "playbackPreparingAudio": "Inihahanda ang Audio…",
+    "playbackBackToCurrent": "Bumalik sa Kasalukuyan",
+    "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
+    "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
+    "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
+    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
+    "forYou": "Para Sa Iyo",
+    "stopThese": "Itigil Ang Mga Ito",
+    "dismiss": "Isara",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Ipakita sa lock screen",
+    "accountDeletionInProgressSignInAgain": "Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.",
+    "onboardingSetupTitle": "Sine-set up ang iyong Omi",
+    "onboardingSetupSubtitle": "Bigyan ng sandali ang Omi para i-personalize",
+    "onboardingSetupStepWorkspace": "Inihahanda ang iyong workspace",
+    "onboardingSetupStepLanguage": "Inaayos ang transcription para sa iyong wika",
+    "onboardingSetupStepMemory": "Sine-set up ang iyong memory",
+    "onboardingSetupStepDevices": "Kinokonekta ang iyong mga device",
+    "onboardingSetupStepPersonalize": "Pini-personalize ang iyong karanasan",
+    "onboardingRatingPromptTitle": "Nag-e-enjoy ka ba sa Omi?",
+    "onboardingRatingPromptYes": "Oo",
+    "onboardingRatingPromptNo": "Hindi",
+    "partialRecording": "Bahagyang pagrekord",
+    "importTranscriptFiles": "Mga file ng transcript",
+    "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito",
+    "importTooManyAttempts": "Masyadong maraming pag-import ngayon. Subukan ulit mamaya.",
+    "importFileTooLarge": "Masyadong malaki ang file na ito para i-import.",
+    "importUnsupportedFileType": "Hindi ma-import ang ganitong uri ng file.",
+    "reviewTitle": "Review",
+    "reviewEntryTitle": "Mga tanong para sa iyo",
+    "reviewRemaining": "{count} na lang",
+    "reviewQuestionSpeaker": "Sino ang nagsabi nito?",
+    "reviewQuestionSamePerson": "Siya rin ba si “{name}”?",
+    "reviewQuestionSpelling": "Paano ito ibabaybay?",
+    "reviewPlayClip": "I-play ang clip",
+    "reviewStopClip": "Ihinto ang clip",
+    "reviewOpenDetailsHint": "Binubuksan ang mga detalye",
+    "reviewAnswerMe": "Ako",
+    "reviewAnswerOther": "Iba pa",
+    "reviewAddTask": "Magdagdag ng Task",
+    "reviewAnswerFailed": "Hindi na-save ang sagot mo. Subukan ulit.",
+    "reviewAnswersConversations": "Nilalagyan ng label ng sagot na ito ang {count} usapan",
+    "reviewUnknownSpeaker": "Hindi kilalang nagsasalita",
+    "reviewNewPersonName": "Pangalan nila",
+    "reviewSomeoneElse": "May iba pa…",
+    "reviewConfirm": "Kumpirmahin",
+    "reviewConfirmPerson": "Kumpirmahin si {name}",
+    "reviewNotSure": "Hindi sigurado",
+    "reviewOpenConversation": "Usapan",
+    "reviewTaskField": "Task",
+    "reviewDue": "Takdang petsa",
+    "reviewNoDate": "Wala",
+    "reviewProject": "Proyekto",
+    "reviewReasonAlreadyDone": "Tapos na",
+    "reviewReasonNotMine": "Hindi akin",
+    "reviewReasonNotUseful": "Hindi nakatutulong",
+    "reviewYesMerge": "Oo, pagsamahin",
+    "reviewConversationCount": "Mga usapan: {count}",
+    "reviewSpellingCustom": "I-type",
+    "reviewLoadFailed": "Hindi na-load ang mga tanong mo.",
+    "reviewCaughtUpTitle": "Walang sasagutin",
+    "reviewCaughtUpBody": "Magtatanong lang ang Omi dito kapag kailangan ka niya.",
+    "reviewRecentChanges": "Mga Kamakailang Pagbabago",
+    "reviewChangesIntro": "Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.",
+    "reviewChangeUndone": "Na-undo na. Hindi na ito uulitin ng Omi nang mag-isa.",
+    "reviewChangeFailed": "Hindi na-update ang pagbabagong ito. Subukan ulit.",
+    "reviewChangesLoadFailed": "Hindi na-load ang mga kamakailang pagbabago.",
+    "reviewNoChangesTitle": "Wala pang pagbabago",
+    "reviewNoChangesBody": "Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.",
+    "reviewShowMore": "Magpakita Pa",
+    "entityKeptCurrent": "Pinananatiling napapanahon ng Omi",
+    "entityNotRight": "Mali ba?",
+    "entityCorrectionTitle": "Ano ang mali?",
+    "entityCorrectionHint": "Sabihin sa Omi kung ano ang aayusin",
+    "entityCorrectionSaved": "Salamat. Aayusin ito ng Omi.",
+    "entityCorrectionFailed": "Hindi naipadala ang pagwawasto mo. Subukan ulit.",
+    "entityLoadFailed": "Hindi na-load ang page na ito.",
+    "entityProject": "Proyekto",
+    "entityProjects": "Mga proyekto",
+    "entityDecisions": "Mga desisyon",
+    "entityOpenTasks": "Mga bukas na task",
+    "entityOpenThreads": "Mga bukas na usapin",
+    "entityWaitingOn": "Naghihintay kay {name}",
+    "entityDue": "Takdang petsa: {date}",
+    "entityWhatOmiKnows": "Ang alam ng Omi",
+    "entityRecentConversations": "Mga kamakailang usapan",
+    "tasksNoProject": "Walang proyekto",
+    "tasksGroupByProject": "I-group ayon sa Proyekto",
+    "tasksGroupByDate": "I-group ayon sa Petsa",
+    "dreamReportTitle": "Ulat ng Dream",
+    "dreamReportShadowBanner": "Preview mode: ipinapakita ng Dream ang babaguhin nito, pero wala pang nagbabago sa account mo.",
+    "dreamReportLiveBanner": "Kusang ina-apply ng Dream ang mga pagbabagong ito. I-undo ang alinman sa Mga Kamakailang Pagbabago.",
+    "dreamReportRunNow": "Patakbuhin Ngayon",
+    "dreamReportRunLimit": "Wala nang manual na takbo ngayon",
+    "dreamReportRunInProgress": "May tumatakbo nang pass. Subukan ulit sa isang minuto.",
+    "dreamReportRunFailed": "Hindi napatakbo ang Dream. Subukan ulit.",
+    "dreamReportIdle": "Wala pang bagong titingnan.",
+    "dreamReportLoadFailed": "Hindi ma-load ang ulat ng Dream.",
+    "dreamReportEmptyTitle": "Wala pang pass",
+    "dreamReportEmptyBody": "Tinitingnan ng Dream ang mga nagbago sa account mo mga isang beses kada oras.",
+    "dreamReportScheduled": "Naka-iskedyul",
+    "dreamReportManual": "Manual",
+    "dreamReportFailed": "Nabigo ({error})",
+    "dreamReportTimedOut": "Huminto sa limitasyon ng oras",
+    "dreamReportNothingFound": "Walang aayusin",
+    "dreamReportStats": "Nabasa ang {records} item · {tokens} token",
+    "dreamReportWouldFix": "Aayusin sana",
+    "dreamReportFixed": "Naayos",
+    "dreamReportWouldAsk": "Itatanong sana sa iyo",
+    "dreamReportWouldSuggestTasks": "Magmumungkahi sana ng mga gawain",
+    "dreamReportLearnedWords": "Mga salitang natutunan",
+    "dreamReportFeedback": "Iniulat sa team ng Omi",
+    "dreamReportDeletedItem": "Naburang item",
+    "dreamReportPasses": "{count} sa {limit} na pass ngayon",
+    "dreamReportQueued": "{count, plural, =0{Walang pagbabagong naghihintay} =1{1 pagbabagong naghihintay} other{{count} pagbabagong naghihintay}}",
+    "dreamReportRunsLeft": "{count, plural, =1{1 manual na takbo na lang ngayon} other{{count} manual na takbo na lang ngayon}}",
+    "dreamReportFound": "{fixes, plural, =1{1 ayos} other{{fixes} ayos}} · {asks, plural, =1{1 mungkahi} other{{asks} mungkahi}}",
+    "dreamReportDropped": "{count, plural, =1{1 lumang pagbabago ang nilaktawan} other{{count} lumang pagbabago ang nilaktawan}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 ulat ang pinigil para sa privacy} other{{count} ulat ang pinigil para sa privacy}}",
+    "speakerTagPromptExcerptSaved": "Na-save ang sagot para sa bahaging ito.",
+    "pinPersonDescription": "Nananatili sa itaas ng listahan mo ng Mga Tao ang mga naka-pin na tao, at hindi sila tinatanggal ng Linisin.",
+    "chatAppsProblemFailed": "May nangyaring mali. Subukan muli.",
+    "chatAppsIsConnected": "Nakakonekta na ang {app}",
+    "chatAppsRefreshFailed": "Hindi ma-refresh. Ipinapakita ang huling nakita namin.",
+    "chatAppsReadOnlyBanner": "Read-only. Sagutin si Omi sa {app}.",
+    "chatAppsWaitlistConfirmed": "Salamat. Lalabas ang WhatsApp dito kapag handa na.",
+    "chatAppsUseTelegramForNow": "Gamitin Muna ang Telegram",
+    "chatAppsCouldNotOpen": "Hindi mabuksan ang {app}. Tiyaking naka-install ito at subukan muli.",
+    "chatAppsTryPromise": "Ano ang ipinangako ko kay Sam kahapon?",
+    "chatAppsDoesSave": "Nagse-save ng mga alaala at namamahala ng mga gawain mo",
+    "chatAppsOnTheList": "Nasa Listahan",
+    "chatAppsNoChatsTitle": "Wala pang chat",
+    "chatAppsInChannel": "Sa {app}",
+    "chatAppsConnectTelegramMessage": "Bubuksan ni Omi ang Telegram gamit ang pribadong link na para lang sa iyo.",
+    "chatAppsOpenMessages": "Buksan ang Messages",
+    "chatAppsDisconnectTitle": "I-disconnect ang {app}?",
+    "chatAppsPrivateMemoriesSubtitle": "Ang kalusugan, pera, at anumang minarkahan mong pribado ay hindi isasama sa mga chat app.",
+    "chatAppsConnectIMessageMessage": "Magpadala kay Omi ng isang mensahe mula sa numerong gusto mong gamitin. Ang code sa mensahe ang magli-link sa numerong iyon sa account mo.",
+    "chatAppsWhatsAppMessage": "Pinagsisikapan naming dalhin si Omi sa WhatsApp. Lalabas ito rito kapag handa na.",
+    "chatAppsNoChatsMessage": "Lalabas dito ang mga chat mo kay Omi sa {app}.",
+    "chatAppsViewChats": "Tingnan ang mga Chat",
+    "chatAppsDisconnectMessage": "Titigil si Omi sa pagsagot sa {app} at buburahin ang chat history na itinatago nito para dito. Mananatili sa {app} ang mga mensaheng nandoon na.",
+    "chatAppsReadOnlyFooter": "Read-only ang mga chat na ito rito. Sumagot sa {app}.",
+    "chatAppsAddToContacts": "Idagdag si Omi sa Contacts",
+    "chatAppsProPerkContext": "Naaalala ni Omi ang konteksto sa bawat app",
+    "chatAppsWhatsAppMeantime": "Gumagana na ngayon ang Telegram at iMessage, na may parehong mga alaala at gawain.",
+    "chatAppsComingLater": "Paparating pa lang",
+    "chatAppsProblemRateLimited": "Masyadong maraming pagsubok. Maghintay ng isang minuto at subukan muli.",
+    "chatAppsMessage": "Mensahe",
+    "chatAppsOpenApp": "Buksan ang {app}",
+    "chatAppsTelegramSubtitle": "I-set up sa dalawang tap",
+    "chatAppsLoadFailedTitle": "Hindi ma-load ang mga chat app",
+    "chatAppsInsights": "Mga insight mula kay Omi",
+    "chatAppsShowInAppOff": "Naka-off: makikita mo lang ang mga ito sa {app}.",
+    "chatAppsProPerkText": "Mag-text kay Omi mula sa Telegram at iMessage",
+    "chatAppsVoiceNotesSubtitle": "Magpadala ng voice note at sasagutin ito ni Omi.",
+    "chatAppsPartOfPro": "Bahagi ng Pro ang mga chat app",
+    "chatAppsMessagesApp": "Messages",
+    "chatAppsTelegramOtherDevice": "Nasa ibang device ang Telegram?",
+    "chatAppsHeroMessage": "Magtanong tungkol sa araw mo, mag-save ng mga alaala, at mamahala ng mga gawain mula sa Telegram o iMessage. Nananatili ang mga chat mo sa app na ginagamit mo, at naaalala ni Omi ang pinag-usapan ninyo saanman.",
+    "chatAppsTryRemind": "Paalalahanan akong tawagan si Mama sa Linggo",
+    "chatAppsChannelsTitle": "Mga chat app",
+    "chatAppsDoesAnswer": "Sumasagot sa mga tanong tungkol sa mga usapan at alaala mo",
+    "chatAppsChannelChats": "Mga chat sa {app}",
+    "chatAppsIncludedWithPro": "KASAMA SA OMI PRO",
+    "chatAppsLink": "Link",
+    "chatAppsNeverMessagesOthers": "Hindi kailanman magme-message sa ibang tao para sa iyo",
+    "chatAppsNotConnectedTitle": "Hindi nakakonekta",
+    "chatAppsTelegramPrivacyNote": "Naka-store din sa Telegram ang mga chat mo kay Omi. Sa iyo lang sumasagot si Omi, hindi sa ibang tao, at puwede kang mag-disconnect anumang oras.",
+    "chatAppsProblemOffline": "Offline ka. Tingnan ang koneksyon mo at subukan muli.",
+    "chatAppsIMessageSubtitle": "Mag-text kay Omi mula sa phone number mo",
+    "chatAppsPrivateMemories": "Panatilihin ang mga pribadong alaala sa app",
+    "chatAppsConnectTelegramTitle": "Ikonekta ang Telegram",
+    "chatAppsInsightsSubtitle": "Hayaan si Omi na magpadala ng recap o insight dito.",
+    "chatAppsTelegramWaiting": "Hinihintay kang i-tap ang Simulan sa Telegram…",
+    "chatAppsEntrySubtitle": "Makipag-usap kay Omi sa mga app na ginagamit mo araw-araw.",
+    "chatAppsConnectedAs": "Nakakonekta bilang {handle}",
+    "chatAppsProPerkSave": "Mag-save ng mga alaala at mamahala ng mga gawain mismo sa chat",
+    "chatAppsConnectIMessageTitle": "Mag-text kay Omi para kumonekta",
+    "chatAppsWaitingMessage": "Ipadala ang mensahe sa Messages. Mag-a-update ang screen na ito pagkatanggap ni Omi.",
+    "chatAppsShowInApp": "Ipakita ang mga chat na ito sa Omi app",
+    "chatAppsCodeExpiredMessage": "Kumuha ng bagong code at ipadala ito mula sa Messages.",
+    "chatAppsNoMessages": "Walang mensahe",
+    "chatAppsHeroTitle": "Makipag-chat kay Omi kung saan ka na nakikipag-chat",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage, at iba pa",
+    "chatAppsCodeExpiresIn": "Mag-e-expire ang code sa loob ng {time}",
+    "chatAppsNotConnectedMessage": "Na-disconnect na ang chat app na ito.",
+    "chatAppsRepliesOnlyNote": "Sa iyo lang sumasagot si Omi. Hindi ito kailanman nauunang mag-text.",
+    "chatAppsDisconnectFooter": "Buburahin ng pag-disconnect ang history na itinatago ni Omi para sa {app}.",
+    "chatAppsReplyThereAnytime": "Mag-message kay Omi sa {app} anumang oras.",
+    "chatAppsTryAsking": "Subukang magtanong",
+    "chatAppsTelegramStepReturn": "Bumalik dito. Kukumpirmahin namin kung gumana.",
+    "chatAppsDoesFiles": "Nagpapadala at tumatanggap ng mga file, litrato, at voice note",
+    "chatAppsTryWeek": "Ibuod ang linggo ko sa tatlong linya",
+    "chatAppsChannelFooter": "Nananatili sa {app} ang mga {app} chat mo. Alam pa rin ni Omi ang pinag-usapan ninyo sa app at sa iba mo pang chat app.",
+    "chatAppsWhatsAppTitle": "Paparating ang WhatsApp",
+    "chatAppsCodeExpiredTitle": "Nag-expire na ang code na ito",
+    "chatAppsProblemUnavailable": "Hindi pa available ang mga chat app para sa account mo.",
+    "chatAppsWhatOmiDoes": "Ang ginagawa ni Omi sa mga chat app",
+    "chatAppsVoiceNotes": "Mga voice note",
+    "chatAppsNotAvailableYet": "Hindi pa available",
+    "chatAppsOpenMessagesAgain": "Buksan Muli ang Messages",
+    "chatAppsConnectedOn": "Nakakonekta noong {date}",
+    "chatAppsWaitingTitle": "Naghihintay sa text mo",
+    "chatAppsEntryTitle": "Makipag-chat kay Omi",
+    "chatAppsTelegramStepOpen": "I-tap ang Buksan ang Telegram sa ibaba",
+    "chatAppsShowInAppOn": "Naka-on: lalabas ang mga ito sa Omi app bilang read-only na chat.",
+    "chatAppsDisconnectChannel": "I-disconnect ang {app}",
+    "chatAppsTelegramStepStart": "I-tap ang Simulan sa chat mo kay Omi",
+    "chatAppsLocked": "Nangangailangan ng Omi Pro",
+    "chatAppsIMessageBody": "Hi Omi, link code {code}",
+    "chatAppsChatIn": "Chat sa {app}",
+    "chatAppsContactsApp": "Contacts",
+    "chatAppsCodeNote": "Isang beses lang gumagana ang code at mag-e-expire ito sa loob ng 10 minuto.",
+    "chatAppsMoreComing": "May mga paparating pang app.",
+    "chatAppsInTheMeantime": "Sa ngayon",
+    "chatAppsGetNewCode": "Kumuha ng Bagong Code",
+    "chatAppsNotifyMe": "Ipaalam sa Akin",
+    "chatAppsPrefilled": "Napunan na",
+    "chatAppsTextThisTo": "Hindi nagbukas? I-text ito sa {address}",
+    "chatAppsLinkExpired": "Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.",
+    "chatAppsIMessageTo": "Para kay: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Markahan ang “{task}” bilang tapos na?",
+    "reviewProposalRetireTask": "Alisin ang gawaing “{task}”?",
+    "reviewProposalMergePeople": "Iisang tao ba sina “{name}” at “{other}”?",
+    "reviewProposalMergeMemories": "Pagsamahin ang dalawang dobleng alaala?",
+    "reviewProposalMemory": "I-update ang alaalang ito?",
+    "reviewProposalEntitySummary": "I-update ang buod para kay “{name}”?",
+    "reviewProposalGeneric": "Ilapat ang iminungkahing ayos na ito?",
+    "reviewProposalApply": "Ilapat",
+    "reviewProposalSuggested": "Iminungkahi",
+    "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat."
 }

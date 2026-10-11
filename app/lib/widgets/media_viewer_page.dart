@@ -288,7 +288,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
+            OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
             const SizedBox(width: 12),
             Text(
               context.l10n.analyzing,

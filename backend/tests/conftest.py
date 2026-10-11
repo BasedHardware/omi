@@ -17,8 +17,8 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 # Product tests exercise the normal universal write-enabled deployment. Tests
-# for the global incident fence override this explicitly to ``off``/``shadow``.
-os.environ.setdefault('MEMORY_MODE', 'read')
+# for the global incident fence override this explicitly to ``off``.
+os.environ.setdefault('MEMORY_ENABLED', 'on')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
@@ -31,7 +31,9 @@ os.environ.setdefault('OPENROUTER_API_KEY', 'fake-key-for-hermetic-tests')
 # triggers an encoding lookup, avoiding a download in hermetic CI.
 if 'tiktoken' not in sys.modules:
     _tiktoken_stub = ModuleType('tiktoken')
-    _tiktoken_stub.encoding_for_model = lambda model: type('Encoding', (), {'encode': lambda self, text: list(text)})()
+    _Encoding = type('Encoding', (), {'encode': lambda self, text: list(text)})
+    _Encoding.encode_ordinary = _Encoding.encode  # Match tiktoken's token-counting API without downloads.
+    _tiktoken_stub.encoding_for_model = lambda model: _Encoding()
     sys.modules['tiktoken'] = _tiktoken_stub
 
 from testing.hermetic_network import block_outbound_network

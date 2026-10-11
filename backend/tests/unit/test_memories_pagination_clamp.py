@@ -120,6 +120,9 @@ class MemoryBackingStoreUnavailable(HTTPException):
 
 
 mem_mod.MemoryBackingStoreUnavailable = MemoryBackingStoreUnavailable
+# The router is imported under a stubbed ``utils`` package, so the scan-budget
+# constant arrives as a MagicMock. Pin the real detail string the route compares.
+mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL = "Memory scan budget exceeded"
 
 
 def _call(limit, offset):
@@ -252,14 +255,13 @@ def test_first_page_falls_back_to_offset_read_when_historical_scan_unavailable()
     service.read.assert_called_once()
 
 
-def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted():
-    """Prod 2026-08-18: first pages 504'd at the 30s edge timeout (~100/h).
+def test_first_page_scan_row_budget_does_not_fall_back_to_offset_read():
+    """Keyset budget exhaustion must not restart through the offset reader.
 
-    Once the ``memories`` composite indexes went READY the keyset scans actually
-    served, and an account whose historical set is fully suppressed by canonical
-    made ``read_page`` walk every historical row before it could emit anything.
-    The walk now stops at the scan row budget; the offset ``read`` path does not
-    walk suppressed rows, so the first page must fall back to it.
+    That reader used to stream the whole canonical collection and, once the
+    request budget died, return an empty 200. The route serves a truncated
+    page instead. ``read_page`` itself returns the prefix it already walked;
+    this guards the case where the walk still raises the budget detail.
     """
     service = MagicMock()
     service.read_page.side_effect = MemoryBackingStoreUnavailable("Memory scan budget exceeded", stream="historical")
@@ -267,9 +269,9 @@ def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted(
 
     result = _get_first_page(service)
 
-    assert result == ['memory-from-offset-read']
+    assert result == []
     service.read_page.assert_called_once()
-    service.read.assert_called_once()
+    service.read.assert_not_called()
 
 
 def test_first_page_falls_back_on_typed_unavailable_regardless_of_detail():

@@ -102,10 +102,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   enabled: !submitting,
                   maxLines: 4,
                   maxLength: 250,
-                  style: const TextStyle(color: OmiColors.textPrimary),
+                  style: TextStyle(color: OmiColors.textPrimary),
                   decoration: InputDecoration(
                     hintText: context.l10n.writeYourReply,
-                    hintStyle: const TextStyle(color: OmiColors.textTertiary),
+                    hintStyle: TextStyle(color: OmiColors.textTertiary),
                     filled: true,
                     fillColor: OmiColors.surface0.withValues(alpha: 0.3),
                     border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),

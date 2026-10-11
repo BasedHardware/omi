@@ -26,12 +26,13 @@ bool memoryIsEditable(Memory memory) {
 /// Safe to call from a sheet that closes right after: the toast is shown synchronously and the
 /// rest only talks to [provider].
 Future<void> deleteMemoryWithUndo(BuildContext context, MemoriesProvider provider, Memory memory) async {
-  provider.deleteMemory(memory);
+  final indexDelete = provider.deleteMemory(memory);
   PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
   final undone = await OmiFeedback.undo(
     context,
     context.l10n.memoryDeleted,
     onUndo: () => provider.restoreLastDeletedMemory(id: memory.id),
   );
+  await indexDelete;
   if (!undone) await provider.confirmPendingDeletion(id: memory.id);
 }

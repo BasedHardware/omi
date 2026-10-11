@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from utils.executors import postprocess_executor
 from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.routing import APIRoute
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
 from database._client import db
@@ -25,11 +25,12 @@ from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import fetch_memory_dict
 from dependencies import (
-    get_uid_from_mcp_api_key,
+    require_mcp_scope,
     get_current_user_id,
     get_mcp_memory_default_memory_read_context,
     get_mcp_memory_default_memory_write_context,
 )
+from database.person_aliases import normalized_person_alias
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.product_authorization import (
@@ -56,7 +57,7 @@ from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
 from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card
-from utils.mcp_server.registry import spec_for_tool
+from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,25 @@ class _McpRoute(APIRoute):
 
 
 router = APIRouter(route_class=_McpRoute)
+
+# REST and hosted tools resolve requirements from the same registry. Profile
+# uses memories.read but does not read canonical memories or require a grant.
+get_uid_with_mcp_memories_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_user_profile"])
+get_uid_with_mcp_conversations_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_conversations"])
+get_uid_with_mcp_action_items_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_action_items"])
+get_uid_with_mcp_action_items_write = require_mcp_scope(TOOL_REQUIRED_SCOPE["create_action_item"])
+get_uid_with_mcp_goals_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_goals"])
+get_uid_with_mcp_chat_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_chat_messages"])
+get_uid_with_mcp_people_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_people"])
+get_uid_with_mcp_people_rename = require_mcp_scope(TOOL_REQUIRED_SCOPE["rename_person"])
+get_uid_with_mcp_people_cleanup = require_mcp_scope(TOOL_REQUIRED_SCOPE["dismiss_person"])
+get_uid_with_mcp_screen_activity_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_screen_activity"])
+
+# Owner-management operations use Firebase identity rather than resource scopes.
+MCP_REST_SCOPE_EXEMPTIONS = {
+    ("GET", "/v1/mcp/oauth/grants"): "Firebase-authenticated owner lists their OAuth grants",
+    ("DELETE", "/v1/mcp/oauth/grants/{grant_id}"): "Firebase-authenticated owner revokes their OAuth grant",
+}
 
 # REST detail/list reads project one extra card field beyond the hosted tool
 # reads: the released desktop client consumes apps_results off the card.
@@ -325,7 +345,7 @@ def _get_user_contact(uid: str) -> dict:
 
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
-def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_user_profile(uid: str = Depends(get_uid_with_mcp_memories_read)):
     """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
@@ -521,7 +541,7 @@ def get_conversations(
     offset: int = 0,
     cursor: Optional[str] = None,
     updated_since: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     if _parse_updated_since(updated_since) is not None:
@@ -580,7 +600,7 @@ def search_conversations(
     limit: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"search_conversations {uid} query={sanitize_pii(query)} limit={limit}")
 
@@ -639,7 +659,7 @@ def search_conversations(
 )
 def get_conversation_by_id(
     conversation_id: str,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     if not mcp_conversation_handlers.is_safe_conversation_id(conversation_id):
@@ -699,6 +719,28 @@ class SimpleActionItem(BaseModel):
     updated_at: Optional[datetime] = None
     deleted: Optional[bool] = None
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+def _validate_simple_action_items(items: Sequence[Any], uid: str) -> List[dict]:
+    """Validate each action item individually so one malformed row cannot 500 the whole page."""
+    valid_items: List[dict] = []
+    for item in items:
+        if not isinstance(item, (dict, SimpleActionItem)):
+            continue
+        try:
+            if isinstance(item, dict):
+                SimpleActionItem.model_validate(item)
+                valid_items.append(item)
+            else:
+                valid_items.append(item.model_dump())
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            item_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", "unknown")
+            logger.warning(f"Skipping malformed action item {item_id} for uid {uid}: {e}")
+            continue
+    return valid_items
+
 
 @router.get("/v1/mcp/action-items", response_model=List[SimpleActionItem], tags=["mcp"])
 def get_action_items(
@@ -710,7 +752,7 @@ def get_action_items(
     offset: int = 0,
     cursor: Optional[str] = None,
     updated_since: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_action_items_read),
 ):
     logger.info(f"get_action_items {uid} completed={completed} limit={limit} offset={offset}")
     limit = max(1, min(limit, 500))
@@ -736,7 +778,7 @@ def get_action_items(
         except ToolExecutionError as e:
             raise _http_error_from_tool_error(e)
         _next_cursor_header(response, next_cursor)
-        return items
+        return _validate_simple_action_items(items, uid)
 
     try:
         items, next_cursor = mcp_action_item_handlers.action_items_list_page_core(
@@ -752,7 +794,7 @@ def get_action_items(
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
     _next_cursor_header(response, next_cursor)
-    return items
+    return _validate_simple_action_items(items, uid)
 
 
 class McpCreateActionItem(BaseModel):
@@ -801,17 +843,18 @@ def _call_action_item_handler(tool_name: str, uid: str, arguments: Dict[str, Any
 def search_action_items(
     query: str,
     limit: int = 10,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_action_items_read),
 ):
     logger.info(f"search_action_items {uid} limit={limit}")
     result = _call_action_item_handler("search_action_items", uid, {"query": query, "limit": limit})
-    return result["action_items"]
+    action_items = result.get("action_items") if isinstance(result, dict) else []
+    return _validate_simple_action_items(action_items or [], uid)
 
 
 @router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
 def create_action_item(
     body: McpCreateActionItem,
-    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+    uid: str = Depends(with_rate_limit(get_uid_with_mcp_action_items_write, "action_items:write")),
 ):
     logger.info(f"create_action_item {uid} completed={body.completed} has_due={body.due_at is not None}")
     result = _call_action_item_handler(
@@ -826,7 +869,7 @@ def create_action_item(
 def complete_action_item(
     action_item_id: str,
     completed: bool = True,
-    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+    uid: str = Depends(with_rate_limit(get_uid_with_mcp_action_items_write, "action_items:write")),
 ):
     logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
     result = _call_action_item_handler(
@@ -839,7 +882,7 @@ def complete_action_item(
 def update_action_item(
     action_item_id: str,
     body: McpUpdateActionItem,
-    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+    uid: str = Depends(with_rate_limit(get_uid_with_mcp_action_items_write, "action_items:write")),
 ):
     logger.info(f"update_action_item {uid} id={action_item_id}")
     result = _call_action_item_handler(
@@ -853,7 +896,7 @@ def update_action_item(
 @router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"], response_model=McpStatusResponse)
 def delete_action_item(
     action_item_id: str,
-    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+    uid: str = Depends(with_rate_limit(get_uid_with_mcp_action_items_write, "action_items:write")),
 ):
     logger.info(f"delete_action_item {uid} id={action_item_id}")
     _call_action_item_handler("delete_action_item", uid, {"action_item_id": action_item_id})
@@ -868,7 +911,7 @@ def delete_action_item(
 @router.get("/v1/mcp/goals", tags=["mcp"], response_model=List[Dict[str, Any]])
 def get_goals(
     include_inactive: bool = False,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_goals_read),
 ):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     # Shared with the hosted MCP tool of the same name; the REST response is
@@ -897,7 +940,7 @@ def get_chat_messages(
     limit: int = 50,
     offset: int = 0,
     cursor: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_chat_read),
 ):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
@@ -922,15 +965,81 @@ class SimplePerson(BaseModel):
     created_at: Optional[datetime] = None
     speech_sample_transcripts: List[str] = []
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+class McpPersonRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class McpPersonMutationResponse(BaseModel):
+    success: bool
+    person_id: str
+    name: Optional[str] = None
+    dismissed: Optional[bool] = None
+
 
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
-def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_people(uid: str = Depends(get_uid_with_mcp_people_read)):
     logger.info(f"get_people {uid}")
     # Shared with the hosted MCP tool of the same name; identical privacy
     # cleaning via utils.mcp_data.clean_person, unwrapped to the REST list.
     spec = spec_for_tool("get_people")
     assert spec is not None
-    return spec.handler(uid, {}, None)["people"]
+    result = spec.handler(uid, {}, None)
+    raw_people = result.get("people", []) if isinstance(result, dict) else []
+    valid_people: List[dict] = []
+    for person in raw_people:
+        if not isinstance(person, (dict, SimplePerson)):
+            continue
+        try:
+            if isinstance(person, dict):
+                SimplePerson.model_validate(person)
+                valid_people.append(person)
+            else:
+                valid_people.append(person.model_dump())
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            person_id = person.get("id") if isinstance(person, dict) else getattr(person, "id", "unknown")
+            logger.warning(f"Skipping malformed person {person_id} for uid {uid}: {e}")
+            continue
+    return valid_people
+
+
+@router.patch(
+    "/v1/mcp/people/{person_id}/name",
+    response_model=McpPersonMutationResponse,
+    tags=["mcp"],
+)
+def rename_person(
+    person_id: str,
+    request: McpPersonRenameRequest,
+    uid: str = Depends(get_uid_with_mcp_people_rename),
+):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    normalized_name = normalized_person_alias(request.name)
+    if normalized_name is None:
+        raise HTTPException(status_code=422, detail="name must contain 1 to 128 characters")
+    if not users_db.update_person(uid, person_id, normalized_name):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "name": normalized_name}
+
+
+@router.post(
+    "/v1/mcp/people/{person_id}/dismiss",
+    response_model=McpPersonMutationResponse,
+    responses={404: {"description": "Person not found"}},
+    tags=["mcp"],
+)
+def dismiss_person(person_id: str, uid: str = Depends(get_uid_with_mcp_people_cleanup)):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    if not users_db.dismiss_person(uid, person_id):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "dismissed": True}
 
 
 # ---------------------------------------------------------------------------
@@ -951,7 +1060,7 @@ def get_screen_activity(
     summary: bool = False,
     limit: int = 200,
     cursor: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_screen_activity_read),
 ):
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     limit = max(1, min(limit, 200))
@@ -988,7 +1097,7 @@ def get_daily_summaries(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     cursor: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_daily_summaries {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 100))

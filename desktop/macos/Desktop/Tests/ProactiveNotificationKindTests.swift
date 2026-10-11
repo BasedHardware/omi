@@ -15,7 +15,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
   /// `.general` is not reachable from any of them — it is decode-only.
   private static let producerAssistantIDs = [
     "suggestion", "insight", "task", "memory-extraction", "goals", "meeting-notes",
-    "integration_connect", "context-director", "trial", "onboarding", "daily_recap",
+    "integration_connect", "trial", "onboarding", "daily_recap",
     "notch_receipt", "notch_end", "reach_error", "unknown-future-assistant",
   ]
 
@@ -71,7 +71,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
     XCTAssertFalse(ProactiveNotificationKind.onboarding.isJournaled)
     XCTAssertFalse(ProactiveNotificationKind.dailyRecap.isJournaled)
     for kind in ProactiveNotificationKind.allCases
-    where kind != .trial && kind != .onboarding && kind != .dailyRecap {
+    where kind != .trial && kind != .onboarding && kind != .dailyRecap && kind != .proactivityV2 {
       XCTAssertTrue(kind.isJournaled, "\(kind.rawValue) is something Omi observed")
     }
   }

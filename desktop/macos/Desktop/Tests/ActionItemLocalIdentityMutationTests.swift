@@ -2,6 +2,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor SiriBulkDeletionRecorder {
+  var ids: [String] = []
+  func record(_ values: [String]) { ids = values }
+}
+
 /// Regression coverage for mutating unsynced tasks surfaced with a
 /// "local_<rowid>" id.
 ///
@@ -64,6 +69,7 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
   }
 
   func testBatchDeleteRemovesEverySurfacedLocalIdInOneOperation() async throws {
+    let siriDeletion = SiriBulkDeletionRecorder()
     let first = try await ActionItemStorage.shared.insertLocalActionItem(
       ActionItemRecord(description: "first selected task", source: "test"),
       authorization: .unrestricted)
@@ -74,12 +80,15 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
 
     try await ActionItemStorage.shared.deleteActionItemsByBackendIds(
       selectedIDs,
-      authorization: .unrestricted)
+      authorization: .unrestricted,
+      indexDeletion: { await siriDeletion.record($0) })
 
     for selectedID in selectedIDs {
       let remaining = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: selectedID)
       XCTAssertNil(remaining, "batch delete must remove every selected local task")
     }
+    let indexedDeletions = await siriDeletion.ids
+    XCTAssertEqual(indexedDeletions, selectedIDs, "confirmed batch removal must also remove Siri index IDs")
   }
 
   func testToggleCompletionResolvesLocalSurfacedId() async throws {

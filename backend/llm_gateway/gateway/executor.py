@@ -11,12 +11,11 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from llm_gateway.gateway.proactivity_budget import current_attempt, execute_budgeted_provider
 from llm_gateway.gateway.accounting import (
     AttemptTrace,
-    CostStatus,
     ProviderResponseMetadata,
     UsageStatus,
-    estimated_provider_cost_micro_usd,
 )
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
@@ -28,6 +27,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
+from llm_gateway.gateway.metrics import LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -36,16 +36,10 @@ from llm_gateway.gateway.providers import (
     ProviderResponse,
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
-from llm_gateway.gateway.jit_budget import (
-    JITAttemptReservation,
-    reserve_jit_provider_attempt,
-    settle_jit_provider_attempt,
-)
 from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
     ResolvedSystemOneRoute,
-    is_lkg_eligible,
     select_lkg_route_for_failure,
 )
 from llm_gateway.gateway.schemas import (
@@ -56,8 +50,9 @@ from llm_gateway.gateway.schemas import (
     RouteArtifact,
     RouteServingClass,
 )
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
-from utils.executors import db_executor, run_blocking
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
 
@@ -123,11 +118,9 @@ async def execute_chat_completion(
     *,
     attempt_trace: AttemptTrace | None = None,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> ExecutorResult:
+    if current_attempt() is not None:
+        max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
@@ -146,10 +139,6 @@ async def execute_chat_completion(
             fallback_from_route_artifact_id=None,
             attempt_trace=attempt_trace,
             max_provider_attempts=max_provider_attempts,
-            jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-            jit_owner_uid=jit_owner_uid,
-            jit_run_id=jit_run_id,
-            jit_contract_version=jit_contract_version,
             deadline_monotonic=deadline_monotonic,
         )
     except GatewayError as exc:
@@ -173,10 +162,6 @@ async def execute_chat_completion(
                 fallback_from_route_artifact_id=serving_route.route_artifact_id,
                 attempt_trace=attempt_trace,
                 max_provider_attempts=max_provider_attempts,
-                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-                jit_owner_uid=jit_owner_uid,
-                jit_run_id=jit_run_id,
-                jit_contract_version=jit_contract_version,
                 deadline_monotonic=deadline_monotonic,
             )
         except GatewayError as exc:
@@ -297,13 +282,51 @@ async def execute_systemone(
 
     validated = resolved_route.validated_request
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
-    try:
-        response = await create_systemone(
-            request,
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            raise GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
+        response = await execute_budgeted_provider(
+            request=request,
             provider_ref=provider_ref,
+            route=route,
             credentials=credential_context,
+            provider_call=create_systemone,
             timeout_ms=route.timeouts.request_ms,
+            attempt_trace=attempt_trace,
         )
+        return dict(response.response)
+    try:
+        # The provider timeout bounds per-phase httpx inactivity, not total
+        # elapsed time: a trickled response body can hold the lane's worker
+        # far past the route deadline. Enforce the wall-clock budget here so
+        # one slow decision-model request costs at most one route deadline.
+        response = await asyncio.wait_for(
+            create_systemone(
+                request,
+                provider_ref=provider_ref,
+                credentials=credential_context,
+                timeout_ms=route.timeouts.request_ms,
+            ),
+            timeout=route.timeouts.request_ms / 1000.0,
+        )
+    except asyncio.TimeoutError as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=provider_ref.provider,
+                configured_model=provider_ref.model,
+                route_artifact_id=route.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class=FailureClass.TIMEOUT_BEFORE_OUTPUT.value,
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        raise GatewayProviderFailureError(
+            'provider request exceeded the route deadline',
+            failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+        ) from exc
     except ProviderFailure as exc:
         if attempt_trace is not None:
             attempt_trace.record(
@@ -486,10 +509,6 @@ async def _execute_route(
     fallback_from_route_artifact_id: str | None,
     attempt_trace: AttemptTrace | None,
     max_provider_attempts: int | None,
-    jit_max_spend_micro_usd: int | None,
-    jit_owner_uid: str | None,
-    jit_run_id: str | None,
-    jit_contract_version: str | None,
     deadline_monotonic: float,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
@@ -510,21 +529,18 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            response, error = await _attempt_provider(
-                resolved_route,
-                route,
-                provider,
-                provider_ref,
-                credential_context,
-                attempt_trace=attempt_trace,
-                max_provider_attempts=max_provider_attempts,
-                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-                jit_owner_uid=jit_owner_uid,
-                jit_run_id=jit_run_id,
-                jit_contract_version=jit_contract_version,
-                fallback_reason=current_fallback_reason,
-                deadline_monotonic=deadline_monotonic,
-            )
+            with vertex_attempt_scope(route, provider_ref):
+                response, error = await _attempt_provider(
+                    resolved_route,
+                    route,
+                    provider,
+                    provider_ref,
+                    credential_context,
+                    attempt_trace=attempt_trace,
+                    max_provider_attempts=max_provider_attempts,
+                    fallback_reason=current_fallback_reason,
+                    deadline_monotonic=deadline_monotonic,
+                )
             if error is None:
                 if response is None:
                     raise GatewayProviderFailureError(
@@ -545,6 +561,8 @@ async def _execute_route(
                 actual_fallback = current_fallback_reason is not None and (
                     fallback_reason is not None or distinct_within_route
                 )
+                if actual_fallback:
+                    record_reserved_rejection_fallback(route, current_fallback_reason, outcome='recovered')
                 return _executor_result(
                     response,
                     resolved_route=resolved_route,
@@ -565,110 +583,16 @@ async def _execute_route(
         if (
             index == len(refs) - 1
             or max_provider_attempts is not None
-            or not _can_try_next_provider(route, error.failure_class)
+            or not can_try_next_provider(route, provider_ref, error.failure_class)
         ):
+            if index > 0:
+                record_reserved_rejection_fallback(route, current_fallback_reason, outcome='exhausted')
             raise error
         current_fallback_reason = error.failure_class
 
     if last_error is not None:
         raise last_error
     raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
-
-
-def jit_reservation_units(request: Mapping[str, Any]) -> dict[str, int | str | None]:
-    """Build conservative units for the shared JIT reservation authority.
-
-    The router has already applied the qualification input/output caps. The
-    provider request includes the full system, tool, and message payload after
-    route enrichment, so its UTF-8 byte length is a tokenizer-independent
-    upper bound for input tokens. Cache hits and writes are unknown before the
-    provider responds; reserving the whole bound as uncached input is the safe
-    worst case, while settlement uses the provider's normalized receipt.
-    """
-    serialized = json.dumps(request, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
-    output_tokens = request.get('max_completion_tokens', request.get('max_tokens', 2_048))
-    if not isinstance(output_tokens, int) or isinstance(output_tokens, bool) or output_tokens < 0:
-        output_tokens = 2_048
-    return {
-        'input_tokens': max(len(serialized), 1),
-        'cached_input_tokens': 0,
-        'output_tokens': output_tokens,
-        'cache_write_tokens': 0,
-        'cache_ttl': None,
-    }
-
-
-async def reserve_jit_attempt(
-    *,
-    owner_uid: str,
-    run_id: str,
-    contract_version: str,
-    max_attempts: int,
-    max_spend_micro_usd: int,
-    provider: str,
-    model: str,
-    input_tokens: int,
-    cached_input_tokens: int,
-    output_tokens: int,
-    cache_write_tokens: int,
-    cache_ttl: str | None,
-) -> JITAttemptReservation | None:
-    """Reserve a JIT provider attempt without blocking the gateway loop."""
-    return await run_blocking(
-        db_executor,
-        reserve_jit_provider_attempt,
-        owner_uid=owner_uid,
-        run_id=run_id,
-        contract_version=contract_version,
-        max_attempts=max_attempts,
-        max_spend_micro_usd=max_spend_micro_usd,
-        provider=provider,
-        model=model,
-        input_tokens=input_tokens,
-        cached_input_tokens=cached_input_tokens,
-        output_tokens=output_tokens,
-        cache_write_tokens=cache_write_tokens,
-        cache_ttl=cache_ttl,
-    )
-
-
-async def settle_jit_attempt(
-    reservation: JITAttemptReservation | None,
-    *,
-    provider: str,
-    model: str,
-    metadata: ProviderResponseMetadata | None,
-    status: str,
-    release_without_provider: bool = False,
-) -> bool:
-    """Settle one reservation before allowing another provider attempt."""
-    if reservation is None:
-        return True
-    if release_without_provider and (metadata is not None or status != 'released'):
-        raise ValueError('a provider-less JIT release must have status=released and no metadata')
-    cost_micro_usd: int | None = 0 if release_without_provider else None
-    if metadata is not None:
-        cost_status, estimated_cost = estimated_provider_cost_micro_usd(
-            payer='omi',
-            provider=provider,
-            model=model,
-            metadata=metadata,
-        )
-        if cost_status == CostStatus.ESTIMATED and estimated_cost is not None:
-            cost_micro_usd = estimated_cost
-    try:
-        return await run_blocking(
-            db_executor,
-            settle_jit_provider_attempt,
-            reservation=reservation,
-            cost_micro_usd=cost_micro_usd,
-            status=status,  # type: ignore[arg-type]
-        )
-    except Exception:
-        # A missing settlement receipt must leave the reservation active. The
-        # shared authority then blocks another paid attempt instead of letting
-        # a transient Firestore failure turn into an unaccounted retry.
-        return False
 
 
 async def _attempt_provider(
@@ -680,10 +604,6 @@ async def _attempt_provider(
     *,
     attempt_trace: AttemptTrace | None,
     max_provider_attempts: int | None,
-    jit_max_spend_micro_usd: int | None,
-    jit_owner_uid: str | None,
-    jit_run_id: str | None,
-    jit_contract_version: str | None,
     fallback_reason: FailureClass | None,
     deadline_monotonic: float,
 ) -> tuple[ProviderResponse | None, GatewayError | None]:
@@ -692,6 +612,25 @@ async def _attempt_provider(
     Returns ``(response, None)`` on success, or ``(None, error)`` if all
     attempts fail.
     """
+    if current_attempt() is not None:
+        if attempt_trace is None or attempt_trace.attempts:
+            return None, GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
+        request = _provider_request(resolved_route, provider_ref, route=route)
+        try:
+            response = await execute_budgeted_provider(
+                request=request,
+                provider_ref=provider_ref,
+                route=route,
+                credentials=credential_context,
+                provider_call=provider.create_chat_completion,
+                timeout_ms=int((deadline_monotonic - monotonic()) * 1000),
+                attempt_trace=attempt_trace,
+            )
+            return response, None
+        except GatewayError as exc:
+            return None, exc
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
@@ -702,47 +641,8 @@ async def _attempt_provider(
         ):
             return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         provider_request = _provider_request(resolved_route, provider_ref, route=route)
-        reservation: JITAttemptReservation | None = None
-        if jit_run_id is not None:
-            if deadline_monotonic <= monotonic():
-                return None, GatewayProviderFailureError(
-                    'provider request deadline exhausted',
-                    failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
-                )
-            try:
-                units = jit_reservation_units(provider_request)
-                reservation = await reserve_jit_attempt(
-                    owner_uid=cast(str, jit_owner_uid),
-                    run_id=jit_run_id,
-                    contract_version=cast(str, jit_contract_version),
-                    max_attempts=cast(int, max_provider_attempts),
-                    max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
-                    provider=provider_ref.provider,
-                    model=provider_ref.model,
-                    input_tokens=int(cast(int | str, units['input_tokens'])),
-                    cached_input_tokens=int(cast(int | str, units['cached_input_tokens'])),
-                    output_tokens=int(cast(int | str, units['output_tokens'])),
-                    cache_write_tokens=int(cast(int | str, units['cache_write_tokens'])),
-                    cache_ttl=cast(str | None, units['cache_ttl']),
-                )
-            except ValueError as exc:
-                return None, GatewayInvalidRequestError(str(exc))
-            except Exception as exc:
-                return None, GatewayInvalidRequestError('JIT budget authority unavailable')
-            if reservation is None:
-                return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
-            settled = await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='released',
-                release_without_provider=True,
-            )
-            if not settled:
-                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             return None, GatewayProviderFailureError(
                 'provider request deadline exhausted',
                 failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
@@ -754,29 +654,6 @@ async def _attempt_provider(
                 credentials=credential_context,
                 timeout_ms=timeout_ms,
             )
-            settlement_ok = await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=response.accounting,
-                status='succeeded',
-            )
-            if not settlement_ok:
-                if attempt_trace is not None:
-                    attempt_trace.record(
-                        provider=provider_ref.provider,
-                        configured_model=provider_ref.model,
-                        route_artifact_id=route.route_artifact_id,
-                        fallback_reason=fallback_reason.value if fallback_reason is not None else None,
-                        retry_ordinal=retry_ordinal,
-                        outcome='error',
-                        error_class='jit_budget_settlement_failed',
-                        metadata=response.accounting,
-                        usage_status=(
-                            UsageStatus.CONFIRMED if response.accounting.usage is not None else UsageStatus.NOT_REPORTED
-                        ),
-                    )
-                return None, GatewayInvalidRequestError('JIT provider budget settlement rejected')
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -790,13 +667,6 @@ async def _attempt_provider(
                 )
             return response, None
         except ProviderFailure as exc:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             error = _map_provider_failure(exc, credential_context, provider_ref)
             if attempt_trace is not None:
                 attempt_trace.record(
@@ -809,12 +679,6 @@ async def _attempt_provider(
                     error_class=exc.failure_class.value,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
-            if jit_run_id is not None:
-                # The provider may have consumed input or output before
-                # returning a retryable error.  The authority intentionally
-                # blocks an unknown-cost reservation; never reopen it for a
-                # retry or fallback that could spend around that fact.
-                return None, error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
             await _pause_before_provider_429_retry(
@@ -824,13 +688,6 @@ async def _attempt_provider(
                 deadline_monotonic=deadline_monotonic,
             )
         except asyncio.CancelledError:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='cancelled',
-            )
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -844,13 +701,6 @@ async def _attempt_provider(
                 )
             raise
         except Exception:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -885,11 +735,40 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    mapped_gemini_effort: str | None = None
+    if (
+        route.lane_id.startswith('omi:auto:desktop-vertex-')
+        and provider_ref.provider == 'openai'
+        and provider_ref.model == 'gpt-6-luna'
+    ):
+        thinking = provider_request.get('google')
+        thinking = thinking.get('thinking_config') if isinstance(thinking, Mapping) else None
+        if isinstance(thinking, Mapping):
+            mapped_gemini_effort = _gemini_thinking_effort_for_luna(thinking)
     if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
+    provider_request.pop('reserved_capacity_only', None)
+    if provider_ref.provider == 'openai':
+        for key in ('google', 'pt_overflow_origin'):
+            provider_request.pop(key, None)
+        provider_request['messages'] = [
+            (
+                {
+                    **message,
+                    'tool_calls': [
+                        {k: v for k, v in call.items() if k != 'extra_content'} for call in message['tool_calls']
+                    ],
+                }
+                if isinstance(message, Mapping) and isinstance(message.get('tool_calls'), list)
+                else message
+            )
+            for message in provider_request['messages']
+        ]
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
+    if mapped_gemini_effort is not None:
+        provider_request['reasoning_effort'] = mapped_gemini_effort
     return provider_request
 
 
@@ -901,14 +780,20 @@ def _sanitize_openai_chat_completions_request(
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Temperature must also stay at the model default (1). gpt-x-luna keeps this
-    sanitizer; whether that model still rejects the same params is unverified.
+    Desktop Gemini fallbacks reapply their mapped effort after this sanitizer;
+    other gpt-6-luna routes retain their route-specific effort and tool policy.
+    Temperature must stay at the model default (1).
     """
     if provider_ref.provider != 'openai':
         return
     model = provider_ref.model
     if not uses_explicit_cache_and_chat_sanitizer(model):
         return
+    if provider_request.get('model') == 'gpt-6-luna':
+        for param in ('top_p', 'stop'):
+            if param in provider_request:
+                provider_request.pop(param, None)
+                LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param=param).inc()
 
     tools = provider_request.get('tools')
     if tools:
@@ -924,6 +809,28 @@ def _sanitize_openai_chat_completions_request(
         isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or temperature != 1
     ):
         provider_request.pop('temperature', None)
+
+
+def _gemini_thinking_effort_for_luna(thinking: Mapping[str, Any]) -> str:
+    """Map Gemini thinking controls to Luna effort levels.
+
+    Budget mapping is stable and intentionally coarse: absent or zero is
+    ``none``, 1 through 1024 is ``low``, and larger budgets are ``medium``.
+    Gemini levels map minimal/low/medium/high to none/low/medium/medium.
+    Unknown or malformed controls use ``none``.
+    """
+    level = thinking.get('thinking_level', thinking.get('thinkingLevel'))
+    if level in {'minimal', 'none'}:
+        return 'none'
+    if level == 'low':
+        return 'low'
+    if level in {'medium', 'high'}:
+        return 'medium'
+
+    budget = thinking.get('thinking_budget', thinking.get('thinkingBudget'))
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+        return 'none'
+    return 'low' if budget <= 1024 else 'medium'
 
 
 def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
@@ -1113,6 +1020,7 @@ def _map_provider_failure(
         provider=provider_ref.provider,
         model=provider_ref.model,
         provider_rejection=exc.provider_rejection,
+        upstream_http_status=exc.upstream_http_status,
     )
 
 
@@ -1124,9 +1032,3 @@ def _safe_failure_message(failure_class: FailureClass, provider_message: str | N
 
 def _expose_provider_error_details() -> bool:
     return os.getenv(EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR, '').strip().lower() == 'true'
-
-
-def _can_try_next_provider(route: RouteArtifact, failure_class: FailureClass | None) -> bool:
-    if failure_class is None:
-        return False
-    return is_lkg_eligible(route, failure_class)

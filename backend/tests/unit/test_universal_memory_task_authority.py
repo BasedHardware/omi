@@ -12,7 +12,7 @@ TASK_AUTHORITY_FILES = (
     "database/task_recommendations.py",
     "database/chat_first_intents.py",
     "database/recurrence_inbox.py",
-    "utils/task_intelligence/rollout.py",
+    "utils/task_intelligence/chat_first_eligibility.py",
     "utils/task_intelligence/conversation_capture.py",
     "utils/task_intelligence/workstream_association.py",
     "utils/task_intelligence/workstream_index.py",

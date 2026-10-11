@@ -25,14 +25,18 @@ enum MeetingConversationBoundaryPolicy {
 
   /// Meeting observation is independent from capture gating. A detected edge
   /// rotates the logical conversation even when the microphone remains live in
-  /// Always mode; stable detector samples never rotate twice.
-  static func transition(previousRole: Role, meetingActive: Bool) -> Transition? {
+  /// Always mode; stable detector samples never rotate twice. `callChanged` is the detector
+  /// seeing a different call replace the one in progress (back-to-back calls where the mic never
+  /// went quiet long enough for an off edge): the first call ended, and a new meeting begins.
+  static func transition(previousRole: Role, meetingActive: Bool, callChanged: Bool = false) -> Transition? {
     switch (previousRole, meetingActive) {
     case (.ambient, true):
       return Transition(nextRole: .meeting, finalizationReason: .meetingStarted)
     case (.meeting, false):
       return Transition(nextRole: .ambient, finalizationReason: .meetingEnded)
-    case (.ambient, false), (.meeting, true):
+    case (.meeting, true):
+      return callChanged ? Transition(nextRole: .meeting, finalizationReason: .meetingEnded) : nil
+    case (.ambient, false):
       return nil
     }
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -43,6 +44,8 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
   final List<String> startStacks = [];
   bool nativeRecording = false;
   Object Function()? nextStartError;
+  Completer<void>? holdNextStart;
+  Completer<void>? nextStartEntered;
 
   @override
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
@@ -51,6 +54,12 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
     lastStartMode = mode;
     lastStartSessionId = sessionId;
     startSessionIds.add(sessionId);
+    final entered = nextStartEntered;
+    nextStartEntered = null;
+    entered?.complete();
+    final held = holdNextStart;
+    holdNextStart = null;
+    if (held != null) await held.future;
     nativeRecording = true;
     final error = nextStartError;
     nextStartError = null;
@@ -166,6 +175,7 @@ class UploadAttempt {
   final int totalBytes;
   final String? conversationId;
   final bool claimLiveCapture;
+  final String? captureEvidence;
 
   UploadAttempt({
     required this.at,
@@ -173,6 +183,7 @@ class UploadAttempt {
     required this.totalBytes,
     required this.conversationId,
     required this.claimLiveCapture,
+    required this.captureEvidence,
   });
 }
 
@@ -203,7 +214,17 @@ class ScriptedUploads {
   SyncUploadGate buildGate() {
     return SyncUploadGate(
       limiter: SyncRateLimiter.instance,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async {
         attempts.add(
           UploadAttempt(
             at: clock.now(),
@@ -211,6 +232,7 @@ class ScriptedUploads {
             totalBytes: files.fold(0, (sum, f) => sum + f.lengthSync()),
             conversationId: conversationId,
             claimLiveCapture: claimLiveCapture,
+            captureEvidence: captureEvidence,
           ),
         );
         if (failAll) {
@@ -241,6 +263,7 @@ class CaptureReplayWorld {
   final Directory tempDir;
   final VirtualClock clock;
   final ScriptedUploads uploads;
+  final BleAudioCodec pendantCodec;
 
   late ManualScheduler scheduler;
   late FakePhoneMicHostApi hostApi;
@@ -263,6 +286,7 @@ class CaptureReplayWorld {
 
   bool connected = true;
   bool signedIn = true;
+  bool allowMic = true;
   int processCalls = 0;
 
   /// Runs when the controller asks the server to process the in-progress conversation.
@@ -274,9 +298,13 @@ class CaptureReplayWorld {
   /// through the injected job-status fetcher.
   final Map<String, SyncJobFetch> jobStatuses = {};
 
+  final List<Map<String, Object?>> coverageEvents = [];
+
   _ReplayCaptureController? _controller;
 
-  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads});
+  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
+
+  CalendarCaptureGapMonitor? calendarGapMonitor;
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -288,6 +316,8 @@ class CaptureReplayWorld {
     Map<String, Object> initialPrefs = const {},
     bool initiallyConnected = true,
     bool supportsBatch = true,
+    BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
+    CalendarCaptureGapMonitor? calendarGapMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -295,7 +325,9 @@ class CaptureReplayWorld {
       tempDir: tempDir,
       clock: VirtualClock(start),
       uploads: ScriptedUploads(VirtualClock(start)),
+      pendantCodec: pendantCodec,
     );
+    world.calendarGapMonitor = calendarGapMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -340,12 +372,17 @@ class CaptureReplayWorld {
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,
       phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
+      phoneCoverageTelemetry: coverageEvents.add,
+      // The replay world has no real disk-space plugin; report ample space so
+      // the storage-admission gate proves capacity instead of failing closed.
+      phoneFreeDiskBytes: () async => 1 << 40,
     );
     wal.start();
     await wal.syncs.phone.walReady;
     connectivityStream = StreamController<bool>.broadcast();
     _controller = _ReplayCaptureController(
       world: this,
+      calendarGapMonitor: calendarGapMonitor,
       walService: wal,
       phoneMicRecorder: mic,
       phoneMicBatchSupported: supportsBatch,
@@ -371,8 +408,8 @@ class CaptureReplayWorld {
         onProcessInProgress?.call();
         return null;
       },
-      audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
-      microphonePermissionRequester: () async => true,
+      audioCodecLoader: (deviceId) async => pendantCodec,
+      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,
@@ -561,6 +598,7 @@ class _ReplayCaptureController extends CaptureController {
     super.deviceConnectionLoader,
     super.processInProgressConversation,
     super.omiCallState,
+    super.calendarGapMonitor,
   });
 
   @override

@@ -152,7 +152,7 @@ class WhisperModelStatus extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+            Icon(Icons.check_circle, color: OmiColors.success, size: 20),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
               child: Text(l10n.modelReadyWithName(modelFile),

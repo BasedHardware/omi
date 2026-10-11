@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-idempotent-create-precedes-projection",
+  "violated_contract": "Creating a durable idempotency-keyed record and updating its essential parent count/preview must be one commit. If the record lands first and the parent update fails, the caller sees a failed save but its retry returns the existing record without ever applying the missing projection; keyless retries instead duplicate the landed record.",
+  "canonical_prevention": "Stage initial record creation and the existing parent's projection in the same read-before-write transaction. Keep create-only key arbitration, bounded explicit-contention retries, and no parent resurrection; propagate unrelated failures rather than reporting success or replaying an ambiguous commit. Guard the write shape with the shared strict transaction fixture and verify rollback, Increment arithmetic, concurrent creates and lost acknowledgments through the real route and Firestore emulator.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_message_save_atomic.py",
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py",
+    "backend/tests/integration/test_chat_message_save_atomic_emulator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/chat.py",
+    "backend/routers/chat_sessions.py"
+  ],
+  "status": "open"
+}

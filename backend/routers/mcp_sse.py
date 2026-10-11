@@ -2,7 +2,8 @@
 Hosted MCP Server via Streamable HTTP Transport
 
 Thin FastAPI surface for the hosted MCP server. The canonical endpoint is
-``/v1/mcp``; ``/v1/mcp/sse`` remains a permanent alias for released clients.
+``/v1/mcp``; ``/v1/mcp/`` is the same canonical route (no slash redirect) and
+``/v1/mcp/sse`` remains a permanent alias for released clients.
 Protocol dispatch, tools, auth, OAuth, and discovery documents live under
 ``utils/mcp_server/`` — this module only binds routes and re-exports the
 public seams existing tests and integrations rely on.
@@ -99,10 +100,13 @@ logger = logging.getLogger(__name__)
 
 
 def _path_kind(request: Request) -> str:
+    # ``/v1/mcp/`` is canonical. Classifying it from the stripped path keeps
+    # the 401 challenge on the canonical protected-resource metadata.
     return "canonical" if request.url.path.rstrip("/") == "/v1/mcp" else "legacy_sse"
 
 
 @router.post("/v1/mcp", tags=["mcp"], response_class=Response)
+@router.post("/v1/mcp/", tags=["mcp"], response_class=Response, include_in_schema=False)
 @router.post("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_streamable_http(
     request: Request,
@@ -120,6 +124,7 @@ async def mcp_streamable_http(
 
 
 @router.get("/v1/mcp", tags=["mcp"], response_class=Response)
+@router.get("/v1/mcp/", tags=["mcp"], response_class=Response, include_in_schema=False)
 @router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_sse_get(
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -133,12 +138,14 @@ def mcp_sse_get(
 
 
 @router.head("/v1/mcp", tags=["mcp"], response_class=Response)
+@router.head("/v1/mcp/", tags=["mcp"], response_class=Response, include_in_schema=False)
 @router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_sse_head(request: Request, authorization: Optional[str] = Header(None, alias="Authorization")):
     return _transport.handle_head(authorization, path_kind=_path_kind(request), request=request)
 
 
 @router.delete("/v1/mcp", tags=["mcp"], response_class=Response)
+@router.delete("/v1/mcp/", tags=["mcp"], response_class=Response, include_in_schema=False)
 @router.delete("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_delete_session(
     request: Request,

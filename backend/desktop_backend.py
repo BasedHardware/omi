@@ -7,6 +7,7 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.byok import BYOKMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
@@ -23,9 +24,11 @@ from routers import (
     desktop_chat,
     desktop_core,
     desktop_deprecated,
+    desktop_experiments,
     desktop_proxy,
+    desktop_task_gate,
     metrics,
-    desktop_proactivity,
+    retired_desktop_proactivity,
     jit_ledger_snapshot,
     jit_rollout,
     desktop_realtime,
@@ -34,6 +37,7 @@ from routers import (
     memory_use,
 )
 from utils.http_client import close_all_clients
+from utils.llm.vertex_reservation_state import reservation_state
 from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
@@ -82,6 +86,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await shutdown_managed_spend_ledger()
+        await reservation_state.aclose()
         await close_all_clients()
         close_posthog_control_plane()
         close_free_tier_control_plane()
@@ -118,12 +123,19 @@ def _build_app() -> FastAPI:
             "X-Omi-List-Truncated",
         ],
     )
+    # Desktop sends BYOK keys as X-BYOK-* headers on every chat request; without
+    # this middleware they're never read into the contextvar, so get_byok_key()
+    # always returns None here and BYOK users silently ride the managed/quota
+    # lane instead of their own keys. main.py installs the same middleware.
+    app.add_middleware(BYOKMiddleware)
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
     app.include_router(desktop_agent_vm.router)
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
-    app.include_router(desktop_proactivity.router)
+    app.include_router(desktop_task_gate.router)
+    app.include_router(retired_desktop_proactivity.router)
+    app.include_router(desktop_experiments.router)
     app.include_router(jit_ledger_snapshot.router)
     app.include_router(jit_rollout.router)
     app.include_router(desktop_realtime.router)

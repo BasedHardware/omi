@@ -129,7 +129,7 @@ def store():
 
 
 def test_global_intake_pause_is_enforced_inside_apply_boundary(store, monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
     db_client = MagicMock()
 
     with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):
@@ -144,7 +144,7 @@ def test_global_intake_pause_is_enforced_inside_apply_boundary(store, monkeypatc
 
 
 def test_global_intake_pause_is_enforced_inside_source_replacement_boundary(store, monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "shadow")
+    monkeypatch.setenv("MEMORY_ENABLED", "shadow")
     db_client = MagicMock()
 
     with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):

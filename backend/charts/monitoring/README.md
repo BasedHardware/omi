@@ -25,7 +25,9 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 │                                                                           │
 │  ┌──────────────┐   scrape    ┌─────────────┐   query   ┌────────────┐  │
 │  │ Pod metrics   │──────────►│  Prometheus   │◄─────────│  Grafana   │  │
-│  │ (app /metrics)│           │  (10d, 50Gi)  │          │ prod: monitor│ │
+│  │ (app /metrics)│           │  (10d, prod  │          │ prod: monitor│ │
+│  │               │           │  100Gi; dev  │          │              │ │
+│  │               │           │   50Gi)       │          │              │ │
 │  └──────────────┘           └───────┬───────┘          │   .omi.me   │ │
 │                                      │                   │ dev: monitor│ │
 │  ┌──────────────┐   scrape          │                   │  .omiapi.com│ │
@@ -62,13 +64,13 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
-Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. **`backend-sync` is not in that allowlist**, so `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_*` with `source="sync"` are empty in Prometheus until a follow-up adds it (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. The checked-in namespace allowlist includes those services and `notifications-job`; deployed ingestion still requires each sidecar and the matching metrics-egress release (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
 ## Components
 
 | Component | Chart | Purpose | Namespace |
 |-----------|-------|---------|-----------|
-| **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention, 50Gi storage | `{env}-omi-monitoring` |
+| **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention; prod 100Gi PVC, dev 50Gi | `{env}-omi-monitoring` |
 | **Grafana** | `kube-prometheus-stack` | Dashboards and alerting (prod: `monitor.omi.me`, dev: `monitor.omiapi.com`) | `{env}-omi-monitoring` |
 | **Alertmanager** | `kube-prometheus-stack` | Alert routing and notification | `{env}-omi-monitoring` |
 | **Grafana Image Renderer** | `kube-prometheus-stack` | Alert screenshot capture | `{env}-omi-monitoring` |
@@ -102,7 +104,7 @@ Backend-listen, pusher, and llm-gateway require bearer token auth via the `metri
 
 **3. Cloud Run GMP sidecar -> Cloud Monitoring -> isolated Stackdriver exporter**
 
-Used by: Cloud Run `backend` and `desktop-backend`. The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
+Used by: Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` (after their deployments). The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
 
 ### Custom Scrape Jobs (prod)
 
@@ -116,7 +118,7 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Load-balancer Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
-| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend` and `desktop-backend` via isolated exporter | 30s | None |
+| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` via isolated exporter | 30s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
@@ -177,24 +179,24 @@ The adapter translates Prometheus queries into K8s metrics APIs so HPAs can scal
 | `parakeet_gpu_utilization` | DCGM via Prometheus | parakeet HPA |
 | `parakeet_request_latency_p99` | parakeet histogram | parakeet HPA |
 
-Parakeet adapter rules are defined in the parakeet chart's `values.yaml` but must be merged into the cluster-wide adapter (see below).
+Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are mirrored in the production cluster-wide adapter (see below).
 
 ### Stackdriver Exporter
 
 Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):
 
 - `prod-omi-prometheus-stackdriver-exporter` keeps the latency-sensitive load-balancer prefixes at the existing 1-second Prometheus scrape interval.
-- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend` and `desktop-backend`; Prometheus scrapes this release every 30 seconds.
+- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, `backend-sync`, `backend-sync-backfill`, and `notifications-job`; Prometheus scrapes this release every 30 seconds.
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
-### Follow-up: scrape Cloud Run `backend-sync`
+### Deployment verification: scrape Cloud Run `backend-sync`
 
-Not implemented here (needs `.github/` workflow and Helm values). Until it lands, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_{duration_seconds,speech_seconds,segments}{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
+The checked-in allowlist includes sync services; until the matching sidecar and metrics-egress release deploy, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_{duration_seconds,speech_seconds,segments}{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
 
 Concrete change, cost, verify:
 
-1. **Exporter filter** — `backend/charts/monitoring/prometheus-stackdriver-exporter/{dev,prod}_omi_cloud_run_metrics_exporter.yaml` currently restricts Cloud Monitoring reads to `resource.labels.namespace=one_of("backend","desktop-backend")`. Add `"backend-sync"` to that `one_of`. Keep the `prometheus.googleapis.com/omi_*` prefix. Do **not** fold this into the 1-second load-balancer exporter.
+1. **Exporter filter** — `backend/charts/monitoring/prometheus-stackdriver-exporter/{dev,prod}_omi_cloud_run_metrics_exporter.yaml` restricts Cloud Monitoring reads with `resource.labels.namespace=one_of(...)`, including `backend-sync`, `backend-sync-backfill`, and `notifications-job`. Apply those values through the metrics-egress workflow. Keep the `prometheus.googleapis.com/omi_*` prefix. Do **not** fold this into the 1-second load-balancer exporter.
 2. **Sidecar on the service** — `.github/workflows` that deploy `backend-sync` must attach the same GMP sidecar + `PROMETHEUS_SIDECAR_PORT=9090` loopback listener used by `backend` / `desktop-backend` (`backend/docs/runbooks/cloud-run-metrics-ingestion.md`). Without the sidecar there is nothing for Cloud Monitoring to ingest.
 3. **Cost** — GMP samples scale with `series × instances × 30s`. Shape histograms are 342 children per process (6 sources × 3 families); sync only populates `source="sync"` plus the existing `omi_sync_*` families. Sidecar adds 1 vCPU + 512 MiB per active `backend-sync` instance (same as backend). Isolated exporter API reads grow by one namespace, still at 30s.
 4. **Verify** — after deploy, `count({job="cloud-run-application-metrics", __name__=~"omi_.*", service_name="backend-sync"})` must be > 0, and `omi-cloud-run-metric-names-unnormalized` stays at 0. Then `sum(rate(omi_conversation_duration_seconds_count{source="sync"}[5m]))` and `sum(rate(omi_sync_intake_total[5m]))` should match Cloud Logging counts of `omi_conversation_shape source=sync` and `omi_sync_intake` within the 30s exporter offset. Do not enable a Prometheus alert on those series before this proof.
@@ -252,7 +254,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), and conversation search freshness (summary-vector writes and retrieval degradation). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -400,7 +402,7 @@ rules:
           namespace: { resource: "namespace" }
 ```
 
-2. Apply with Helm:
+2. Apply with Helm (prod requires the reconciliation/render review below first):
 ```bash
 helm -n {env}-omi-monitoring upgrade --install {env}-omi-prometheus-adapter \
   prometheus-community/prometheus-adapter \
@@ -439,7 +441,28 @@ metrics:
         averageValue: "25"
 ```
 
-**Parakeet adapter rules:** The parakeet chart defines adapter rules in its own `values.yaml` under `prometheus-adapter.rules`, but these are NOT yet present in the cluster-wide adapter config (`prometheus-adapter/` values in this directory). They must be manually merged into `prometheus-adapter/{env}_omi_prometheus_adapter.yaml` before parakeet HPA can use them. The parakeet sub-chart adapter is disabled (`prometheus-adapter.enabled: false`) to avoid deploying a second adapter that would conflict with the cluster-scoped APIService.
+**Parakeet adapter rules:** The five rules in the parakeet chart's
+`values.yaml` under `prometheus-adapter.rules` are mirrored in the cluster-wide
+**production** adapter values (three custom/Pods rules and two external rules).
+Keep both sources in sync; dev values need their own reconciliation before
+using these metrics. The parakeet sub-chart adapter is disabled
+(`prometheus-adapter.enabled: false`) to avoid a second adapter conflicting
+with the cluster-scoped APIService. The hermetic
+`backend/tests/unit/test_monitoring_adapter_hpa_contract.py` renders prod
+Parakeet, listen, pusher, VAD, diarizer and Deepgram HPAs and checks every
+consumed Pods/External metric against the correct prod adapter rule list.
+
+**Before any prod adapter upgrade**, follow the
+[monitoring prerequisite](../../docs/runbooks/listen-stt-careful-rollout.md#monitoring-prerequisite-coordinator-only):
+capture live config, Deployment and APIService objects read-only, render chart
+4.14.2 locally and run `backend/scripts/diff_prod_adapter.py`. Reconcile any
+missing live rules in a reviewed PR first. The only intended config difference
+for #20418 is `listen_track!="canary"` in both listen connection queries. Review
+all other object drift, including the manually created custom APIService's
+missing Helm ownership, and verify the deployed Helm rollback manifest retains
+all live rules. The linked prerequisite documents these remaining live HOLDs.
+The prod NLLB external rule is intentionally absent: the live NLLB HPA uses CPU,
+and adding a metric should be a separate reviewed change.
 
 ### Grafana Dashboards
 
@@ -614,12 +637,21 @@ The same script can classify every committed rule in `alerts/*.json` against
 live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
-UIDs listed in `live-alert-gate.json`, which starts as the proven Pusher set and
-widens only after a token-backed proof. Do not wire `--fail-on all` into a
-backend or Pusher deploy until that proof exists: a large unimported set would
-block every release. Nothing in CI or deploy currently POSTs these JSON files to
-Grafana; they remain a manual import until that write path is an explicit
-decision. Split-vs-combined equality in unit tests is not evidence a rule is live.
+UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
+import` to upsert the committed live-STT allowlist and the two Redis cache connection rules
+(`omi-redis-cache-conn-warn`/`page` from `resilience.json`) by stable UID (POST
+when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
+--fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
+receiver and confirms that receiver exists with resolve notifications enabled;
+it never deletes or pauses other rules. The `live-stt` verification scope includes those Redis rules and fails closed
+when either is absent, paused, or divergent. They are Grafana-managed alerts,
+not PrometheusRule CRDs. Their `component="other"` selector matches the shared
+fallback bucket for `redis_cache`; cache-write children are initialized at zero.
+Soniox runway UIDs remain pending until
+their metrics have a data source. The token is read from a mode-0600 file and
+neither token material nor contact-point settings are logged. Split-vs-combined
+equality in unit tests is not evidence a rule is live; only the workflow's
+token-backed fleet verification proves that.
 
 Every rule carries these notification fields:
 
@@ -816,62 +848,133 @@ helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 ```
 
+```bash
+PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+DEV_CONTEXT=gke_based-hardware-dev_us-central1_dev-omi-gke
+```
+
 **Prod** (release names use `prod-omi-` prefix):
 ```bash
 # kube-prometheus-stack
-helm -n prod-omi-monitoring upgrade --install prod-omi-kube-prometheus-stack \
-  prometheus-community/kube-prometheus-stack \
-  -f kube-prometheus-stack/prod_omi_monitoring_values.yaml
+helm upgrade prod-omi-kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --version 75.15.1 \
+  --namespace prod-omi-monitoring \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --reset-values --skip-crds \
+  --values kube-prometheus-stack/prod_omi_monitoring_values.yaml \
+  --wait --timeout 10m
 
-# prometheus-adapter
-helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-adapter \
-  prometheus-community/prometheus-adapter \
-  -f prometheus-adapter/prod_omi_prometheus_adapter.yaml
+# prometheus-adapter: complete the linked reconciliation/render review first.
+helm upgrade prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \
+  --version 4.14.2 --namespace prod-omi-monitoring --kube-context "$PROD_CONTEXT" \
+  --values prometheus-adapter/prod_omi_prometheus_adapter.yaml \
+  --atomic --wait --timeout 10m
 
 # Loki
-helm -n prod-omi-monitoring upgrade --install prod-omi-loki \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-loki \
   grafana/loki \
   -f loki/prod_omi_loki_values.yaml
 
 # Alloy (k8s-monitoring) — release name is prod-omi-alloy (not prod-omi-k8s-monitoring)
-helm -n prod-omi-monitoring upgrade --install prod-omi-alloy \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/prod_omi_k8s_monitoring_values.yml
 
 # Stackdriver exporter
-helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-stackdriver-exporter \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml
 
 # Isolated Cloud Run application-metrics bridge
-helm -n prod-omi-monitoring upgrade --install prod-omi-cloud-run-metrics-exporter \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-cloud-run-metrics-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml
 ```
 
+### Production kube-prometheus-stack review and rollback
+
+The production values file is the source for the Prometheus CR: 10d retention,
+1 CPU / 2Gi memory requests, 2 CPU / 8Gi memory limits, and a 100Gi
+`standard-rwo` claim. It preserves the scrape configuration from deployed
+revision 14 and does not drop `app_build`; the backend now emits the fixed
+`unknown` value, so that extra label does not help bound cardinality and dropping
+it would blank the fixed value.
+
+Before an upgrade, render the pinned chart with the same API capabilities as
+the cluster, then diff the normal (non-hook) resources. The EndpointSlice API
+capability matters: the chart conditionally adds its operator RBAC rule for
+that API. This command supplies the current cluster's server version and that
+resource capability explicitly:
+
+```bash
+PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+DEV_CONTEXT=gke_based-hardware-dev_us-central1_dev-omi-gke
+PROD_NAMESPACE=prod-omi-monitoring
+PROD_RELEASE=prod-omi-kube-prometheus-stack
+SERVER_VERSION=$(kubectl --context "$PROD_CONTEXT" version -o json | jq -r '.serverVersion.gitVersion')
+
+helm template "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
+  --version 75.15.1 \
+  --namespace "$PROD_NAMESPACE" \
+  --kube-context "$PROD_CONTEXT" \
+  --kube-version "$SERVER_VERSION" \
+  --api-versions discovery.k8s.io/v1/EndpointSlice \
+  --skip-crds --no-hooks \
+  --values kube-prometheus-stack/prod_omi_monitoring_values.yaml \
+  | kubectl diff --context "$PROD_CONTEXT" -f -
+```
+
+This is a read-only preflight: `helm template` renders locally and
+`kubectl diff` compares the rendered objects without applying them. Against the
+current production release (revision 14, chart 75.15.1), the values file renders
+to no object changes: `kubectl diff` exits 0 with empty output. Re-run this
+preflight against live state before every release; if it prints any diff, inspect
+it before deciding whether an upgrade is intended. An empty diff means there is
+no Kubernetes manifest change to apply; do not create a Helm revision just to
+sync these already-matching values.
+
+`--skip-crds` is required for upgrades. The chart's ten Prometheus Operator
+CRDs are not updated by Helm during an upgrade; review a CRD migration as a
+separate operation. `--no-hooks` excludes the admission create/patch Jobs and
+their hook-only RBAC objects from `kubectl diff`. Helm runs those Jobs as
+pre/post-upgrade hooks and removes successful Jobs per their hook delete
+policy. Do not apply rendered CRDs or manage those Jobs with `kubectl apply`.
+
+Helm rollback creates a new revision. Revision 14 is the current known-good
+baseline with the live 8Gi / 100Gi values. Revision 13 records 4Gi / 50Gi and
+must not be used as the rollback target. Before a future rollback, inspect
+`helm history` and choose the appropriate deployed baseline:
+
+```bash
+helm rollback "$PROD_RELEASE" 14 \
+  --namespace "$PROD_NAMESPACE" \
+  --kube-context "$PROD_CONTEXT" \
+  --wait --timeout 10m
+```
+
 **Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
 ```bash
-helm -n dev-omi-monitoring upgrade --install dev-kube-prometheus-stack \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-kube-prometheus-stack \
   prometheus-community/kube-prometheus-stack \
   -f kube-prometheus-stack/dev_omi_monitoring_values.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-adapter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-prometheus-adapter \
   prometheus-community/prometheus-adapter \
   -f prometheus-adapter/dev_omi_prometheus_adapter.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-loki \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-loki \
   grafana/loki \
   -f loki/dev_omi_loki_values.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-alloy \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/dev_omi_k8s_monitoring_values.yml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-stackdriver-exporter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-cloud-run-metrics-exporter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-cloud-run-metrics-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml
 ```

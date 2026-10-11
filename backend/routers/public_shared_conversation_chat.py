@@ -10,6 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.routing import APIRoute
+from fastapi.responses import JSONResponse
+import firebase_admin.auth
+from prometheus_client import Counter
+import database.users as users_db
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import id_token
 from starlette.datastructures import MutableHeaders
@@ -22,6 +26,9 @@ from utils.conversations.shared_chat import (
     SharedConversationUnavailable,
     build_bounded_transcript,
     check_public_shared_chat_rate_limits,
+    check_anonymous_shared_chat_daily_limits,
+    check_signed_shared_chat_daily_limits,
+    release_signed_shared_chat_daily_limits,
     resolve_shared_public_conversation,
 )
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -34,12 +41,28 @@ PUBLIC_SHARED_CONVERSATION_CHAT_MODE_ENV_VAR = 'PUBLIC_SHARED_CONVERSATION_CHAT_
 FRONTEND_AUDIENCE_ENV_VAR = 'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE'
 FRONTEND_INVOKER_SA_ENV_VAR = 'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
 OPAQUE_SUBJECT_HEADER = 'X-Omi-Public-Chat-Subject'
+USER_TOKEN_HEADER = 'X-Omi-User-Id-Token'
 _OPAQUE_SUBJECT_PATTERN = re.compile(r'^[0-9a-f]{64}$')
 _MAX_TRANSCRIPT_CHARS = 24_000
 _MAX_REQUEST_BODY_BYTES = 80 * 1024
 _OPAQUE_SUBJECT_STATE_ATTR = 'public_shared_chat_opaque_subject'
 _RATE_LIMIT_STATE_ATTR = 'public_shared_chat_rate_limit_checked'
+_SIGNED_UID_STATE_ATTR = 'public_shared_chat_signed_uid'
 _google_auth_request = GoogleAuthRequest()
+PUBLIC_SHARED_CHAT_OUTCOMES = Counter(
+    'public_shared_conversation_chat_outcomes_total',
+    'Bounded outcomes of public shared conversation questions',
+    ['outcome'],
+)
+
+
+def _rate_limited_response(exc: PublicSharedChatRateLimited) -> JSONResponse:
+    PUBLIC_SHARED_CHAT_OUTCOMES.labels(exc.reason).inc()
+    return JSONResponse(
+        status_code=429,
+        content={'reason': exc.reason, 'retry_after': exc.retry_after},
+        headers={'Retry-After': str(exc.retry_after), 'Cache-Control': 'no-store'},
+    )
 
 
 def _route_http_exception(
@@ -72,7 +95,28 @@ class _BoundedSharedChatRoute(APIRoute):
         async def bounded_route_handler(request: Request) -> Response:
             opaque_subject = await _trusted_frontend_subject_for_preparse(request)
             setattr(request.state, _OPAQUE_SUBJECT_STATE_ATTR, opaque_subject)
-            await _enforce_public_shared_chat_rate_limit(request, opaque_subject)
+            user_token = request.headers.get(USER_TOKEN_HEADER)
+            if user_token:
+                try:
+                    claims = await run_blocking(
+                        critical_executor, firebase_admin.auth.verify_id_token, user_token, check_revoked=True
+                    )
+                    uid = claims.get('uid') if isinstance(claims, Mapping) else None
+                    if not isinstance(uid, str) or not uid:
+                        raise ValueError('missing uid')
+                except Exception:
+                    PUBLIC_SHARED_CHAT_OUTCOMES.labels('invalid_token').inc()
+                    return JSONResponse(
+                        status_code=401,
+                        content={'reason': 'invalid_token'},
+                        headers={'Cache-Control': 'no-store'},
+                    )
+                setattr(request.state, _SIGNED_UID_STATE_ATTR, uid)
+            else:
+                try:
+                    await _enforce_public_shared_chat_rate_limit(request, opaque_subject)
+                except PublicSharedChatRateLimited as exc:
+                    return _rate_limited_response(exc)
 
             content_length = request.headers.get('content-length')
             if content_length is not None:
@@ -172,12 +216,8 @@ async def _enforce_public_shared_chat_rate_limit(request: Request, opaque_subjec
         return
     try:
         await run_blocking(critical_executor, check_public_shared_chat_rate_limits, opaque_subject)
-    except PublicSharedChatRateLimited as exc:
-        raise _route_http_exception(
-            429,
-            'Public shared conversation chat rate limit exceeded',
-            headers={'Retry-After': str(exc.retry_after)},
-        ) from exc
+    except PublicSharedChatRateLimited:
+        raise
     except PublicSharedChatRateLimiterUnavailable as exc:
         raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
     setattr(request.state, _RATE_LIMIT_STATE_ATTR, True)
@@ -215,11 +255,38 @@ async def public_shared_conversation_chat(
     request: Request,
     data: SharedConversationChatRequest,
     opaque_subject: str = Depends(require_trusted_frontend_subject),
-) -> SharedConversationChatResponse:
+) -> SharedConversationChatResponse | Response:
     if not _gateway_mode_enabled():
         raise _route_http_exception(503, 'Public shared conversation chat unavailable')
 
-    await _enforce_public_shared_chat_rate_limit(request, opaque_subject)
+    signed_uid = getattr(request.state, _SIGNED_UID_STATE_ATTR, None)
+    remaining_free_questions: int | None = None
+    try:
+        if signed_uid:
+            # Reserve first: a rate-limit rejection never reads Firestore.
+            reservation = await run_blocking(critical_executor, check_signed_shared_chat_daily_limits, signed_uid)
+            try:
+                is_omi_user = await run_blocking(db_executor, users_db.is_exists_user, signed_uid)
+            except Exception as exc:
+                await run_blocking(critical_executor, release_signed_shared_chat_daily_limits, signed_uid, reservation)
+                raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
+            if not is_omi_user:
+                await run_blocking(critical_executor, release_signed_shared_chat_daily_limits, signed_uid, reservation)
+                PUBLIC_SHARED_CHAT_OUTCOMES.labels('no_omi_account').inc()
+                return JSONResponse(
+                    status_code=403,
+                    content={'reason': 'no_omi_account'},
+                    headers={'Cache-Control': 'no-store'},
+                )
+        else:
+            await _enforce_public_shared_chat_rate_limit(request, opaque_subject)
+            remaining_free_questions = await run_blocking(
+                critical_executor, check_anonymous_shared_chat_daily_limits, opaque_subject, data.conversation_id
+            )
+    except PublicSharedChatRateLimited as exc:
+        return _rate_limited_response(exc)
+    except PublicSharedChatRateLimiterUnavailable as exc:
+        raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
 
     try:
         resolved = await run_blocking(db_executor, resolve_shared_public_conversation, data.conversation_id)
@@ -232,4 +299,5 @@ async def public_shared_conversation_chat(
         answer = await invoke_public_shared_conversation_chat_gateway(_gateway_messages(data, resolved.conversation))
     except PublicSharedConversationChatGatewayUnavailable as exc:
         raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
-    return SharedConversationChatResponse(message=answer)
+    PUBLIC_SHARED_CHAT_OUTCOMES.labels('answered').inc()
+    return SharedConversationChatResponse(message=answer, remaining_free_questions=remaining_free_questions)

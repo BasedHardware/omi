@@ -80,7 +80,7 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: OmiColors.warning),
+                        Icon(Icons.warning_amber_rounded, color: OmiColors.warning),
                         const SizedBox(width: OmiSpacing.sm),
                         Expanded(
                           child: Text(
@@ -100,7 +100,7 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                   LinearProgressIndicator(
                     value: installProgress / 100,
                     backgroundColor: OmiColors.surface2,
-                    valueColor: const AlwaysStoppedAnimation<Color>(OmiColors.accent),
+                    valueColor: AlwaysStoppedAnimation<Color>(OmiColors.accent),
                     minHeight: 8,
                     borderRadius: OmiRadius.smAll,
                   ),
@@ -112,7 +112,7 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                     padding: const EdgeInsets.only(top: OmiSpacing.xxl),
                     child: Column(
                       children: [
-                        const Icon(Icons.check_circle, color: OmiColors.success, size: 64),
+                        Icon(Icons.check_circle, color: OmiColors.success, size: 64),
                         const SizedBox(height: OmiSpacing.md),
                         Text(l10n.firmwareFlashed, style: OmiType.title3),
                         const SizedBox(height: OmiSpacing.xs),
@@ -124,7 +124,7 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                   const SizedBox(height: OmiSpacing.md),
                   Container(
                     padding: const EdgeInsets.all(OmiSpacing.sm),
-                    decoration: const BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
                     child: Text(_error!, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
                   ),
                 ],

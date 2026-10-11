@@ -33,6 +33,7 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(snapshots[2].conversations[0].status, .completed)
     XCTAssertFalse(snapshots[2].isLoading)
     XCTAssertEqual(local.stored.map(\.updatedAt), [server.updatedAt])
+    XCTAssertEqual(local.storeBatchCalls, 1, "A server page must enter the cache through one Siri sync batch")
   }
 
   func testCacheReloadDuringPendingMutationKeepsOptimisticStar() async throws {
@@ -993,6 +994,7 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   var countValue: Int
   var detailResult: ServerConversation?
   var stored: [ServerConversation] = []
+  var storeBatchCalls = 0
   var deletedIds: [String] = []
   var events: [String] = []
   var storeHandler: ((ServerConversation) async throws -> Void)?
@@ -1019,6 +1021,17 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
     try scope.withCurrent(generation) {
       stored.append(conversation)
       events.append("store:\(conversation.id)")
+    }
+  }
+
+  func storeMany(
+    _ conversations: [ServerConversation],
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws {
+    storeBatchCalls += 1
+    for conversation in conversations {
+      try await store(conversation, scope: scope, generation: generation)
     }
   }
 

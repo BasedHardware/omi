@@ -15,7 +15,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 SCHEMA: str = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -32,21 +32,50 @@ CREATE TABLE IF NOT EXISTS conversations (
 """
 
 
-def utc_stamp(value: Optional[str]) -> Optional[str]:
+def utc_stamp(value: Any) -> Optional[str]:
     """Normalise an ISO-8601 timestamp to UTC 'YYYY-MM-DD HH:MM:SS' text.
 
     Returns None for None/empty so SQLite NULL is used instead of a string,
     keeping date functions (strftime, julianday) working without coercion.
+    A non-string or unparseable value is stored as text rather than dropped, so
+    the original value stays queryable.
     """
-    if not value:
+    if value is None or value == "":
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if dt.tzinfo is not None:
             dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, AttributeError):
-        return value
+    except (ValueError, AttributeError, TypeError):
+        return text(value)
+
+
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    both sqlite3 and file writes raise UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the row import.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+def text(value: Optional[Any]) -> Optional[str]:
+    """Coerce a loosely typed API field to storable text.
+
+    The dev API is loosely typed, so title/category/source/transcript can arrive as
+    a dict or list. sqlite3 refuses to bind those ("type 'dict' is not supported"),
+    which would abort the whole import over one bad field, so anything non-null is
+    coerced rather than rejected. Returns None for None so SQLite NULL is used.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        value = json.dumps(value, ensure_ascii=False)
+    elif not isinstance(value, str):
+        value = str(value)
+    return strip_surrogates(value)
 
 
 def rows_from(pages: Sequence[str]) -> List[Tuple]:
@@ -55,12 +84,14 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
     for path in pages:
         raw = Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
         items = json.loads(raw)
-        # Support both bare array and wrapped {"conversations": [...]} shape
+        # Support both bare array, wrapped {"conversations": [...]} shape, and single objects
         if isinstance(items, dict):
             for key in ("conversations", "items", "data"):
                 if isinstance(items.get(key), list):
                     items = items[key]
                     break
+            else:
+                items = [items]
         if not isinstance(items, list):
             raise ValueError(f"{path}: expected a JSON array or wrapped object")
         for item in items:
@@ -69,18 +100,26 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
             conv_id = item.get("id")
             if not conv_id:
                 raise ValueError(f"{path}: conversation missing required 'id' field")
-            structured: Dict[str, Any] = item.get("structured") or {}
-            rows.append((
-                str(conv_id),
-                structured.get("title"),
-                structured.get("category"),
-                item.get("source"),
-                utc_stamp(item.get("started_at")),
-                utc_stamp(item.get("created_at")),
-                utc_stamp(item.get("updated_at")),
-                item.get("transcript"),
-                json.dumps(item, ensure_ascii=False),
-            ))
+            structured = item.get("structured")
+            if not isinstance(structured, dict):
+                # The summary is produced upstream and is not schema-validated, so
+                # 'structured' can arrive as a list, string or number. Subscript it
+                # as a dict only when it really is one; one odd record must not
+                # abort the entire import with AttributeError.
+                structured = {}
+            rows.append(
+                (
+                    strip_surrogates(str(conv_id)),
+                    text(structured.get("title")),
+                    text(structured.get("category")),
+                    text(item.get("source")),
+                    utc_stamp(item.get("started_at")),
+                    utc_stamp(item.get("created_at")),
+                    utc_stamp(item.get("updated_at")),
+                    text(item.get("transcript")),
+                    strip_surrogates(json.dumps(item, ensure_ascii=False)),
+                )
+            )
     return rows
 
 
@@ -97,10 +136,7 @@ def validate_db_path(db_path: str) -> None:
     """
     p = Path(db_path)
     if ".." in p.parts:
-        raise ValueError(
-            f"Output path {db_path!r} contains '..'; refusing to write outside "
-            "the intended directory."
-        )
+        raise ValueError(f"Output path {db_path!r} contains '..'; refusing to write outside " "the intended directory.")
     if p.exists():
         try:
             with p.open("rb") as fh:
@@ -108,10 +144,7 @@ def validate_db_path(db_path: str) -> None:
         except OSError as exc:
             raise ValueError(f"Cannot read existing file {db_path!r}") from exc
         if header != _SQLITE_MAGIC:
-            raise ValueError(
-                f"{db_path!r} already exists but is not a SQLite database; "
-                "refusing to overwrite it."
-            )
+            raise ValueError(f"{db_path!r} already exists but is not a SQLite database; " "refusing to overwrite it.")
 
 
 def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
@@ -150,7 +183,7 @@ if __name__ == "__main__":
     if "-o" in args:
         idx = args.index("-o")
         db_path = args[idx + 1]
-        json_paths = args[:idx] + args[idx + 2:]
+        json_paths = args[:idx] + args[idx + 2 :]
     elif len(args) >= 2:
         db_path = args[-1]
         json_paths = args[:-1]

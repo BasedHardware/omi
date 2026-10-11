@@ -45,7 +45,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 24),
+          Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 24),
           const SizedBox(width: OmiSpacing.sm),
           Expanded(
             child: Text(
@@ -127,8 +127,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-            child: const Icon(Icons.schedule_outlined, color: OmiColors.textTertiary, size: 22),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: Icon(Icons.schedule_outlined, color: OmiColors.textTertiary, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(

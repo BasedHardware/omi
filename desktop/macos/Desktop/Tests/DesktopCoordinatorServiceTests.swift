@@ -508,14 +508,26 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let runSource = clientSource[runStart.lowerBound...]
     let taskSource = try sourceFile(
       "ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
+    // omi-test-quality: source-inspection -- static contract: ordinary task
+    // resolution and query paths must never invoke execution-profile migration;
+    // the explicit user recovery method is a separate, authorized boundary.
+    let taskPrepareStart = try XCTUnwrap(taskSource.range(of: "static func prepareSession("))
+    let taskRecoveryStart = try XCTUnwrap(taskSource.range(of: "static func useOmiAI("))
+    let taskPrepare = taskSource[taskPrepareStart.lowerBound..<taskRecoveryStart.lowerBound]
+    let taskQueryStart = try XCTUnwrap(taskSource.range(of: "static func query("))
+    let taskQueryTail = taskSource[taskQueryStart.lowerBound...]
+    let taskQueryEnd = try XCTUnwrap(taskQueryTail.range(of: "nonisolated static func taskWorkspaceContext("))
+    let taskQuery = taskQueryTail[..<taskQueryEnd.lowerBound]
 
     XCTAssertTrue(providerSetup.contains("creationProfile: AgentSessionCreationProfile("))
     XCTAssertFalse(providerSetup.contains("migrateSessionExecutionProfile"))
     XCTAssertTrue(providerSource.contains("pinnedSession: pinnedSession"))
     XCTAssertTrue(runSource.contains("creationProfile: creationProfile"))
     XCTAssertFalse(runSource.contains("migrateSessionExecutionProfile"))
-    XCTAssertTrue(taskSource.contains("creationProfile: creationProfile"))
-    XCTAssertFalse(taskSource.contains("migrateSessionExecutionProfile"))
+    XCTAssertTrue(taskPrepare.contains("creationProfile: AgentSessionCreationProfile("))
+    XCTAssertFalse(taskPrepare.contains("migrateSessionExecutionProfile"))
+    XCTAssertTrue(taskQuery.contains("creationProfile: creationProfile"))
+    XCTAssertFalse(taskQuery.contains("migrateSessionExecutionProfile"))
   }
 
   func testPTTVoiceSpawnUsesCanonicalBackgroundAgentProjection() throws {

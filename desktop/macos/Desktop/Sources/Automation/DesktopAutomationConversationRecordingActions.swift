@@ -17,6 +17,7 @@ extension DesktopAutomationActionRegistry {
   func registerConversationRecordingActions() {
     register(
       name: "conversation_detail_recording",
+      effects: [.localState, .networkOrModel],
       summary:
         "List, show/hide, open, separate, or request_separate (raise the confirmation) the recordings of the open conversation's event",
       params: ["action", "recordingId"]
@@ -54,6 +55,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "conversation_detail_prompt",
+      effects: [.localState],
       summary:
         "Raise the open conversation's rename or delete prompt, or press action item N's task control (add_task)",
       params: ["prompt", "index"]

@@ -38,6 +38,11 @@ REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 CLIENT_ID = "omi-claude-prod"
 
 
+def _assert_token_cache_headers(response):
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert response.headers['Pragma'] == 'no-cache'
+
+
 @pytest.fixture()
 def mcp_sse():
     from routers import mcp_sse as module
@@ -211,12 +216,13 @@ def test_token_code_exchange_without_resource_defers_to_stored_audience(client, 
     assert response.status_code == 200
     assert captured["resource"] is None
     assert response.json()["access_token"] == "at-1"
+    _assert_token_cache_headers(response)
 
 
 def test_token_refresh_without_resource_defers_to_stored_audience(client, mcp_sse, claude_client, monkeypatch):
     captured = {"resource": "sentinel-not-called"}
 
-    def fake_rotate(refresh_token, client_id, resource, scope):
+    def fake_rotate(refresh_token, client_id, resource, scope, *, on_outcome=None):
         captured["resource"] = resource
         return {
             "access_token": "at-2",
@@ -235,6 +241,7 @@ def test_token_refresh_without_resource_defers_to_stored_audience(client, mcp_ss
     )
     assert response.status_code == 200
     assert captured["resource"] is None
+    _assert_token_cache_headers(response)
 
 
 def test_token_still_rejects_a_wrong_explicit_resource(client, mcp_sse, claude_client, monkeypatch):
@@ -253,3 +260,106 @@ def test_token_still_rejects_a_wrong_explicit_resource(client, mcp_sse, claude_c
         },
     )
     assert response.json()["error"] == "invalid_target"
+    _assert_token_cache_headers(response)
+
+
+@pytest.mark.parametrize('error_type', ['RefreshRotationUnavailable', 'McpTokenStoreUnavailable'])
+def test_token_refresh_unavailable_returns_retryable_503(client, mcp_sse, claude_client, monkeypatch, error_type):
+    from utils.mcp_server import oauth
+    from database import mcp_token_cache
+
+    exception = getattr(
+        mcp_sse.mcp_oauth_db if error_type == 'RefreshRotationUnavailable' else mcp_token_cache, error_type
+    )
+
+    def unavailable(*args, **kwargs):
+        raise exception('dependency unavailable')
+
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'verify_client_auth', lambda *args: True)
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'rotate_refresh_token', unavailable)
+    metric = oauth.OMI_MCP_OAUTH_TOKEN_TOTAL.labels(grant_type='refresh_token', outcome='unavailable')
+    before = metric._value.get()
+    response = client.post(
+        '/token', data={'grant_type': 'refresh_token', 'client_id': CLIENT_ID, 'refresh_token': 'old'}
+    )
+    assert response.status_code == 503
+    assert response.json()['error'] == 'temporarily_unavailable'
+    assert response.headers['Retry-After'] == '30'
+    _assert_token_cache_headers(response)
+    assert metric._value.get() == before + 1
+
+
+@pytest.mark.parametrize('outcome', ['rotated', 'replay_grace_reissued', 'replay_revoked', 'invalid'])
+def test_token_refresh_records_one_terminal_outcome(client, mcp_sse, claude_client, monkeypatch, outcome):
+    from utils.mcp_server import oauth
+
+    def rotate(*args, on_outcome, **kwargs):
+        on_outcome(outcome)
+        if outcome in ('invalid', 'replay_revoked'):
+            return None
+        return {
+            'access_token': 'new-at',
+            'refresh_token': 'new-rt',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+            'scope': 'memories.read',
+        }
+
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'verify_client_auth', lambda *args: True)
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'rotate_refresh_token', rotate)
+    metrics = {
+        name: oauth.OMI_MCP_OAUTH_TOKEN_TOTAL.labels(grant_type='refresh_token', outcome=name)
+        for name in ('rotated', 'replay_grace_reissued', 'replay_revoked', 'invalid', 'unavailable')
+    }
+    before = {name: metric._value.get() for name, metric in metrics.items()}
+    response = client.post(
+        '/token', data={'grant_type': 'refresh_token', 'client_id': CLIENT_ID, 'refresh_token': 'old'}
+    )
+    assert response.status_code == (400 if outcome in ('invalid', 'replay_revoked') else 200)
+    _assert_token_cache_headers(response)
+    for name, metric in metrics.items():
+        assert metric._value.get() == before[name] + (name == outcome)
+
+
+def test_token_code_exchange_counts_issued(client, mcp_sse, claude_client, monkeypatch):
+    from utils.mcp_server import oauth
+
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'verify_client_auth', lambda *args: True)
+    monkeypatch.setattr(
+        mcp_sse.mcp_oauth_db,
+        'exchange_authorization_code_for_tokens',
+        lambda *args: {
+            'access_token': 'at',
+            'refresh_token': 'rt',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+            'scope': 'memories.read',
+        },
+    )
+    metric = oauth.OMI_MCP_OAUTH_TOKEN_TOTAL.labels(grant_type='authorization_code', outcome='issued')
+    before = metric._value.get()
+    response = client.post(
+        '/token',
+        data={
+            'grant_type': 'authorization_code',
+            'client_id': CLIENT_ID,
+            'code': 'code',
+            'redirect_uri': REDIRECT_URI,
+            'code_verifier': CODE_VERIFIER,
+        },
+    )
+    assert response.status_code == 200
+    _assert_token_cache_headers(response)
+    assert metric._value.get() == before + 1
+
+
+def test_token_unknown_grant_has_bounded_metric_label(client, mcp_sse, claude_client, monkeypatch):
+    from utils.mcp_server import oauth
+
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'verify_client_auth', lambda *args: True)
+    metric = oauth.OMI_MCP_OAUTH_TOKEN_TOTAL.labels(grant_type='unknown', outcome='invalid')
+    before = metric._value.get()
+    response = client.post('/token', data={'grant_type': 'untrusted-grant-type', 'client_id': CLIENT_ID})
+    assert response.status_code == 400
+    _assert_token_cache_headers(response)
+    assert metric._value.get() == before + 1

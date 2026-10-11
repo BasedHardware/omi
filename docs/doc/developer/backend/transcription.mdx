@@ -163,6 +163,19 @@ non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
 `api.deepgram.com`. If no supported provider can serve a language, the request
 fails closed.
 
+Managed live connections can use a declarative target registry to select the
+cheapest capable endpoint within its rollout share and capacity. Shared health
+gates remove disrupted targets and restore cheaper targets through staged
+recovery. Target identity is separate from provider family, so two endpoints
+using the same provider protocol can have independent routing health. Custom
+STT, BYOK and multichannel connections keep their existing paths. Fleet trial
+rejection requires broad failure evidence; healthy small cohorts can recover
+without a distinct-user minimum. Capacity signals and short local capacity
+cooldowns apply to terminal failover legs as well as primary selection. If all
+candidates are capacity-blocked, one least-recently-refused candidate may dial
+through normal admission. Recovery gives each trial user one majority-outcome
+vote, preventing repeated client failures from blocking a healthy majority.
+
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}

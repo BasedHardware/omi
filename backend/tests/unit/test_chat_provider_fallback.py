@@ -30,13 +30,13 @@ def test_configured_chat_provider_reads_current_environment(monkeypatch):
 
 @pytest.mark.parametrize(
     ('provider', 'gateway_enabled', 'expected_model_feature'),
-    [('openai', False, 'chat_graph'), ('anthropic', True, 'chat_agent')],
+    [('openai', False, 'chat_graph'), ('anthropic', True, 'chat_agent'), ('anthropic', False, 'chat_agent')],
 )
 async def test_openai_compatible_modes_use_current_supervised_runner(
     monkeypatch, provider, gateway_enabled, expected_model_feature
 ):
     invoked = {}
-    messages = [SimpleNamespace(sender='human', text='hello')]
+    messages = [SimpleNamespace(sender='human', text='hello', files_id=[])]
 
     async def fake_run_blocking(_executor, function, *_args, **_kwargs):
         if function is agentic.get_user_timezone:
@@ -106,7 +106,10 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
 
 
 @pytest.mark.parametrize('model_feature', ['chat_graph', 'chat_agent'])
-async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_feature(monkeypatch, model_feature):
+@pytest.mark.parametrize('runner_name', ['_run_openai_agent_stream', '_run_shaped_chat_stream'])
+async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_feature(
+    monkeypatch, model_feature, runner_name
+):
     calls = {}
     usage_token = object()
 
@@ -131,7 +134,11 @@ async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_
         calls['usage'] = (user_id, feature)
         return usage_token
 
-    monkeypatch.setattr(agentic, 'get_llm', lambda *_args, **_kwargs: FailingModel())
+    def get_model_for_feature(feature, **kwargs):
+        calls['model_feature'] = feature
+        return FailingModel()
+
+    monkeypatch.setattr(agentic, 'get_llm', get_model_for_feature)
     monkeypatch.setattr(agentic, 'get_model', lambda feature: f'model-for-{feature}')
     monkeypatch.setattr(agentic, 'set_usage_context', fake_set_usage_context)
     monkeypatch.setattr(agentic, 'reset_usage_context', lambda token: calls.setdefault('reset_token', token))
@@ -140,7 +147,7 @@ async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_
 
     callback = agentic.AsyncStreamingCallback()
     full_response = []
-    result = await agentic._run_openai_agent_stream(
+    result = await getattr(agentic, runner_name)(
         'SYSTEM',
         [{'role': 'user', 'content': 'question'}],
         [],
@@ -153,9 +160,49 @@ async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_
     )
 
     assert result == 'provider_RuntimeError'
+    assert calls['model_feature'] == model_feature
     assert calls['usage'] == ('uid-123', model_feature)
     assert calls['reset_token'] is usage_token
     assert calls['error']['provider'] == 'openai'
     assert calls['error']['feature'] == model_feature
     assert calls['error']['model'] == f'model-for-{model_feature}'
-    assert full_response == ['\n\nSorry, I encountered an error. Please try again.']
+    expected_error = (
+        agentic.AGENT_STREAM_FAILURE_MESSAGE
+        if runner_name == '_run_shaped_chat_stream'
+        else '\n\nSorry, I encountered an error. Please try again.'
+    )
+    assert full_response == [expected_error]
+
+
+@pytest.mark.parametrize('route', ['old', 'new', 'shadow'])
+@pytest.mark.parametrize('model_feature', ['chat_agent', 'chat_graph'])
+async def test_feature_selection_survives_routed_and_shadow_chat(monkeypatch, route, model_feature):
+    calls, background = [], []
+
+    async def old(*args, **kwargs):
+        calls.append(('old', kwargs['model_feature'], False))
+
+    async def shaped(*args, **kwargs):
+        calls.append(('shaped', kwargs['model_feature'], kwargs.get('shadow', False)))
+
+    monkeypatch.setattr(agentic, 'route_for_uid', lambda uid: route)
+    monkeypatch.setattr(agentic, '_run_openai_agent_stream', old)
+    monkeypatch.setattr(agentic, '_run_shaped_chat_stream', shaped)
+    monkeypatch.setattr(agentic, 'start_background_task', lambda coro, **kwargs: background.append(coro))
+    await agentic._run_routed_chat_stream(
+        'system',
+        [],
+        [],
+        {},
+        agentic.AsyncStreamingCallback(),
+        [],
+        SimpleNamespace(),
+        {'user_id': 'test'},
+        model_feature=model_feature,
+    )
+    for task in background:
+        await task
+    expected = [('shaped' if route == 'new' else 'old', model_feature, False)]
+    if route == 'shadow':
+        expected.append(('shaped', model_feature, True))
+    assert calls == expected

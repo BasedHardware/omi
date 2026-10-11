@@ -29,7 +29,7 @@ class ReviewReadingMoment extends StatefulWidget {
     required this.enabled,
     required this.onFinishedReading,
     this.onEngaged,
-    this.minimumReadingDuration = const Duration(seconds: 15),
+    this.minimumReadingDuration = const Duration(seconds: 5),
     this.bottomIdleDuration = const Duration(seconds: 2),
   });
 
@@ -429,10 +429,7 @@ class _ReviewReadingMomentState extends State<ReviewReadingMoment> with WidgetsB
 
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: _handleMetricsNotification,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: _handleScrollNotification,
-        child: widget.child,
-      ),
+      child: NotificationListener<ScrollNotification>(onNotification: _handleScrollNotification, child: widget.child),
     );
   }
 }

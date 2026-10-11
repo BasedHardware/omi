@@ -19,7 +19,7 @@ class PhoneSetupIntroPage extends StatelessWidget {
             children: [
               const SizedBox(height: 40),
               // Hero icon
-              const ExcludeSemantics(
+              ExcludeSemantics(
                 child: SizedBox(
                   width: 80,
                   height: 80,
@@ -98,7 +98,7 @@ class _StepRow extends StatelessWidget {
           child: Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             child: Icon(icon, color: OmiColors.textPrimary, size: 20),
           ),
         ),

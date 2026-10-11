@@ -1,0 +1,41 @@
+version: 1
+name: experiment-arm-resolution
+tier: 1
+description: >
+  EXP-002 launch gate. The main shell must not paint until the identity
+  experiment arm resolves: non-production bundles resolve the local
+  OMI_FORCE_EXPERIMENT_VARIANT override (never enrolling), and any failure
+  resolves control chrome. The observable contract is that the shell leaves
+  the loading variant and the app reaches a settled main state.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Experiments/DesktopExperiment.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Experiments.swift
+preconditions:
+  - automation_bridge_ready
+steps:
+  - id: S0
+    name: Park automation UI without taking the desktop
+    bridge.action:
+      name: set_automation_ui_presentation
+      params:
+        mode: quiet
+    expect:
+      result.detail.mode: quiet
+
+  - id: S1
+    name: Wait for the shell to settle past the experiment hold
+    wait:
+      state.appState: signed_in
+    timeout_seconds: 120
+
+  - id: S2
+    name: Shell variant is resolved, not loading
+    state.expect:
+      state.shellVariant:
+        not: loading
+
+  - id: S3
+    name: Capture settled shell visual
+    visual.export:
+      name: experiment-shell

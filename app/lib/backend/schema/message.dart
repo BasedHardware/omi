@@ -233,6 +233,9 @@ class ServerMessage {
   MessageType type;
 
   String? appId;
+  String? messageSource;
+  String? metadata;
+  String? wireType;
   bool fromIntegration;
 
   List<MessageFile> files;
@@ -249,6 +252,9 @@ class ServerMessage {
   Map<String, dynamic>? rawChartData;
   List<Map<String, dynamic>> contentBlocks;
 
+  /// Receipt for a successful memory write in this streamed reply.
+  String? memoryAction;
+
   /// Optional supplemental references. Text remains authoritative when this
   /// envelope is absent, malformed, unavailable, or from a future version.
   ChatEvidenceReferenceEnvelope? evidenceEnvelope;
@@ -264,6 +270,9 @@ class ServerMessage {
     this.files,
     this.filesId,
     this.memories, {
+    this.messageSource,
+    this.metadata,
+    this.wireType,
     this.askForNps = true,
     this.rating,
     this.chartData,
@@ -330,6 +339,9 @@ class ServerMessage {
       generated.files.map(MessageFile.fromGenerated).toList(),
       generated.filesId,
       generated.memories.map(MessageConversation.fromGenerated).toList(),
+      messageSource: generated.messageSource,
+      metadata: generated.metadata,
+      wireType: generated.type,
       askForNps: askForNps,
       rating: generated.rating,
       chartData: parsedChartData,
@@ -359,6 +371,9 @@ class ServerMessage {
       generated.files.map(MessageFile.fromGenerated).toList(),
       generated.filesId,
       generated.memories.map(MessageConversation.fromGenerated).toList(),
+      messageSource: generated.messageSource,
+      metadata: generated.metadata,
+      wireType: generated.type,
       askForNps: generated.askForNps ?? false,
       rating: generated.rating,
       chartData: parsedChartData,
@@ -379,7 +394,9 @@ class ServerMessage {
       'created_at': createdAt.toUtc().toIso8601String(),
       'text': text,
       'sender': sender.toString().split('.').last,
-      'type': type.value,
+      'type': wireType ?? type.value,
+      if (messageSource != null) 'message_source': messageSource,
+      if (metadata != null) 'metadata': metadata,
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
@@ -616,15 +633,36 @@ class ServerMessage {
     );
   }
 
+  /// Automatic journal entries are hidden on history, cache, and push replay.
+  /// A user reply can contain any of these same rich block types.
+  bool get isAutomaticChatEntry {
+    final decoded = metadata == null ? null : _tryDecodeJson(metadata!);
+    final origin = decoded is Map ? decoded : const {};
+    return origin['chatFirstIntentId'] != null ||
+        origin['chatFirstIntentSource'] != null ||
+        origin['origin'] == 'proactive_notification' ||
+        messageSource == 'proactive_notification' ||
+        (sender == MessageSender.ai &&
+            origin['continuityKey'] is String &&
+            (origin['continuityKey'] as String).startsWith('notification:')) ||
+        (type == MessageType.daySummary || const {'task', 'goal', 'question'}.contains(wireType)) ||
+        contentBlocks.any((block) => block['coldStartSequence'] != null || block['cold_start_sequence'] != null);
+  }
+
   bool get isEmpty => id == '0000';
 }
 
 enum MessageChunkType {
   think('think'),
+  memory('memory'),
   data('data'),
   done('done'),
   error('error'),
-  message('message');
+  message('message'),
+
+  /// The server is asking this client to run a tool that only exists on the
+  /// device. The turn stays open while the user answers.
+  tool('tool');
 
   final String value;
 
@@ -636,8 +674,9 @@ class ServerMessageChunk {
   MessageChunkType type;
   String text;
   ServerMessage? message;
+  String? errorCode;
 
-  ServerMessageChunk(this.messageId, this.text, this.type, {this.message});
+  ServerMessageChunk(this.messageId, this.text, this.type, {this.message, this.errorCode});
 
   static ServerMessageChunk failedMessage() {
     return ServerMessageChunk(

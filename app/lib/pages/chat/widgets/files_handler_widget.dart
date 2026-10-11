@@ -37,14 +37,14 @@ class FilesHandlerWidget extends StatelessWidget {
               return _buildImageThumbnail(context, index);
             } else {
               return Container(
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 margin: const EdgeInsets.only(bottom: 6, top: 2),
                 width: MediaQuery.sizeOf(context).width * 0.32,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.insert_drive_file, color: OmiColors.textPrimary),
+                    Icon(Icons.insert_drive_file, color: OmiColors.textPrimary),
                     const SizedBox(height: 6),
                     Text(
                       message.files[index].name,
@@ -100,10 +100,10 @@ class FilesHandlerWidget extends StatelessWidget {
       ),
       errorWidget: (context, url, error) => Container(
         margin: const EdgeInsets.only(bottom: 6, top: 2),
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
         width: width,
         height: height,
-        child: const Center(child: Icon(Icons.image, color: OmiColors.textTertiary)),
+        child: Center(child: Icon(Icons.image, color: OmiColors.textTertiary)),
       ),
     );
   }

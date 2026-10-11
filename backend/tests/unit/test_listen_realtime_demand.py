@@ -6,6 +6,7 @@ import pytest
 from routers.listen.contracts import ListenSessionState
 from routers.listen.realtime_demand import MAX_STATE_REPORTS, RealtimeDemandTracker
 from routers.listen.receiver import ListenReceiver
+from utils.translation_demand import TranslationDemand
 
 
 class Clock:
@@ -92,6 +93,10 @@ def test_reports_past_the_budget_are_ignored_but_time_keeps_accruing():
 async def test_receiver_routes_client_state_to_the_session_tracker():
     receiver = object.__new__(ListenReceiver)
     receiver.host = SimpleNamespace(onboarding_handler=None, use_custom_stt=False, state=ListenSessionState())
+    receiver.translation_demand = TranslationDemand(clock=Clock())
+    receiver._translation_expiry_task = None
+    receiver.host.spawn = lambda coro, name='': None
+    receiver.host.transcripts = None
 
     await receiver._handle_text('{"type":"client_state","foreground":true,"transcript_visible":false}')
 

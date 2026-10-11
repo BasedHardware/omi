@@ -36,12 +36,14 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) {
     return messageProvider.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: onFirstChunkRecived,
+      onNoSpeech: onNoSpeech,
       codec: codec,
       playResponseAudio: playResponseAudio,
     );

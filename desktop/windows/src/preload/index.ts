@@ -21,7 +21,6 @@ import type {
   CaptureCommand,
   CaptureEvent,
   ExportMemory,
-  GoogleSource,
   KnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
@@ -34,6 +33,7 @@ import type {
   WhatsNewPayload,
   AutomationPlan,
   StepResult,
+  TranslationResult,
   CodingAgentCommandOverrides,
   CodingAgentEvent,
   CodingAgentId,
@@ -187,13 +187,6 @@ const omi: OmiBridgeApi = {
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   signInWithProvider: (provider: SignInProvider) => ipcRenderer.invoke('auth:signIn', provider),
-  googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
-  googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
-  googleStatus: () => ipcRenderer.invoke('integrations:google:status'),
-  googleGmailFetchNew: () => ipcRenderer.invoke('integrations:google:gmailFetchNew'),
-  googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
-    ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
   // --- Gmail session connector (Option B): Omi-owned login window + own-session
   // cookie replay. connect opens the login window and resolves once signed in. ---
   gmailSessionConnect: (email?: string) =>
@@ -304,31 +297,6 @@ const omi: OmiBridgeApi = {
   // waiting for a natural context switch.
   focusAnalyzeNow: () =>
     ipcRenderer.invoke('focus:analyzeNow') as Promise<{ ok: boolean; reason?: string }>,
-  // Dev/QA only (handlers registered on dev builds): observe the REAL Insight
-  // privacy/cost gates. debugActivity returns only distinct app names from the
-  // real Phase-1 aggregate; debugSql returns only a row count from the real
-  // execute_sql closure; debugIsEnabled returns the real isEnabled() (optionally
-  // after applying a notifications patch).
-  insightDebugActivity: (denylist: string[]) =>
-    ipcRenderer.invoke('insight:debugActivity', denylist) as Promise<{
-      apps: string[]
-      rowCount: number
-    }>,
-  insightDebugSql: (query: string, denylist: string[]) =>
-    ipcRenderer.invoke('insight:debugSql', query, denylist) as Promise<{
-      rowCount: number
-      error?: string
-    }>,
-  insightDebugIsEnabled: (patch?: {
-    notificationsEnabled?: boolean
-    notificationFrequency?: number
-  }) =>
-    ipcRenderer.invoke('insight:debugIsEnabled', patch) as Promise<{
-      isEnabled: boolean
-      insightEnabled: boolean
-      notificationsEnabled: boolean
-      notificationFrequency: number
-    }>,
   memoriesBulkDelete: (args: { token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
@@ -527,26 +495,25 @@ const omi: OmiBridgeApi = {
   relaunchApp: () => ipcRenderer.send('app:relaunch'),
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
-  insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
-  insightRecent: (limit) => ipcRenderer.invoke('insight:recent', limit),
-  insightDismissRecord: (id) => ipcRenderer.invoke('insight:dismissRecord', id),
-  insightDismissAll: () => ipcRenderer.invoke('insight:dismissAll'),
-  insightClearAll: () => ipcRenderer.invoke('insight:clearAll'),
-  insightShow: (p) => ipcRenderer.send('insight:show', p),
   insightDismiss: () => ipcRenderer.send('insight:dismiss'),
+  proactivityNotificationRendered: (id) => ipcRenderer.send('insight:proactivity-rendered', id),
+  proactivityNotificationFeedback: (id, action) =>
+    ipcRenderer.send('insight:proactivity-feedback', id, action),
+  proactivityNotificationPending: () => ipcRenderer.invoke('insight:proactivity-pending'),
+  onProactivityNavigate: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      target: { kind: string; id: string }
+    ): void => callback(target)
+    ipcRenderer.on('proactivity:navigate', listener)
+    return () => ipcRenderer.removeListener('proactivity:navigate', listener)
+  },
+  proactivityTargetRendered: (target) => ipcRenderer.send('proactivity:target-rendered', target),
+  proactivityNotificationOpen: (itemID) => ipcRenderer.send('insight:proactivity-open', itemID),
   insightHoverStart: () => ipcRenderer.send('insight:hoverStart'),
   insightHoverEnd: () => ipcRenderer.send('insight:hoverEnd'),
   insightTest: () => ipcRenderer.send('insight:test'),
-  jitFeedback: (input: {
-    eventId: string
-    lane: 'planned' | 'ambient'
-    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
-    subjectId: string
-    triggerRevision: number | null
-    accountGeneration: number
-    snoozedUntil?: string | null
-  }) => ipcRenderer.invoke('jit:feedback', input),
-  jitFeedbackDrain: () => ipcRenderer.invoke('jit:feedbackDrain'),
+
   onInsightShow: (cb) => {
     const listener = (_e: Electron.IpcRendererEvent, p: InsightPayload): void => cb(p)
     ipcRenderer.on('insight:payload', listener)
@@ -614,6 +581,15 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
   },
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
+    ipcRenderer.on('omi-sign-update', listener)
+    return () => ipcRenderer.removeListener('omi-sign-update', listener)
+  },
+  signLanguageSetEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
+  signLanguageGetEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('integrations:signLanguage:getEnabled'),
   // --- Bar chat bridge (main-window side) ---
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
     const listener = (

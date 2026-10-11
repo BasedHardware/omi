@@ -141,7 +141,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                 fillColor: OmiColors.surface2,
                 border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
                 enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
-                focusedBorder: const OutlineInputBorder(
+                focusedBorder: OutlineInputBorder(
                   borderRadius: OmiRadius.mdAll,
                   borderSide: BorderSide(color: OmiColors.textSecondary, width: 1.5),
                 ),
@@ -190,7 +190,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
+                Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
                   child:

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-serial-index-provisioning-exceeds-migration-budget",
+  "violated_contract": "A create-only serving-index migration must start every missing composite index without waiting for prior builds, then verify readiness for the complete expected set within a budget sized for healthy large-collection builds. Serial blocking creates multiply per-index build latency, can time out the migration, and leave serving deployments blocked on a schema that is only partially provisioned.",
+  "canonical_prevention": "Use asynchronous create operations for every missing composite, tolerate only an explicit ALREADY_EXISTS create response, and poll the complete expected signature set after all creates have been issued. Size both the readiness timeout and workflow job limit above observed large-collection build costs, and test the create-before-wait ordering, complete readiness set, and failure handling.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/reconcile_firestore_indexes.py",
+    "backend/tests/unit/test_reconcile_firestore_indexes.py",
+    ".github/workflows/gcp_firestore_indexes.yml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/reconcile_firestore_indexes.py",
+    "backend/tests/unit/test_reconcile_firestore_indexes.py",
+    ".github/workflows/gcp_firestore_indexes.yml"
+  ],
+  "status": "open"
+}

@@ -17,13 +17,20 @@ import collections
 import csv
 import datetime as dt
 import json
+import os
 import pathlib
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fs  # noqa: E402
-from gcpauth import assert_readonly_identity  # noqa: E402
+
+if os.environ.get("FINOPS_AUTH") == "cloudrun":
+    import cloudrun  # noqa: E402
+
+    assert_readonly_identity = cloudrun.assert_runtime_identity
+else:
+    from gcpauth import assert_readonly_identity  # noqa: E402
 
 PAGE = 3000
 SEL = {
@@ -98,7 +105,7 @@ def pull(year: int, month: int, day_lo: int, day_hi: int, acc: dict):
             a[1] += fs.unwrap(f.get("speech_seconds")) or 0
             a[2] += fs.unwrap(f.get("words_transcribed")) or 0
             pf = fs.unwrap(f.get("platforms"))
-            for x in (pf if isinstance(pf, list) else [pf] if pf else []):
+            for x in pf if isinstance(pf, list) else [pf] if pf else []:
                 if x:
                     a[3].add(str(x))
         cursor = docs[-1]["name"]

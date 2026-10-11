@@ -10,14 +10,17 @@ import 'package:omi/utils/l10n_extensions.dart';
 // Pieces of the chat composer that carry no page state. The text field and the Send button stay
 // in `chat/page.dart`: they are the catalogued controls (omi.chat.input / omi.chat.send).
 
-/// The soft shadow that lifts the composer pill and its side button off the transcript.
-const List<BoxShadow> kChatComposerShadow = [
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
-];
+/// The soft shadow that lifts the composer card off the transcript.
+List<BoxShadow> get kChatComposerShadow => OmiColors.active == OmiPalette.dark
+    ? const [
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
+      ]
+    : const [BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.08), blurRadius: 16, offset: Offset(0, -4))];
 
-/// The 48 pt round button beside the composer pill: Add (idle) or Stop (recording).
+/// The quiet round button at the composer card's leading edge: Attach (idle) or Discard (recording),
+/// a 36 pt circle in a 44 pt target.
 ///
 /// Labelled for screen readers and long-press; [onPressed] null draws it disabled.
 class ChatComposerSideButton extends StatelessWidget {
@@ -40,20 +43,20 @@ class ChatComposerSideButton extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onPressed,
-          child: Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              shape: BoxShape.circle,
-              border: Border.all(color: OmiColors.surface3, width: 1),
-              boxShadow: kChatComposerShadow,
-            ),
+          child: SizedBox.square(
+            dimension: kOmiMinTapTarget,
             child: Center(
-              child: ExcludeSemantics(
-                child: IconTheme.merge(
-                  data: IconThemeData(color: enabled ? OmiColors.textPrimary : OmiColors.textDisabled, size: 18),
-                  child: icon,
+              child: Container(
+                height: 36,
+                width: 36,
+                decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+                child: Center(
+                  child: ExcludeSemantics(
+                    child: IconTheme.merge(
+                      data: IconThemeData(color: enabled ? OmiColors.textSecondary : OmiColors.textDisabled, size: 16),
+                      child: icon,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -64,7 +67,63 @@ class ChatComposerSideButton extends StatelessWidget {
   }
 }
 
-/// The round 38 pt button inside the composer pill (mic, send-while-recording), in a 44 pt target.
+/// Who answers: Omi or the chat app picked for this thread, as a small chip in the composer.
+/// Tapping it opens the chat apps drawer.
+class ChatAppChip extends StatelessWidget {
+  const ChatAppChip({super.key, required this.name, required this.avatar, required this.onPressed});
+
+  final String name;
+  final Widget avatar;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: context.l10n.chatAppsTitle,
+      value: name,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const ValueKey('chat_app_chip'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+              decoration: BoxDecoration(
+                color: OmiColors.surface2,
+                borderRadius: OmiRadius.pillAll,
+                border: Border.all(color: OmiColors.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(dimension: 20, child: FittedBox(child: avatar)),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textTertiary),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The round 38 pt button at the composer card's trailing edge (mic, send), in a 44 pt target.
 ///
 /// A disabled button is visibly disabled: a dark fill and a dimmed glyph instead of the white
 /// "ready" fill. The glyph is a widget (FontAwesome `arrowUp` / `microphone`, like the side
@@ -137,8 +196,8 @@ class ChatSelectedFilesStrip extends StatelessWidget {
         if (provider.selectedFiles.isEmpty) return const SizedBox.shrink();
         return Container(
           margin: const EdgeInsets.only(top: OmiSpacing.md, bottom: OmiSpacing.xs),
-          // Align with the chat bar's left edge: outer padding (8) + side button (48) + gap (8).
-          padding: const EdgeInsets.only(left: 64, right: OmiSpacing.xs),
+          // Aligned with the composer card's inner edge.
+          padding: const EdgeInsets.only(left: OmiSpacing.md, right: OmiSpacing.xs),
           height: 70,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
@@ -157,8 +216,7 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    if (!isImage)
-                      const Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
+                    if (!isImage) Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
                     if (provider.isFileUploading(file.path))
                       Container(
                         decoration: BoxDecoration(
@@ -209,8 +267,8 @@ class _RemoveFileButton extends StatelessWidget {
                 width: 20,
                 height: 20,
                 margin: const EdgeInsets.all(OmiSpacing.xxs),
-                decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: const Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
+                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                child: Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
               ),
             ),
           ),

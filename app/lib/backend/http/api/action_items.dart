@@ -158,6 +158,21 @@ class ActionItemsApi {
   final String _baseUrl;
   final ApiSend? _send;
 
+  /// Resolve a task independently of the visible, filtered task page.
+  Future<ApiResult<ActionItemWithMetadata>> getById(String id) => executeApi<ActionItemWithMetadata>(
+        request: ApiRequest(url: '${_baseUrl}v1/action-items/${Uri.encodeComponent(id)}', method: 'GET'),
+        send: _send,
+        decode: (body) {
+          try {
+            final value = jsonDecode(body);
+            if (value is! Map<String, dynamic>) throw const FormatException('Expected action item object');
+            return wire.GeneratedActionItemResponse.fromJson(value);
+          } catch (_) {
+            throw const FormatException('Invalid action item');
+          }
+        },
+      );
+
   Future<ApiResult<ActionItemsResponse>> list({
     int limit = 50,
     int offset = 0,
@@ -188,7 +203,11 @@ class ActionItemsApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data) => decodeActionItemsEnvelope(data, fallback: recordFallback),
+      ApiSuccess(:final data, :final truncated) => switch (decodeActionItemsEnvelope(data, fallback: recordFallback)) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
     };
   }
 }

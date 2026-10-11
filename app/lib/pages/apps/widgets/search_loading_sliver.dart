@@ -46,8 +46,8 @@ class _SearchProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(bottom: OmiSpacing.md),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: LinearProgressIndicator(
         // Indeterminate: a search has no known duration, and a determinate bar
         // would have to invent a percentage that then appears to stall.
@@ -71,13 +71,13 @@ class _ShimmerListItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
         margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Container(
               width: 60,
               height: 60,
-              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
             ),
             const SizedBox(width: OmiSpacing.md),
             Expanded(
@@ -87,13 +87,13 @@ class _ShimmerListItem extends StatelessWidget {
                   Container(
                     width: double.infinity,
                     height: 18,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                   ),
                   const SizedBox(height: OmiSpacing.xs),
                   Container(
                     width: 150,
                     height: 14,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                   ),
                 ],
               ),
@@ -102,7 +102,7 @@ class _ShimmerListItem extends StatelessWidget {
             Container(
               width: 72,
               height: 32,
-              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
             ),
           ],
         ),

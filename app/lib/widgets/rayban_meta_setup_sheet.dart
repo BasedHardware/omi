@@ -119,7 +119,7 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
               height: 120,
               width: 120,
               padding: const EdgeInsets.all(OmiSpacing.sm),
-              decoration: const BoxDecoration(borderRadius: OmiRadius.lgAll, color: OmiColors.accent),
+              decoration: BoxDecoration(borderRadius: OmiRadius.lgAll, color: OmiColors.accent),
               child: Image.asset(Assets.images.raybanMeta.path, fit: BoxFit.contain),
             ),
           ),

@@ -21,12 +21,17 @@ import pytest  # noqa: E402
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment  # noqa: E402
 from routers.listen.transcripts import TranscriptProcessor  # noqa: E402
+from utils.observability.owner_recognition import LIVE_SPEAKER_DECISIONS  # noqa: E402
 from utils.stt.speaker_match import (  # noqa: E402
+    OWNER_NEAR_MISS_THRESHOLD,
     SPEAKER_MATCH_MARGIN,
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     SPEAKER_MATCH_THRESHOLD,
+    SpeakerMatchDecision,
+    arbitrate_owner_matches,
     mean_embedding,
+    owner_near_miss,
     select_speaker_match,
 )
 
@@ -91,6 +96,46 @@ class TestSelectSpeakerMatch:
         assert select_speaker_match({'user': 0.3, 'sarah': 0.35}, margin=0.0).person_id == 'user'
 
 
+@pytest.mark.parametrize(
+    'distance,pending',
+    [
+        (math.nextafter(SPEAKER_MATCH_THRESHOLD, -math.inf), False),
+        (SPEAKER_MATCH_THRESHOLD, True),
+        (math.nextafter(OWNER_NEAR_MISS_THRESHOLD, -math.inf), True),
+        (OWNER_NEAR_MISS_THRESHOLD, False),
+        (0.737, False),
+        (math.inf, False),
+        (math.nan, False),
+    ],
+)
+def test_owner_near_miss_distance_boundaries(distance, pending):
+    decision = select_speaker_match({'user': distance})
+    assert owner_near_miss(decision) is pending
+    assert decision.accepted is (distance < SPEAKER_MATCH_THRESHOLD)
+
+
+@pytest.mark.parametrize('runner_up,pending', [(0.75, False), (math.nextafter(0.75, math.inf), True)])
+def test_owner_near_miss_uses_the_incumbent_margin_boundary(runner_up, pending):
+    # The exact subtraction matters: 0.75 - 0.65 rounds below 0.10.
+    decision = select_speaker_match({'user': 0.65, 'peer': runner_up})
+    assert owner_near_miss(decision) is pending
+    assert not decision.accepted
+
+
+@pytest.mark.parametrize(
+    'decision',
+    [
+        SpeakerMatchDecision('user', 'user', 0.67, math.inf),
+        SpeakerMatchDecision(None, 'peer', 0.67, math.inf),
+        SpeakerMatchDecision(None, None, math.inf, math.inf),
+        SpeakerMatchDecision(None, 'user', 0.67, math.inf, owner_contended=True),
+        SpeakerMatchDecision(None, 'user', 0.67, 0.70),
+    ],
+)
+def test_owner_near_miss_never_overrides_accepts_people_or_contention(decision):
+    assert not owner_near_miss(decision)
+
+
 class TestMeanEmbedding:
     def test_centroid_is_unit_length_and_between_inputs(self):
         a = np.array([[1.0, 0.0]], dtype=np.float32)
@@ -131,7 +176,7 @@ def _live_matcher(monkeypatch, clip_embeddings):
         state=SimpleNamespace(audio_ring_buffer=_AudioRingBuffer(), speaker_map_dirty=False),
         limits=SimpleNamespace(speaker_id_min_audio=2.0),
         request=SimpleNamespace(sample_rate=16000),
-        emit_speaker_suggestion=lambda *args: emitted.append(args),
+        emit_speaker_suggestion=lambda *args, **kwargs: emitted.append(args),
     )
     matcher = speakers_mod.SpeakerMatcher(host)
     matcher.person_embeddings = {
@@ -172,6 +217,80 @@ def test_one_long_clip_decides_immediately(monkeypatch):
     assert matcher.speaker_to_person[2] == ('p1', 'Sarah')
     assert matcher.segment_identity_status['s1'] == SpeakerIdentityStatus.not_user
     assert emitted == [(2, 'p1', 'Sarah', 's1')]
+
+
+def test_live_owner_near_miss_stays_pending_then_accepts_fresh_evidence(monkeypatch):
+    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
+    matcher, _host, emitted = _live_matcher(monkeypatch, [_cold_start_vector(0.67), _cold_start_vector(0.40)])
+    matcher.person_embeddings.pop('p1')
+    pending_counter = LIVE_SPEAKER_DECISIONS.labels(target='owner', decision='pending')._value
+    rejected_counter = LIVE_SPEAKER_DECISIONS.labels(target='owner', decision='rejected')._value
+    pending_before, rejected_before = pending_counter.get(), rejected_counter.get()
+
+    asyncio.run(matcher.match(1, _segment('near', 0, 5)))
+    assert 1 not in matcher.speaker_to_person
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.unknown
+    assert matcher.segment_identity_status['near'] == SpeakerIdentityStatus.unknown
+    assert matcher.match_scores[0]['status'] == 'unknown'
+    assert matcher.match_scores[0]['decision'] == 'pending'
+    assert matcher.match_scores[0]['accepted_person_id'] is None
+    assert emitted == []
+    assert pending_counter.get() == pending_before + 1
+    assert rejected_counter.get() == rejected_before
+
+    asyncio.run(matcher.match(1, _segment('fresh', 6, 5)))
+    assert matcher.speaker_to_person[1] == ('user', 'User')
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.user
+    assert matcher.match_scores[0]['decision'] == 'accepted'
+    assert emitted == [(1, 'user', 'User', 'fresh')]
+
+
+def test_live_owner_outside_calibrated_band_remains_no_match(monkeypatch):
+    matcher, _host, emitted = _live_matcher(monkeypatch, [_cold_start_vector(0.737)])
+    matcher.person_embeddings.pop('p1')
+    asyncio.run(matcher.match(1, _segment('far', 0, 10)))
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.no_match
+    assert 1 not in matcher.speaker_to_person
+    assert emitted == []
+
+
+def test_provider_failover_reconciles_one_owner_across_epoch_ids(monkeypatch):
+    # Both clips independently match the owner at 0.53/0.54. Their in-session
+    # vectors are close; provider epoch IDs alone must not create contention.
+    clips = [
+        np.array([[0.47, np.sqrt(1 - 0.47**2)]], dtype=np.float32),
+        np.array([[0.46, np.sqrt(1 - 0.46**2)]], dtype=np.float32),
+    ]
+    matcher, _host, _emitted = _live_matcher(monkeypatch, clips)
+    matcher.person_embeddings.pop('p1')
+    first = dict(_segment('before', 0, 6), speaker_id_scope='connection:0')
+    second = dict(_segment('after', 7, 6), speaker_id_scope='connection:1')
+
+    asyncio.run(matcher.match(1, first))
+    asyncio.run(matcher.match(2, second))
+
+    assert matcher.speaker_to_person[1][0] == 'user'
+    assert matcher.speaker_to_person[2][0] == 'user'
+    assert matcher.voice_identity_status[1] == matcher.voice_identity_status[2] == SpeakerIdentityStatus.user
+
+
+def test_manual_owner_receipt_reserves_live_owner_without_embedding(monkeypatch):
+    from routers.listen import speakers as speakers_mod
+
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, _emitted = _live_matcher(monkeypatch, [owner])
+    matcher._profile_conversation_id = 'c'
+
+    async def receipt(_fn, _uid, _conversation_id):
+        return {'segments': {'manual': {'is_user': True, 'person_id': None}}}
+
+    host.request.uid = 'u'
+    host.persistence = SimpleNamespace(call=receipt)
+    monkeypatch.setattr(speakers_mod.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
+    asyncio.run(matcher.match(2, _segment('automatic', 0, 6)))
+
+    assert 2 not in matcher.speaker_to_person
+    assert matcher.voice_identity_status[2] == SpeakerIdentityStatus.ambiguous
 
 
 def test_decision_uses_the_centroid_not_the_latest_clip(monkeypatch):
@@ -431,3 +550,175 @@ def test_speaker_detection_reads_person_embeddings_live():
         assert item['speaker_id'] == 1
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    'scores,owner',
+    [
+        ([0.631, 0.645], None),
+        ([0.64, 0.70], None),
+        ([0.40, 0.63], 0),
+        ([0.53, 0.73], 0),
+        ([0.53], 0),
+        ([0.73, 0.87, 1.05], None),
+    ],
+)
+def test_cold_start_arbitrates_voices_without_retuning_recall(scores, owner):
+    rows = {i: {'user': score} for i, score in enumerate(scores)}
+    decisions = arbitrate_owner_matches(rows, {i: select_speaker_match(row) for i, row in rows.items()})
+    assert [i for i, d in decisions.items() if d.accepted] == ([] if owner is None else [owner])
+    if scores == [0.631, 0.645]:
+        assert all(d.owner_contended for d in decisions.values())
+
+
+@pytest.mark.parametrize(
+    'status', [SpeakerIdentityStatus.no_match, SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.unknown]
+)
+@pytest.mark.parametrize(
+    'source,match_source,clear',
+    [
+        ('auto', 'live_embedding', True),
+        (None, 'live_embedding', True),
+        ('manual', 'live_embedding', False),
+        ('carried', 'live_embedding', False),
+        (None, None, False),
+        ('auto', 'channel', False),
+    ],
+)
+@pytest.mark.parametrize('was_owner', [False, True])
+def test_rejected_identity_projection_preserves_manual_and_channel_authority(
+    status, source, match_source, clear, was_owner
+):
+    segment = TranscriptSegment(
+        id='s',
+        text='synthetic',
+        speaker_id=0,
+        start=0,
+        end=5,
+        is_user=was_owner,
+        person_id=None if was_owner else 'peer',
+        speaker_label_source=source,
+        speaker_match_source=match_source,
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={},
+            voice_identity_status={0: status},
+            segment_identity_status={},
+        )
+    )
+    processor._apply_speaker_identity_statuses([segment])
+    rendered = segment.model_dump()
+    assert rendered['is_user'] is (False if clear else was_owner)
+    assert rendered['person_id'] == (None if clear or was_owner else 'peer')
+
+
+def _cold_start_vector(distance, sign=1):
+    # Unit vectors at measured cosine distances; opposite residual directions
+    # keep the two voices distinct under in-session clustering.
+    cosine = 1 - distance
+    return np.array([[cosine, sign * np.sqrt(1 - cosine**2)]], dtype=np.float32)
+
+
+@pytest.mark.parametrize('source', ['auto', 'manual', 'carried'])
+@pytest.mark.parametrize('next_person', ['user', 'peer'])
+def test_identity_projection_corrects_only_automatic_positive_labels(source, next_person):
+    was_owner = next_person == 'peer'
+    segment = TranscriptSegment(
+        id='s',
+        text='synthetic',
+        speaker_id=0,
+        start=0,
+        end=5,
+        is_user=was_owner,
+        person_id=None if was_owner else 'peer',
+        speaker_label_source=source,
+        speaker_match_source='live_embedding',
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={0: (next_person, 'Name')},
+            voice_identity_status={},
+            segment_identity_status={},
+        )
+    )
+    processor._apply_speaker_identity_statuses([segment])
+    rendered = segment.model_dump()
+    expected_owner = next_person == 'user' if source == 'auto' else was_owner
+    assert rendered['is_user'] is expected_owner
+    assert rendered['person_id'] == (None if expected_owner else 'peer')
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_live_cold_start_retracts_previous_owner_and_projects_all_segments(monkeypatch, reverse):
+    vectors = [_cold_start_vector(0.631), _cold_start_vector(0.645, -1)]
+    matcher, host, _ = _live_matcher(monkeypatch, vectors[::-1] if reverse else vectors)
+    del matcher.person_embeddings['p1']
+    segments = [
+        TranscriptSegment(id=f's{i}', text='synthetic', speaker_id=i // 2, is_user=False, start=i * 6, end=i * 6 + 6)
+        for i in range(4)
+    ]
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(speakers=matcher)
+    from utils.speaker_assignment import process_speaker_assigned_segments
+
+    asyncio.run(matcher.match(0, _segment('s0', 0, 6)))
+    process_speaker_assigned_segments(segments, matcher.segment_assignments, matcher.speaker_to_person)
+    processor._apply_speaker_identity_statuses(segments)
+    assert all(s.is_user for s in segments[:2])
+    asyncio.run(matcher.match(1, _segment('s2', 12, 6)))
+    processor._apply_speaker_identity_statuses(segments)
+    assert matcher.speaker_to_person == {}
+    assert all(not s.is_user and s.person_id is None for s in segments)
+    assert all(s.speaker_identity_status == SpeakerIdentityStatus.ambiguous for s in segments)
+    assert all(TranscriptSegment(**s.model_dump()).speaker_identity_status == 'ambiguous' for s in segments)
+    matcher.clear()
+    assert not matcher.voice_identity_status and not matcher._voice_distances
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_live_clear_owner_wins_regardless_of_arrival_order(monkeypatch, reverse):
+    vectors = [_cold_start_vector(0.53), _cold_start_vector(0.645, -1)]
+    matcher, _, _ = _live_matcher(monkeypatch, vectors[::-1] if reverse else vectors)
+    del matcher.person_embeddings['p1']
+    asyncio.run(matcher.match(0, _segment('a', 0, 6)))
+    asyncio.run(matcher.match(1, _segment('b', 6, 6)))
+    assert matcher.speaker_to_person == {int(reverse): ('user', 'User')}
+
+
+def test_known_household_member_does_not_contend_for_the_owner():
+    rows = {0: {'user': 0.53, 'person': 0.90}, 1: {'user': 0.43, 'person': 0.20}}
+    result = arbitrate_owner_matches(rows, {i: select_speaker_match(row) for i, row in rows.items()})
+    assert result[0].person_id == 'user'
+    assert result[1].person_id == 'person'
+
+
+def test_subsecond_live_fragments_reach_owner_transcript(monkeypatch):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, emitted = _live_matcher(monkeypatch, [owner] * 6)
+    for index in range(15):
+        # Real provider fragments, not merged text: 7.5 distinct speech seconds.
+        fragment = _segment(f's{index}', index * 0.5, 0.5)
+        fragment['speaker_id'] = 1
+        fragment['speaker_id_scope'] = 'socket:0'
+        asyncio.run(matcher.match(1, fragment))
+    from utils.speaker_assignment import process_speaker_assigned_segments
+
+    rendered = TranscriptSegment(id='reply', text='Okay', speaker_id=1, is_user=False, start=8.0, end=8.5)
+    process_speaker_assigned_segments([rendered], matcher.segment_assignments, matcher.speaker_to_person)
+    assert rendered.model_dump()['is_user'] is True
+    assert rendered.speaker_label_source == 'auto'
+    assert len(emitted) == 1
+
+
+def test_repeated_tiny_fragment_cannot_mint_owner_evidence(monkeypatch):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, _, emitted = _live_matcher(monkeypatch, [owner] * 20)
+    for _ in range(20):
+        asyncio.run(matcher.match(1, _segment('same', 0.0, 0.5)))
+    assert 1 not in matcher.speaker_to_person
+    assert not emitted

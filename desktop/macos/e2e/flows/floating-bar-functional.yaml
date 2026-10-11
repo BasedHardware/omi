@@ -30,6 +30,9 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService+ProgressiveTTS.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveMP3Player.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveTTSPlaybackPipeline.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
@@ -37,19 +40,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectClassificationDelivery.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectAttention.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectCopyBudget.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayDuration.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayTimer.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientFeedback.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
@@ -65,6 +56,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+WarmRecovery.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionVoiceConfig.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubVoicePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+AssistantVoice.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/AssistantVoiceStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/UserInputPresence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
@@ -79,6 +72,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+AssistantVoice.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift

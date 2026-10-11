@@ -19,7 +19,7 @@ These tests pin the request shape rather than the prompt wording:
   - two calls with different conversations share a byte-identical stable prefix;
   - the per-uid routing key is set, stable, and carries no raw uid;
   - cache options are bound onto the structured runnable, not dropped beforehand;
-  - every guard (kill switch, missing uid, prefix under the provider's floor, BYOK)
+  - every guard (missing uid, prefix under the provider's floor, BYOK)
     falls back to a plain uncached request instead of buying an unreadable cache write.
 """
 
@@ -113,11 +113,11 @@ def test_wire_text_is_byte_identical_to_the_single_string_prompt():
     expected = pn.GATE_PROMPT.format(
         user_name='Alex',
         user_facts=BIG_FACTS,
-        goals_text=pn._format_goals([{'title': 'ship the gate fix'}]),
-        current_conversation=pn._format_current_conversation(
+        goals_text=pn.format_goals([{'title': 'ship the gate fix'}]),
+        current_conversation=pn.format_current_conversation(
             [{'text': 'we should ship on friday', 'is_user': True}], 'Alex'
         ),
-        recent_notifications=pn._format_recent_notifications(
+        recent_notifications=pn.format_recent_notifications(
             [{'created_at': '2026-09-09T10:00:00', 'text': 'call Mike'}]
         ),
         current_date='2026-09-09',
@@ -203,17 +203,7 @@ def _assert_uncached(captured):
     assert captured['get_llm_kwargs'] == {}
 
 
-@pytest.mark.parametrize('value', ['false', '0', 'off', 'no'])
-def test_kill_switch_disables_the_cache_without_changing_the_prompt(monkeypatch, value):
-    monkeypatch.setenv(pn.MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, value)
-    captured = _run_gate()
-    _assert_uncached(captured)
-    # The text still reassembles: the kill switch removes the marking, not the prompt.
-    assert ''.join(part['text'] for part in _parts(captured['messages'])).startswith('You decide whether')
-
-
-def test_enabled_by_default_when_the_env_var_is_unset(monkeypatch):
-    monkeypatch.delenv(pn.MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, raising=False)
+def test_cache_enabled_when_model_supports_it():
     captured = _run_gate()
     assert captured['llm_kwargs']['extra_body']['prompt_cache_options'] == dict(EXPLICIT_CACHE_OPTIONS)
 

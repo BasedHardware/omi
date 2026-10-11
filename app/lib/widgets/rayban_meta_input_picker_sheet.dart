@@ -145,7 +145,7 @@ class _RayBanMetaInputPickerSheetState extends State<RayBanMetaInputPickerSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ExcludeSemantics(child: Icon(Icons.mic_off_outlined, size: 44, color: OmiColors.textTertiary)),
+            ExcludeSemantics(child: Icon(Icons.mic_off_outlined, size: 44, color: OmiColors.textTertiary)),
             const SizedBox(height: OmiSpacing.md),
             Text(
               _loadFailed ? context.l10n.rayBanMetaMicPickerLoadError : context.l10n.rayBanMetaMicPickerEmpty,
@@ -183,11 +183,11 @@ class _RayBanMetaInputPickerSheetState extends State<RayBanMetaInputPickerSheet>
                 enabled: _connectingUid == null,
                 onTap: () => _connect(input),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                leading: const Icon(Icons.bluetooth_audio, color: OmiColors.textPrimary),
+                leading: Icon(Icons.bluetooth_audio, color: OmiColors.textPrimary),
                 title: Text(input.name, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
                 trailing: isConnecting
                     ? const OmiSpinner(size: OmiSpinnerSize.small)
-                    : const Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+                    : Icon(Icons.chevron_right, color: OmiColors.textTertiary),
               ),
             ),
             if (failed) ...[

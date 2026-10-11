@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-hermetic-guard-blocks-reserved-test-tld",
+  "violated_contract": "A hermetic suite's reserved fixture domain must keep resolving inside the harness when product code gains config-time DNS validation. The developer-webhook SSRF guard (5760363ae5) began resolving webhook targets at configuration time via socket.getaddrinfo; the e2e suite's RFC 6761 'webhook.test' fixture host hit the hermetic network guard, which raised 'Hermetic e2e blocked DNS lookup' and failed every developer-webhook e2e test on main.",
+  "canonical_prevention": "The hermetic getaddrinfo guard answers reserved .test names with a deterministic public-class address (AF_INET 8.8.8.8 — the same answer the SSRF unit tests stub) without performing a real DNS lookup; real socket connects stay guarded. Harness self-tests pin all four sides: .test resolution succeeds (str and bytes host), the synthesized answer passes assert_public_http_url, non-.test hosts still raise, and a connect to the synthesized IP still fails closed.",
+  "canonical_prevention_artifact": [
+    "backend/testing/e2e/conftest.py",
+    "backend/testing/e2e/test_harness_guards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/testing/e2e/**",
+    "backend/utils/http_client.py",
+    "backend/routers/users.py"
+  ],
+  "status": "open"
+}

@@ -102,19 +102,12 @@ class TaskIntelligenceRolloutDecision(BaseModel):
 
 
 class TaskWorkflowControl(BaseModel):
-    """Persisted workflow metadata plus the derived Chat-first capability.
-
-    ``workflow_mode`` remains readable for legacy records and operational
-    history. It is not an entitlement. ``chat_first_ui`` is derived from the
-    universal task decision; persistence excludes it so clients cannot turn a
-    sampled response into later authority.
-    """
+    """Persisted workflow metadata for legacy records and operational history."""
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     workflow_mode: TaskWorkflowMode = TaskWorkflowMode.off
     account_generation: int = Field(default=0, ge=0)
-    chat_first_ui: bool = False
 
     @model_validator(mode='before')
     @classmethod

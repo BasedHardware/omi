@@ -6,8 +6,7 @@
   "canonical_prevention_artifact": [
     "app/test/support/local_day.dart",
     "app/test/unit/search_rank_grouping_test.dart",
-    "app/test/providers/conversation_detail_provider_selection_test.dart",
-    "app/test/widgets/home_conversations_preview_test.dart"
+    "app/test/providers/conversation_detail_provider_selection_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [

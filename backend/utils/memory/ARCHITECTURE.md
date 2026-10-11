@@ -28,7 +28,7 @@ Sorting, visibility, device, locked-memory, and lifecycle policy are applied by
 the service rather than selected by physical origin.
 
 No request chooses a memory system from a UID list, user enrollment document,
-header, or client claim. `MEMORY_MODE`, `MEMORY_V3_GET_ENABLED`, and the
+header, or client claim. `MEMORY_ENABLED` and the
 canonical maintenance/consolidation flags are deployment-wide safety controls.
 There is no runtime user inventory.
 
@@ -255,8 +255,7 @@ The supported controls and rollback floor are documented in
 
 - `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
   to off. `on` enables intake and list; it does not by itself enable ST→LT
-  maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
-  only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
+  maintenance.
 - `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
   switch. Do not derive it from `MEMORY_ENABLED=on`. Both env overlays pin it
   on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
@@ -264,9 +263,9 @@ The supported controls and rollback floor are documented in
   global cost/incident controls.
 - `GET /v3/memories` first page uses `read_page`, which raises
   `MemoryBackingStoreUnavailable` (503 `Memory cursor unavailable`) when
-  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence, not
-  `MEMORY_V3_GET_ENABLED` (unused on the route). First page falls back to
-  offset `read()` for that typed failure — not by matching detail strings.
+  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence. First page
+  falls back to offset `read()` for that typed failure — not by matching
+  detail strings.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader

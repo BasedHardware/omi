@@ -317,6 +317,13 @@ extension SettingsContentView {
               .foregroundColor(Ink.secondary)
           }
 
+          if let userSubscription {
+            GlassSeparator()
+            Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+
           if let error = subscriptionError {
             Text(error)
               .scaledFont(size: OmiType.caption)
@@ -517,22 +524,18 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading)
             .foregroundColor(Ink.secondary)
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
+            Text(byokStatusTitle)
               .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(Ink.primary)
-            Text(
-              APIKeyService.isByokActive
-                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
-                : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
-            )
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+            Text(byokUsageDescription)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
         }
 
         Button(action: openBYOKSettings) {
-          Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
+          Text(APIKeyService.isByokActive ? "Manage Keys" : "Add Keys")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))

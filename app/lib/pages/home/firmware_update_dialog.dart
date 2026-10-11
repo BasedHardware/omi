@@ -100,7 +100,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
             ),
             child: Row(
               children: [
-                const ExcludeSemantics(
+                ExcludeSemantics(
                   child: FaIcon(FontAwesomeIcons.triangleExclamation, color: OmiColors.warning, size: 18),
                 ),
                 const SizedBox(width: OmiSpacing.sm),
@@ -125,13 +125,13 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
       child: Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
         child: Row(
           children: [
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
               child: Center(child: FaIcon(step.icon, size: 18, color: OmiColors.textPrimary)),
             ),
             const SizedBox(width: 14),

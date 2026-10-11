@@ -21,7 +21,6 @@ The shared plumbing every feature call goes through.
   direct-transport fallback.
 - `gateway_byok.py` — BYOK (bring-your-own-key) credential envelope helpers for
   gateway routing.
-- `gateway_shadow.py` — dev/shadow comparison wrapping (sampled, prod-gated).
 - `gateway_observability.py` — records gateway vs. direct outcomes for
   comparison and health.
 - `clients.py` — LLM client construction plus the shared error callback wiring.

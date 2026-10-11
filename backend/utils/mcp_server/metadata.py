@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 
 import database.mcp_oauth as mcp_oauth_db
-from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
 
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
 MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
@@ -16,7 +16,7 @@ MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-kno
 MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL = (
     f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 )
-MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_SCOPES_SUPPORTED = list(MCP_SUPPORTED_SCOPES)
 
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
@@ -30,6 +30,8 @@ SCOPE_PERMISSION_TEXT = {
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
+    "people.rename": "Correct the names of people Omi has recognized",
+    "people.cleanup": "Dismiss false-positive people from your Omi account",
 }
 
 

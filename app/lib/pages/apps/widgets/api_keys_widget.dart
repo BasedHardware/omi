@@ -190,7 +190,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         const SizedBox(height: OmiSpacing.md),
         Container(
           padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
           child: Row(
             children: [
               Expanded(
@@ -234,7 +234,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
         return Container(
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
           child: Row(
             children: [
@@ -255,7 +255,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                 width: kOmiMinTapTarget,
                 height: kOmiMinTapTarget,
                 child: _deletingKeyId == key.id
-                    ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.danger))
+                    ? Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.danger))
                     : OmiIconButton(
                         icon: const Icon(Icons.delete_outline),
                         label: l10n.revokeKey,

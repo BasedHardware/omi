@@ -1,8 +1,10 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -17,6 +19,7 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
+  final TextEditingController customBackendUrl = TextEditingController();
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -29,19 +32,19 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingImportMemories = false;
 
   // Experimental switches. Like every switch in Settings they apply and are saved the moment they
-  // flip (chat-apps-settings #2); only the webhook URL fields wait for Save.
-  bool followUpQuestionEnabled = false;
+  // flip (chat-apps-settings #2); webhook URLs and the custom backend URL wait for Save.
   bool transcriptionDiagnosticEnabled = false;
-  bool autoCreateSpeakersEnabled = false;
   bool vadGateEnabled = false;
 
   /// Webhook field values as last loaded or saved; [hasUnsavedWebhookChanges] compares against them.
   Map<String, String> _savedWebhookText = const {};
+  String _savedCustomBackendUrl = '';
 
   DeveloperModeProvider() {
     for (final controller in _webhookControllers) {
       controller.addListener(_onWebhookTextChanged);
     }
+    customBackendUrl.addListener(_onWebhookTextChanged);
   }
 
   List<TextEditingController> get _webhookControllers => [
@@ -72,11 +75,12 @@ class DeveloperModeProvider extends BaseProvider {
     }
   }
 
-  /// A webhook URL (or the audio interval) was edited and not saved yet. The page guards leaving
-  /// with a discard confirmation while this is true.
+  /// A webhook URL, the audio interval, or the custom backend URL was edited and not saved yet.
+  /// The page guards leaving with a discard confirmation while this is true.
   bool get hasUnsavedWebhookChanges {
     final current = _webhookText();
-    return current.keys.any((k) => current[k] != (_savedWebhookText[k] ?? ''));
+    return customBackendUrl.text != _savedCustomBackendUrl ||
+        current.keys.any((k) => current[k] != (_savedWebhookText[k] ?? ''));
   }
 
   void onConversationEventsToggled(bool value) {
@@ -142,9 +146,9 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     webhookDaySummary.text = SharedPreferencesUtil().webhookDaySummary;
-    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
+    _savedCustomBackendUrl = SharedPreferencesUtil().customBackendUrl;
+    customBackendUrl.text = _savedCustomBackendUrl;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-    autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -185,12 +189,27 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  /// Saves the webhook URLs (the only fields on Developer Settings that wait for Save). Resolves
-  /// whether they were saved.
+  /// Saves webhook URLs and, outside release builds, the custom backend URL. Resolves whether
+  /// they were saved.
   Future<bool> saveSettings() async {
     if (savingSettingsLoading) return false;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
+
+    if (!kReleaseMode) {
+      try {
+        final rawBackendUrl = customBackendUrl.text.trim();
+        final normalizedBackendUrl = rawBackendUrl.isEmpty ? '' : BackendUrlOverride.parse(rawBackendUrl).url;
+        prefs.customBackendUrl = normalizedBackendUrl;
+        _savedCustomBackendUrl = normalizedBackendUrl;
+        customBackendUrl.text = normalizedBackendUrl;
+        BackendUrlOverride.restore(normalizedBackendUrl);
+      } on FormatException catch (error) {
+        AppSnackbar.showSnackbarError(error.message);
+        setIsLoading(false);
+        return false;
+      }
+    }
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError(
@@ -279,6 +298,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = _savedWebhookText['audio'] ?? '';
     webhookAudioBytesDelay.text = _savedWebhookText['audioDelay'] ?? '';
     webhookDaySummary.text = _savedWebhookText['daySummary'] ?? '';
+    customBackendUrl.text = _savedCustomBackendUrl;
   }
 
   void setIsLoading(bool value) {
@@ -286,21 +306,9 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onFollowUpQuestionChanged(bool value) {
-    followUpQuestionEnabled = value;
-    SharedPreferencesUtil().devModeJoanFollowUpEnabled = value;
-    notifyListeners();
-  }
-
   void onTranscriptionDiagnosticChanged(bool value) {
     transcriptionDiagnosticEnabled = value;
     SharedPreferencesUtil().transcriptionDiagnosticEnabled = value;
-    notifyListeners();
-  }
-
-  void onAutoCreateSpeakersChanged(bool value) {
-    autoCreateSpeakersEnabled = value;
-    SharedPreferencesUtil().autoCreateSpeakersEnabled = value;
     notifyListeners();
   }
 
@@ -315,6 +323,7 @@ class DeveloperModeProvider extends BaseProvider {
     for (final controller in _webhookControllers) {
       controller.removeListener(_onWebhookTextChanged);
     }
+    customBackendUrl.removeListener(_onWebhookTextChanged);
     super.dispose();
   }
 }

@@ -1,19 +1,20 @@
-"""get_sync_job self-heals a dead worker on read.
+"""Stale job reads must leave recovery to the lease-owning route/coordinator.
 
-A job stuck in 'processing' past STALE_THRESHOLD_SECONDS is finalized to 'failed'
-on read, for every dispatch mode, so the client reverts the WAL to 'miss' and
-re-uploads instead of waiting out the 24h reconcile TTL. 'queued' jobs are never
-finalized (no worker claimed them; flipping them caused #7469 retry loops).
-
-This restores the dispatch-agnostic self-heal that PR #9616 narrowed to a
-client-poll, cloud_tasks-only path — the regression behind offline recordings
-sitting at "Uploaded · processing on Omi" for 12+ hours (#10033).
+See docs/runbooks/sync-two-lane.md: progress age is not lease ownership.
+test_sync_status_read_ownership covers this reader through the real HTTP route.
 """
 
 import json
 import time
 
+import pytest
+
 import database.sync_jobs as sync_jobs
+
+
+@pytest.fixture(autouse=True)
+def _prod_sync_stage(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
 
 
 class _FakeRedis:
@@ -33,23 +34,22 @@ def _stale_at():
     return time.time() - (sync_jobs.STALE_THRESHOLD_SECONDS + 60)
 
 
-def test_stale_processing_job_self_heals_for_inline_dispatch(monkeypatch):
+def test_stale_processing_read_preserves_inline_dispatch(monkeypatch):
     fake = _FakeRedis({'id': 'j1', 'status': 'processing', 'dispatch_mode': 'inline', 'updated_at': _stale_at()})
     monkeypatch.setattr(sync_jobs, 'r', fake)
 
     job = sync_jobs.get_sync_job('j1')
 
-    assert job['status'] == 'failed'
-    assert job['error']
-    # Persisted, not just returned — a later read stays failed.
-    assert fake.sets and fake.sets[-1][1]['status'] == 'failed'
+    assert job['status'] == 'processing'
+    assert fake.sets == []
 
 
-def test_stale_processing_job_self_heals_for_cloud_tasks_dispatch(monkeypatch):
+def test_stale_processing_read_preserves_cloud_tasks_dispatch(monkeypatch):
     fake = _FakeRedis({'id': 'j2', 'status': 'processing', 'dispatch_mode': 'cloud_tasks', 'updated_at': _stale_at()})
     monkeypatch.setattr(sync_jobs, 'r', fake)
 
-    assert sync_jobs.get_sync_job('j2')['status'] == 'failed'
+    assert sync_jobs.get_sync_job('j2')['status'] == 'processing'
+    assert fake.sets == []
 
 
 def test_fresh_processing_job_is_not_finalized(monkeypatch):

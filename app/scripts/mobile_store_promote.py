@@ -9,9 +9,11 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 APP_ID = "6502156163"
 PACKAGE_NAME = "com.friend.ios"
@@ -48,7 +50,9 @@ def require_notes(path: Path, version: str, platform: str) -> str:
     try:
         from importlib.util import module_from_spec, spec_from_file_location
 
-        spec = spec_from_file_location("mobile_changelog", Path(__file__).resolve().parents[2] / ".github/scripts/mobile-changelog.py")
+        spec = spec_from_file_location(
+            "mobile_changelog", Path(__file__).resolve().parents[2] / ".github/scripts/mobile-changelog.py"
+        )
         if spec is None or spec.loader is None:
             raise PromotionError("mobile changelog tooling unavailable")
         module = module_from_spec(spec)
@@ -65,7 +69,9 @@ def require_notes(path: Path, version: str, platform: str) -> str:
 
 
 def check_live_ios_version(version: str) -> None:
-    request = urllib.request.Request(f"https://itunes.apple.com/lookup?id={APP_ID}", headers={"Accept": "application/json"})
+    request = urllib.request.Request(
+        f"https://itunes.apple.com/lookup?id={APP_ID}", headers={"Accept": "application/json"}
+    )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             listing = json.load(response)
@@ -123,8 +129,16 @@ def prepare_ios(version: str, build_number: str) -> IOSBuild:
             raise PromotionError(f"missing Codemagic iOS integration credential: {name}")
     check_live_ios_version(version)
     builds = cli_json(
-        "builds", "list", "--app-id", APP_ID, "--platform", "IOS", "--pre-release-version", version,
-        "--build-version-number", build_number,
+        "builds",
+        "list",
+        "--app-id",
+        APP_ID,
+        "--platform",
+        "IOS",
+        "--pre-release-version",
+        version,
+        "--build-version-number",
+        build_number,
     )
     selected = select_ios_build(builds, version, build_number)
     prerelease = cli_json("builds", "pre-release-version", selected.id)
@@ -134,16 +148,45 @@ def prepare_ios(version: str, build_number: str) -> IOSBuild:
     return selected
 
 
-def submit_ios(build: IOSBuild, notes: str) -> None:
+def ios_localizations(locales: Sequence[str], notes: str) -> list[dict[str, str]]:
+    """What's New for every App Store locale; Apple rejects a submission when any locale lacks it."""
+    unique = sorted(set(locales))
+    if not unique or any(not isinstance(locale, str) or not locale for locale in unique):
+        raise PromotionError("App Store locales must be a non-empty list of locale codes")
+    return [{"locale": locale, "whats_new": notes} for locale in unique]
+
+
+def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = None) -> None:
     command = [
-        "app-store-connect", "builds", "submit-to-app-store", "--max-build-processing-wait", "0",
-        "--platform", "IOS", "--release-type", "MANUAL", "--version-string", build.version,
-        "--whats-new", notes, build.id,
+        "app-store-connect",
+        "builds",
+        "submit-to-app-store",
+        "--max-build-processing-wait",
+        "0",
+        "--platform",
+        "IOS",
+        "--release-type",
+        "MANUAL",
+        "--version-string",
+        build.version,
     ]
+    localizations_file: Path | None = None
+    if locales is None:
+        command += ["--whats-new", notes]
+    else:
+        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+        with handle:
+            json.dump(ios_localizations(locales, notes), handle)
+        localizations_file = Path(handle.name)
+        command += ["--no-phased-release", "--app-store-version-localizations", f"@file:{localizations_file}"]
+    command.append(build.id)
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True, timeout=120)
+        subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         raise PromotionError("App Store Connect rejected the selected build for review") from exc
+    finally:
+        if localizations_file is not None:
+            localizations_file.unlink(missing_ok=True)
 
 
 def release_codes(release: dict[str, object]) -> list[str]:
@@ -153,35 +196,61 @@ def release_codes(release: dict[str, object]) -> list[str]:
     return [str(code) for code in codes]
 
 
-def select_play_release(alpha: object, production: object, version: str, build_number: str) -> None:
-    if not isinstance(alpha, dict) or alpha.get("track") != "alpha":
-        raise PromotionError("Play alpha track lookup failed")
+def select_play_release(
+    source: object, production: object, version: str, build_number: str, *, source_track: str = "alpha"
+) -> None:
+    if not isinstance(source, dict) or source.get("track") != source_track:
+        raise PromotionError(f"Play {source_track} track lookup failed")
     if not isinstance(production, dict) or production.get("track") != "production":
         raise PromotionError("Play production track lookup failed")
-    alpha_releases = alpha.get("releases", [])
+    source_releases = source.get("releases", [])
     production_releases = production.get("releases", [])
-    if not isinstance(alpha_releases, list) or not isinstance(production_releases, list):
+    if not isinstance(source_releases, list) or not isinstance(production_releases, list):
         raise PromotionError("Play track releases are invalid")
     matches = []
-    for release in alpha_releases:
+    for release in source_releases:
         if not isinstance(release, dict):
-            raise PromotionError("Play alpha release is invalid")
+            raise PromotionError(f"Play {source_track} release is invalid")
         codes = release_codes(release)
         if build_number in codes:
-            if codes != [build_number] or release.get("name") != version or release.get("status") not in ("completed", "inProgress"):
-                raise PromotionError("Play alpha build does not match the exact version and code")
+            name = release.get("name")
+            if (
+                codes != [build_number]
+                or not isinstance(name, str)
+                or production_release_version(name) != version
+                or release.get("status") not in ("completed", "inProgress")
+            ):
+                raise PromotionError(f"Play {source_track} build does not match the exact version and code")
             matches.append(release)
     if len(matches) != 1:
-        raise PromotionError("Play alpha track has no unique matching build")
+        raise PromotionError(f"Play {source_track} track has no unique matching build")
     for release in production_releases:
         if not isinstance(release, dict) or not isinstance(release.get("name"), str):
             raise PromotionError("Play public release lacks a marketing version")
         release_codes(release)
-        if version_parts(version) < version_parts(release["name"]):
+        live_version = production_release_version(release["name"])
+        if live_version is not None and version_parts(version) < version_parts(live_version):
             raise PromotionError("Android target is older than the live public version")
 
 
-def prepare_android(version: str, build_number: str) -> tuple[object, str]:
+PRODUCTION_NAME_VERSION_RE = re.compile(
+    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?:\s*\(.*\))?\s*$"
+)
+
+
+def production_release_version(name: str) -> str | None:
+    """Return the X.Y.Z a Play production release name carries, if any.
+
+    Play Console labels a production release by its build name and may suffix the
+    version code ("1.0.552 (1246)"); older or hand-named releases may carry no
+    version at all. Only a recognised version participates in the ordering check.
+    """
+    match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
+    return match.group(1) if match else None
+
+
+def play_edit() -> tuple[object, str]:
+    """Authenticate with the Codemagic Google Play credentials and open an edit."""
     credentials_raw = os.environ.get("GCLOUD_SERVICE_ACCOUNT_CREDENTIALS")
     if not credentials_raw:
         raise PromotionError("missing Codemagic Google Play credentials")
@@ -194,24 +263,46 @@ def prepare_android(version: str, build_number: str) -> tuple[object, str]:
         )
         client = build("androidpublisher", "v3", credentials=credentials, cache_discovery=False)
         edit_id = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()["id"]
-        alpha = client.edits().tracks().get(packageName=PACKAGE_NAME, editId=edit_id, track="alpha").execute()
-        production = client.edits().tracks().get(packageName=PACKAGE_NAME, editId=edit_id, track="production").execute()
     except Exception as exc:
-        raise PromotionError("Google Play track lookup or authentication failed") from exc
+        raise PromotionError("Google Play authentication failed") from exc
+    return client, edit_id
+
+
+def play_track(client: object, edit_id: str, track: str) -> object:
+    try:
+        return client.edits().tracks().get(packageName=PACKAGE_NAME, editId=edit_id, track=track).execute()
+    except Exception as exc:
+        raise PromotionError(f"Google Play {track} track lookup failed") from exc
+
+
+def prepare_android(version: str, build_number: str) -> tuple[object, str]:
+    client, edit_id = play_edit()
+    alpha = play_track(client, edit_id, "alpha")
+    production = play_track(client, edit_id, "production")
     select_play_release(alpha, production, version, build_number)
     return client, edit_id
 
 
-def submit_android(client: object, edit_id: str, version: str, build_number: str, notes: str) -> None:
+PLAY_RELEASE_STATUSES = ("completed", "draft")
+
+
+def submit_android(
+    client: object, edit_id: str, version: str, build_number: str, notes: str, *, status: str = "completed"
+) -> None:
+    """Write one production release for an existing code: live ("completed") or a Play Console draft."""
+    if status not in PLAY_RELEASE_STATUSES:
+        raise PromotionError("Play release status must be completed or draft")
     release = {
         "name": version,
         "versionCodes": [build_number],
-        "status": "completed",
+        "status": status,
         "releaseNotes": [{"language": "en-US", "text": notes}],
     }
     try:
         client.edits().tracks().update(
-            packageName=PACKAGE_NAME, editId=edit_id, track="production",
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            track="production",
             body={"track": "production", "releases": [release]},
         ).execute()
         client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()

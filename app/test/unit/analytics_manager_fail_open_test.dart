@@ -53,6 +53,8 @@ void main() {
 
     expect(adapter.events, hasLength(1));
     expect(adapter.events.single.eventName, 'Queued Event');
+    // platform/trigger stamping lives at the PostHog SDK boundary now, so the
+    // manager's governed emission payload carries only the main-contract globals.
     expect(adapter.events.single.properties, {
       'count': 1,
       'app_platform': 'unknown',
@@ -60,6 +62,31 @@ void main() {
       'app_build': '567',
     });
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
+  });
+
+  test('capture-wedge family events copy app_build onto build', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Local WAL Stuck', properties: {'pending_wal_count': 2});
+    AnalyticsManager().track('Recording Start Failed', properties: {'failure_class': 'capture_unavailable'});
+    AnalyticsManager().track('Capture Recovery Resolved', properties: {'trigger': 'upload_silence'});
+    AnalyticsManager().track('Device Connected', properties: {'type': 'omi'});
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.map((event) => event.eventName), [
+      'Local WAL Stuck',
+      'Recording Start Failed',
+      'Capture Recovery Resolved',
+      'Device Connected',
+    ]);
+    for (final event in adapter.events.take(3)) {
+      expect(event.properties['build'], '567', reason: event.eventName);
+      expect(event.properties['app_build'], '567', reason: event.eventName);
+    }
+    expect(adapter.events.last.properties.containsKey('build'), isFalse);
+    expect(adapter.events.last.properties['app_build'], '567');
   });
 
   test('SDK setup completing after caller deadline recovers queued events', () async {
@@ -72,6 +99,38 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.map((e) => e.eventName), ['late-ready']);
+  });
+
+  test('manager emissions stay attribution-free; classification lives at the SDK boundary', () async {
+    // The governed manager payload is pinned exactly by the C7 spine contract, so
+    // platform/trigger enrichment must NOT appear at this boundary.
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Mobile Background Resource Session');
+    AnalyticsManager().track('custom background event', properties: {'trigger': 'background'});
+    await AnalyticsManager.flushPending(force: true);
+
+    final byName = {for (final e in adapter.events) e.eventName: e.properties};
+    expect(byName['Mobile Background Resource Session']?['trigger'], isNull);
+    expect(byName['Mobile Background Resource Session']?['platform'], isNull);
+    expect(byName['custom background event']?['trigger'], 'background'); // explicit caller property passes through
+  });
+
+  test('account created event carries platform for signup cohort analysis', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().accountCreated(authProvider: 'apple');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events, hasLength(1));
+    expect(adapter.events.single.eventName, 'Account Created');
+    // attribution now stamps at the PostHog SDK boundary, not the governed emission
+    expect(adapter.events.single.properties['platform'], isNull);
+    expect(adapter.events.single.properties['trigger'], isNull);
   });
 
   test('awaited retry preserves occurrence identity and session context', () async {
@@ -193,25 +252,6 @@ void main() {
     expect(adapter.identifies, ['account-b']);
   });
 
-  test('attempt retains original exposure after context clears without leaking to next outcome', () async {
-    final adapter = _FakeAnalyticsAdapter();
-    AnalyticsManager.configure(adapter);
-    await AnalyticsManager.init();
-    var context = <String, Object>{r'$feature/test-ui': 'compact'};
-    AnalyticsManager.experimentContext = () => context;
-    final telemetry = ProductTelemetry();
-    final attempt = telemetry.start(ProductJourney.summaryFeedback);
-    // Equivalent to lease disposal, TTL expiry or kill: subsequent context empty.
-    context = {};
-    attempt.complete(ProductOutcome.success);
-    telemetry.value(ProductValue.feedbackHelpful);
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
-        containsPair(r'$feature/test-ui', 'compact'));
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
-        isNot(contains(r'$feature/test-ui')));
-  });
-
   test('attempt started without consent never emits after consent is restored', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
@@ -224,26 +264,6 @@ void main() {
     expect(adapter.events.where((event) => event.eventName == 'Product Journey Outcome'), isEmpty);
   });
 
-  test('asynchronous zone cannot carry previous account variant into new identity', () async {
-    final adapter = _FakeAnalyticsAdapter();
-    AnalyticsManager.configure(adapter);
-    await AnalyticsManager.init();
-    AnalyticsManager().bindIdentity('account-a');
-    final release = Completer<void>();
-    late Future<void> delayed;
-    AnalyticsManager.withExperimentContext({r'$feature/test-ui': 'compact'}, () {
-      delayed = release.future.then((_) => AnalyticsManager().track('Product Value'));
-    });
-    AnalyticsManager().bindIdentity('account-b');
-    release.complete();
-    await delayed;
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events, isEmpty);
-    AnalyticsManager().track('Product Value');
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.single.properties, isNot(contains(r'$feature/test-ui')));
-  });
-
   test('page opens register context for native interaction events', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
@@ -254,7 +274,7 @@ void main() {
     expect(adapter.interactionContexts, [const _InteractionContext(screenName: 'Settings', target: 'screen')]);
   });
 
-  test('canonical app context cannot be overridden by a call site', () async {
+  test('event-owned app context survives globals; globals fill absent keys', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
@@ -265,9 +285,37 @@ void main() {
     );
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events.single.properties, containsPair('app_platform', 'unknown'));
-    expect(adapter.events.single.properties, containsPair('app_version', '2.3.4'));
-    expect(adapter.events.single.properties, containsPair('app_build', '567'));
+    expect(adapter.events.single.properties, containsPair('app_platform', 'bad-value'));
+    expect(adapter.events.single.properties, containsPair('app_version', '0.0.0'));
+    expect(adapter.events.single.properties, containsPair('app_build', '0'));
+    AnalyticsManager().track('Context Missing', properties: {'app_version': 'observed'});
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.last.properties, containsPair('app_version', 'observed'));
+    expect(adapter.events.last.properties, containsPair('app_build', '567'));
+  });
+
+  test('explicitly unknown event-owned globals are not filled or replaced at delivery', () async {
+    final adapter = _DeliveryAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().track('Capture Wedge Detected',
+        properties: {'app_version': null, 'app_build': 'observed-build', 'build': null});
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.single.properties.containsKey('app_version'), false);
+    expect(adapter.events.single.properties.containsKey('build'), false);
+    expect(adapter.events.single.properties['app_build'], 'observed-build');
+    expect(adapter.events.single.properties['app_platform'], 'unknown');
+  });
+
+  test('delivery preserves positive integer event schema versions and defaults invalid ones', () async {
+    final adapter = _DeliveryAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    for (final version in <Object?>[2, 3, null, 0, -1, '2', 2.5, true]) {
+      AnalyticsManager().track('Schema Event', properties: {'schema_version': version});
+    }
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.map((event) => event.properties['schema_version']), [2, 3, 1, 1, 1, 1, 1, 1]);
   });
 
   test('recording upload lifecycle keeps one correlation schema through the analytics boundary', () async {

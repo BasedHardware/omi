@@ -20,7 +20,7 @@ from models.chat_first import ChatFirstSubject, ProactiveDeferral
 from models.chat_first_e2e import ChatFirstE2EFixtureCase
 from models.task_intelligence import TaskWorkflowMode
 import utils.task_intelligence.chat_first_e2e_fixture as fixture
-import utils.task_intelligence.rollout as rollout
+import utils.task_intelligence.chat_first_eligibility as eligibility
 import routers.chat_first_e2e as fixture_router
 
 ENABLED_UID = 'auth-emulator-enabled-fixture'
@@ -315,12 +315,12 @@ def test_fixture_identity_is_fail_closed_but_task_rollout_is_universal(firestore
             fixture_case=ChatFirstE2EFixtureCase.enabled,
         )
 
-    enabled = rollout.resolve_task_intelligence_for_user(
+    enabled = eligibility.resolve_task_intelligence_for_user(
         uid=ENABLED_UID,
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,
     )
-    disabled_fixture = rollout.resolve_task_intelligence_for_user(
+    disabled_fixture = eligibility.resolve_task_intelligence_for_user(
         uid=DISABLED_UID,
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,

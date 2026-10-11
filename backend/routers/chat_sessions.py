@@ -230,7 +230,16 @@ def get_messages(
     offset: int = Query(0, ge=0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset)
+    # One malformed/legacy stored row must not 500 the whole desktop history page.
+    return Message.deserialize_many_safe(
+        chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset),
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed desktop chat message %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.get(

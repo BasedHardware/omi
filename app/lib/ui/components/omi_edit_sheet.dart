@@ -173,7 +173,7 @@ class _OmiEditSheetState extends State<OmiEditSheet> {
                           child: Container(
                             width: 36,
                             height: 4,
-                            decoration: const BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
+                            decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
                           ),
                         ),
                       ),

@@ -6,11 +6,14 @@ import 'package:in_app_review/in_app_review.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/services/app_review_policy.dart';
+import 'package:omi/services/app_review_tuning.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 export 'app_review_policy.dart' show AppReviewDecision, AppReviewMoment;
+
+enum AppReviewBadExperience { negativeChatRating, captureFailure, fatalError }
 
 typedef AppReviewTelemetry = void Function(String eventName, Map<String, Object> properties);
 
@@ -34,6 +37,7 @@ class AppReviewService {
         _isAvailable = InAppReview.instance.isAvailable,
         _requestNativeReview = InAppReview.instance.requestReview,
         _writeState = null,
+        _cooldown = AppReviewTuning.cooldown,
         _telemetry = _productionTelemetry;
 
   /// Creates an isolated service for hermetic tests and local policy checks.
@@ -45,6 +49,7 @@ class AppReviewService {
     Future<bool> Function()? isAvailable,
     Future<void> Function()? requestNativeReview,
     Future<bool> Function(String key, String value)? writeState,
+    Future<Duration> Function()? cooldown,
     AppReviewTelemetry? telemetry,
   })  : _providedStorage = storage,
         _clock = clock ?? DateTime.now,
@@ -53,12 +58,10 @@ class AppReviewService {
         _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
         _requestNativeReview = requestNativeReview ?? InAppReview.instance.requestReview,
         _writeState = writeState,
+        _cooldown = cooldown ?? (() async => AppReviewPolicy.requestCooldown),
         _telemetry = telemetry ?? _productionTelemetry;
 
   static const String _stateKey = 'app_review_policy_v1';
-  static const String _legacyPromptKey = 'has_shown_review_prompt';
-  static const String _legacyConversationKey = 'has_shown_review_for_conversation';
-  static const String _legacyActionItemKey = 'has_shown_review_for_action_item';
 
   final SharedPreferences? _providedStorage;
   final DateTime Function() _clock;
@@ -67,6 +70,7 @@ class AppReviewService {
   final Future<bool> Function() _isAvailable;
   final Future<void> Function() _requestNativeReview;
   final Future<bool> Function(String key, String value)? _writeState;
+  final Future<Duration> Function() _cooldown;
   final AppReviewTelemetry _telemetry;
 
   Future<SharedPreferences>? _storageFuture;
@@ -74,12 +78,13 @@ class AppReviewService {
   bool _attemptedThisSession = false;
   bool _storageBroken = false;
 
-  /// Records that a valid reading surface was viewed.
-  ///
-  /// Callers should invoke this only after valid content has loaded. The
-  /// service stores a local calendar day and first-seen timestamp, never the
-  /// conversation, summary, or any other content.
-  Future<void> recordEngagement() => _enqueue<void>(() async {
+  /// Saves only the latest local timestamp for a user-visible bad experience.
+  Future<void> recordBadExperience(AppReviewBadExperience category) async {
+    // This is called from global error handlers. Keep even unexpected local
+    // failures out of the zone so recording a crash cannot recursively report
+    // another crash or interfere with startup.
+    try {
+      await _enqueue<void>(() async {
         if (_storageBroken) return;
         final now = _clock();
         final storage = await _storage();
@@ -87,24 +92,19 @@ class AppReviewService {
 
         final state = await _loadState(storage, now);
         if (state == null) return;
-        state.firstSeenAtMs ??= now.millisecondsSinceEpoch;
-        state.readingDays.add(_localDayKey(now));
-        if (state.readingDays.length > AppReviewPolicy.maximumStoredReadingDays) {
-          final sorted = state.readingDays.toList()..sort();
-          state.readingDays
-            ..clear()
-            ..addAll(sorted.skip(sorted.length - AppReviewPolicy.maximumStoredReadingDays));
-        }
+        state.badExperiences[category.name] = now.millisecondsSinceEpoch;
         await _persistState(storage, state);
       });
+    } catch (_) {
+      // Bad-experience suppression is best-effort; review storage remains
+      // fail-closed in requestReview if its state cannot be read or written.
+    }
+  }
 
   /// Requests the platform review dialog when local policy and lifecycle
   /// checks permit it. The lifecycle guard is checked before and after the
   /// asynchronous native availability query.
-  Future<void> requestReview({
-    required AppReviewMoment moment,
-    required bool Function() isStillAppropriate,
-  }) =>
+  Future<void> requestReview({required AppReviewMoment moment, required bool Function() isStillAppropriate}) =>
       _enqueue<void>(() => _requestReviewSerialized(moment, isStillAppropriate));
 
   Future<void> _requestReviewSerialized(AppReviewMoment moment, bool Function() isStillAppropriate) async {
@@ -132,15 +132,20 @@ class AppReviewService {
     }
 
     final version = _safeString(_appVersion).split('+').first;
+    Duration cooldown;
+    try {
+      cooldown = await _cooldown();
+    } catch (_) {
+      cooldown = AppReviewPolicy.requestCooldown;
+    }
     final policyDecision = AppReviewPolicy.evaluate(
       platform: platform,
       appVersion: version,
       now: now,
-      firstSeen: state.firstSeen,
-      distinctReadingDays: state.readingDays.length,
       attempts: state.attempts.map((attempt) => attempt.toPolicyAttempt()),
-      migratedAt: state.migratedAt,
+      badExperiences: state.badExperiences.values.map(DateTime.fromMillisecondsSinceEpoch),
       attemptedThisSession: _attemptedThisSession,
+      cooldown: cooldown,
     );
     if (policyDecision != AppReviewDecision.eligible) {
       _opportunity(momentName, policyDecision);
@@ -233,12 +238,9 @@ class AppReviewService {
 
     if (state.migrationComplete) return state;
 
-    bool legacyFlag(String key) => storage.get(key) == true;
-    final hadLegacyPrompt =
-        legacyFlag(_legacyPromptKey) || legacyFlag(_legacyConversationKey) || legacyFlag(_legacyActionItemKey);
     state
       ..migrationComplete = true
-      ..migratedAtMs = hadLegacyPrompt ? now.millisecondsSinceEpoch : null;
+      ..migratedAtMs = null;
     if (!await _persistState(storage, state)) return null;
     return state;
   }
@@ -270,9 +272,14 @@ class AppReviewService {
 
     validTimestamp(state.firstSeenAtMs);
     validTimestamp(state.migratedAtMs);
-    if (state.readingDays.length > AppReviewPolicy.maximumStoredReadingDays ||
-        state.attempts.length > AppReviewPolicy.maximumStoredAttempts) {
+    if (state.readingDays.length > 32 || state.attempts.length > AppReviewPolicy.maximumStoredAttempts) {
       throw const FormatException('review history exceeds bound');
+    }
+    for (final entry in state.badExperiences.entries) {
+      if (!AppReviewBadExperience.values.any((category) => category.name == entry.key)) {
+        throw const FormatException('invalid bad experience category');
+      }
+      validTimestamp(entry.value);
     }
 
     final currentDay = _localDayKey(now);
@@ -320,17 +327,11 @@ class AppReviewService {
   }
 
   void _opportunity(String moment, AppReviewDecision decision) {
-    _telemetrySafe('App Review Opportunity', <String, Object>{
-      'moment': moment,
-      'decision': decision.telemetryName,
-    });
+    _telemetrySafe('App Review Opportunity', <String, Object>{'moment': moment, 'decision': decision.telemetryName});
   }
 
   void _finished(String moment, String result) {
-    _telemetrySafe('App Review Request Finished', <String, Object>{
-      'moment': moment,
-      'result': result,
-    });
+    _telemetrySafe('App Review Request Finished', <String, Object>{'moment': moment, 'result': result});
   }
 
   void _telemetrySafe(String eventName, Map<String, Object> properties) {
@@ -415,10 +416,8 @@ final class _StoredAttempt {
 
   Map<String, Object> toJson() => <String, Object>{'atMs': atMs, 'version': version};
 
-  AppReviewAttempt toPolicyAttempt() => AppReviewAttempt(
-        at: DateTime.fromMillisecondsSinceEpoch(atMs),
-        version: version,
-      );
+  AppReviewAttempt toPolicyAttempt() =>
+      AppReviewAttempt(at: DateTime.fromMillisecondsSinceEpoch(atMs), version: version);
 }
 
 final class _ReviewState {
@@ -428,6 +427,7 @@ final class _ReviewState {
     required this.firstSeenAtMs,
     required this.readingDays,
     required this.attempts,
+    required this.badExperiences,
   });
 
   factory _ReviewState.empty() => _ReviewState(
@@ -436,6 +436,7 @@ final class _ReviewState {
         firstSeenAtMs: null,
         readingDays: <String>{},
         attempts: <_StoredAttempt>[],
+        badExperiences: <String, int>{},
       );
 
   factory _ReviewState.fromJson(Object? raw) {
@@ -446,10 +447,12 @@ final class _ReviewState {
     final firstSeenAt = raw['firstSeenAtMs'];
     final rawDays = raw['readingDays'];
     final rawAttempts = raw['attempts'];
+    final rawBadExperiences = raw['badExperiences'] ?? <String, Object>{};
     if ((migrationAt != null && migrationAt is! int) ||
         (firstSeenAt != null && firstSeenAt is! int) ||
         rawDays is! List ||
-        rawAttempts is! List) {
+        rawAttempts is! List ||
+        rawBadExperiences is! Map) {
       throw const FormatException('invalid review state fields');
     }
     return _ReviewState(
@@ -458,6 +461,10 @@ final class _ReviewState {
       firstSeenAtMs: firstSeenAt as int?,
       readingDays: rawDays.map((value) => value is String ? value : throw const FormatException('invalid day')).toSet(),
       attempts: rawAttempts.map(_StoredAttempt.fromJson).toList(growable: true),
+      badExperiences: rawBadExperiences.map<String, int>((key, value) {
+        if (key is! String || value is! int) throw const FormatException('invalid bad experience timestamp');
+        return MapEntry(key, value);
+      }),
     );
   }
 
@@ -466,6 +473,7 @@ final class _ReviewState {
   int? firstSeenAtMs;
   Set<String> readingDays;
   List<_StoredAttempt> attempts;
+  Map<String, int> badExperiences;
 
   DateTime? get firstSeen => firstSeenAtMs == null ? null : DateTime.fromMillisecondsSinceEpoch(firstSeenAtMs!);
   DateTime? get migratedAt => migratedAtMs == null ? null : DateTime.fromMillisecondsSinceEpoch(migratedAtMs!);
@@ -477,5 +485,6 @@ final class _ReviewState {
         'firstSeenAtMs': firstSeenAtMs,
         'readingDays': readingDays.toList()..sort(),
         'attempts': attempts.map((attempt) => attempt.toJson()).toList(growable: false),
+        'badExperiences': badExperiences,
       };
 }

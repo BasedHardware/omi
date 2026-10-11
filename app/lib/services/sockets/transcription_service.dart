@@ -17,6 +17,7 @@ import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
@@ -147,10 +148,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Enable server-side speaker auto-assignment (backward compatibility flag)
     params += '&speaker_auto_assign=enabled';
 
-    // Whether the backend may auto-create a new person when it detects a name.
-    // Mirrors the user's "Auto-create Speakers" setting; a detected name with no
-    // existing match is still surfaced for manual tagging when this is off.
-    params += '&create_speakers=${SharedPreferencesUtil().autoCreateSpeakersEnabled}';
+    // The backend may auto-create a new person when it detects a name.
+    params += '&create_speakers=true';
 
     if (SharedPreferencesUtil().vadGateEnabled) {
       params += '&vad_gate=enabled';
@@ -206,7 +205,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
   }
 
+  int _binaryAudioBytesSent = 0;
+  int get binaryAudioBytesSent => _binaryAudioBytesSent;
+
+  bool _stoppedIntentionally = false;
+  bool get stoppedIntentionally => _stoppedIntentionally;
+
   Future stop({String? reason}) async {
+    _stoppedIntentionally = true;
     _detachClientState();
     await _socket.stop();
     _listeners.clear();
@@ -218,8 +224,38 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future send(dynamic message) async {
+    final List<int>? audioFrame = message is List<int> ? message : null;
+    final connectedOnEntry = audioFrame != null && _socket.status == PureSocketStatus.connected;
     _socket.send(message);
+    if (connectedOnEntry && _socket.status == PureSocketStatus.connected) {
+      _binaryAudioBytesSent += audioFrame.length;
+    }
     return;
+  }
+
+  /// S1 optional source unit. WebSocket ordering binds this control record to
+  /// exactly the next binary frame; the server verifies its byte digest.
+  void sendEvidenceFrame(WalFrame frame) {
+    final root = frame.captureRoot;
+    final ordinal = frame.sourceFramePosition;
+    final epoch = frame.sourceClockEpoch;
+    if (root == null || ordinal == null || epoch == null) {
+      send(frame.payload);
+      return;
+    }
+    if (_socket.status != PureSocketStatus.connected) return;
+    _socket.send(jsonEncode({
+      'type': 'capture_evidence_frame',
+      'version': 1,
+      'capture_root': root,
+      'clock_epoch': epoch,
+      'source_frame': ordinal,
+      'byte_length': frame.payload.length,
+    }));
+    _socket.send(frame.payload);
+    if (_socket.status == PureSocketStatus.connected) {
+      _binaryAudioBytesSent += frame.payload.length;
+    }
   }
 
   Future sendText(String message) async {
@@ -336,6 +372,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onConnected() {
+    _binaryAudioBytesSent = 0;
+    _stoppedIntentionally = false;
     _attachClientState();
     _listeners.forEach((k, v) {
       v.onConnected();

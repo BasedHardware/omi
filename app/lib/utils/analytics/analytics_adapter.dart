@@ -56,3 +56,8 @@ abstract interface class AnalyticsIdentityAdapter {
   /// actual SDK distinct ID used for both assignments and product events.
   Future<String> settleIdentity(String? identity, {required bool reset});
 }
+
+abstract interface class AnalyticsFeatureFlagAdapter {
+  Future<bool> isFeatureEnabled(String key);
+  Future<Object?> getFeatureFlagPayload(String key);
+}

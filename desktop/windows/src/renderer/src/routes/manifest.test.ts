@@ -12,7 +12,6 @@ vi.mock('../pages/Tasks', () => ({ Tasks: () => null }))
 vi.mock('../pages/Goals', () => ({ Goals: () => null }))
 vi.mock('../pages/Apps', () => ({ Apps: () => null }))
 vi.mock('../pages/Rewind', () => ({ Rewind: () => null }))
-vi.mock('../pages/Insights', () => ({ Insights: () => null }))
 vi.mock('../pages/LiveConversation', () => ({ LiveConversation: () => null }))
 vi.mock('../pages/KnowledgeGraph', () => ({ KnowledgeGraph: () => null }))
 
@@ -124,7 +123,6 @@ describe('route manifest', () => {
       'tasks',
       'rewind',
       'apps',
-      'insights'
     ])
   })
 
@@ -138,7 +136,6 @@ describe('route manifest', () => {
       'goals',
       'apps',
       'rewind',
-      'insights'
     ])
   })
 

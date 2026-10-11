@@ -546,9 +546,13 @@ struct AIResponseView: View {
     Task {
       if let url = await onShareLink?() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url, forType: .string)
-        AnalyticsManager.shared.shareAction(category: "floating_bar_share_link")
-        showShareSuccessFeedback()
+        if NSPasteboard.general.setString(url, forType: .string) {
+          if let sid = DesktopBackendEnvironment.shareID(from: url) {
+            AnalyticsManager.shared.shareAction(
+              category: "floating_bar_share_link", properties: ["share_id": sid, "target_app": "copy"])
+          }
+          showShareSuccessFeedback()
+        }
       }
       isSharingLink = false
     }

@@ -68,13 +68,54 @@ only drops or truncates the derived text — the release file is never touched.
 A release collected from only `none` fragments yields exactly
 "Bug fixes and improvements".
 
-Public promotion stays a manual operator action: the `mobile-store-promote`
-Codemagic lane runs only on an explicit trigger, requires
-`CONFIRM=submit-for-review`, selects an already-uploaded build, and attaches
-the derived notes as the store "What's New" text. Deriving notes never submits
-anything; a missing or invalid release file fails the promotion closed.
+Manual promotion: the `mobile-store-promote` Codemagic lane runs only on an
+explicit trigger, requires `CONFIRM=submit-for-review`, selects an
+already-uploaded build, and attaches the derived notes as the store "What's
+New" text. Deriving notes never submits anything; a missing or invalid release
+file fails the promotion closed.
 
-Rollback: revert the `codemagic.yaml` workflow addition to retire the lane, and
+## Daily store train
+
+`.github/workflows/mobile_daily_train.yml` (14:00 UTC, or `workflow_dispatch`
+with `dry_run`) starts the Codemagic `mobile-daily-train` workflow on `main`,
+which runs `app/scripts/mobile_daily_train.py --platform both`. The train
+queues builds for a **human** release; it never releases anything itself.
+
+iOS (App Store Connect, versions are read per state because the unfiltered
+listing only returns live versions):
+
+- live = newest `READY_FOR_SALE` version; candidate = highest TestFlight
+  marketing version above it with a processed (`VALID`, not expired) build, and
+  that version's highest build number. No candidate → nothing to do.
+- Anything `WAITING_FOR_REVIEW`, `IN_REVIEW`, `WAITING_FOR_EXPORT_COMPLIANCE`,
+  `PENDING_APPLE_RELEASE` or `PROCESSING_FOR_APP_STORE` → hold; one submission
+  is in flight at a time.
+- `PENDING_DEVELOPER_RELEASE` (approved, not released): if the candidate build
+  is already attached to it, leave it for the human. Otherwise cancel its
+  completed review submission (`PATCH /v1/reviewSubmissions/{id}
+  canceled=true`, i.e. `app-store-connect review-submissions cancel`), wait for
+  `DEVELOPER_REJECTED`, then submit the candidate. A pending version newer than
+  every TestFlight build, or two pending versions, stops the train.
+- Submission: `builds submit-to-app-store --release-type MANUAL
+  --no-phased-release` with `--app-store-version-localizations` carrying the
+  derived iOS notes for every locale of the live version (a bare `--whats-new`
+  covers only the primary locale and Apple rejects the submission). The run
+  ends only after the new version reads `WAITING_FOR_REVIEW`.
+
+Android (Google Play): candidate = highest version code on the `internal` and
+`alpha` tracks whose release name version is newer than the live `production`
+release. It is written to `production` as a `draft` release
+(`mobile_store_promote.submit_android(..., status="draft")`); a human presses
+Release in Play Console. A later run overwrites the draft with the newer build;
+a draft already holding the candidate code is left alone.
+
+Release notes: the train runs `collect` for the candidate version in its
+checkout (unreleased fragments fold into `releases/<version>.json` without a
+commit, so notes are never empty); it logs the `collect` command to commit the
+same lines to `main`. No release file and no fragments fails the platform. The
+run ends with one `TRAIN SUMMARY:` line; any platform failure exits non-zero.
+
+Rollback: revert the `codemagic.yaml` workflow additions to retire a lane, and
 delete `app/changelog/releases/<version>.json` to drop a collected release.
 Neither affects builds already uploaded to a store.
 
@@ -99,4 +140,6 @@ Neither affects builds already uploaded to a store.
   group can receive it; verify the configured group and its capabilities in
   App Store Connect when investigating a failed post-publish task.
 
-No workflow in this document silently promotes a build to public production.
+No workflow in this document releases a build to users: the daily train stops at
+App Review (manual release) and at a Play production draft, and the manual lane
+needs an explicit confirmation.

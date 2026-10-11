@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
+import json
+from collections import OrderedDict
+from hashlib import sha256
 import logging
 import os
 import re
+import sys
+import threading
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
 from models.conversation_enums import ConversationSource
 from utils.journey_metrics_contract import bounded_app_build
 from utils.metrics import (
+    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL,
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
     OMI_LISTEN_ACCEPTED_TOTAL,
+    OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL,
     OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
+    OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
@@ -30,6 +39,8 @@ from utils.metrics import (
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
+from utils.stt.soniox_runway import meter_audio_seconds
+from utils.observability.routing_cohort import current_routing_cohort
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +54,17 @@ _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
 _LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
 _SYNC_INTAKE_OUTCOMES = frozenset({'created', 'merged'})
+# Headline SLI outcomes (routers/listen/runtime.py session-end seam).
+LIVE_SESSION_TRANSCRIPT_OUTCOMES = frozenset({'transcribed', 'no_transcript', 'too_short'})
+LiveSessionTranscriptOutcome = Literal['transcribed', 'no_transcript', 'too_short']
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
+
+_ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS = 5 * 60
+_ZERO_TRANSCRIPT_EVENT_UID_CAP = 10_000
+_zero_transcript_events_lock = threading.Lock()
+_zero_transcript_events: OrderedDict[str, tuple[float, int]] = OrderedDict()
+_zero_transcript_clock: Callable[[], float] = monotonic
 
 
 def _bounded_route(route: str) -> str:
@@ -167,6 +187,7 @@ class LiveSTTAttempt:
         self._clock = clock
         self._started_at = clock()
         self._finished = False
+        self._routing_cohort = current_routing_cohort.get()
         OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
             provider=self.provider,
             client_platform=self.platform,
@@ -193,6 +214,8 @@ class LiveSTTAttempt:
             deployment_environment=self.deployment_environment,
             phase=phase,
         ).inc()
+        if self._routing_cohort is not None:
+            self._routing_cohort.terminal(outcome)
         properties = {
             **self._base_properties(),
             'duration_seconds': max(0.0, self._clock() - self._started_at),
@@ -278,6 +301,9 @@ def record_live_stt_pre_audio_failure(
         outcome='failure',
         phase=bounded_phase,
     ).inc()
+    cohort = current_routing_cohort.get()
+    if cohort is not None:
+        cohort.terminal('failure')
 
 
 def record_sync_intake_outcome(*, created: bool) -> None:
@@ -335,6 +361,8 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
     ).inc(seconds)
+    if provider == 'soniox':
+        meter_audio_seconds(seconds)
 
 
 def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
@@ -352,8 +380,37 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
     ).inc()
 
 
+class ListenNoAudioObservation:
+    """Observe first decoded audio, then raw byte-frame inactivity; control messages never reset the timer."""
+
+    def __init__(self) -> None:
+        self.started_at = monotonic()
+        self.last_audio_at: float | None = None
+        self.counted = False
+        self.closed = False
+
+    def observe(self, *, has_audio: bool, audio_received_at: float | None = None) -> None:
+        if self.closed:
+            return
+        if has_audio and audio_received_at != self.last_audio_at:
+            self.last_audio_at = audio_received_at
+            self.started_at = monotonic()
+        stalled = monotonic() - self.started_at >= 300
+        if stalled != self.counted:
+            OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS.inc(1 if stalled else -1)
+            self.counted = stalled
+            if stalled:
+                logger.warning('omi_listen_capture_idle reason=no_upstream_audio threshold_seconds=300')
+
+    def close(self) -> None:
+        self.closed = True
+        if self.counted:
+            OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS.dec()
+            self.counted = False
+
+
 def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only.
+    """Count one /v4/listen session admitted through STT setup with bounded labels only.
 
     WebSocket accept paths omit app_build (unknown): the handshake does not
     carry a trusted version contract.
@@ -374,6 +431,119 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL.labels(
         transcription_source=_bounded_source(source),
         outcome=outcome,
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_live_session_transcript_outcome(
+    *,
+    outcome: LiveSessionTranscriptOutcome,
+    uid: str | None = None,
+    source: str | None = None,
+    platform: str | None = None,
+    recording_id: str | None = None,
+) -> None:
+    """Record the headline per-session transcript outcome once at session teardown.
+
+    The one number that answers the incident question "did this session get any
+    transcript?". ``too_short`` (under ~10s of audio, or no speech per the
+    existing VAD) is a separate bucket so silence cannot dilute or fake the
+    failure ratio: alerts divide ``transcribed`` by
+    ``transcribed + no_transcript`` only.
+    """
+
+    if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
+        raise ValueError(f'unknown live session transcript outcome: {outcome}')
+    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    if outcome != 'no_transcript' or not uid:
+        return
+    now = _zero_transcript_clock()
+    with _zero_transcript_events_lock:
+        prior = _zero_transcript_events.get(uid)
+        if prior is not None and now - prior[0] < _ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS:
+            _zero_transcript_events[uid] = (prior[0], prior[1] + 1)
+            _zero_transcript_events.move_to_end(uid)
+            return
+        coalesced_outcome_count = 1 if prior is None else prior[1] + 1
+        _zero_transcript_events[uid] = (now, 0)
+        _zero_transcript_events.move_to_end(uid)
+        while len(_zero_transcript_events) > _ZERO_TRANSCRIPT_EVENT_UID_CAP:
+            _zero_transcript_events.popitem(last=False)
+    recording_correlation_id = None
+    if recording_id:
+        recording_correlation_id = sha256(recording_id.encode('utf-8')).hexdigest()[:16]
+    try:
+        emit_product_event(
+            uid=uid,
+            event='Listen Socket Zero Transcript',
+            properties={
+                'transcription_source': _bounded_source(source),
+                'app_platform': _bounded_platform(platform),
+                'recording_correlation_id': recording_correlation_id,
+                'coalesced_outcome_count': coalesced_outcome_count,
+            },
+        )
+    except Exception:
+        # Per-user observability is subordinate to socket teardown. The
+        # aggregate Prometheus outcome above remains authoritative.
+        pass
+
+
+def initialize_live_session_transcript_outcome_children() -> None:
+    """Pre-create the three headline-SLI children at process start. Never raises.
+
+    A counter child only exists after its first increment. Touching ``labels``
+    instantiates it at 0 without counting a phantom session (the same trick
+    ``connect_metrics.initialize_stt_provider_connect_children`` uses), so the
+    ``outcome="transcribed"`` numerator is a real series from process start:
+    a rolling restart into a total outage reads as a 0% ratio instead of an
+    empty vector the alert math turns into No Data (2026-09-26 review).
+    """
+
+    try:
+        for outcome in sorted(LIVE_SESSION_TRANSCRIPT_OUTCOMES):
+            OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome)
+    except Exception:
+        pass
+
+
+def emit_listen_vad_gate_metrics(payload: Mapping[str, Any], *, source: str | None, platform: str | None) -> dict:
+    """Emit the vad_gate_metrics payload as one pure JSON line on stdout.
+
+    A logger-prefixed line is not guaranteed to arrive as ``jsonPayload`` in
+    Cloud Logging; the self-heal wedge detector reads this event as structured
+    JSON, so the line must contain nothing but the payload. Adds the bounded
+    funnel labels and returns the emitted mapping for the caller's zero-byte
+    check.
+    """
+
+    enriched = dict(payload)
+    enriched['transcription_source'] = _bounded_source(source)
+    enriched['client_platform'] = _bounded_platform(platform)
+    sys.stdout.write(json.dumps(enriched) + '\n')
+    sys.stdout.flush()
+    return enriched
+
+
+def record_listen_zero_byte_session(*, source: str | None, platform: str | None) -> None:
+    """Count one VAD-gated session that tore down having received literally no audio."""
+
+    OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_no_audio_teardown(*, source: str | None, platform: str | None) -> None:
+    """Count one accepted listen session that ended before its first audio byte.
+
+    Emitted for every accepted session regardless of VAD or phone-call status so
+    the accepted -> first_audio -> no-audio funnel covers all sources. Never
+    labeled by uid.
+    """
+
+    OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL.labels(
+        transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
 
@@ -401,3 +571,8 @@ def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | 
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+# Pre-create the headline-SLI children at import so every outcome series is
+# queryable (and the emitter provably alive) from process start.
+initialize_live_session_transcript_outcome_children()

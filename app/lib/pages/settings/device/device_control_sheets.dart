@@ -44,7 +44,7 @@ Future<int?> showDoubleTapActionSheet(BuildContext context, {required int curren
             child: OmiSettingsRow(
               title: options[i],
               showChevron: false,
-              trailing: i == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              trailing: i == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
               onTap: () => Navigator.of(sheetContext).pop(i),
             ),
           ),

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, X } from 'lucide-react'
-import { useGoogleConnection } from '../../../../hooks/useGoogleConnection'
 import { getCalendarStatus, type CalendarStatus } from '../../../../lib/calendarConnect'
 import { getXSession } from '../../../../lib/xSession'
 import type { XStatus } from '../../../../../../shared/types'
@@ -18,7 +17,7 @@ import { TrayTile } from './TrayTile'
 
 export interface ConnectTrayCallbacks {
   /** LEFT brand tile → that import connector's detail (drill-in). */
-  onOpenSource: (id: 'gmail' | 'calendar' | 'sticky' | 'x') => void
+  onOpenSource: (id: 'calendar' | 'sticky' | 'x') => void
   /** LEFT "+ More" → the full Imports list. */
   onOpenImports: () => void
   /** RIGHT "+ More" → the Exports (memory-pack) list. */
@@ -61,13 +60,10 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
     onDismiss
   } = props
 
-  // Connected labels reuse the SAME status derivations the connectors do — the Gmail
-  // lane's shared singleton hook, and a one-shot Calendar status probe. Sticky Notes
-  // is a one-shot import with no persistent connection, and Windows has no
-  // Omi-device-history signal yet, so those tiles carry no "Connected" label.
-  const { googleEnabled, status: gmailStatus } = useGoogleConnection()
-  const gmailConnected = googleEnabled && gmailStatus.connected
-
+  // Connected labels reuse the SAME status derivations the connectors do — a
+  // one-shot Calendar status probe. Sticky Notes is a one-shot import with no
+  // persistent connection, and Windows has no Omi-device-history signal yet, so
+  // those tiles carry no "Connected" label.
   const [calendar, setCalendar] = useState<CalendarStatus>({ connected: false })
   const canceled = useRef(false)
   useEffect(() => {
@@ -121,12 +117,6 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
             <ColumnCard>
               <ColumnHeader title="Connect data" subtitle="Sources Omi learns from." />
               <div className="flex flex-col gap-2.5">
-                <TrayTile
-                  title="Gmail"
-                  brand="gmail"
-                  connected={gmailConnected}
-                  onClick={() => onOpenSource('gmail')}
-                />
                 <TrayTile
                   title="Calendar"
                   brand="calendar"

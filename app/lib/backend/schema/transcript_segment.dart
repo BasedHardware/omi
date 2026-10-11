@@ -25,6 +25,9 @@ class TranscriptSegment {
   bool speechProfileProcessed;
   String? sttProvider;
 
+  /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
+  String? speakerLabelSource;
+
   TranscriptSegment({
     required this.id,
     required this.text,
@@ -36,6 +39,7 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerLabelSource,
     int? speakerId,
   }) {
     final parts = speaker?.split('_') ?? [];
@@ -52,10 +56,6 @@ class TranscriptSegment {
     var end = Duration(seconds: this.end.toInt());
     return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
   }
-
-  /// Whitespace-delimited word count. Shared with [ServerConversation.isFailedTitleRecoverable]
-  /// so the ≥5-word "real content" heuristic has one source of truth.
-  int get wordCount => text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
 
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
@@ -76,6 +76,7 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerLabelSource: generated.speakerLabelSource,
     );
   }
 
@@ -92,6 +93,7 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerLabelSource: speakerLabelSource,
     );
   }
 
@@ -187,12 +189,14 @@ class TranscriptSegment {
     List<Person>? people,
     String? ownerName,
     List<TranscriptSegment>? numberingSegments,
+    bool unresolved = false,
   }) {
     final names = SpeakerNames.forSegments(
       numberingSegments ?? segments,
       people: people ?? SharedPreferencesUtil().cachedPeople,
       ownerName: ownerName ?? SharedPreferencesUtil().givenName,
       l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+      unresolved: unresolved,
     );
     final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);

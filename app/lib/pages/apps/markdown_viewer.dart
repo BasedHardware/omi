@@ -38,7 +38,7 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
                   backgroundColor: Colors.transparent,
                   color: OmiColors.textSecondary,
                 ),
-                blockquoteDecoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                blockquoteDecoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                 code: OmiType.callout.copyWith(
                   height: 1.2,
                   backgroundColor: Colors.transparent,

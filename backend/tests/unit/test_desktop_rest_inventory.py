@@ -45,6 +45,7 @@ OUT_OF_SCOPE_PREFIXES = (
     '/v2/chat/',  # streaming chat / Rust
     '/v2/chat-sessions',  # Rust desktop backend
     '/v2/desktop/',  # Rust desktop backend
+    '/v1/desktop/experiments',  # Python desktop-backend experiment enrollment
     '/v2/messages/',  # SSE streaming
     '/v2/files',  # multipart upload
     '/v2/apps',  # Rust-proxied app routes (desktop uses v1/apps)

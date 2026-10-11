@@ -12,7 +12,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversations/widgets/date_filter_chip.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -157,7 +156,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];
@@ -179,10 +181,12 @@ void main() {
 
   testWidgets('Separate… from a grouped row separates on confirm and reloads the list', (tester) async {
     final separated = <String>[];
-    rowSeparationController = () => CaptureGroupSeparationController(separate: (id) async {
-          separated.add(id);
-          return CaptureGroupSeparationResult.separated;
-        });
+    rowSeparationController = () => CaptureGroupSeparationController(
+          separate: (id) async {
+            separated.add(id);
+            return CaptureGroupSeparationResult.separated;
+          },
+        );
     addTearDown(() => rowSeparationController = CaptureGroupSeparationController.new);
     final grouped = ServerConversation(
       id: 'a',
@@ -192,7 +196,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];
@@ -221,11 +228,15 @@ void main() {
   });
 
   group('row titles (hub audit #21)', () {
-    testWidgets('a blank title reads Untitled Conversation; a discarded one says so with its length', (tester) async {
+    testWidgets('a blank title uses its recording date; a discarded one says so with its length', (tester) async {
       late BuildContext captured;
       await pump(tester, Builder(builder: (context) => (captured = context, const SizedBox()).$2));
 
-      expect(conversationRowTitle(captured, _conversation('a', title: '  ')), 'Untitled Conversation');
+      final blankTitle = _conversation('a', title: '  ');
+      expect(
+        conversationRowTitle(captured, blankTitle),
+        OmiDateFormat.of(captured).dateTime(blankTitle.createdAt.toLocal()),
+      );
       final start = DateTime(2026, 9, 20, 10);
       final discarded = _conversation(
         'b',
@@ -240,21 +251,5 @@ void main() {
   testWidgets('today gets a day header (hub audit #16)', (tester) async {
     await pump(tester, DateListItem(date: DateTime.now(), isFirst: true));
     expect(find.text('Today'), findsOneWidget);
-  });
-
-  testWidgets('the active date filter is a removable chip (hub audit #23)', (tester) async {
-    await pump(tester, const ConversationDateFilterChip());
-    expect(find.byKey(const Key('conversation_date_filter_chip')), findsNothing);
-
-    provider.selectedStartDate = DateTime(2026, 9, 1);
-    provider.selectedEndDate = DateTime(2026, 9, 7);
-    provider.notifyListeners();
-    await tester.pump();
-
-    expect(find.text('Sep 1, 2026 – Sep 7, 2026'), findsOneWidget);
-    await tester.tap(find.byTooltip('Remove Filter'));
-    await tester.pump();
-    expect(provider.selectedStartDate, isNull);
-    await tester.pumpAndSettle();
   });
 }

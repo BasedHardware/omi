@@ -12,6 +12,7 @@ abstract interface class CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   });
@@ -50,6 +51,7 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {}

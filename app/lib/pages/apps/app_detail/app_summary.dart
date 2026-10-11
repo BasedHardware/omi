@@ -55,7 +55,7 @@ class AppDetailSummary extends StatelessWidget {
                   ),
                   if (official) ...[
                     const SizedBox(width: OmiSpacing.xxs),
-                    const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: OmiColors.textPrimary),
+                    FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: OmiColors.textPrimary),
                   ],
                 ],
               ),
@@ -65,7 +65,7 @@ class AppDetailSummary extends StatelessWidget {
                 child: Row(
                   children: [
                     if (ratingCount > 0) ...[
-                      const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: OmiColors.textPrimary),
+                      FaIcon(FontAwesomeIcons.solidStar, size: 11, color: OmiColors.textPrimary),
                       const SizedBox(width: OmiSpacing.xxs),
                       Text(
                         '$rating ($ratingCount)',
@@ -75,7 +75,7 @@ class AppDetailSummary extends StatelessWidget {
                     ],
                     if (installs > 0)
                       Text(
-                        context.l10n.appUsersCount((installs / 10).round() * 10),
+                        context.l10n.appUsersCount(installs),
                         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                       ),
                   ],

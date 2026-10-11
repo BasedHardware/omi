@@ -136,11 +136,13 @@ For self-hosted instances, replace with your backend URL.
 
 ## Authentication
 
-All API requests require your Developer API key in the `Authorization` header:
+Resource endpoints under `/v1/dev/user/...` and credential introspection at `/v1/dev/key` require a Developer API key in the `Authorization` header:
 
 ```http
 Authorization: Bearer omi_dev_your_api_key_here
 ```
+
+Key management (`GET`/`POST /v1/dev/keys` and `DELETE /v1/dev/keys/{key_id}`) instead requires a signed-in Firebase ID token. A developer key cannot manage other keys. See [API Keys](/doc/developer/api/keys).
 
 <Warning>
 MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp`. They do not authenticate
@@ -153,18 +155,40 @@ Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` su
 
 ## Rate Limits
 
-| Limit | Value |
-|-------|-------|
-| Per minute | 100 requests per API key |
-| Per day | 10,000 requests per user |
+Budgets are operation-specific, per credential context (user/app/key), rather than a blanket per-minute or daily allowance. Default budgets are:
 
-Rate limit headers are included in responses:
+| Operation | Requests per hour |
+|-----------|-------------------|
+| Calling key metadata | 120 |
+| Memory reads | 120 |
+| Action item reads / writes (separate buckets) | 120 each |
+| Goal reads / writes (separate buckets) | 120 each |
+| Conversation reads, shared across list/detail/transcript | 60 |
+| Conversation list / detail (additional separate buckets) | 60 each |
+| Transcript fetch (additional bucket) | 25 |
+| Conversation writes, shared | 25 |
+| Conversation from-segments (additional bucket) | 30 |
+| Ask | 25 |
+| Memory writes | 120 |
+| Memory batch writes | 15 |
+
+Single-memory creation also has a 30 requests/minute burst limit. Overlapping budgets all apply; for example, transcript fetches consume the shared conversation-read, detail-read, and transcript buckets. Deployment configuration may adjust effective limits.
+
+Each fixed window begins with its first counted request and resets when the bucket expires, rather than on a clock-hour boundary. Denied requests do not extend the window. There is no general 10,000/day developer quota.
+
+Quota headers are sent on rate-limit denials; do not expect them on every successful response or expect an `X-RateLimit-Reset` timestamp. Use `Retry-After` (seconds until the denied bucket resets):
 
 ```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642694400
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 0
+Retry-After: 1800
+
+{"detail": "Rate limit exceeded. Try again in 1800s."}
 ```
+
+Wait at least the indicated time before retrying. Retry writes only when you know they were rejected before execution; avoid repeating ambiguous writes after transport failures.
 
 ---
 

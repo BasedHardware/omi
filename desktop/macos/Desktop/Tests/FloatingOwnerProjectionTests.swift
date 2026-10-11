@@ -98,7 +98,7 @@ final class FloatingOwnerProjectionTests: XCTestCase {
         ownerID: "owner-a",
         title: "stale before paint",
         message: "must not mark delivered",
-        assistantId: "context-director",
+        assistantId: "insight",
         sound: .none,
         kind: .insight,
         onPresented: { presentedCount += 1 },

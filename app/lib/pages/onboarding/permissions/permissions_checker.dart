@@ -23,7 +23,7 @@ Future<bool> arePermissionsGranted() async {
 
 /// Interstitial shown when onboarding was completed (from backend) but permissions haven't been
 /// granted on this device (fresh install). Same rows as the first-run step
-/// ([OnboardingPermissionsPanel]); Continue goes home without prompting.
+/// ([OnboardingPermissionsPanel]); Continue asks for whatever is still missing, then goes home.
 class PermissionsInterstitialPage extends StatefulWidget {
   const PermissionsInterstitialPage({super.key, this.source});
 
@@ -56,7 +56,13 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
             child: Align(
               alignment: const Alignment(0, 0.4),
               child: ExcludeSemantics(
-                child: Image.asset(Assets.images.logoTransparent.path, width: 120, height: 120),
+                // The asset is white; tint it so it shows on the light page too.
+                child: Image.asset(
+                  Assets.images.logoTransparent.path,
+                  width: 120,
+                  height: 120,
+                  color: OmiColors.textPrimary,
+                ),
               ),
             ),
           ),
@@ -67,7 +73,7 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                 Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
                 const SizedBox(height: OmiSpacing.xs),
                 Text(
-                  context.l10n.permissionsSetupDescription,
+                  context.l10n.permissionsChangeAnytime,
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -80,7 +86,11 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                   key: const Key('permissions_interstitial_continue'),
                   label: context.l10n.continueButton,
                   expand: true,
-                  onPressed: () {
+                  onPressed: () async {
+                    await requestMissingOnboardingPermissions(
+                      resolveOnboardingPermissionsSource(context, widget.source),
+                    );
+                    if (!context.mounted) return;
                     PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                     _goHome(context);
                   },

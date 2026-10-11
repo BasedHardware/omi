@@ -40,8 +40,20 @@ def validate(doc, root=ROOT, prior=None):
         old = {e['id']: e for e in prior['events']}
         now = {e['id']: e for e in events}
         for key, value in old.items():
-            if key not in now or any(now[key][field] != value[field] for field in ('wire_name', 'properties', 'phase', 'intent', 'correlation')):
+            if key not in now or any(now[key][field] != value[field] for field in ('wire_name', 'phase', 'intent', 'correlation')):
                 errors.append(f'{key}: released wire identity is immutable; retain old event and add a new id')
+            elif now[key]['properties'] != value['properties']:
+                old_props = value['properties']
+                new_props = now[key]['properties']
+                if set(old_props) != set(new_props) or any(
+                    new_props[prop] != spec and not (
+                        spec.get('type') == 'enum' and
+                        {field: item for field, item in new_props[prop].items() if field != 'values'} ==
+                        {field: item for field, item in spec.items() if field != 'values'} and
+                        new_props[prop]['values'][:len(spec['values'])] == spec['values']
+                    ) for prop, spec in old_props.items()
+                ):
+                    errors.append(f'{key}: released properties are immutable except append-only enum values')
         if not set(prior['adopted_files']) <= set(doc['adopted_files']):
             errors.append('adoption cannot be removed')
     for event in events:
@@ -199,6 +211,16 @@ def render(doc):
         ]
         dart += ['  @override', f'  String get wireName => {dart_string(e["wire_name"])};', '  @override', '  Map<String, Object> get properties => {' + ', '.join(entries) + '};', '}']
         plan.append(f"| {e['id']} | {e['wire_name']} | {', '.join(p['wire_name'] for p in fields.values()) or 'none'} | {e['status']} | {', '.join(e['consumers'])} |")
+    review_event = next(e for e in doc['events'] if e['id'] == 'appReviewOpportunity')
+    decisions = review_event['properties']['decision']['values']
+    plan += ['', '## App Review Opportunity decisions', '', ', '.join(f'`{decision}`' for decision in decisions)]
+    plan += [
+        '',
+        '## Integer sentinel conventions',
+        '',
+        '- `deviceDisconnectedDetailed.reason_code` = `-1`: the disconnect reason is unknown (native sentinel absent).',
+        '- `diagnosticsSendFailed.status_code` = `0`: the failure was not an HTTP failure; otherwise the real HTTP status.',
+    ]
     return '\n'.join(dart)+'\n', '\n'.join(plan)+'\n'
 
 

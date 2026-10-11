@@ -352,7 +352,7 @@ import XCTest
     XCTAssertTrue(voiceServiceSource.contains("cachedOrSynthesizedBackgroundAgentKickoffAudio"))
     XCTAssertTrue(voiceServiceSource.contains("DesktopLocalProfile.applicationSupportURL()"))
     XCTAssertFalse(voiceServiceSource.contains(".appendingPathComponent(\"Omi\", isDirectory: true)"))
-    XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.canUseBYOK"))
+    XCTAssertFalse(voiceServiceSource.contains("CredentialHealthManager.shared.canUseBYOK"))
     XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.recordProviderFailure"))
     XCTAssertTrue(voiceServiceSource.contains("context: \"openai_tts\""))
   }

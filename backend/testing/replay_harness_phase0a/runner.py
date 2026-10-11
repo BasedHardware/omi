@@ -166,7 +166,6 @@ class Harness:
                 "HTTP_SYNC_JOBS_RUN_TIMEOUT": "30",
                 "FAIR_USE_ENABLED": "true",
                 "MAX_DAILY_AUDIO_HOURS": "30",
-                "TRIAL_PAYWALL_ENABLED": "false",
                 "STT_PRERECORDED_MODEL": "parakeet",
                 "STT_SERVICE_MODELS": "parakeet",
                 "HOSTED_PARAKEET_API_URL": "http://127.0.0.1:1",

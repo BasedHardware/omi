@@ -30,9 +30,9 @@ class OnboardingCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: padding,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: OmiColors.surface0,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
       ),
       child: SafeArea(
         top: false,
@@ -42,8 +42,11 @@ class OnboardingCard extends StatelessWidget {
           children: [
             Flexible(
               child: SingleChildScrollView(
-                child:
-                    Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: crossAxisAlignment, children: content),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: crossAxisAlignment,
+                  children: content,
+                ),
               ),
             ),
             ...footer,
@@ -63,10 +66,14 @@ class OnboardingStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keep clear of the progress dots and back button drawn over the top of the step.
+    // The top padding already includes the progress dots and back button when the wrapper draws
+    // them (OnboardingStepLayout), so this only adds a small gap above a full-height card.
     return Padding(
-      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 64),
-      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [Flexible(child: card)]),
+      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + OmiSpacing.md),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [Flexible(child: card)],
+      ),
     );
   }
 }

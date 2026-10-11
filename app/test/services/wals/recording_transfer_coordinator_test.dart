@@ -129,7 +129,7 @@ void main() {
       expect(harness.walState, 'uploaded');
     });
 
-    test('background connectivity during an in-flight drain does not start another pass (#5221)', () async {
+    test('background connectivity during an in-flight drain coalesces one bounded live pass', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
       final drainGate = Completer<void>();
@@ -147,11 +147,13 @@ void main() {
       await wake;
       await _settle();
 
-      expect(harness.reconcilePasses, 1);
+      expect(harness.reconcilePasses, 2);
       expect(harness.discoveryPasses, 1);
       expect(harness.drainPasses, 1);
-      expect(harness.drainedWalIds, ['wal-1']);
-      expect(harness.backlog, ['wal-after-lock']);
+      expect(harness.liveCaptureDrainPasses, 1);
+      expect(harness.retryBudgetResets, 1);
+      expect(harness.drainedWalIds, ['wal-1', 'wal-after-lock']);
+      expect(harness.backlog, isEmpty);
     });
 
     test('a coalesced extra pass is dropped when the screen turns off mid-drain (#5221)', () async {
@@ -209,7 +211,52 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
     });
 
-    test('background recovery wakes wait for the foreground before draining', () async {
+    for (final hook in ['start', 'finish']) {
+      test('a failing keep-alive $hook hook reports to the caller once without an unhandled error', () async {
+        final sentinel = StateError('keep-alive $hook hook failed');
+        var hookCalls = 0;
+        Future<void> failingOnceHook() async {
+          hookCalls++;
+          if (hookCalls == 1) throw sentinel;
+        }
+
+        final harness = _TransferHarness(
+          onTransferStarted: hook == 'start' ? failingOnceHook : null,
+          onTransferFinished: hook == 'finish' ? failingOnceHook : null,
+        );
+        addTearDown(harness.dispose);
+
+        Object? callerError;
+        Object? secondWakeError;
+        final outcome = await _runInGuardedZone(() async {
+          try {
+            await harness.coordinator.wake(WakeTrigger.startup);
+          } catch (e) {
+            callerError = e;
+          }
+          if (hook == 'finish') harness.backlog.add('wal-after-hook-failure');
+          try {
+            await harness.coordinator.wake(WakeTrigger.startup);
+          } catch (e) {
+            secondWakeError = e;
+          }
+        });
+
+        expect(outcome.harnessError, isNull);
+        expect(callerError, same(sentinel));
+        expect(secondWakeError, isNull);
+        expect(hookCalls, 2);
+        if (hook == 'start') {
+          expect(harness.drainedWalIds, ['wal-1']);
+        } else {
+          expect(harness.drainedWalIds, ['wal-1', 'wal-after-hook-failure']);
+        }
+        expect(harness.coordinator.hasInFlight, isFalse);
+        expect(outcome.unhandled, isEmpty);
+      });
+    }
+
+    test('background connectivity re-arms retries and runs one live-capture-only drain', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
 
@@ -218,14 +265,42 @@ void main() {
       harness.connectivity.add(true);
       await _settle();
 
-      expect(harness.reconcilePasses, 0);
+      expect(harness.reconcilePasses, 1);
+      expect(harness.retryBudgetResets, 1);
+      expect(harness.discoveryPasses, 0);
       expect(harness.drainPasses, 0);
+      expect(harness.liveCaptureDrainPasses, 1);
 
       harness.coordinator.setForeground(true);
       await harness.coordinator.wake(WakeTrigger.foregrounded);
 
+      expect(harness.discoveryPasses, 1);
+      expect(harness.drainPasses, 0, reason: 'background live drain already consumed the backlog');
+    });
+
+    test('data-stalled background wake runs the bounded live-capture drain without device discovery', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.dataStalled);
+
       expect(harness.reconcilePasses, 1);
-      expect(harness.drainPasses, 1);
+      expect(harness.discoveryPasses, 0);
+      expect(harness.liveCaptureDrainPasses, 1);
+      expect(harness.drainPasses, 0);
+    });
+
+    test('socket reconnect in background drains the live-capture backlog', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.socketReconnected);
+
+      expect(harness.discoveryPasses, 0);
+      expect(harness.liveCaptureDrainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1']);
     });
 
     test('startup resumes a pending backlog once without loss or duplication', () async {
@@ -326,6 +401,29 @@ void main() {
 
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
+}
+
 class _ScheduledCooldown {
   const _ScheduledCooldown(this.delay, this.callback);
 
@@ -348,6 +446,7 @@ class _TransferHarness {
       discover: _discover,
       refreshPending: _refreshPending,
       drain: _drain,
+      drainLiveCapture: _drainLiveCapture,
       autoUploadEnabled: () => _autoUploadEnabled,
       connectivityChanges: connectivity.stream,
       initiallyConnected: true,
@@ -355,6 +454,9 @@ class _TransferHarness {
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
       onTransferStarted: onTransferStarted,
       onTransferFinished: onTransferFinished,
+      onConnectivityRestored: () async {
+        retryBudgetResets++;
+      },
     );
   }
 
@@ -380,6 +482,8 @@ class _TransferHarness {
   int discoveryPasses = 0;
   int pendingRefreshes = 0;
   int drainPasses = 0;
+  int liveCaptureDrainPasses = 0;
+  int retryBudgetResets = 0;
   int _concurrentDrains = 0;
   int maximumConcurrentDrains = 0;
 
@@ -405,8 +509,20 @@ class _TransferHarness {
   }
 
   Future<RecordingTransferDrainResult> _drain() async {
+    return _drainBacklog(liveCaptureOnly: false);
+  }
+
+  Future<RecordingTransferDrainResult> _drainLiveCapture() async {
+    return _drainBacklog(liveCaptureOnly: true);
+  }
+
+  Future<RecordingTransferDrainResult> _drainBacklog({required bool liveCaptureOnly}) async {
     if (backlog.isEmpty) return const RecordingTransferDrainResult.skipped();
-    drainPasses++;
+    if (liveCaptureOnly) {
+      liveCaptureDrainPasses++;
+    } else {
+      drainPasses++;
+    }
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
     // Claim the backlog at pass start so a WAL added while this drain is gated

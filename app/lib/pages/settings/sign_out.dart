@@ -31,10 +31,8 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
   // Display and phone behaviour
-  'showGoalTrackerEnabled',
-  'showDailyScoreEnabled',
-  'showTasksEnabled',
-  'showPhoneCallButton',
+  SharedPreferencesUtil.appearanceDefaultMigrationKey,
+  SharedPreferencesUtil.appearanceModeKey,
   'showShortConversations',
   'showDiscardedMemories',
   'voiceResponseMode',

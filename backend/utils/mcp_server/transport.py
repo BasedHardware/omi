@@ -694,11 +694,13 @@ def _client_capabilities_error(message: Dict[str, Any], header_version: Optional
     """2026-07-28 requires every request to carry ``clientCapabilities`` ``_meta``.
 
     Both official SDKs (``mcp`` Python 2.0.0, ``@modelcontextprotocol/client``
-    2.0.0) stamp it on every modern call, so a 2026-declared message without a
+    2.0.0) stamp it on every modern call, so a 2026-declared request without a
     capabilities OBJECT is a malformed request: ``-32602`` on HTTP 400.
+    Notifications (no ``id``, the same test as the all-notifications 202 path)
+    and ``initialize`` are exempt: the spec requirement is on requests.
     Older revisions and undeclared messages are untouched.
     """
-    if message.get("method") == "initialize":
+    if message.get("method") == "initialize" or message.get("id") is None:
         return None
     declared = declared_protocol_version(message) or header_version
     if declared != PROTOCOL_VERSION_2026:

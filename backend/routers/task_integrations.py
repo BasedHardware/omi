@@ -172,10 +172,19 @@ CLEARABLE_SELECTION_FIELDS = (
 )
 
 
+class TaskIntegrationStatus(BaseModel):
+    """Non-secret projection safe for clients, support tooling, and OpenAPI."""
+
+    model_config = {'extra': 'forbid'}
+
+    app_key: str
+    connected: bool
+
+
 class TaskIntegrationsResponse(BaseModel):
     """Response containing all task integrations"""
 
-    integrations: Dict[str, Any] = Field(description="Map of app_key to connection details")
+    integrations: Dict[str, TaskIntegrationStatus] = Field(description="Map of app_key to non-secret status")
     default_app: Optional[str] = Field(description="Default task integration app key")
 
 
@@ -224,7 +233,12 @@ class ClickUpListsResponse(BaseModel):
 @router.get("/v1/task-integrations", response_model=TaskIntegrationsResponse, tags=['task-integrations'])
 def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
     """Get all task integration connections for the current user."""
-    integrations = users_db.get_task_integrations(uid)
+    stored_integrations = users_db.get_task_integrations(uid)
+    integrations = {
+        app_key: TaskIntegrationStatus(app_key=app_key, connected=bool(value.get('connected')))
+        for app_key, value in stored_integrations.items()
+        if isinstance(value, dict)
+    }
     default_app = users_db.get_default_task_integration(uid)
 
     return TaskIntegrationsResponse(integrations=integrations, default_app=default_app)
@@ -465,7 +479,8 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
+        logger.error(f"Error fetching workspaces: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana workspaces due to an internal error")
 
 
 @router.get(
@@ -519,7 +534,8 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
+        logger.error(f"Error fetching projects: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana projects due to an internal error")
 
 
 @router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
@@ -557,7 +573,8 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
+        logger.error(f"Error fetching teams: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp teams due to an internal error")
 
 
 @router.get(
@@ -597,7 +614,8 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
+        logger.error(f"Error fetching spaces: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp spaces due to an internal error")
 
 
 @router.get(
@@ -637,7 +655,8 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
+        logger.error(f"Error fetching lists: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp lists due to an internal error")
 
 
 # *****************************

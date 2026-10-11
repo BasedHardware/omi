@@ -306,6 +306,7 @@ def test_chat_get_entrypoint_uses_real_tool_wrapper_and_complete_claim(memory_su
     assert json.dumps(claim, ensure_ascii=False) in rendered
     assert "Exception: never on holidays." in rendered
     assert "subject: legacy_assumed" in rendered
+    assert "memory_id: chat-get" in rendered
     assert memory_surfaces.read_calls == [("uid-test", {"limit": 1, "offset": 0})]
 
 
@@ -324,6 +325,8 @@ def test_chat_search_entrypoint_uses_real_tool_wrapper_and_preserves_order(memor
     assert rendered.index("first search result") < rendered.index("second search result")
     assert "subject: user" in rendered
     assert "subject: unknown" in rendered
+    assert "memory_id: search-first" in rendered
+    assert "memory_id: search-second" in rendered
     assert memory_surfaces.search_calls == [("uid-test", "preferences", {"limit": 2})]
 
 

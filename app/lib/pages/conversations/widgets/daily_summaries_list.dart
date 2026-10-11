@@ -9,7 +9,6 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 
 typedef DailySummariesFetcher = Future<({List<DailySummary> items, bool ok})> Function({int limit, int offset});
 
@@ -21,7 +20,9 @@ DateTime? parseRecapDate(String value) {
   final month = int.tryParse(parts[1]);
   final day = int.tryParse(parts[2]);
   if (year == null || month == null || day == null) return null;
-  return DateTime(year, month, day);
+  final date = DateTime(year, month, day);
+  if (date.year != year || date.month != month || date.day != day) return null;
+  return date;
 }
 
 /// A recap's day as a group header ("Today", "Yesterday", "Wed, Sep 23"), in the reader's locale.
@@ -51,9 +52,12 @@ class DailySummariesListState extends State<DailySummariesList> {
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _refreshing = false;
   static const int _limit = 20;
   bool _hasMore = true;
   bool _loadFailed = false;
+  bool _loadMoreFailed = false;
+  int _generation = 0;
 
   DailySummariesFetcher get _fetchSummaries => widget.fetchSummaries ?? getDailySummaries;
 
@@ -67,37 +71,68 @@ class DailySummariesListState extends State<DailySummariesList> {
   Future<void> refresh() => _loadSummaries(showSpinner: _summaries.isEmpty);
 
   Future<void> _loadSummaries({bool showSpinner = true}) async {
-    if (showSpinner) setState(() => _isLoading = true);
-    final result = await _fetchSummaries(limit: _limit, offset: 0);
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        // A failed read is not "no recaps": keep what is on screen and leave
-        // paging open so the next attempt can still load.
-        _loadFailed = !result.ok;
-        if (result.ok) {
-          _summaries = result.items;
-          _hasMore = result.items.length >= _limit;
-        }
-      });
+    final generation = ++_generation;
+    setState(() {
+      _refreshing = true;
+      _isLoadingMore = false;
+      if (showSpinner) _isLoading = true;
+    });
+    try {
+      final result = await _fetchSummaries(limit: _limit, offset: 0)
+          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      if (mounted && generation == _generation) {
+        setState(() {
+          // A failed read is not "no recaps": keep what is on screen and leave
+          // paging open so the next attempt can still load.
+          _loadFailed = !result.ok;
+          if (result.ok) {
+            _summaries = result.items;
+            _hasMore = result.items.length >= _limit;
+            _loadMoreFailed = false;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _refreshing = false;
+          if (_isLoading) _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadingMore || !_hasMore) return;
+    if (_isLoadingMore || !_hasMore || _loadMoreFailed || _refreshing) return;
+    final generation = _generation;
     setState(() => _isLoadingMore = true);
-    // Derive the offset from the current list length so swipe-deletions don't
-    // cause the next page to skip rows (a standalone counter would drift).
-    final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length);
-    if (mounted) {
-      setState(() {
-        if (moreResult.ok) {
-          _summaries.addAll(moreResult.items);
-          _hasMore = moreResult.items.length >= _limit;
-        }
-        _isLoadingMore = false;
-      });
+    try {
+      // Derive the offset from the current list length so swipe-deletions don't
+      // cause the next page to skip rows (a standalone counter would drift).
+      final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length)
+          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      if (mounted && generation == _generation) {
+        setState(() {
+          if (moreResult.ok) {
+            _summaries.addAll(moreResult.items);
+            _hasMore = moreResult.items.length >= _limit;
+          } else {
+            _loadMoreFailed = true;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadMoreFailed = true);
+    } finally {
+      if (mounted && generation == _generation && _isLoadingMore) setState(() => _isLoadingMore = false);
     }
+  }
+
+  void _retryLoadMore() {
+    setState(() => _loadMoreFailed = false);
+    _loadMore();
   }
 
   Future<void> _openSummary(DailySummary summary) async {
@@ -177,23 +212,61 @@ class DailySummariesListState extends State<DailySummariesList> {
       );
     }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) {
-        // Extra tail item for spinner / bottom padding
-        if (index == _summaries.length) {
-          if (_isLoadingMore) {
-            return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
-          }
-          return SizedBox(height: widget.bottomPadding);
-        }
+    return SliverMainAxisGroup(
+      slivers: [
+        // Keep refresh failures visible in the viewport while retaining rows and scroll position.
+        if (_loadFailed)
+          SliverToBoxAdapter(
+            child: Padding(
+              key: const ValueKey('recaps_refresh_failed_banner'),
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  OmiButton.secondary(
+                    label: context.l10n.tryAgain,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => _loadSummaries(showSpinner: false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            if (index == _summaries.length) {
+              if (_isLoadingMore) {
+                return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
+              }
+              if (_loadMoreFailed) {
+                return Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: Center(
+                    child: OmiButton.secondary(
+                      label: context.l10n.tryAgain,
+                      size: OmiButtonSize.compact,
+                      onPressed: _retryLoadMore,
+                    ),
+                  ),
+                );
+              }
+              return SizedBox(height: widget.bottomPadding);
+            }
 
-        // Prefetch more when approaching end
-        if (_hasMore && !_isLoadingMore && index >= _summaries.length - 3) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-        }
-
-        return _buildSummaryCard(_summaries[index]);
-      }, childCount: _summaries.length + 1),
+            if (_hasMore && !_isLoadingMore && !_loadMoreFailed && !_loadFailed && index >= _summaries.length - 3) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+            }
+            return _buildSummaryCard(_summaries[index]);
+          }, childCount: _summaries.length + 1),
+        ),
+      ],
     );
   }
 
@@ -206,11 +279,11 @@ class DailySummariesListState extends State<DailySummariesList> {
           (index) => Padding(
             padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
             child: ShimmerWithTimeout(
-              baseColor: AppStyles.backgroundSecondary,
-              highlightColor: AppStyles.backgroundTertiary,
+              baseColor: OmiColors.surface1,
+              highlightColor: OmiColors.surface3,
               child: Container(
                 height: 80,
-                decoration: const BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
               ),
             ),
           ),
@@ -231,7 +304,7 @@ class DailySummariesListState extends State<DailySummariesList> {
   Widget _buildSummaryCard(DailySummary summary) {
     final l10n = context.l10n;
     final stats = _statsLabel(summary);
-    const metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+    final metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
     return Dismissible(
       key: ValueKey('daily-summary-${summary.id}'),
       direction: DismissDirection.endToStart,
@@ -245,7 +318,7 @@ class DailySummariesListState extends State<DailySummariesList> {
       background: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
-          decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
+          decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
           padding: const EdgeInsets.symmetric(horizontal: 24),
           alignment: Alignment.centerRight,
           child: Row(
@@ -264,7 +337,7 @@ class DailySummariesListState extends State<DailySummariesList> {
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               child: Row(
@@ -274,7 +347,7 @@ class DailySummariesListState extends State<DailySummariesList> {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     alignment: Alignment.center,
                     child: ExcludeSemantics(
                       child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),

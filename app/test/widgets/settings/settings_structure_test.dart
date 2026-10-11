@@ -4,15 +4,19 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The smaller Settings top level (2026-09-24): Account, Plan & Usage, Referral Program, the
 /// five settings groups, Help & About, Feedback and Developer Settings. Nothing became unreachable:
@@ -46,17 +50,42 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => 'http://127.0.0.1:1/';
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
 /// The top-level rows that open a page of rows, and that page's widget key.
 const _pagesOfRows = {
   'settings_account': 'settings_page_account',
   'settings_group_device': 'settings_page_device',
   'settings_group_recording': 'settings_page_recording',
+  'settings_group_voice': 'settings_page_voice',
   'settings_group_notifications': 'settings_page_notifications',
   'settings_group_privacy': 'settings_page_privacy',
   'settings_group_help': 'settings_page_help',
 };
 
-String? _keyOf(Widget widget) => switch (widget.key) { ValueKey<String>(:final value) => value, _ => null };
+String? _keyOf(Widget widget) => switch (widget.key) {
+      ValueKey<String>(:final value) => value,
+      _ => null,
+    };
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();
@@ -64,8 +93,19 @@ List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
 void main() {
   final en = lookupAppLocalizations(const Locale('en'));
 
+  setUpAll(() {
+    try {
+      Env.init(_TestEnvFields());
+    } catch (_) {}
+  });
+
   setUp(() async {
-    SharedPreferences.setMockInitialValues({'givenName': 'Ada', 'email': 'ada@example.com', 'uid': 'uid-1234567'});
+    SharedPreferences.setMockInitialValues({
+      'givenName': 'Ada',
+      'email': 'ada@example.com',
+      'uid': 'uid-1234567',
+      'deviceIdHash': 'test-device-hash',
+    });
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
       appName: 'Omi',
@@ -74,6 +114,7 @@ void main() {
       buildNumber: '1',
       buildSignature: '',
     );
+    await PlatformManager.initializeServices();
   });
 
   Future<void> pumpSheet(WidgetTester tester) async {
@@ -86,6 +127,7 @@ void main() {
           ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
           ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
           ChangeNotifierProvider<CaptureProvider>(create: (_) => _Capture()),
+          ChangeNotifierProvider<AppearanceProvider>(create: (_) => AppearanceProvider()),
         ],
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -98,8 +140,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed',
-      (tester) async {
+  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed', (
+    tester,
+  ) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
@@ -108,9 +151,12 @@ void main() {
       'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
+      'settings_group_voice',
       'settings_group_notifications',
       'settings_group_integrations',
       'settings_group_privacy',
+      'settings_row_memories',
+      'settings_row_goals',
       'settings_group_help',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
@@ -123,9 +169,12 @@ void main() {
       en.referralProgram,
       en.device,
       en.recordingAndTranscription,
+      en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
       en.integrations,
       en.dataAndPrivacy,
+      en.memories,
+      en.goals,
       en.helpAndAbout,
       en.feedbackBug,
       en.developerSettings,
@@ -135,8 +184,9 @@ void main() {
     expect(find.bySemanticsLabel(en.search), findsOneWidget);
   });
 
-  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less',
-      (tester) async {
+  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (
+    tester,
+  ) async {
     await pumpSheet(tester);
 
     // Depth 0: the sheet itself.
@@ -173,16 +223,19 @@ void main() {
       SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
       SettingsDestination.referral: 'settings_row_referral',
       SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)
+      SettingsDestination.voice: 'settings_group_voice',
+      // Memories and Goals moved onto the sheet when they left the Home tabs (2026-09-29).
+      SettingsDestination.memories: 'settings_row_memories',
+      SettingsDestination.goals: 'settings_row_goals',
     };
-    const movedOffSheet = [
+    final movedOffSheet = [
       SettingsDestination.notifications,
       SettingsDestination.device, // only while connected; the stub is connected
       SettingsDestination.transcription,
       SettingsDestination.conversationDisplay,
       SettingsDestination.conversationTimeout,
       SettingsDestination.offlineSync,
-      SettingsDestination.phoneCalls,
-      SettingsDestination.homeScreen,
+      if (PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
       SettingsDestination.dataPrivacy,
       SettingsDestination.exportData,
       SettingsDestination.importData,
@@ -202,7 +255,6 @@ void main() {
     const wasOnProfile = [
       SettingsDestination.language,
       SettingsDestination.customVocabulary,
-      SettingsDestination.memories,
       SettingsDestination.voiceProfile,
       SettingsDestination.people,
       SettingsDestination.deleteAccount,
@@ -217,7 +269,6 @@ void main() {
       en.email,
       en.language,
       en.customVocabulary,
-      en.memories,
       en.speechProfile,
       en.identifyingOthers,
       en.voiceResponseMode,
@@ -242,6 +293,8 @@ void main() {
       SettingsDestination.notificationsGroup,
       SettingsDestination.privacyGroup,
       SettingsDestination.helpGroup,
+      // Hidden for now (PhoneCallsFeature.visible); the destination stays wired for when it returns.
+      if (!PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
     };
     expect(covered, SettingsDestination.values.toSet(), reason: 'a destination is missing from this walk');
 
@@ -252,14 +305,13 @@ void main() {
     expect(background.rowFile, 'lib/pages/settings/settings_groups.dart');
 
     // Pages hold what the brief says, in order.
-    expect(pageTitles['settings_page_account'], [
-      en.name,
-      en.email,
-      en.userId,
-      en.signOut,
-      en.deleteAccountTitle,
+    expect(pageTitles['settings_page_account'], [en.name, en.email, en.userId, en.signOut, en.deleteAccountTitle]);
+    expect(pageTitles['settings_page_device'], [
+      en.deviceSettings,
+      en.offlineSync,
+      if (PhoneCallsFeature.visible) en.phoneCalls,
+      en.permissions,
     ]);
-    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
       en.language,
@@ -270,13 +322,8 @@ void main() {
       en.conversationTimeout,
       en.transcribeLaterTitle,
     ]);
-    expect(pageTitles['settings_page_notifications'], [en.notifications, en.homeScreen, en.conversationDisplay]);
-    expect(pageTitles['settings_page_privacy'], [
-      en.dataProtection,
-      en.memories,
-      en.exportAllData,
-      en.importData,
-    ]);
+    expect(pageTitles['settings_page_notifications'], [en.notifications, en.conversationDisplay, en.appearance]);
+    expect(pageTitles['settings_page_privacy'], [en.dataProtection, en.exportAllData, en.importData]);
     expect(pageTitles['settings_page_help'], [en.helpCenter, en.whatsNew]);
   });
 
@@ -288,6 +335,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OmiSettingsRow, en.voiceResponseMode));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('settings_page_recording')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_page_voice')), findsOneWidget);
   });
 }

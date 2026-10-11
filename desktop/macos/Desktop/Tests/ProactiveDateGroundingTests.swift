@@ -29,16 +29,6 @@ final class ProactiveDateGroundingTests: XCTestCase {
   }
 
   @MainActor
-  func testInsightDefaultPromptRetiresTheWrongYearExample() {
-    let prompt = InsightAssistantSettings.defaultAnalysisPrompt
-
-    XCTAssertFalse(prompt.contains("double-check the year"))
-    // The replacement keeps the calendar-mistake class without year suspicion.
-    XCTAssertTrue(prompt.contains("double-check the date"))
-    XCTAssertTrue(prompt.contains("DATE GROUNDING"))
-    XCTAssertTrue(prompt.contains("never say the clock, calendar, or year"))
-  }
-  @MainActor
   func testSuggestionDefaultPromptRetiresTheWrongYearExample() {
     let prompt = SuggestionAssistantSettings.defaultAnalysisPrompt
 
@@ -54,7 +44,7 @@ final class ProactiveDateGroundingTests: XCTestCase {
   @MainActor
   func testDefaultSystemPromptsCarryNoLiveTimestamp() {
     let timestampLike = #"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"#
-    for prompt in [InsightAssistantSettings.defaultAnalysisPrompt, SuggestionAssistantSettings.defaultAnalysisPrompt] {
+    for prompt in [SuggestionAssistantSettings.defaultAnalysisPrompt] {
       XCTAssertNil(
         prompt.range(of: timestampLike, options: .regularExpression),
         "system prompt must not embed a live timestamp")
@@ -62,12 +52,6 @@ final class ProactiveDateGroundingTests: XCTestCase {
   }
 
   // MARK: - User-prompt grounding (controllable clock seam)
-
-  func testInsightClockLineCarriesFullYearAndTimezone() {
-    let line = InsightAssistant.analysisClockLine(at: instant(hour: 15, minute: 45), timeZone: tz)
-
-    XCTAssertEqual(line, "Date/Time: Tuesday, August 25, 2026 at 3:45 PM (America/New_York)")
-  }
 
   func testSuggestionUserPromptCarriesTodaysDateFromTheClockSeam() {
     let prompt = SuggestionAssistant.userPrompt(

@@ -21,7 +21,7 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(OmiSpacing.sm),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
           child: SelectableText(apiKey.key, style: OmiType.footnote.copyWith(fontFamily: 'monospace')),
         ),
       ),

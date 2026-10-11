@@ -83,17 +83,29 @@ struct TaskChatPanel: View {
           VStack(spacing: 0) {
             // Error banner
             if let error = taskState.errorMessage {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .foregroundColor(PageGlass.warning)
-                  .scaledFont(size: OmiType.body)
-                Text(error)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                Spacer()
-                DismissButton(
-                  action: { taskState.errorMessage = nil }, showBackground: false,
-                  accessibilityLabel: "Dismiss Error", size: .compact)
+              VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.sm) {
+                  Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(PageGlass.warning)
+                    .scaledFont(size: OmiType.body)
+                  Text(error)
+                    .scaledFont(size: OmiType.body)
+                    .foregroundColor(Ink.secondary)
+                  Spacer()
+                  DismissButton(
+                    action: { taskState.errorMessage = nil }, showBackground: false,
+                    accessibilityLabel: "Dismiss Error", size: .compact)
+                }
+                if taskState.canUseOmiAI {
+                  Button("Use Omi AI for This Thread") {
+                    Task { await taskState.useOmiAI() }
+                  }
+                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                  .disabled(taskState.isSending || taskState.isSwitchingProvider)
+                  .help(
+                    "Switch this thread to Omi AI and keep its messages. Your request will not be resent automatically."
+                  )
+                }
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
@@ -128,6 +140,7 @@ struct TaskChatPanel: View {
               // composer from exposing the global push-to-talk route here.
               showsPushToTalk: false
             )
+            .disabled(taskState.isSwitchingProvider)
             .padding(OmiSpacing.md)
           }
           .background(Ink.rowFill)
@@ -161,6 +174,7 @@ struct TaskChatPanel: View {
           .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.tail)
+          .help(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
 
         Spacer()
 
@@ -176,6 +190,7 @@ struct TaskChatPanel: View {
             .scaledFont(size: OmiType.micro)
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(coordinator.workspacePath)
           Spacer()
         }
         .foregroundColor(Ink.secondary)
@@ -224,7 +239,7 @@ struct TaskChatPanel: View {
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(Ink.secondary)
 
-      Text("Continue the same work as context changes, without starting over.")
+      Text("Keep chatting about this task. Omi remembers what you've already discussed here.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)

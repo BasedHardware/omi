@@ -23,6 +23,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
@@ -58,6 +59,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _auth_module = cast(Any, auth)
+
+
+def _sanitize_memories_error(exc: Exception, fallback: str) -> str:
+    """Sanitize query parameter and temporal view error details while preserving debug logging."""
+    logger.warning("Memories query operation failed: %s: %s", type(exc).__name__, exc)
+    msg = str(exc).strip()
+    if msg.startswith("unsupported memory read view:"):
+        return "unsupported memory read view"
+    if msg == "device_scope must be one of: all, current, explicit":
+        return msg
+    return fallback
 
 
 class MemoryMutationResponse(BaseModel):
@@ -317,7 +329,8 @@ def _resolve_get_memories_device_scope(
             x_device_id_hash=x_device_id_hash,
         )
     except DeviceScopeValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = _sanitize_memories_error(exc, "device_scope must be one of: all, current, explicit")
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
@@ -676,7 +689,8 @@ def get_memories(
         try:
             temporal_view = normalize_temporal_read_view(view)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            detail = _sanitize_memories_error(exc, "unsupported memory read view")
+            raise HTTPException(status_code=422, detail=detail) from exc
         if not belief_model_enabled():
             temporal_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
@@ -702,6 +716,8 @@ def get_memories(
     # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
     budget = list_read_budget_for_request(request, route='memories')
 
+    # X-Omi-Memory-* capability headers exist for pre-capability desktop clients;
+    # removal requires minimum supported desktop version 0.12.386+12386.
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
@@ -763,13 +779,23 @@ def get_memories(
                 as_of=as_of,
             )
         except MemoryBackingStoreUnavailable as exc:
-            # First page must succeed whenever the legacy offset read can serve
-            # it. Catch the typed backing-store failure — not detail strings —
-            # so a renamed or newly added unavailable message still degrades
-            # instead of escaping as a hard 503. The cursor path, both keyset
-            # scans, and the scan-row budget all raise this type. Unrelated
-            # errors (4xx, other 503s) propagate. The fallback runs on the
-            # SAME request budget, never a fresh unbudgeted window (#11831).
+            if exc.detail == MEMORY_LIST_SCAN_BUDGET_DETAIL:
+                # The keyset walk already holds the honest prefix. Do not
+                # restart through the offset reader: that path used to stream
+                # the entire canonical collection and return an empty 200 when
+                # the request budget died (#11831).
+                logger.warning(
+                    "memories first-page keyset scan budget exhausted; not falling back to offset read stream=%s",
+                    exc.stream,
+                )
+                return _finalize([], truncated=True, next_cursor=None)
+            # Other backing-store failures (cursor secret, a historical index
+            # still building) may still use the offset reader. That reader
+            # walks the canonical keyset and the budgeted historical index —
+            # never the unbounded canonical collection stream. Catch the typed
+            # failure, not detail strings, so a renamed unavailable message
+            # still degrades. Unrelated errors propagate. The fallback runs on
+            # the SAME request budget, never a fresh unbudgeted window.
             record_fallback(
                 component='firestore_read',
                 from_mode='cursor_page',

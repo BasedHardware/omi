@@ -72,7 +72,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: OmiType.callout),
                         backgroundColor: Colors.transparent,
-                        shape: const StadiumBorder(side: BorderSide(color: OmiColors.border)),
+                        shape: StadiumBorder(side: BorderSide(color: OmiColors.border)),
                       ),
                     )
                     .toList(),
@@ -88,7 +88,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: OmiType.callout),
                         backgroundColor: Colors.transparent,
-                        shape: const StadiumBorder(side: BorderSide(color: OmiColors.border)),
+                        shape: StadiumBorder(side: BorderSide(color: OmiColors.border)),
                       ),
                     )
                     .toList(),

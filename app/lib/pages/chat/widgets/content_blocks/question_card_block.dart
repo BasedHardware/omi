@@ -53,7 +53,7 @@ class QuestionCardBlock extends StatelessWidget {
                       minimumSize: const Size(0, kOmiMinTapTarget),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       foregroundColor: OmiColors.textPrimary,
-                      side: const BorderSide(color: OmiColors.border),
+                      side: BorderSide(color: OmiColors.border),
                       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.pillAll),
                     ),
                     child: Text(option.label, style: Theme.of(context).textTheme.bodySmall),

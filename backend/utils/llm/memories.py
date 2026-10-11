@@ -13,7 +13,8 @@ from models.daily_sweep_dispatch import SweepDispatchScope
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
@@ -197,6 +198,8 @@ def extract_canonical_l1_memory_candidates(
     # must not transitively import the working-observation provider stack.
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
+    # This is a cache candidate, not provider admission: the extractor resolves
+    # memory_l1 through get_llm before marking content, including BYOK profiles.
     items = extract_l1_memory_archive_items_from_text(
         uid=uid,
         source_id=source_id,
@@ -281,12 +284,8 @@ def new_memories_extractor(
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
-    # TODO: make it more strict?
-
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_memories_prompt | get_llm('memories') | parser
@@ -417,9 +416,8 @@ def extract_memories_from_text(
     if not text or len(text) == 0:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         with track_usage(uid, Features.MEMORIES):
             prompt_input = {
@@ -481,9 +479,8 @@ def new_learnings_extractor(
     if not content or len(content) < 100:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=Learnings)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_learnings_prompt | get_llm('learnings') | parser

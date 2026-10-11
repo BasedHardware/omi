@@ -54,6 +54,34 @@ omi action-item list --open
 omi goal list
 ```
 
+## Terminal chat
+
+Sign in with your Omi account, then chat on your current default Omi cloud
+chat thread:
+
+```bash
+omi auth login --browser
+omi chat                        # interactive; replies stream as they arrive
+omi chat "What did we decide?"  # one message, then exit
+omi chat --history --limit 20   # recent shared messages
+omi chat --clear                 # asks before deleting shared chat history
+omi chat --clear --yes           # explicit non-interactive reset
+omi --json chat "Summarize today"  # one final response as JSON
+```
+
+Interactive commands: `/history`, `/clear`, `/tasks`, `/task add TEXT`,
+`/task done ID`, `/help`, and `/quit`. `/clear` removes the shared cloud chat
+history across clients, not just terminal output. It always asks first.
+The terminal does not keep a second transcript on disk. If a stream disconnects,
+check `omi chat --history` before resending because the server may have saved the turn.
+
+This uses the cloud chat backend and its synced memories, conversations, and
+tasks. It does **not** grant the terminal live access to the Mac's private
+screen or the desktop-only agent context; use the desktop app for those.
+Developer API keys cannot authenticate the user chat endpoint, so `omi chat`
+requires browser sign-in. `omi ask` remains available for scoped, one-shot
+developer API-key questions.
+
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 
@@ -67,7 +95,7 @@ to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
 > [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), or the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md), the [🇳🇬 Ntuziaka mmalite ngwa ngwa nke omi-cli (Igbo Quickstart)](examples/quickstart.ig.md), or the [🇪🇹 የ omi-cli ፈጣን መጀመሪያ መመሪያ (Amharic Quickstart)](examples/quickstart.am.md).
 > Looking for localized guides? See the [nnapulitano (Neapolitan Quickstart)](examples/quickstart.nap.md), the [vosa vakaViti (Fijian Quickstart)](examples/quickstart.fj.md), the [papiamentu (Papiamento Quickstart)](examples/quickstart.pap.md), the [mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md), the [hornjoserbšćina (Upper Sorbian Quickstart)](examples/quickstart.hsb.md), the [rumantsch (Romansh Quickstart)](examples/quickstart.rm.md), the [armãneashti (Aromanian Quickstart)](examples/quickstart.rup.md), or the [estremeñu (Extremaduran Quickstart)](examples/quickstart.ext.md).
 
 
@@ -283,15 +311,31 @@ omi
 │       ├── search <query> [--include-completed]
 │       ├── complete <id>
 │       └── delete <id> [-y]
-└── goal
-    ├── list [--limit N] [--include-inactive]
-    ├── get <id>
-    ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [--unit ... | --clear-unit] [...]
-    ├── progress <id> <value>
-    ├── history <id> [--days N]
-    └── delete <id> [-y]
+├── goal
+│   ├── list [--limit N] [--include-inactive]
+│   ├── get <id>
+│   ├── create <title> --target N [--type ...] [--current N] [--unit ...]
+│   ├── update <id> [--unit ... | --clear-unit] [...]
+│   ├── progress <id> <value>
+│   ├── history <id> [--days N]
+│   └── delete <id> [-y]
+└── app
+    ├── events
+    ├── payload <event> [--uid UID]
+    ├── send <event> --to URL [--uid UID] [--payload-file FILE] [--idempotency-key K] [--timeout S]
+    ├── verify --to URL [--event EVENT] [--uid UID]
+    └── serve [--port N] [--host H] [--status N] [--reply JSON] [--requests N]
 ```
+
+`omi app` is the local test harness for an Omi app. `omi app serve` receives
+deliveries and prints them, `omi app send` posts a sample event the way the
+backend posts it: same query parameters, content type, and `Idempotency-Key`
+header. `send` exits non-zero unless the receiver answers 2xx, and says what
+Omi would do next, including whether a `realtime_transcript` reply was long
+enough to reach the user as a notification. `omi app verify` posts every event
+to one URL and reports whether that endpoint would work in production: a
+private or loopback host, a redirect, or a response slower than 30 seconds all
+fail, because that is what the backend's delivery client does with them.
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.

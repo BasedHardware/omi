@@ -24,7 +24,7 @@ import 'package:omi/utils/constants.dart';
 /// Text(names.forSegment(segment));
 /// ```
 class SpeakerNames {
-  SpeakerNames._(this._ordinals, this._peopleById, this._ownerName, this._l10n);
+  SpeakerNames._(this._ordinals, this._peopleById, this._ownerName, this._l10n, this._unresolved);
 
   /// Resolver for [segments] (the whole conversation, so numbering matches every surface).
   ///
@@ -34,6 +34,7 @@ class SpeakerNames {
     List<TranscriptSegment> segments, {
     List<Person> people = const [],
     String? ownerName,
+    bool unresolved = false,
     required AppLocalizations l10n,
   }) {
     return SpeakerNames._(
@@ -41,6 +42,7 @@ class SpeakerNames {
       {for (final person in people) person.id: person},
       ownerName == null || ownerName.trim().isEmpty ? null : ownerName.trim(),
       l10n,
+      unresolved,
     );
   }
 
@@ -48,6 +50,7 @@ class SpeakerNames {
   final Map<String, Person> _peopleById;
   final String? _ownerName;
   final AppLocalizations _l10n;
+  final bool _unresolved;
 
   /// The name for [segment]'s speaker. [person] overrides the people lookup (callers that already
   /// resolved it).
@@ -62,6 +65,7 @@ class SpeakerNames {
   /// "Speaker N" for a diarized [speakerId], with N from [ordinalFor].
   String anonymousName(int speakerId) {
     if (speakerId == omiSpeakerId) return _l10n.omiAppName;
+    if (_unresolved) return _l10n.unnamedSpeakerLabel;
     return _l10n.speakerWithId('${ordinalFor(speakerId)}');
   }
 
@@ -85,11 +89,7 @@ class SpeakerNames {
   static AppLocalizations contextFreeL10n() {
     final name = Intl.defaultLocale ?? Intl.systemLocale;
     final parts = name.split(RegExp('[_-]'));
-    for (final locale in [
-      if (parts.length > 1) Locale(parts[0], parts[1]),
-      Locale(parts[0]),
-      const Locale('en'),
-    ]) {
+    for (final locale in [if (parts.length > 1) Locale(parts[0], parts[1]), Locale(parts[0]), const Locale('en')]) {
       try {
         return lookupAppLocalizations(locale);
       } catch (_) {

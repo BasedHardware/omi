@@ -10,7 +10,8 @@ class SpeakerSummaryAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: provider,
-        builder: (context, _) => !provider.offerSpeakerSummaryRefresh
+        // Mid-pass, the labeling bar's Done is the one summary update.
+        builder: (context, _) => !provider.offerSpeakerSummaryRefresh || provider.speakerLabelingSessionActive
             ? const SizedBox.shrink()
             : Align(
                 alignment: Alignment.centerLeft,
@@ -19,8 +20,8 @@ class SpeakerSummaryAction extends StatelessWidget {
                   onPressed: provider.loadingReprocessConversation ? null : () => provider.reprocessConversation(),
                   icon: provider.loadingReprocessConversation
                       ? const SizedBox(width: 16, height: 16, child: OmiSpinner(size: OmiSpinnerSize.small))
-                      : const Icon(Icons.refresh, color: Colors.white70),
-                  label: Text(context.l10n.updateSummaryWithNewNames, style: const TextStyle(color: Colors.white)),
+                      : Icon(Icons.refresh, color: OmiColors.textSecondary),
+                  label: Text(context.l10n.updateSummaryWithNewNames, style: TextStyle(color: OmiColors.textPrimary)),
                 )),
       );
 }

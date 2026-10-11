@@ -23,6 +23,7 @@ import utils.mcp_analytics as mcp_analytics
 import utils.mcp_server.transport as mcp_transport
 from models.memories import MemoryCategory
 from routers import mcp_sse as sse
+from tests.unit.fixtures import offline_firestore_sdk as _offline_sdk
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 from utils.mcp_server import cursors as mcp_cursors
 from utils.mcp_server.auth import MCPAuthContext
@@ -1077,9 +1078,9 @@ class TestFirestoreSdkCursorTransform:
 
     def _client(self):
         firestore = self._firestore()
-        from google.auth.credentials import AnonymousCredentials
-
-        return firestore.Client(project="test-project", credentials=AnonymousCredentials())
+        if _offline_sdk.CollectionReference is not firestore.CollectionReference:
+            pytest.fail('offline fixture bound stubbed SDK classes')
+        return _offline_sdk.OfflineFirestoreClient(project="test-project")
 
     def test_screen_activity_keyset_protobuf(self):
         col = self._client().collection("users").document(UID).collection("screen_activity")

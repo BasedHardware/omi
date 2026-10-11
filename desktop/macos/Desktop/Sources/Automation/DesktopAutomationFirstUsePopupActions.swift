@@ -13,6 +13,7 @@ extension DesktopAutomationActionRegistry {
   func registerFirstUsePopupActions() {
     register(
       name: "first_use_popup_show",
+      effects: [.localState],
       summary: "Re-arm and raise the first-use popup onboarding shows (legacy shell only; non-prod)",
       examples: ["./scripts/omi-ctl action first_use_popup_show"]
     ) { _ in
@@ -28,6 +29,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "first_use_popup_select",
+      effects: [.localState],
       summary: "Select a case in the first-use popup (same handler as clicking its chip)",
       params: ["use_case"],
       examples: ["./scripts/omi-ctl action first_use_popup_select use_case=design"]
@@ -43,6 +45,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "first_use_popup_try",
+      effects: [.localState, .networkOrModel],
       summary: "Press \"Try it now\" in the first-use popup (opens the site)",
       examples: ["./scripts/omi-ctl action first_use_popup_try"]
     ) { _ in

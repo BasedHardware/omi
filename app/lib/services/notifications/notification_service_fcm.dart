@@ -211,11 +211,10 @@ class _FCMNotificationService implements NotificationInterface {
 
       // Plugin
       if (data.isNotEmpty) {
-        final Map<String, String> payload = <String, String>{};
-        final navigateTo = data['navigate_to'];
-        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
-          payload['navigate_to'] = navigateTo.toString();
-        }
+        final Map<String, String> payload = <String, String>{
+          for (final entry in data.entries)
+            if (entry.value != null) entry.key: '${entry.value}',
+        };
 
         // Handle action item data messages
         final messageType = data['type'];
@@ -282,11 +281,8 @@ class _FCMNotificationService implements NotificationInterface {
 
     Future<void> handleNotificationTap(RemoteMessage? message) async {
       if (message == null) return;
-      final navigateTo = NotificationUtil.navigateToFromFcmData(message.data);
-      if (navigateTo == null) return;
-
       final objectId = _notificationObjectId(message.data);
-      await NotificationUtil.handleNavigateTo(navigateTo, objectId: objectId);
+      await NotificationUtil.handleFcmDataTap(message.data, objectId: objectId);
     }
 
     // Background: app is backgrounded and the user taps a push notification (#5126).

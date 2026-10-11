@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-child-output-read-after-exit",
+  "violated_contract": "A parent that connects a child process's stdout or stderr to a pipe must drain it while the child runs and must bound the wait with a deadline that terminates the child. Reading the pipe only after waitUntilExit() deadlocks once the output outgrows the pipe buffer (about 64 KB): the child blocks on write and never exits, and everything awaiting it (Rewind database initialization behind 'Preparing your data...') never finishes, leaking a blocked thread and a live child on every attempt.",
+  "canonical_prevention": "Capture subprocess output through PipeProcessRunner, which drains both streams while the child runs and arms a terminate-then-SIGKILL deadline before any blocking stdin write. When one child's output only feeds another child, connect their descriptors directly so the parent holds no pipe to drain, and await exits from termination handlers rather than a blocked waitUntilExit(). Regression tests must push far more than a pipe buffer through the real path and must prove a hung child is terminated at the deadline.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/PipeProcessRunnerTests.swift",
+    "desktop/macos/Desktop/Tests/RewindDatabaseRecoveryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/PipeProcessRunner.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabaseRecovery.swift"
+  ],
+  "status": "open"
+}

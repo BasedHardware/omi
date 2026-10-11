@@ -121,7 +121,7 @@ class ChatBlockLoading extends StatelessWidget {
       semanticsLabel: '$label: $message',
       child: Row(
         children: [
-          const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
+          OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),

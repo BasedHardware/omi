@@ -21,7 +21,7 @@ void main() {
     final sent = <String>[];
     var fail = true;
     final provider = MessageProvider()
-      ..replyStreamOverride = (text, {appId, filesId, context}) async* {
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
         sent.add(text);
         if (fail) throw Exception('socket closed');
         yield ServerMessageChunk('reply-1', 'All good.', MessageChunkType.data);
@@ -51,7 +51,7 @@ void main() {
 
   test('a server error chunk is treated as a failed reply, not shown verbatim', () async {
     final provider = MessageProvider()
-      ..replyStreamOverride = (text, {appId, filesId, context}) async* {
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
         yield ServerMessageChunk('x', 'Internal Server Error: stack trace', MessageChunkType.error);
       };
 
@@ -64,7 +64,7 @@ void main() {
 
   test('retry is a no-op for a reply that did not fail', () async {
     final provider = MessageProvider()
-      ..replyStreamOverride = (text, {appId, filesId, context}) async* {
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
         yield ServerMessageChunk('x', 'fine', MessageChunkType.data);
       };
     await provider.sendMessageStreamToServer('hi');

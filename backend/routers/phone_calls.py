@@ -214,8 +214,8 @@ def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_curren
 
     # Delete from Twilio if we have the SID
     twilio_sid = phone_number.get('twilio_sid')
-    if twilio_sid:
-        delete_caller_id(twilio_sid)
+    if twilio_sid and not delete_caller_id(twilio_sid):
+        raise HTTPException(status_code=503, detail="Could not remove the phone number. Please try again.")
 
     phone_calls_db.delete_phone_number(uid, phone_number_id)
     return {'success': True}

@@ -1,17 +1,6 @@
 name: Deploy Personas to Cloud Run
 
 on:
-  push:
-    branches: ["main", "development"]
-    paths:
-      - 'web/personas-open-source/**'
-      - 'config/public-build-*.json'
-      - '.github/actions/deploy-public-build/**'
-      - '.github/actions/prepare-public-build/**'
-      - '.github/actions/public-build-candidate-promotion/**'
-      - '.github/scripts/preflight_public_build_config.py'
-      - '.github/scripts/preflight_public_build_runtime.py'
-      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
     inputs:
       environment:
