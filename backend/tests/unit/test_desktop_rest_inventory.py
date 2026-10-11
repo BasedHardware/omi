@@ -201,6 +201,7 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/tools/action-items',
     '/v1/tools/action-items/{param}',
     '/v1/tools/calendar-events',
+    '/v1/tools/commitments',
     '/v1/tools/conversations',
     '/v1/tools/conversations/search',
     '/v1/tools/conversations/search-chunks',  # #11613 desktop client; OpenAPI export follow-up

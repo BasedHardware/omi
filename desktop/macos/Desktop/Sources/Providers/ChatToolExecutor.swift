@@ -569,6 +569,11 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       return result
 
+    case .getCommitments:
+      return await executeGetCommitments(
+        toolCall.arguments, runID: originatingRunId, attemptID: originatingAttemptId,
+        expectedOwnerID: expectedOwnerID, api: backendAPIClient)
+
     // Backend RAG/calendar tools — call Python backend /v1/tools/* endpoints
     case .getConversations, .searchConversations, .getMemories, .searchMemories, .getActionItems,
       .createActionItem, .updateActionItem, .createCalendarEvent:

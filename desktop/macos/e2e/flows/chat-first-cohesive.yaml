@@ -26,6 +26,10 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
   - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  # get_commitments is routed by the same authorized dispatch switch; its request,
+  # owner fence and result mapping are asserted hermetically in
+  # ChatToolExecutorCommitmentsTests, not here.
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+Commitments.swift
   # save_knowledge_graph discovery_text resolves through backend KG extract SSOT.
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
