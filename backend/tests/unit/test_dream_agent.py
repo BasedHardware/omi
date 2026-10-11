@@ -23,6 +23,12 @@ def admission(monkeypatch):
     database = DreamFirestore()
     database.rows[('users', UID)] = {}
     database.rows[('dream_users', UID)] = {'sequence': 2, 'watermark': 0, 'score': 2}
+    database.rows[('dream_users', UID, 'dirty', 'read')] = {
+        'collection': 'conversations',
+        'id': 'c1',
+        'version': 'read-version',
+        'last_changed_at': NOW,
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     # Strict fixture validates read-before-write; the production transactional
@@ -134,7 +140,7 @@ def pass_context(monkeypatch):
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
     monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [{'spelling': 'Meeting'}])
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [{'spelling': 'Meeting', 'authorship': 'user_authored'}])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -439,7 +445,15 @@ def test_tier_policy_defaults_and_override(monkeypatch, caplog):
 
     monkeypatch.delenv('DREAM_AGENT_AUTO_APPLY_KINDS', raising=False)
     assert auto_apply_kinds() == {'title', 'overview', 'spelling'}
-    assert SUGGEST == {'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
+    assert SUGGEST == {
+        'vocabulary',
+        'close_task',
+        'retire_task',
+        'merge_people',
+        'merge_memories',
+        'memory',
+        'entity_summary',
+    }
     assert all(apply_policy(kind, AUTO) == 'auto' for kind in AUTO)
     assert all(apply_policy(kind, AUTO) == 'suggest' for kind in SUGGEST)
     before = POLICY_WARNINGS._value.get()
