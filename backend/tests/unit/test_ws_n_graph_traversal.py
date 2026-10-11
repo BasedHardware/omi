@@ -321,9 +321,13 @@ def test_canonical_formatted_neighbors(canonical_graph_context):
 
 
 def test_traversal_reads_only_graph_references_and_returned_citations() -> None:
-    """An 18k-item corpus must never be enumerated for a four-reference graph."""
+    """A 1.5k-item corpus must never be enumerated for a four-reference graph.
+
+    18k items reproduced the prod-scale scan but blew test.sh's 0.30s per-test
+    timing guard (0.33s); the scan-vs-by-ID-read property holds at 1.5k.
+    """
     items = {item.memory_id: item for item in _canonical_items()}
-    items.update({f"unrelated-{i}": _long_term_item(f"unrelated-{i}", "Unrelated") for i in range(18_000)})
+    items.update({f"unrelated-{i}": _long_term_item(f"unrelated-{i}", "Unrelated") for i in range(1_500)})
     items["mem-bob-alice"] = items["mem-bob-alice"].model_copy(update={"promotion": {"user_review": False}})
     db = MagicMock()
     db.collection.side_effect = AssertionError("Traversal must not scan memory_items")
