@@ -505,7 +505,17 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
     monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
     monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     ref = 'conversations/0'
-    valid = {'kind': 'spelling', 'target': ref, 'reason': 'Invented typo', 'evidence': [ref]}
+    valid = {
+        'kind': 'spelling',
+        'target': ref,
+        'before': 'Synthetik',
+        'after': 'Synthetic',
+        'reason': 'Invented typo',
+        'evidence': [ref],
+    }
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetik record ' * 100}}
+    )
     payloads = [
         {'clusters': [{'refs': [], 'problem': 'spelling'}, {'refs': [ref], 'problem': 'spelling'}]},
         {'edits': [{**valid, 'evidence': []}, {**valid, 'reason': ''}, valid]},

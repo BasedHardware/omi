@@ -1445,6 +1445,66 @@
         "title": "AdviceResponse",
         "type": "object"
       },
+      "AgentProposalAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AgentProposalAnswer",
+        "type": "object"
+      },
+      "AgentProposalItem": {
+        "properties": {
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Edit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "other_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Label"
+          },
+          "target_label": {
+            "default": "",
+            "title": "Target Label",
+            "type": "string"
+          },
+          "vocabulary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AgentProposalItem",
+        "type": "object"
+      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -13422,6 +13482,15 @@
             "title": "Outcome",
             "type": "string"
           },
+          "policy": {
+            "default": "suggest",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
+            "type": "string"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -13513,6 +13582,15 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "policy": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "spelling": {
@@ -13697,6 +13775,68 @@
           "runs"
         ],
         "title": "DreamRunsResponse",
+        "type": "object"
+      },
+      "Edit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "retire_task",
+              "merge_memories"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "Edit",
         "type": "object"
       },
       "EntitiesResponse": {
@@ -25486,6 +25626,68 @@
         "title": "ReviewAnswerReceipt",
         "type": "object"
       },
+      "ReviewAnswerV2": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "not_sure": {
+            "default": false,
+            "title": "Not Sure",
+            "type": "boolean"
+          },
+          "same_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SamePersonAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spelling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ReviewAnswerV2",
+        "type": "object"
+      },
       "ReviewAppRequest": {
         "properties": {
           "response": {
@@ -25775,6 +25977,103 @@
         "title": "ReviewItem",
         "type": "object"
       },
+      "ReviewItemV2": {
+        "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "speaker",
+              "task",
+              "same_person",
+              "spelling",
+              "agent_proposal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "same_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SamePersonItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spelling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "kind",
+          "title",
+          "created_at"
+        ],
+        "title": "ReviewItemV2",
+        "type": "object"
+      },
       "ReviewItemsResponse": {
         "properties": {
           "items": {
@@ -25797,6 +26096,30 @@
           "remaining_today"
         ],
         "title": "ReviewItemsResponse",
+        "type": "object"
+      },
+      "ReviewItemsResponseV2": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItemV2"
+            },
+            "maxItems": 3,
+            "title": "Items",
+            "type": "array"
+          },
+          "remaining_today": {
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Remaining Today",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "remaining_today"
+        ],
+        "title": "ReviewItemsResponseV2",
         "type": "object"
       },
       "ReviewResolutionRequest": {
@@ -31646,6 +31969,51 @@
         ],
         "title": "TaskWorkflowMode",
         "type": "string"
+      },
+      "Term": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "organization",
+              "project",
+              "jargon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "spelling": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Spelling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "spelling",
+          "evidence"
+        ],
+        "title": "Term",
+        "type": "object"
       },
       "TestDailySummaryRequest": {
         "properties": {
@@ -77259,6 +77627,179 @@
         "summary": "Report Message",
         "tags": [
           "chat"
+        ]
+      }
+    },
+    "/v2/review/items": {
+      "get": {
+        "operationId": "get_review_items_v2_v2_review_items_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItemsResponseV2"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Review Items V2",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v2/review/items/{item_id}/answer": {
+      "post": {
+        "operationId": "answer_review_item_v2_v2_review_items__item_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAnswerV2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnswerReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Answer Review Item V2",
+        "tags": [
+          "review"
         ]
       }
     },

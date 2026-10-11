@@ -170,9 +170,16 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     def forbidden(*a, **k):
         pytest.fail('shadow wrote user data or developer feedback')
 
-    for name in ('apply_edit', 'ask', 'propose_task', 'request_frame'):
+    for name in (
+        'apply_edit',
+        'apply_vocabulary',
+        'suggest_edit',
+        'suggest_vocabulary',
+        'ask',
+        'propose_task',
+        'request_frame',
+    ):
         monkeypatch.setattr(dream_tools, name, forbidden)
-    monkeypatch.setattr(dream_store, 'save_vocabulary', forbidden)
     monkeypatch.setattr(dream_feedback, 'store', forbidden)
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['status'] == 'complete'
