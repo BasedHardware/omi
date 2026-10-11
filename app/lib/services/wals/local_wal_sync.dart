@@ -21,6 +21,8 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
+import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
@@ -33,7 +35,6 @@ import 'package:omi/utils/wal_file_manager.dart';
 /// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
 /// #7469 — if this string changes, update here and keep the structural check
 /// below ('failed' with totalSegments==0) as the durable signal.
-const _kBackendBusyErrorHint = 'background worker likely died';
 const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
 /// Phone-local safety copies include 10-second pendant chunks. The 720-file
@@ -62,46 +63,6 @@ class WalRetentionRisk {
   final int blockedCount;
 
   final String reason;
-}
-
-enum SyncJobTerminalPolicy { wait, acknowledge, retry }
-
-/// The shared WAL acknowledgement boundary for async sync jobs.
-///
-/// Only the backend's truthful `completed` state permits local audio to become
-/// terminally synced. Partial and full failures deliberately take the retry
-/// path so the retained WAL remains recoverable.
-@visibleForTesting
-SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bool isTerminal}) {
-  if (!isTerminal) return SyncJobTerminalPolicy.wait;
-  return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
-}
-
-/// Terminal `reason_code`s the backend only reaches because of the uploaded
-/// audio itself. `sync_invalid_audio` is raised by `decode_files_to_wav` once
-/// *nothing* in the batch decoded, and `stt_invalid_input` is the provider
-/// refusing the decoded audio as invalid — re-sending identical bytes produces
-/// the identical verdict. Keep in sync with `_SYNC_FAILURE_REASON_CODES` in
-/// backend/utils/sync/pipeline.py.
-const _kPermanentInputFailureReasonCodes = {'sync_invalid_audio', 'stt_invalid_input'};
-
-/// Whether a terminal job failed for a reason no re-upload can change.
-///
-/// Only a whole-job `failed` qualifies: `partial_failure` proves some segments
-/// landed, so the batch is not shown to be bad. A permanent verdict therefore
-/// never strands a good sibling — the decoder drops unreadable files
-/// individually and only fails the job when the batch has nothing left.
-@visibleForTesting
-bool syncJobFailureIsPermanent(SyncJobStatusResponse status) =>
-    status.status == 'failed' && _kPermanentInputFailureReasonCodes.contains(status.reasonCode);
-
-@visibleForTesting
-bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
-  if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
-  // Legacy stale-worker failures predate reason_code. New typed failures with
-  // totalSegments=0 carry a reason and must consume retry budget normally.
-  final reasonCode = status.reasonCode;
-  return status.status == 'failed' && status.totalSegments == 0 && (reasonCode == null || reasonCode.isEmpty);
 }
 
 bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= _liveCaptureMaxAgeSeconds;
@@ -354,7 +315,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
-  Future<SyncJobFetch> Function(String jobId) get _jobStatusFetcher => _jobStatusFetcherOverride ?? fetchSyncJobStatus;
+  late final SyncJobPoller _jobPoller =
+      _jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller(clock: _now);
+  Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
+      _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
+  Future<SyncLocalFilesResponse>? _reconcileInFlight;
 
   LocalWalSyncImpl(
     this.listener, {
@@ -2128,6 +2093,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           // synced / miss(retry) / corrupted out of the critical path. The
           // local file is retained until confirmed synced.
           final now = _now().millisecondsSinceEpoch ~/ 1000;
+          _jobPoller.defer(result.jobId!, result.pollAfterMs);
           for (final wal in batchWals) {
             wal.status = WalStatus.uploaded;
             wal.jobId = result.jobId;
@@ -2367,6 +2333,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final now = _now().millisecondsSinceEpoch ~/ 1000;
         walToSync.status = WalStatus.uploaded;
         walToSync.jobId = result.jobId;
+        _jobPoller.defer(result.jobId!, result.pollAfterMs);
         walToSync.uploadedAt = now;
         walToSync.isSyncing = false;
         walToSync.syncStartedAt = null;
@@ -2477,7 +2444,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// it only touches `uploaded` WALs, and the upload loop only ever touches
   /// `miss` WALs, so the two never contend for the same recording. WALs are
   /// grouped by their shared `jobId` (batched upload → one job : N WALs).
-  Future<SyncLocalFilesResponse> reconcileUploadedWals() async {
+  Future<SyncLocalFilesResponse> reconcileUploadedWals() {
+    final active = _reconcileInFlight;
+    if (active != null) return active;
+    if (!_jobPoller.beginPass()) {
+      return Future.value(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    }
+    final pass = _reconcileUploadedWals();
+    _reconcileInFlight = pass;
+    return pass.whenComplete(() {
+      if (identical(_reconcileInFlight, pass)) _reconcileInFlight = null;
+      _jobPoller.endPass();
+    });
+  }
+
+  Future<SyncLocalFilesResponse> _reconcileUploadedWals() async {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -2491,17 +2472,22 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     bool changed = false;
     final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
-    const maxConcurrent = 3;
-    final entries = byJob.entries.toList();
+    // Serial requests let a 429 stop this pass before another request escapes.
+    const maxConcurrent = 1;
+    final entries = _jobPoller.ordered(byJob.keys).map((id) => MapEntry(id, byJob[id]!)).toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
+      if (SyncRateLimiter.instance.isLimited || !_isCurrent(generation)) break;
       final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
+      if (!_isCurrent(generation)) return resp;
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;
         final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
+          case SyncJobFetchOutcome.throttled:
+            break; // Shared poller installed the account cooldown; stop below.
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
             DebugLogManager.logEvent('reconcile_poll', {
@@ -2519,7 +2505,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               final fileExists = await _localFileExists(w);
               if (fileExists) {
                 w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
-                w.retryCount += 1;
+                // Expiry is not an audio failure. Recovery is already paced by
+                // two missing reads separated by five minutes.
                 w.lastRetryAt = nowSecs;
               } else {
                 w.markCorrupted(); // nothing left to recover

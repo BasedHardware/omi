@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-sync-edge-paused.png",
+      "platform": "mobile-ios",
+      "description": "Actual Offline Sync page rendered with hermetic edge-throttle provider fixtures and bundled product fonts; neutral Paused card, no global server-busy banner. Widget rendering, not installed-device acceptance.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

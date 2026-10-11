@@ -813,6 +813,7 @@ class SyncJobStatusResponse {
   final String? lane;
   final String? reasonCode;
   final int? retryAfter;
+  final int? pollAfterMs;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -826,6 +827,7 @@ class SyncJobStatusResponse {
     this.lane,
     this.reasonCode,
     this.retryAfter,
+    this.pollAfterMs,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -846,6 +848,7 @@ class SyncJobStatusResponse {
       lane: json['lane'] as String?,
       reasonCode: json['reason_code'] as String?,
       retryAfter: (json['retry_after'] as num?)?.toInt(),
+      pollAfterMs: (json['poll_after_ms'] as num?)?.toInt(),
     );
   }
 

@@ -695,7 +695,24 @@ def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():
     busy = sync_ledger._claim_transaction.to_wrap(_Transaction(), busy_ref, 'new-job', 'backfill', now)
 
     assert completed == {'outcome': 'completed', 'result': completed_result}
-    assert busy == {'outcome': 'busy'}
+    assert busy == {'outcome': 'busy', 'job_id': 'other'}
+
+
+def test_expired_job_can_still_have_a_live_content_owner():
+    # The job result expires at 24h, but the content claim lasts 48h. An
+    # offline client can legitimately get 404 then 409 for the same bytes.
+    from database.sync_jobs import JOB_TTL_SECONDS
+
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    age_seconds = JOB_TTL_SECONDS + 1
+    assert age_seconds < sync_ledger.CLAIM_STALE_SECONDS
+    owner = _Ref(
+        {'status': 'processing', 'job_id': 'expired-owner', 'updated_at': now - timedelta(seconds=age_seconds)}
+    )
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, owner, 'new-upload', 'fresh', now)
+    assert claim == {'outcome': 'busy', 'job_id': 'expired-owner'}
+    assert transaction.writes == []
 
 
 def test_durable_ledger_side_effect_is_once_only():

@@ -3375,3 +3375,34 @@ async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
 
 if __name__ == '__main__':
     sys.exit(pytest.main([__file__, '-v']))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('owner_job_id', ['existing-owner', None])
+async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_id):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.claim_sync_content = MagicMock(return_value={'outcome': 'busy', 'job_id': owner_job_id})
+    module.start_background_task = MagicMock()
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+        assert response.status_code == 409
+        assert response.headers['retry-after'] == '10'
+        body = json.loads(response.body)
+        assert body['code'] == 'sync_content_in_progress'
+        assert body['job_id'] == owner_job_id
+        assert body['poll_after_ms'] == 10000
+        jobs.delete_sync_job.assert_called_once_with(module.claim_sync_content.call_args.args[2])
+        assert jobs.delete_sync_job.call_args.args[0] != owner_job_id
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig

@@ -219,7 +219,7 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
         if (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS:
-            return {'outcome': 'busy'}
+            return {'outcome': 'busy', 'job_id': existing.get('job_id')}
 
     transaction.set(
         ref,

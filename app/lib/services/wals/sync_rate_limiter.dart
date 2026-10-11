@@ -13,7 +13,7 @@ import 'package:omi/backend/preferences.dart';
 ///                   saturated and never picked it up. In-memory only — once
 ///                   the app restarts, the cooldown clears so the user sees
 ///                   fresh state if the server has since recovered.
-enum RateLimitReason { fairUse, backendBusy }
+enum RateLimitReason { fairUse, backendBusy, edgeThrottle }
 
 /// Account-global cooldown for rate limiting (HTTP 429) on sync uploads.
 ///
@@ -54,6 +54,7 @@ class SyncRateLimiter extends ChangeNotifier {
   // app restart re-probes the backend state instead of trusting a stale
   // local timer.
   int _backendBusyUntilMs = 0;
+  RateLimitReason _inMemoryReason = RateLimitReason.backendBusy;
   Timer? _expiryTimer;
 
   /// Whether a server-confirmed fair-use cooldown is persisted, including an
@@ -68,7 +69,8 @@ class SyncRateLimiter extends ChangeNotifier {
     return until > DateTime.now().millisecondsSinceEpoch;
   }
 
-  bool get isBackendBusyLimited => _backendBusyUntilMs > DateTime.now().millisecondsSinceEpoch;
+  bool get isBackendBusyLimited =>
+      _inMemoryReason == RateLimitReason.backendBusy && _backendBusyUntilMs > DateTime.now().millisecondsSinceEpoch;
 
   bool get isLimited {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -93,7 +95,7 @@ class SyncRateLimiter extends ChangeNotifier {
     if (!busyActive && !rateActive) return null;
     // Match `until`'s max-based pick so reason and deadline refer to the same cooldown.
     if (busyActive && (!rateActive || _backendBusyUntilMs >= persisted)) {
-      return RateLimitReason.backendBusy;
+      return _inMemoryReason;
     }
     return RateLimitReason.fairUse;
   }
@@ -109,8 +111,11 @@ class SyncRateLimiter extends ChangeNotifier {
     final maxCooldown = reason == RateLimitReason.fairUse ? _maxFairUseCooldownSeconds : _maxBackendBusyCooldownSeconds;
     final secs = requested > maxCooldown ? maxCooldown : requested;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
-    if (reason == RateLimitReason.backendBusy) {
-      _backendBusyUntilMs = untilMs;
+    if (reason != RateLimitReason.fairUse) {
+      if (untilMs >= _backendBusyUntilMs) {
+        _inMemoryReason = reason;
+        _backendBusyUntilMs = untilMs;
+      }
     } else {
       SharedPreferencesUtil().saveInt(_prefKeyUntil, untilMs);
       SharedPreferencesUtil().saveString(_prefKeyReason, reason.name);
