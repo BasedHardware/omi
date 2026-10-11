@@ -62,6 +62,21 @@ jsonPayload."@type"="type.googleapis.com/google.cloud.scheduler.logging.AttemptF
 
 For a missing tick, query `resource.type="cloud_run_revision" AND resource.labels.service_name="backend-sync" AND "event=sync_uid_sequencer action=sweep_summary outcome=done"` over the last ten minutes. No results should match the heartbeat absence alert. The failure and heartbeat alert policies are provisioned by the same lifecycle composite as the Scheduler job; they have no UID label.
 
+## Poll contract
+
+`GET /v2/sync-local-files/{job_id}` admits at most 40 requests per authenticated
+UID per 20-second Redis fixed window, shared across jobs and replicas. This
+ceiling bypasses generic rate-limit boost and shadow settings. Current Dart
+polling admits at most 18 requests/minute per app instance with a 20-second
+minimum per job; two simultaneous instances still fit the ceiling. A hot loop
+receives HTTP 429 with `Retry-After: 20`, before job lookup or stale recovery.
+Redis limiter errors fail open with shared fallback telemetry. The counters
+`omi_sync_job_poll_requests_total` and `omi_sync_job_poll_throttled_total` have
+no labels. Unknown/expired jobs retain HTTP 404 (`Sync job not found or expired`);
+clients retain local audio for re-upload. The 200 schema and terminal status
+strings are unchanged. Failed/partial backfill polls can also perform durable
+claim/dead-letter cleanup; healthy in-progress polls only read Redis job state.
+
 ## Transcription completion contract
 
 VAD is the eligibility owner for offline sync. A batch for which VAD produces

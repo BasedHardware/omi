@@ -9632,6 +9632,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatBlockMemory => '메모리';
 
   @override
+  String get chatBlockPerson => '사람';
+
+  @override
+  String get chatBlockUndone => '실행 취소됨';
+
+  @override
+  String get chatBlockUndoFailed => '변경 사항을 실행 취소하지 못했습니다';
+
+  @override
   String get chatBlockQuestion => '질문';
 
   @override

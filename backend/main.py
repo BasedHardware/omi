@@ -30,6 +30,7 @@ install_firebase_auth_mutation_guard()
 
 from routers import messaging
 from routers import (
+    chat_receipts,
     dream_cohort,
     dream_report,
     dream_sweep,
@@ -247,6 +248,7 @@ app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(memory_use.router)
 app.include_router(chat.router)
+app.include_router(chat_receipts.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
 app.include_router(speaker_labels.router)

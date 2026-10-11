@@ -9824,6 +9824,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chatBlockMemory => 'Emlék';
 
   @override
+  String get chatBlockPerson => 'Személy';
+
+  @override
+  String get chatBlockUndone => 'Visszavonva';
+
+  @override
+  String get chatBlockUndoFailed => 'Nem sikerült visszavonni a módosítást';
+
+  @override
   String get chatBlockQuestion => 'Kérdés';
 
   @override

@@ -9791,6 +9791,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get chatBlockMemory => 'स्मृती';
 
   @override
+  String get chatBlockPerson => 'व्यक्ती';
+
+  @override
+  String get chatBlockUndone => 'पूर्ववत केले';
+
+  @override
+  String get chatBlockUndoFailed => 'हा बदल पूर्ववत करता आला नाही';
+
+  @override
   String get chatBlockQuestion => 'प्रश्न';
 
   @override

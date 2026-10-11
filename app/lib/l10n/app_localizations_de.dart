@@ -9864,6 +9864,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chatBlockMemory => 'Erinnerung';
 
   @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Rückgängig gemacht';
+
+  @override
+  String get chatBlockUndoFailed => 'Diese Änderung konnte nicht rückgängig gemacht werden';
+
+  @override
   String get chatBlockQuestion => 'Frage';
 
   @override
