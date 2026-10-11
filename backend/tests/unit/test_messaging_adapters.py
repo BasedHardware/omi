@@ -93,7 +93,7 @@ class TestProviderContracts(AdapterContract):
     pass
 
 
-@pytest.mark.parametrize('failure', [None, 'rejected', 'error_frame', 'empty'])
+@pytest.mark.parametrize('failure', [None, 'rejected', 'error_frame', 'empty', 'cancelled'])
 def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, failure, caplog):
     if adapter.channel != 'imessage':
         return
@@ -116,6 +116,8 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
         async def source():
             token = usage.set('user')
             try:
+                if failure == 'cancelled' and len(turns) == 1:
+                    raise asyncio.CancelledError
                 if failure == 'empty' and len(turns) == 1:
                     return
                 if failure == 'error_frame' and len(turns) == 1:
@@ -148,6 +150,14 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
         assert store.jobs[link_job]['status'] == 'done'
         assert next(iter(store.identities.values()))['active']
         first = await deliver('text', 'first')
+        if failure == 'cancelled':
+            with pytest.raises(asyncio.CancelledError):
+                await gateway.process(first)
+            assert store.leases
+            assert store.jobs[first]['status'] == 'running'
+            assert cleaned == [True]
+            assert usage.get() is None
+            return
         if failure == 'rejected':
             # Typing succeeds, final text is rejected, typing stops, failure reply succeeds.
             adapter.transport.responses = [(200, {}, {}), (400, {'error': 'synthetic'}, {}), (200, {}, {})]
@@ -173,6 +183,9 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
     assert sends[0]['message']['parts'][0]['value'].startswith('Account linked.')
     assert all('parts' not in body and body['message']['idempotency_key'] for body in sends)
     typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
+    if failure == 'cancelled':
+        assert typing == ['POST', 'DELETE']
+        return
     assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
     if failure:
         reason = {'rejected': 'worker_error', 'error_frame': 'turn_error_frame', 'empty': 'missing_terminal_reply'}[

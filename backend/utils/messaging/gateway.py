@@ -178,7 +178,8 @@ class Gateway:
                 await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
             raise
         except BaseException:
-            await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+            # Cancellation can abandon executor work that is still running.
+            # Keep its lease fenced until the operator proves that work stopped.
             raise
         else:
             await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
@@ -202,7 +203,10 @@ class Gateway:
             return
         try:
             await self._turn(principal.uid, session, message, link, principal, event=event)
-        finally:
+        except Exception:
+            await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+            raise
+        else:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
 
     async def _turn(self, uid, session, message, link, principal, *, event=None):
