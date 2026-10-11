@@ -1,6 +1,7 @@
 """Behavioral coalescing, budget, acknowledgement and admission regression contracts."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
@@ -12,7 +13,7 @@ from database import dream_store
 from models.dream_agent import Triage, Cluster
 from tests.support.dream_firestore import DreamFirestore
 from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError, InvalidFirestoreValueError
-from utils import dream_agent, dream_reads, dream_transport
+from utils import dream_agent, dream_reads, dream_transport, dream_prompt
 from utils.dream_prompt import fits_triage
 from utils.llm.shaped_agent import Turn
 
@@ -33,7 +34,9 @@ def queue(monkeypatch):
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref: {'content': 'Synthetic record ' * 100})
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic record ' * 100}}
+    )
     return db
 
 
@@ -79,7 +82,7 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     assert list(records) == [f'conversations/{i}' for i in range(79, 79 - len(consumed), -1)]
     assert fits_triage(records, caps)
     assert not fits_triage(
-        {**records, f'conversations/{79 - len(consumed)}': {'content': 'Synthetic record ' * 100}}, caps
+        {**records, f'conversations/{79 - len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
     )
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     assert dream_store.dirty_count(UID) == 80 - len(consumed)
@@ -91,6 +94,67 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     next_records, _ = dream_reads.read_changes(UID, next_lease, caps)
     assert set(next_records).isdisjoint(records)
     assert list(next_records)[0] == f'conversations/{79 - len(consumed)}'
+
+
+@pytest.mark.parametrize(
+    'words',
+    [
+        'Synthetic robot discussion about gears. ',
+        'Cuộc thảo luận tổng hợp về rô bốt và những bánh răng. ',
+    ],
+)
+def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypatch, words):
+    seed(queue, 20)
+    row = {
+        'structured': {'title': 'Synthetic robot', 'overview': 'Invented engineering discussion'},
+        'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + words * 2000 + ' TAIL'}],
+    }
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    caps = Caps(tokens=16000)
+    lease = dream_store.acquire(UID, caps, now=NOW)
+    records, consumed = dream_reads.read_changes(UID, lease, caps)
+    assert 1 < len(records) < 20
+    assert len(consumed) == len(records)
+    budget = 8000
+    messages = dream_prompt.evidence_message(records, Triage, budget)
+    projected = json.loads(messages[0]['content'])['records']
+    assert all(len(value) >= 600 for value in projected.values())
+    assert all('HEAD' in value and value.endswith('TAIL') for value in projected.values())
+    assert (
+        dream_transport.input_ceiling(
+            dream_prompt.mount(Triage, budget, dream_prompt.TRIAGE_INSTRUCTIONS).messages(messages),
+            Triage.model_json_schema(),
+        )
+        + 768
+        <= budget
+    )
+    assert not fits_triage({**records, 'conversations/next': row}, caps)
+    dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
+    remaining = {
+        f"{snapshot.to_dict()['collection']}/{snapshot.to_dict()['id']}" for snapshot in dream_store.dirty_refs(UID)
+    }
+    assert remaining == {f'conversations/{i}' for i in range(20)} - set(records)
+    assert dream_store.dirty_count(UID) == 20 - len(consumed)
+    next_lease = dream_store.acquire(UID, caps, now=NOW)
+    next_records, _ = dream_reads.read_changes(UID, next_lease, caps)
+    assert next_records and set(next_records).issubset(remaining)
+
+
+def test_single_huge_conversation_is_admitted_and_acknowledged(queue, monkeypatch):
+    seed(queue, 1)
+    row = {'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + 'Synthetic words ' * 100000 + ' TAIL'}]}
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    caps = Caps(tokens=16000)
+    lease = dream_store.acquire(UID, caps, now=NOW)
+    records, consumed = dream_reads.read_changes(UID, lease, caps)
+    assert list(records) == ['conversations/0'] and len(consumed) == 1
+    messages = dream_prompt.evidence_message(records, Triage, 8000)
+    value = json.loads(messages[0]['content'])['records']['conversations/0']
+    assert len(value) >= 600
+    assert value.startswith('title: \noverview: \nSPEAKER_00: HEAD') and value.endswith('TAIL')
+    assert 'chars omitted' in value
+    dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
+    assert dream_store.dirty_count(UID) == 0
 
 
 def test_failed_pass_keeps_every_version_queued(queue):
@@ -335,3 +399,146 @@ def test_pre_model_timeout_refunds_but_retains_worker_safety_lease(queue, monkey
     assert dream_store.acquire(UID, Caps()) is None
     assert dream_store.dirty_count(UID) == 1
     turn.assert_not_called()
+
+
+def test_three_failed_reasoning_passes_settle_only_consumed_versions(queue, monkeypatch, caplog):
+    seed(queue, 2)
+    triage = {'clusters': [{'refs': ['conversations/1'], 'problem': 'quality'}]}
+    private_key = 'invented private top level content'
+
+    def response(content):
+        return httpx.Response(
+            200,
+            request=httpx.Request('POST', 'https://synthetic.invalid'),
+            json={
+                'usage': {'prompt_tokens': 10, 'completion_tokens': 7},
+                'choices': [{'message': {'content': json.dumps(content)}}],
+            },
+        )
+
+    client = type('Client', (), {'post': AsyncMock()})()
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
+    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    # Keep an unread older row behind the poisoned frontier.
+    real_read = dream_reads.read_changes
+
+    def read_one(*args):
+        records, consumed = real_read(*args)
+        return {'conversations/1': records['conversations/1']}, consumed[:1]
+
+    monkeypatch.setattr(dream_reads, 'read_changes', read_one)
+    with caplog.at_level('INFO', logger='utils.dream_metrics'):
+        for attempt in range(1, 4):
+            client.post.side_effect = [response(triage), response({private_key: True})]
+            report = asyncio.run(dream_agent.run_pass(UID, caps=Caps(passes=10)))
+            assert report['status'] == 'failed' and report['error_type'] == 'ValidationError'
+            assert report['tokens'] == 34
+            assert report['validation_errors'] == {'unknown_field:extra_forbidden': 1}
+            assert report['poisoned'] == (1 if attempt == 3 else 0)
+            if attempt < 3:
+                assert dream_store.dirty_refs(UID)[0].to_dict()['failed_passes'] == attempt
+    assert private_key not in caplog.text
+    assert 'validation_errors=' in caplog.text and 'poisoned=1' in caplog.text
+    assert report['records_queued_after'] == dream_store.dirty_count(UID) == 1
+    assert dream_store.dirty_refs(UID)[0].to_dict()['id'] == '0'
+    state = queue.rows[('dream_users', UID)]
+    assert state['watermark'] < dream_store.dirty_refs(UID)[0].to_dict()['last_changed_at']
+    assert state['poisoned'] == 1 and state['score'] > 0 and state['lease'] is None
+    run = queue.rows[('users', UID, 'dream_runs', report['run_id'])]
+    assert run['poisoned'] == 1 and run['success'] is False
+
+
+def test_poison_counter_resets_on_refresh_and_fences_concurrent_refresh(queue):
+    seed(queue, 1)
+    caps = Caps(passes=10)
+    for attempt in range(2):
+        lease = dream_store.acquire(UID, caps)
+        consumed = [s.to_dict() for s in dream_store.dirty_refs(UID)]
+        dream_store.finish(UID, lease, {'tokens': 10}, success=False, consumed=consumed, count_failure=True)
+    assert dream_store.dirty_refs(UID)[0].to_dict()['failed_passes'] == 2
+    lease = dream_store.acquire(UID, caps)
+    consumed = [s.to_dict() for s in dream_store.dirty_refs(UID)]
+    dream_store.mark_dirty(UID, [('conversations', '0')])
+    report = {'tokens': 10}
+    dream_store.finish(UID, lease, report, success=False, consumed=consumed, count_failure=True)
+    row = dream_store.dirty_refs(UID)[0].to_dict()
+    assert report['poisoned'] == 0 and row['failed_passes'] == 0
+    assert row['version'] != consumed[0]['version']
+    # The refreshed product version receives three attempts of its own.
+    for attempt in range(3):
+        lease = dream_store.acquire(UID, caps)
+        consumed = [s.to_dict() for s in dream_store.dirty_refs(UID)]
+        dream_store.finish(UID, lease, report, success=False, consumed=consumed, count_failure=True)
+    assert report['poisoned'] == 1 and report['records_queued_after'] == 0
+    assert queue.rows[('dream_users', UID)]['score'] == 0
+    assert dream_store.acquire(UID, caps) is None
+
+
+@pytest.mark.parametrize('flags', [{'refund': True}, {'release': False}, {'count_failure': False}])
+def test_refunded_unreleased_and_pre_reasoning_failures_do_not_poison(queue, flags):
+    seed(queue, 1)
+    row = dream_store.dirty_refs(UID)[0].reference.path
+    queue.rows[row]['failed_passes'] = 2
+    lease = dream_store.acquire(UID, Caps())
+    consumed = [s.to_dict() for s in dream_store.dirty_refs(UID)]
+    report = {'tokens': 0}
+    dream_store.finish(UID, lease, report, success=False, consumed=consumed, **{'count_failure': True, **flags})
+    assert report['poisoned'] == 0 and dream_store.dirty_count(UID) == 1
+    assert queue.rows[row]['failed_passes'] == 2
+
+
+def test_success_after_failure_settles_without_poisoning(queue):
+    seed(queue, 1)
+    queue.rows[dream_store.dirty_refs(UID)[0].reference.path]['failed_passes'] = 2
+    lease = dream_store.acquire(UID, Caps())
+    consumed = [s.to_dict() for s in dream_store.dirty_refs(UID)]
+    report = {'tokens': 10}
+    dream_store.finish(UID, lease, report, success=True, consumed=consumed)
+    assert report['poisoned'] == 0 and dream_store.dirty_count(UID) == 0
+    assert queue.rows[('dream_users', UID)].get('poisoned', 0) == 0
+
+
+def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkeypatch):
+    seed(queue, 1)
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    ref = 'conversations/0'
+    valid = {'kind': 'spelling', 'target': ref, 'reason': 'Invented typo', 'evidence': [ref]}
+    payloads = [
+        {'clusters': [{'refs': [], 'problem': 'spelling'}, {'refs': [ref], 'problem': 'spelling'}]},
+        {'edits': [{**valid, 'evidence': []}, {**valid, 'reason': ''}, valid]},
+    ]
+    responses = [
+        httpx.Response(
+            200,
+            request=httpx.Request('POST', 'https://synthetic.invalid'),
+            json={
+                'usage': {'prompt_tokens': 10, 'completion_tokens': 7},
+                'choices': [{'message': {'content': json.dumps(payload)}}],
+            },
+        )
+        for payload in payloads
+    ]
+    client = type('Client', (), {'post': AsyncMock(side_effect=responses)})()
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
+    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
+    applied = []
+    monkeypatch.setattr(
+        dream_agent.dream_tools, 'apply_edit', lambda uid, edit, records: applied.append(edit) or 'applied'
+    )
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == 'complete' and report['tokens'] == 34
+    assert len(applied) == len(report['proposed']['edits']) == 1
+    assert applied[0].evidence == [ref] and applied[0].reason == 'Invented typo'
+    assert report['dropped_invalid']['clusters'] == 1 and report['dropped_invalid']['edits'] == 2
+    assert report['validation_errors'] == {
+        'clusters.refs:too_short': 1,
+        'edits.evidence:too_short': 1,
+        'edits.reason:string_too_short': 1,
+    }
+    assert dream_store.dirty_count(UID) == 0 and report['poisoned'] == 0

@@ -14,8 +14,9 @@ from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
 from models.candidate import CandidateCreate, TaskCreateCandidate
-from models.review import ReviewChange
+from models.review import ChangeRef, ReviewChange
 from utils.entity_pages import write_entity_summary
+from utils.dream_guards import summary_rejection
 
 
 def edit_key(edit, records=None):
@@ -88,6 +89,20 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
     return value
 
 
+def validate_summary_edit(edit, row):
+    if edit.kind not in {'title', 'overview'}:
+        return
+    if row.get('is_locked') or not conversations.is_visible_conversation(row):
+        raise review_store.ReviewConflict('Dream conversation unavailable')
+    if edit.kind == 'title' and row.get('user_title'):
+        raise review_store.ReviewConflict('Dream title was set by the user')
+    if edit.before != ((row.get('structured') or {}).get(edit.kind) or ''):
+        raise review_store.ReviewConflict('Dream summary changed')
+    reason = summary_rejection(edit, row)
+    if reason:
+        raise ValueError('dream_summary_' + reason)
+
+
 def apply_edit(uid, edit, records):
     if edit.target not in records or any(ref not in records for ref in edit.evidence):
         raise ValueError('dream_unknown_evidence')
@@ -95,6 +110,7 @@ def apply_edit(uid, edit, records):
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
     row = records[edit.target]
+    validate_summary_edit(edit, row)
     if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
         raise ValueError('dream_invalid_spelling')
     change = ReviewChange(
@@ -149,6 +165,28 @@ def apply_edit(uid, edit, records):
             'completed': edit.kind == 'close_task',
             'completed_at': datetime.now(timezone.utc) if edit.kind == 'close_task' else None,
         }
+    elif edit.kind in {'title', 'overview'}:
+        current = conversations.prepare_conversation_for_read(copy.deepcopy(raw), uid)
+        if current is None:
+            raise review_store.ReviewConflict('Dream conversation unavailable')
+        fields = [edit.kind, 'sections', 'note_claims'] if edit.kind == 'overview' else [edit.kind]
+        if (
+            current.get('transcript_segments') != row.get('transcript_segments')
+            or any((current.get('structured') or {}).get(k) != (row.get('structured') or {}).get(k) for k in fields)
+            or current.get('user_title') != row.get('user_title')
+        ):
+            raise review_store.ReviewConflict('Dream conversation changed')
+        validate_summary_edit(edit, current)
+        patch = {'structured.' + edit.kind: edit.after}
+        if edit.kind == 'overview':
+            # Clients compose notes from sections when present. Clear stale projections
+            # in the same journal entry so undo restores them with the previous overview.
+            patch.update({'structured.sections': [], 'structured.note_claims': []})
+        change.kind = 'title_conversation' if edit.kind == 'title' else 'other'
+        change.snippet = edit.after
+        change.refs = [
+            ChangeRef(type='conversation', id=key_id, label=edit.after if edit.kind == 'title' else 'Conversation')
+        ]
     elif edit.kind == 'spelling':
         if collection == 'people':
             if raw.get('name') != row.get('name'):

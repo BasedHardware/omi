@@ -1,12 +1,20 @@
 """One gateway-only model turn. Reserved routing belongs to the gateway."""
 
 import json
+from collections import Counter
+from functools import lru_cache
+from typing import get_args
+
+from pydantic import ValidationError
+
+from models.dream_agent import Plan, Triage
 
 import httpx
 
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.shaped_agent import Turn
+from utils.observability.fallback import record_fallback
 
 # These lanes default to Luna. The gateway owns the reserved-capacity selection
 # when #20960 is present; no dream caller constructs a Gemini provider client.
@@ -46,6 +54,81 @@ def _truncate_arrays(value, schema, root):
         properties = schema.get('properties', {})
         return {key: _truncate_arrays(item, properties.get(key, {}), root) for key, item in value.items()}
     return value
+
+
+@lru_cache(maxsize=1)
+def _diagnostic_fields():
+    # Static model metadata only; never retain response values or exception data.
+    fields = set()
+    for model in (Plan, Triage):
+        schema = model.model_json_schema()
+        for node in [schema, *schema.get('$defs', {}).values()]:
+            fields.update(node.get('properties', {}))
+    return frozenset(fields)
+
+
+def validation_counts(exc, *, prefix=()):
+    """Only schema-owned field names and Pydantic error types may leave parsing.
+
+    Unknown extra keys can contain user content; never log them, input, message,
+    context or URL. Numeric locations collapse into their enclosing field path.
+    """
+    fields = _diagnostic_fields()
+    counts = Counter()
+    for error in exc.errors(include_input=False, include_context=False, include_url=False):
+        path = (
+            '.'.join(
+                part if part in fields else 'unknown_field'
+                for part in (*prefix, *error['loc'])
+                if not isinstance(part, int)
+            )
+            or 'root'
+        )
+        counts[f"{path}:{error['type']}"] += 1
+    return dict(counts)
+
+
+def parse_response(model, content, *, usage_sink=None):
+    """Preserve strict top-level shape while isolating malformed list items."""
+    schema = model.model_json_schema()
+    bounded = _truncate_arrays(content, schema, schema)
+    if model not in (Plan, Triage):
+        return model.model_validate_json(json.dumps(bounded))
+    # Validate object/list types and extras before dropping anything. Empty lists
+    # preserve the exact top-level schema; item validation follows independently.
+    shape = (
+        {key: [] if key in model.model_fields and isinstance(value, list) else value for key, value in bounded.items()}
+        if isinstance(bounded, dict)
+        else bounded
+    )
+    model.model_validate_json(json.dumps(shape))
+    retained = {}
+    dropped = {}
+    errors = Counter()
+    for name, field in model.model_fields.items():
+        item_model = get_args(field.annotation)[0]
+        retained[name] = []
+        dropped[name] = 0
+        for item in bounded.get(name, []):
+            try:
+                retained[name].append(item_model.model_validate_json(json.dumps(item)))
+            except ValidationError as exc:
+                dropped[name] += 1
+                errors.update(validation_counts(exc, prefix=(name,)))
+    if any(dropped.values()):
+        record_fallback(
+            component='agent_tools',
+            from_mode='dream_response',
+            to_mode='validated_items',
+            reason='malformed_doc',
+            outcome='degraded',
+        )
+    if usage_sink is not None:
+        usage_sink.setdefault('dropped_invalid', {}).update(dropped)
+        totals = Counter(usage_sink.get('validation_errors', {}))
+        totals.update(errors)
+        usage_sink['validation_errors'] = dict(totals)
+    return model.model_validate(retained)
 
 
 async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
@@ -93,6 +176,5 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
         usage_sink['usage_unknown'] = False
         usage_sink.setdefault('model_lanes', []).append(lane)
     content = json.loads(body['choices'][0]['message']['content'])
-    bounded = _truncate_arrays(content, schema, schema)
-    value = mount.schema.model_validate_json(json.dumps(bounded))
+    value = parse_response(mount.schema, content, usage_sink=usage_sink)
     return Turn(value=value, tokens=tokens)

@@ -343,12 +343,20 @@ class DriverResult:
 
 
 def import_function(dotted: str) -> Callable[..., Any]:
-    module_name, attr_path = dotted.rsplit('.', 1)
-    module = importlib.import_module(module_name)
-    target: Any = module
-    for part in attr_path.split('.'):
-        target = getattr(target, part)
-    return target
+    # Query owners may be repository classes as well as module functions.
+    parts = dotted.split('.')
+    for split in range(len(parts) - 1, 0, -1):
+        module_name = '.'.join(parts[:split])
+        try:
+            target = importlib.import_module(module_name)
+        except ModuleNotFoundError as error:
+            if error.name != module_name:
+                raise
+            continue
+        for part in parts[split:]:
+            target = getattr(target, part)
+        return target
+    raise ImportError(dotted)
 
 
 def _function_module(dotted: str) -> str:

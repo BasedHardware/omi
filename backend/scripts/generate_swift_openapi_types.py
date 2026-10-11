@@ -227,7 +227,16 @@ def _render_enum(name: str, schema: dict[str, Any]) -> str:
     lines.append('  public init(from decoder: Decoder) throws {')
     lines.append('    let c = try decoder.singleValueContainer()')
     lines.append('    let raw = try c.decode(String.self)')
-    lines.append(f'    self = {name}(rawValue: raw) ?? ._unknown')
+    # A Python enum that reaches the wire through str() arrives qualified ("GoalType.scale").
+    # The exact match comes first so a raw value that itself contained a dot would keep its
+    # meaning; only a value that matches nothing falls back to its last dotted component
+    # (#21091 wrote this by hand for GoalType).
+    lines.append(f'    if let exact = {name}(rawValue: raw) {{')
+    lines.append('      self = exact')
+    lines.append('      return')
+    lines.append('    }')
+    lines.append('    let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw')
+    lines.append(f'    self = {name}(rawValue: unqualified) ?? ._unknown')
     lines.append('  }')
     lines.append('}')
     return '\n'.join(lines) + '\n\n'

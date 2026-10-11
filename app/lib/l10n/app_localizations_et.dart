@@ -12609,206 +12609,358 @@ class AppLocalizationsEt extends AppLocalizations {
       'Esile tõstetud inimesed jäävad sinu Inimeste loendi ülaossa ega ole Puhastamisega eemaldatavad.';
 
   @override
-  String get buildAndShareApp => 'Looge ja jagage oma kohandatud rakendust';
+  String get chatAppsProblemFailed => 'Midagi läks valesti. Proovi uuesti.';
 
   @override
-  String get membersAndCounting => '8000+ liiget ja arv kasvab.';
-
-  @override
-  String get privacyIntro =>
-      'Omi-s oleme pühendunud teie privaatsuse kaitsmisele. See leht võimaldab teil kontrollida, kuidas teie andmeid säilitatakse ja kasutatakse.';
-
-  @override
-  String get dataProtectionDesc =>
-      'Teie andmed on vaikimisi kaitstud tugeva krüpteerimisega. Vaadake allpool oma seadeid ja tulevasi privaatsusvalikuid.';
-
-  @override
-  String get transcriptionConfig => 'Seadistage STT pakkuja';
-
-  @override
-  String get importDataConfig => 'Importige andmed teistest allikatest';
-
-  @override
-  String get understandingSubtitle => 'Teie vestlustest mõistetud sõnad.';
-
-  @override
-  String get rememberingSubtitle => 'Teie jaoks meeles peetud faktid ja üksikasjad.';
-
-  @override
-  String get debugLogsDesc => 'Aitab diagnoosida probleeme';
-
-  @override
-  String get deleteKnowledgeGraphMessage =>
-      'See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'Tühjenda kõik sõlmed ja ühendused';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'Kui meie mudel paraneb, saame pakkuda teie salvestiste jaoks paremaid transkriptsioone.';
-
-  @override
-  String get bestInClassTranscription => 'Parim oma klassis transkriptsioon nullseadistusega';
-
-  @override
-  String get optimizedForConversation => 'Optimeeritud vestluseks';
-
-  @override
-  String get highAccuracy => 'Kõrge täpsus';
-
-  @override
-  String get privacyFirst => 'Privaatsus esmalt';
-
-  @override
-  String get keepGoing => 'Jätkake, teil läheb suurepäraselt';
-
-  @override
-  String get personalGrowthJourney => 'Teie isikliku arengu teekond AI-ga, mis kuulab iga teie sõna.';
-
-  @override
-  String get alwaysInContext => 'Alati kontekstis';
-
-  @override
-  String get configureSttProvider => 'Seadista STT pakkuja';
-
-  @override
-  String get clearAllNodesAndConnections => 'Kustuta kõik sõlmed ja ühendused';
-
-  @override
-  String get welcomeToOmiDescription =>
-      'Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.';
-
-  @override
-  String get conversationsProcessedAutomatically => 'Vestlusi töödeldakse automaatselt';
-
-  @override
-  String get getInsightsInstantly => 'Saate kohe ülevaateid ja kokkuvõtteid';
-
-  @override
-  String get dailyScoreDescription => 'Skoor, mis aitab teil paremini\nkeskenduda täitmisele.';
-
-  @override
-  String get startConversation => 'Alustage vestlust ja laske maagia alata';
-
-  @override
-  String get wearableAiCompanion => 'Kantav AI kaaslane';
-
-  @override
-  String get organizeAndControlMemories => 'Korraldage ja kontrollige oma mälestusi';
-
-  @override
-  String get setAllMemoriesToPrivate => 'Määra kõik mälestused privaatseks';
-
-  @override
-  String get setAllMemoriesToPublic => 'Määra kõik mälestused avalikuks';
-
-  @override
-  String get selectPreferredLanguageForBestExperience => 'Valige oma eelistatud keel parima Omi kogemuse jaoks';
-
-  @override
-  String get enableFeaturesForBestExperience => 'Lubage funktsioonid parima Omi kogemuse jaoks oma seadmes.';
-
-  @override
-  String get deliveryTimeDescription => 'Millal saada päevast kokkuvõtet';
-
-  @override
-  String get configureSTTProvider => 'Konfigureerige STT pakkuja';
-
-  @override
-  String get setConversationEndDescription => 'Määrake, millal vestlused automaatselt lõpevad';
-
-  @override
-  String get clearNodesDescription => 'Kustuta kõik sõlmed ja ühendused';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.';
-
-  @override
-  String get createAndShareYourApp => 'Loo ja jaga oma rakendust';
-
-  @override
-  String get e2eeDescription =>
-      'Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.';
-
-  @override
-  String get secureEncryptionDescription =>
-      'Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google\'ile, otse andmebaasist.';
-
-  @override
-  String get e2eeCardDescription =>
-      'Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.';
-
-  @override
-  String get yourOmiUnleashed => 'Teie Omi, vabastatud. Minge piiramatu juurde lõputute võimaluste jaoks.';
-
-  @override
-  String get privacyIntroText =>
-      'Omis võtame teie privaatsust väga tõsiselt. Tahame olla läbipaistvad andmete osas, mida kogume ja kuidas neid kasutame. Siin on see, mida peate teadma:';
-
-  @override
-  String get commitmentText =>
-      'Oleme pühendunud kasutama kogutud andmeid ainult Omi paremaks muutmiseks. Teie privaatsus ja usaldus on meile ülimalt olulised.';
-
-  @override
-  String get thankYouText =>
-      'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.';
-
-  @override
-  String get howPeopleWorks =>
-      'Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!';
-
-  @override
-  String get buildAndShareYourCustomApp => 'Ehita ja jaga oma kohandatud rakendust';
-
-  @override
-  String get onboardingChooseYourPreference => 'Vali oma eelistus';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'Anna nõutav juurdepääs';
-
-  @override
-  String get apiEnvironmentDescription => 'Valige, millise serveriga ühenduda';
-
-  @override
-  String get phoneCallsUpsellFeature4 => 'Teie kõned jäävad privaatseks ja turvaliseks';
-
-  @override
-  String get omisStorageDesc =>
-      'Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.';
-
-  @override
-  String get permissionsSetupDescription => 'Lubage mõned õigused, et Omi saaks oma võlu avaldada.';
-
-  @override
-  String get architectSubtitle => 'Võimas AI — tuhanded vestlused + agentne automatiseerimine';
-
-  @override
-  String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
-
-  @override
-  String get speakerTagPromptSubtitle => 'Kiire ülevaade viimase kahe päeva häältest';
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return 'Hoia $name alles ja oota teda oma vestlustes';
+  String chatAppsIsConnected(String app) {
+    return '$app on ühendatud';
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi küsib enne sarnaste häälte sobitamist.';
+  String get chatAppsRefreshFailed => 'Värskendamine ebaõnnestus. Näitame viimast teadaolevat seisu.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return 'Jah tõstab inimese $name kindlust.';
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Kirjutuskaitstud. Vasta Omile rakenduses $app.';
   }
 
   @override
-  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+  String get chatAppsWaitlistConfirmed => 'Aitäh. WhatsApp ilmub siia, kui on valmis.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Kasuta praegu Telegrami';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Rakendust $app ei saanud avada. Veendu, et see on installitud, ja proovi uuesti.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Mida ma eile Samile lubasin?';
+
+  @override
+  String get chatAppsDoesSave => 'Salvestab mälestusi ja haldab sinu ülesandeid';
+
+  @override
+  String get chatAppsOnTheList => 'Nimekirjas';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Vestlusi pole veel';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Rakenduses $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi avab Telegrami privaatse lingiga, mis on ainult sinu jaoks.';
+
+  @override
+  String get chatAppsOpenMessages => 'Ava Sõnumid';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Kas katkestada $app ühendus?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Tervis, raha ja kõik, mille oled privaatseks märkinud, jääb vestlusrakendustest välja.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Saada Omile üks sõnum numbrilt, mida soovid kasutada. Selles olev kood seob selle numbri sinu kontoga.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'Töötame selle nimel, et Omi jõuaks WhatsAppi. See ilmub siia, kui on valmis.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Vestlused, mida pead Omiga rakenduses $app, ilmuvad siia.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Vaata vestlusi';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi lõpetab vastamise rakenduses $app ja kustutab selle jaoks hoitava vestlusajaloo. Rakenduses $app juba olevad sõnumid jäävad sinna.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Need vestlused on siin kirjutuskaitstud. Vasta rakenduses $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Lisa Omi kontaktidesse';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi mäletab konteksti igas rakenduses';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram ja iMessage töötavad juba täna, samade mälestuste ja ülesannetega.';
+
+  @override
+  String get chatAppsComingLater => 'Tulekul hiljem';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Liiga palju katseid. Oota minut ja proovi uuesti.';
+
+  @override
+  String get chatAppsMessage => 'Sõnum';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Ava $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Seadistub kahe puudutusega';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Vestlusrakendusi ei saanud laadida';
+
+  @override
+  String get chatAppsInsights => 'Omi ülevaated';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Väljas: näed neid ainult rakenduses $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Kirjuta Omile Telegramist ja iMessage\'ist';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Saada häälsõnum ja Omi vastab sellele.';
+
+  @override
+  String get chatAppsPartOfPro => 'Vestlusrakendused kuuluvad Pro juurde';
+
+  @override
+  String get chatAppsMessagesApp => 'Sõnumid';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram teises seadmes?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Küsi oma päeva kohta, salvesta mälestusi ja halda ülesandeid Telegramist või iMessage\'ist. Sinu vestlused jäävad rakendusse, mida kasutad, ja Omi mäletab kõikjal, millest te rääkisite.';
+
+  @override
+  String get chatAppsTryRemind => 'Tuleta mulle pühapäeval meelde emale helistada';
+
+  @override
+  String get chatAppsChannelsTitle => 'Vestlusrakendused';
+
+  @override
+  String get chatAppsDoesAnswer => 'Vastab küsimustele sinu vestluste ja mälestuste kohta';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app-i vestlused';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'KUULUB OMI PRO JUURDE';
+
+  @override
+  String get chatAppsLink => 'Link';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Ei kirjuta kunagi sinu eest teistele inimestele';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Pole ühendatud';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Telegram salvestab ka sinu vestlused Omiga. Omi vastab ainult sulle, mitte kunagi teistele, ja saad ühenduse igal ajal katkestada.';
+
+  @override
+  String get chatAppsProblemOffline => 'Oled võrguühenduseta. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Kirjuta Omile oma telefoninumbrilt';
+
+  @override
+  String get chatAppsPrivateMemories => 'Hoia privaatsed mälestused rakenduses';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Ühenda Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Luba Omil saata sulle siia kokkuvõte või ülevaade.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Ootan, et puudutaksid Telegramis nuppu Alusta…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Räägi Omiga rakendustest, mida kasutad iga päev.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Ühendatud kasutajana $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Salvesta mälestusi ja halda ülesandeid otse vestlusest';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Kirjuta Omile ühendamiseks';
+
+  @override
+  String get chatAppsWaitingMessage => 'Saada sõnum rakenduses Sõnumid. See ekraan uueneb, kui Omi selle kätte saab.';
+
+  @override
+  String get chatAppsShowInApp => 'Näita neid vestlusi Omi rakenduses';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Hangi uus kood ja saada see rakendusest Sõnumid.';
+
+  @override
+  String get chatAppsNoMessages => 'Sõnumeid pole';
+
+  @override
+  String get chatAppsHeroTitle => 'Vestle Omiga seal, kus sa juba vestled';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage ja palju muud';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kood aegub $time pärast';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'See vestlusrakendus on lahti ühendatud.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi vastab ainult sulle. Ta ei kirjuta kunagi esimesena.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Ühenduse katkestamine kustutab ajaloo, mida Omi $app jaoks hoiab.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Kirjuta Omile rakenduses $app millal tahes.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Proovi küsida';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Tule siia tagasi. Kinnitame, et see õnnestus.';
+
+  @override
+  String get chatAppsDoesFiles => 'Saadab ja võtab vastu faile, fotosid ja häälsõnumeid';
+
+  @override
+  String get chatAppsTryWeek => 'Võta mu nädal kokku kolme reaga';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Sinu $app-i vestlused jäävad rakendusse $app. Omi teab siiski, millest te rääkisite rakenduses ja sinu teistes vestlusrakendustes.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp on tulemas';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'See kood aegus';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Vestlusrakendused pole sinu kontol veel saadaval.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Mida Omi vestlusrakendustes teeb';
+
+  @override
+  String get chatAppsVoiceNotes => 'Häälsõnumid';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Pole veel saadaval';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Ava Sõnumid uuesti';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Ühendatud $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Ootan sinu sõnumit';
+
+  @override
+  String get chatAppsEntryTitle => 'Vestle Omiga';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Puuduta all nuppu Ava Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Sees: need ilmuvad Omi rakenduses kirjutuskaitstud vestlustena.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Katkesta $app ühendus';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Puuduta oma vestluses Omiga nuppu Alusta';
+
+  @override
+  String get chatAppsLocked => 'Nõuab Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Tere Omi, sidumiskood $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Vestlus rakenduses $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontaktid';
+
+  @override
+  String get chatAppsCodeNote => 'Kood töötab ainult ühe korra ja aegub 10 minuti pärast.';
+
+  @override
+  String get chatAppsMoreComing => 'Rohkem rakendusi on tulemas.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Vahepeal';
+
+  @override
+  String get chatAppsGetNewCode => 'Hangi uus kood';
+
+  @override
+  String get chatAppsNotifyMe => 'Anna mulle teada';
+
+  @override
+  String get chatAppsPrefilled => 'Eeltäidetud';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Ei avanenud? Saada see numbrile $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'See link aegus. Uue saamiseks puuduta nuppu Ava Telegram.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Kellele: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 
   @override
   String get singlePress => 'Ühekordne vajutus';

@@ -216,7 +216,7 @@ async def test_async_entrypoint_routes_through_gateway(monkeypatch):
     with patch.object(cf, 'get_file_chat_gateway_async_client', return_value=gateway_client), patch.object(
         cf.FileChatTool, '_completion_messages', AsyncMock(return_value=[{'role': 'user', 'content': 'q'}])
     ), patch.object(cf, 'run_blocking', AsyncMock(return_value=[])), patch.object(
-        cf, '_safe_file_chats', MagicMock(return_value=_vision_files())
+        cf, 'safe_file_chats', MagicMock(return_value=_vision_files())
     ):
         output = await tool.process_chat_with_file_stream('q', ['file-1'], callback)
 

@@ -12610,206 +12610,358 @@ class AppLocalizationsFa extends AppLocalizations {
   String get pinPersonDescription => 'افرادِ سنجاق‌شده بالای فهرست افراد شما می‌مانند و با پاک‌سازی حذف نمی‌شوند.';
 
   @override
-  String get buildAndShareApp => 'اپلیکیشن سفارشی خود را بسازید و اشتراک‌گذاری کنید';
+  String get chatAppsProblemFailed => 'مشکلی پیش آمد. دوباره تلاش کنید.';
 
   @override
-  String get membersAndCounting => '8000+ اعضا و افزایش.';
-
-  @override
-  String get privacyIntro =>
-      'در Omi، ما متعهد به حفاظت از حریم خصوصی شما هستیم. این صفحه به شما اجازه می‌دهد که کنترل کنید داده‌های شما چگونه ذخیره و استفاده می‌شوند.';
-
-  @override
-  String get dataProtectionDesc =>
-      'داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی ایمن هستند. تنظیمات و گزینه‌های حریم خصوصی آینده خود را مرور کنید.';
-
-  @override
-  String get transcriptionConfig => 'پیکربندی ارائه‌دهنده STT';
-
-  @override
-  String get importDataConfig => 'وارد کردن داده‌ها از منابع دیگر';
-
-  @override
-  String get understandingSubtitle => 'کلمات درک‌شده از گفتگوهای شما.';
-
-  @override
-  String get rememberingSubtitle => 'واقعیات و جزئیات یادآوری‌شده برای شما.';
-
-  @override
-  String get debugLogsDesc => 'کمک به تشخیص مشکلات';
-
-  @override
-  String get deleteKnowledgeGraphMessage =>
-      'این کار تمام داده‌های گراف دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادداشت‌های اصلی شما امن باقی خواهند ماند. گراف در طول زمان یا در درخواست بعدی بازسازی خواهد شد.';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'تمام گره‌ها و اتصالات را پاک کنید';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'هنگامی که مدل ما بهبود می‌یابد، می‌توانیم نتایج رونویسی بهتری برای ضبط‌های شما ارائه دهیم.';
-
-  @override
-  String get bestInClassTranscription => 'بهترین کلاس رونویسی بدون راه‌اندازی';
-
-  @override
-  String get optimizedForConversation => 'برای گفتگو بهینه‌سازی شده';
-
-  @override
-  String get highAccuracy => 'دقت بالا';
-
-  @override
-  String get privacyFirst => 'حریم خصوصی اول';
-
-  @override
-  String get keepGoing => 'ادامه دهید، خیلی خوب انجام می‌دهید';
-
-  @override
-  String get personalGrowthJourney => 'سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.';
-
-  @override
-  String get alwaysInContext => 'همیشه در زمینه';
-
-  @override
-  String get configureSttProvider => 'ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید';
-
-  @override
-  String get clearAllNodesAndConnections => 'پاک کردن تمام گره‌ها و اتصالات';
-
-  @override
-  String get welcomeToOmiDescription =>
-      'خوش‌آمدید به Omi! دستیار هوش مصنوعی شما آماده‌است تا در گفتگوها، وظایف و بسیاری مورد دیگر به شما کمک کند.';
-
-  @override
-  String get conversationsProcessedAutomatically => 'گفتگوها به‌طور خودکار پردازش می‌شوند';
-
-  @override
-  String get getInsightsInstantly => 'بلافاصله بینش‌ها و خلاصه‌ها را دریافت کنید';
-
-  @override
-  String get dailyScoreDescription => 'امتیازی برای کمک به شما\nدر تمرکز بر اجرا.';
-
-  @override
-  String get startConversation => 'یک گفتگو شروع کنید و بگذارید جادو شروع شود';
-
-  @override
-  String get wearableAiCompanion => 'دستیار هوش مصنوعی قابل پوشیدن';
-
-  @override
-  String get organizeAndControlMemories => 'تنظیم و کنترل یادآوری‌های خود';
-
-  @override
-  String get setAllMemoriesToPrivate => 'تنظیم تمام یادآوری‌ها به حالت خصوصی';
-
-  @override
-  String get setAllMemoriesToPublic => 'تنظیم تمام یادآوری‌ها به حالت عمومی';
-
-  @override
-  String get selectPreferredLanguageForBestExperience => 'زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید';
-
-  @override
-  String get enableFeaturesForBestExperience => 'ویژگی‌ها را برای بهترین تجربه Omi بر روی دستگاه خود فعال کنید.';
-
-  @override
-  String get deliveryTimeDescription => 'زمان دریافت خلاصه روزانه خود';
-
-  @override
-  String get configureSTTProvider => 'پیکربندی ارائه‌دهنده STT';
-
-  @override
-  String get setConversationEndDescription => 'تنظیم زمان خودکار پایان گفتگوها';
-
-  @override
-  String get clearNodesDescription => 'تمام گره‌ها و اتصالات را پاک کنید';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'این تمام داده‌های نمودار دانش مشتق‌شده را حذف می‌کند. خاطرات اصلی شما ایمن می‌مانند.';
-
-  @override
-  String get createAndShareYourApp => 'برنامه خود را ایجاد و اشتراک کنید';
-
-  @override
-  String get e2eeDescription =>
-      'رمزگذاری از سر به سر استاندارد طلایی برای حریم‌خصوصی است. هنگامی که فعال باشد، داده‌های شما قبل از ارسال به سرورهای ما در دستگاه شما رمزگذاری می‌شوند. این بدان معناست که هیچ کس، حتی Omi، نمی‌تواند محتوای شما را دسترسی کند.';
-
-  @override
-  String get secureEncryptionDescription =>
-      'داده‌های شما با کلیدی منحصر به فرد برای شما در سرورهای ما، میزبان‌شده در Google Cloud، رمزگذاری می‌شوند. این بدان معناست که محتوای خام شما برای هیچ کس، از جمله کارکنان Omi یا Google، مستقیماً از پایگاه داده قابل دسترسی نیست.';
-
-  @override
-  String get e2eeCardDescription =>
-      'برای حداکثر امنیت فعال کنید جایی که فقط شما می‌توانید داده‌های خود را دسترسی کنید. برای اطلاعات بیشتر لمس کنید.';
-
-  @override
-  String get yourOmiUnleashed => 'Omi شما، آزاد شده. بی‌محدود بروید برای امکانات بی‌پایان.';
-
-  @override
-  String get privacyIntroText =>
-      'در Omi، ما حریم خصوصی شما را بسیار جدی می‌گیریم. ما می‌خواهیم در مورد داده‌هایی که جمع‌آوری می‌کنیم و نحوه استفاده از آن برای بهبود محصول خود برای شما شفاف باشیم. در اینجا آنچه باید بدانید:';
-
-  @override
-  String get commitmentText =>
-      'ما متعهد هستیم داده‌هایی که جمع‌آوری می‌کنیم را تنها برای بهتر کردن Omi برای شما استفاده کنیم. حریم خصوصی و اعتماد شما برای ما بسیار اهمیت دارند.';
-
-  @override
-  String get thankYouText =>
-      'از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'این تمام داده‌های نمودار دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادآوری‌های اصلی شما ایمن خواهند ماند. نمودار در طول زمان یا بعد از درخواست بعدی بازسازی خواهد شد.';
-
-  @override
-  String get howPeopleWorks =>
-      'بعد از اینکه یک فرد ایجاد شود، می‌توانید به رونویس مکالمه بروید و بخش‌های مرتبط با آن‌ها را تعیین کنید، به این ترتیب Omi می‌تواند صوت آن‌ها را نیز تشخیص دهد!';
-
-  @override
-  String get buildAndShareYourCustomApp => 'برنامه سفارشی خود را بسازید و به اشتراک بگذارید';
-
-  @override
-  String get onboardingChooseYourPreference => 'ترجیح خود را انتخاب کنید';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'دسترسی مورد نیاز را اعطا کنید';
-
-  @override
-  String get apiEnvironmentDescription => 'انتخاب کنید کدام سرویس‌گیر را مورد اتصال قرار دهید';
-
-  @override
-  String get phoneCallsUpsellFeature4 => 'تماس‌های شما خصوصی و ایمن هستند';
-
-  @override
-  String get omisStorageDesc =>
-      'هنگامی که Omi به تلفن شما متصل نیست، صوت را به‌طور محلی روی حافظه داخلی‌اش ذخیره می‌کند. شما هرگز ضبط را از دست نمی‌دهید.';
-
-  @override
-  String get permissionsSetupDescription => 'چند مجوز را فعال کنید تا Omi بتواند جادو کند.';
-
-  @override
-  String get architectSubtitle => 'هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی';
-
-  @override
-  String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
-
-  @override
-  String get speakerTagPromptSubtitle => 'بررسی سریع صداهای دو روز گذشته';
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return '$name را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید';
+  String chatAppsIsConnected(String app) {
+    return '$app متصل شد';
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.';
+  String get chatAppsRefreshFailed => 'تازه‌سازی ممکن نشد. آخرین اطلاعات ذخیره‌شده نمایش داده می‌شود.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return 'پاسخ «بله» اطمینان درباره $name را بالا می‌برد.';
+  String chatAppsReadOnlyBanner(String app) {
+    return 'فقط‌خواندنی. در $app به Omi پاسخ دهید.';
   }
 
   @override
-  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+  String get chatAppsWaitlistConfirmed => 'متشکریم. وقتی WhatsApp آماده شد اینجا نمایش داده می‌شود.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'فعلاً از Telegram استفاده کنید';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return '$app باز نشد. مطمئن شوید نصب است و دوباره تلاش کنید.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'دیروز به سم چه قولی دادم؟';
+
+  @override
+  String get chatAppsDoesSave => 'خاطرات را ذخیره می‌کند و کارهای شما را مدیریت می‌کند';
+
+  @override
+  String get chatAppsOnTheList => 'در فهرست هستید';
+
+  @override
+  String get chatAppsNoChatsTitle => 'هنوز چتی نیست';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'در $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi با یک پیوند خصوصی که فقط برای شماست، Telegram را باز می‌کند.';
+
+  @override
+  String get chatAppsOpenMessages => 'باز کردن پیام‌ها';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'اتصال $app قطع شود؟';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'سلامت، پول و هر چیزی که خصوصی علامت زده‌اید از برنامه‌های چت دور می‌ماند.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'از شماره‌ای که می‌خواهید استفاده کنید یک پیام به Omi بفرستید. کد داخل آن، این شماره را به حساب شما پیوند می‌دهد.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'ما در حال آوردن Omi به WhatsApp هستیم. وقتی آماده شد اینجا نمایش داده می‌شود.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'چت‌هایی که با Omi در $app دارید اینجا نمایش داده می‌شوند.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'مشاهده چت‌ها';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi پاسخ دادن در $app را متوقف می‌کند و تاریخچه چتی را که برای آن نگه می‌دارد حذف می‌کند. پیام‌هایی که از قبل در $app هستند همان‌جا می‌مانند.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'این چت‌ها اینجا فقط‌خواندنی هستند. در $app پاسخ دهید.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'افزودن Omi به مخاطبین';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi زمینه گفتگو را در همه برنامه‌ها به یاد دارد';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram و iMessage همین حالا با همان خاطرات و کارها کار می‌کنند.';
+
+  @override
+  String get chatAppsComingLater => 'بعداً می‌آید';
+
+  @override
+  String get chatAppsProblemRateLimited => 'تعداد تلاش‌ها زیاد بود. یک دقیقه صبر کنید و دوباره تلاش کنید.';
+
+  @override
+  String get chatAppsMessage => 'پیام';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'باز کردن $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'راه‌اندازی با دو ضربه';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'بارگیری برنامه‌های چت ممکن نشد';
+
+  @override
+  String get chatAppsInsights => 'بینش‌های Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'خاموش: فقط در $app آن‌ها را می‌بینید.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'از Telegram و iMessage به Omi پیام بدهید';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'یک پیام صوتی بفرستید تا Omi پاسخ دهد.';
+
+  @override
+  String get chatAppsPartOfPro => 'برنامه‌های چت بخشی از Pro هستند';
+
+  @override
+  String get chatAppsMessagesApp => 'پیام‌ها';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram روی دستگاه دیگری است؟';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'درباره روزتان بپرسید، خاطرات را ذخیره کنید و کارها را از Telegram یا iMessage مدیریت کنید. چت‌های شما در همان برنامه‌ای که استفاده می‌کنید می‌مانند و Omi هر چه را که گفته‌اید در همه‌جا به یاد دارد.';
+
+  @override
+  String get chatAppsTryRemind => 'یادآوری کن یکشنبه به مامان زنگ بزنم';
+
+  @override
+  String get chatAppsChannelsTitle => 'برنامه‌های چت';
+
+  @override
+  String get chatAppsDoesAnswer => 'به پرسش‌ها درباره گفتگوها و خاطرات شما پاسخ می‌دهد';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'چت‌های $app';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'همراه با OMI PRO';
+
+  @override
+  String get chatAppsLink => 'پیوند';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'هرگز از طرف شما به دیگران پیام نمی‌دهد';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'متصل نیست';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'چت‌های شما با Omi در Telegram هم ذخیره می‌شوند. Omi فقط به شما پاسخ می‌دهد، نه به دیگران، و هر زمان بخواهید می‌توانید اتصال را قطع کنید.';
+
+  @override
+  String get chatAppsProblemOffline => 'آفلاین هستید. اتصال خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'از شماره تلفن خود به Omi پیام بدهید';
+
+  @override
+  String get chatAppsPrivateMemories => 'نگه‌داشتن خاطرات خصوصی در برنامه';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'اتصال Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'اجازه دهید Omi یک مرور یا بینش را اینجا برای شما بفرستد.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'در انتظار ضربه شما روی شروع در Telegram…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'از برنامه‌هایی که هر روز استفاده می‌کنید با Omi صحبت کنید.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'متصل به‌عنوان $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'خاطرات را ذخیره و کارها را مستقیم از چت مدیریت کنید';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'برای اتصال به Omi پیام بدهید';
+
+  @override
+  String get chatAppsWaitingMessage => 'پیام را در پیام‌ها ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.';
+
+  @override
+  String get chatAppsShowInApp => 'نمایش این چت‌ها در برنامه Omi';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'کد جدید بگیرید و از پیام‌ها ارسال کنید.';
+
+  @override
+  String get chatAppsNoMessages => 'پیامی نیست';
+
+  @override
+  String get chatAppsHeroTitle => 'همان‌جا که چت می‌کنید با Omi چت کنید';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram، iMessage و بیشتر';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'کد تا $time دیگر منقضی می‌شود';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'اتصال این برنامه چت قطع شده است.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi فقط به شما پاسخ می‌دهد. هرگز اول پیام نمی‌دهد.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'با قطع اتصال، تاریخچه‌ای که Omi برای $app نگه می‌دارد حذف می‌شود.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'هر زمان در $app به Omi پیام بدهید.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'این را بپرسید';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'به اینجا برگردید. ما تأیید می‌کنیم که انجام شد.';
+
+  @override
+  String get chatAppsDoesFiles => 'فایل، عکس و پیام صوتی ارسال و دریافت می‌کند';
+
+  @override
+  String get chatAppsTryWeek => 'هفته‌ام را در سه خط خلاصه کن';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'چت‌های $app شما در $app می‌مانند. Omi همچنان می‌داند در این برنامه و دیگر برنامه‌های چت‌تان درباره چه صحبت کرده‌اید.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp به‌زودی می‌آید';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'این کد منقضی شد';
+
+  @override
+  String get chatAppsProblemUnavailable => 'برنامه‌های چت هنوز برای حساب شما در دسترس نیستند.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'کارهایی که Omi در برنامه‌های چت انجام می‌دهد';
+
+  @override
+  String get chatAppsVoiceNotes => 'پیام‌های صوتی';
+
+  @override
+  String get chatAppsNotAvailableYet => 'هنوز در دسترس نیست';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'باز کردن دوباره پیام‌ها';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'متصل‌شده در $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'در انتظار پیام شما';
+
+  @override
+  String get chatAppsEntryTitle => 'چت با Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'در پایین روی باز کردن Telegram ضربه بزنید';
+
+  @override
+  String get chatAppsShowInAppOn => 'روشن: در برنامه Omi به‌صورت چت فقط‌خواندنی نمایش داده می‌شوند.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'قطع اتصال $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'در چت خود با Omi روی شروع ضربه بزنید';
+
+  @override
+  String get chatAppsLocked => 'نیازمند Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'سلام Omi، کد پیوند $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'چت در $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'مخاطبین';
+
+  @override
+  String get chatAppsCodeNote => 'این کد فقط یک‌بار کار می‌کند و تا ۱۰ دقیقه دیگر منقضی می‌شود.';
+
+  @override
+  String get chatAppsMoreComing => 'برنامه‌های بیشتری در راه است.';
+
+  @override
+  String get chatAppsInTheMeantime => 'تا آن موقع';
+
+  @override
+  String get chatAppsGetNewCode => 'دریافت کد جدید';
+
+  @override
+  String get chatAppsNotifyMe => 'به من اطلاع بده';
+
+  @override
+  String get chatAppsPrefilled => 'از پیش پر شده';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'باز نشد؟ این را به $address پیامک کنید';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'آن پیوند منقضی شد. برای دریافت پیوند جدید روی باز کردن Telegram ضربه بزنید.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'به: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 
   @override
   String get singlePress => 'یک بار فشار دادن';

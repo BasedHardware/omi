@@ -12637,206 +12637,360 @@ class AppLocalizationsLt extends AppLocalizations {
       'Prisegtieji žmonės lieka viršuje jūsų Žmonių sąraše ir nėra pašalinami per Sutvarkymą.';
 
   @override
-  String get buildAndShareApp => 'Sukurkite ir bendrinkite savo programėlę';
+  String get chatAppsProblemFailed => 'Kažkas nepavyko. Bandykite dar kartą.';
 
   @override
-  String get membersAndCounting => '8000+ narių ir skaičius auga.';
-
-  @override
-  String get privacyIntro =>
-      'Omi įsipareigoja saugoti jūsų privatumą. Šis puslapis leidžia kontroliuoti, kaip jūsų duomenys saugomi ir naudojami.';
-
-  @override
-  String get dataProtectionDesc =>
-      'Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu. Peržiūrėkite savo nustatymus ir būsimas privatumo parinktis žemiau.';
-
-  @override
-  String get transcriptionConfig => 'Konfigūruoti STT teikėją';
-
-  @override
-  String get importDataConfig => 'Importuoti duomenis iš kitų šaltinių';
-
-  @override
-  String get understandingSubtitle => 'Žodžiai, suprasti iš jūsų pokalbių.';
-
-  @override
-  String get rememberingSubtitle => 'Faktai ir detalės, prisiminti jums.';
-
-  @override
-  String get debugLogsDesc => 'Padeda diagnozuoti problemas';
-
-  @override
-  String get deleteKnowledgeGraphMessage =>
-      'Taip bus ištrinti visi išvesti žinių grafiko duomenys (mazgai ir ryšiai). Jūsų originalūs prisiminimai liks saugūs. Grafikas bus atstatytas laikui bėgant arba pagal kitą užklausą.';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'Išvalyti visus mazgus ir ryšius';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'Mūsų modeliui tobulėjant, galime pateikti geresnius transkripcijos rezultatus jūsų įrašams.';
-
-  @override
-  String get bestInClassTranscription => 'Geriausia klasės transkripcija be jokio nustatymo';
-
-  @override
-  String get optimizedForConversation => 'Optimizuota pokalbiams';
-
-  @override
-  String get highAccuracy => 'Aukštas tikslumas';
-
-  @override
-  String get privacyFirst => 'Pirmiausiai privatumas';
-
-  @override
-  String get keepGoing => 'Tęskite, jums puikiai sekasi';
-
-  @override
-  String get personalGrowthJourney => 'Jūsų asmeninio augimo kelionė su AI, kuris klauso kiekvieno jūsų žodžio.';
-
-  @override
-  String get alwaysInContext => 'Visada kontekste';
-
-  @override
-  String get configureSttProvider => 'Konfigūruoti STT teikėją';
-
-  @override
-  String get clearAllNodesAndConnections => 'Išvalyti visus mazgus ir ryšius';
-
-  @override
-  String get welcomeToOmiDescription =>
-      'Sveiki atvykę į Omi! Jūsų AI palydovas pasirengęs padėti jums pokalbių, užduočių ir daugiau.';
-
-  @override
-  String get conversationsProcessedAutomatically => 'Pokalbiai apdorojami automatiškai';
-
-  @override
-  String get getInsightsInstantly => 'Gaukite įžvalgas ir santraukas akimirksniu';
-
-  @override
-  String get dailyScoreDescription => 'Balas, padedantis geriau\nsutelkti dėmesį į vykdymą.';
-
-  @override
-  String get startConversation => 'Pradėkite pokalbį ir leiskite magijai prasidėti';
-
-  @override
-  String get wearableAiCompanion => 'Nešiojamas AI palydovas';
-
-  @override
-  String get organizeAndControlMemories => 'Organizuokite ir valdykite savo atmintis';
-
-  @override
-  String get setAllMemoriesToPrivate => 'Nustatyti visus atminimus kaip privačius';
-
-  @override
-  String get setAllMemoriesToPublic => 'Nustatyti visus atminimus kaip viešus';
-
-  @override
-  String get selectPreferredLanguageForBestExperience => 'Pasirinkite pageidaujamą kalbą geriausiam Omi patirčiai';
-
-  @override
-  String get enableFeaturesForBestExperience => 'Įjunkite funkcijas geriausiai Omi patirčiai jūsų įrenginyje.';
-
-  @override
-  String get deliveryTimeDescription => 'Kada gauti dienos santrauką';
-
-  @override
-  String get configureSTTProvider => 'Sukonfigūruoti STT teikėją';
-
-  @override
-  String get setConversationEndDescription => 'Nustatykite, kada pokalbiai automatiškai baigiasi';
-
-  @override
-  String get clearNodesDescription => 'Išvalyti visus mazgus ir ryšius';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'Tai ištrins visus išvestinius žinių grafiko duomenis. Jūsų originalios atminties išliks saugios.';
-
-  @override
-  String get createAndShareYourApp => 'Sukurkite ir dalinkitės savo programėle';
-
-  @override
-  String get e2eeDescription =>
-      'Šifravimas nuo galo iki galo yra privatumo aukso standartas. Kai įjungta, jūsų duomenys užšifruojami jūsų įrenginyje prieš juos siunčiant į mūsų serverius. Tai reiškia, kad niekas, net Omi, negali pasiekti jūsų turinio.';
-
-  @override
-  String get secureEncryptionDescription =>
-      'Jūsų duomenys yra užšifruoti jums unikaliu raktu mūsų serveriuose, prieglobstuose Google Cloud. Tai reiškia, kad jūsų neapdoroti duomenys yra neprieinami niekam, įskaitant Omi darbuotojus ar Google, tiesiogiai iš duomenų bazės.';
-
-  @override
-  String get e2eeCardDescription =>
-      'Įgalinkite maksimaliam saugumui, kai tik jūs galite pasiekti savo duomenis. Bakstelėkite, kad sužinotumėte daugiau.';
-
-  @override
-  String get yourOmiUnleashed => 'Jūsų Omi, paleistas. Tapkite neribotu dėl begalinių galimybių.';
-
-  @override
-  String get privacyIntroText =>
-      'Omi labai rimtai žiūrime į jūsų privatumą. Norime būti skaidrūs dėl renkamų duomenų ir kaip juos naudojame. Štai ką turite žinoti:';
-
-  @override
-  String get commitmentText =>
-      'Mes įsipareigojame naudoti surinktus duomenis tik tam, kad Omi būtų geresnis produktas jums. Jūsų privatumas ir pasitikėjimas mums yra svarbiausias.';
-
-  @override
-  String get thankYouText =>
-      'Dėkojame, kad esate vertinamas Omi vartotojas. Jei turite klausimų ar rūpesčių, susisiekite su mumis adresu team@basedhardware.com.';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'Tai ištrins visus išvestinius žinių grafo duomenis (mazgus ir ryšius). Jūsų originalūs prisiminimai išliks saugūs. Grafas bus atstatytas laikui bėgant arba kitą kartą pateikus užklausą.';
-
-  @override
-  String get howPeopleWorks =>
-      'Kai asmuo sukurtas, galite eiti į pokalbio transkripciją ir priskirti jam atitinkamus segmentus, tokiu būdu Omi galės atpažinti ir jų kalbą!';
-
-  @override
-  String get buildAndShareYourCustomApp => 'Sukurkite ir dalinkitės savo pritaikyta programėle';
-
-  @override
-  String get onboardingChooseYourPreference => 'Pasirinkite savo nuostatą';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'Suteikti reikiamą prieigą';
-
-  @override
-  String get apiEnvironmentDescription => 'Pasirinkite, prie kurio serverio prisijungti';
-
-  @override
-  String get phoneCallsUpsellFeature4 => 'Jūsų skambučiai lieka privatūs ir saugūs';
-
-  @override
-  String get omisStorageDesc =>
-      'Kai jūsų Omi nėra prijungtas prie telefono, jis saugo garsą vietoje savo integruotoje atmintyje. Niekada neprarasite įrašo.';
-
-  @override
-  String get permissionsSetupDescription => 'Įjunkite kelis leidimus, kad Omi galėtų atlikti savo magiją.';
-
-  @override
-  String get architectSubtitle => 'Pažangus AI — tūkstančiai pokalbių + agentinė automatizacija';
-
-  @override
-  String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
-
-  @override
-  String get speakerTagPromptSubtitle => 'Greita paskutinių dviejų dienų balsų patikra';
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return 'Palikti $name ir tikėtis jų jūsų pokalbiuose';
+  String chatAppsIsConnected(String app) {
+    return '$app prijungta';
   }
 
   @override
-  String get pinPersonHonestLine => 'Prieš susiedama panašius balsus, Omi paklausia.';
+  String get chatAppsRefreshFailed => 'Nepavyko atnaujinti. Rodoma tai, ką matėme paskutinį kartą.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return 'Taip padidina $name tikrumą.';
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Tik skaitymui. Atsakykite Omi programoje $app.';
   }
 
   @override
-  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda ❤️';
+  String get chatAppsWaitlistConfirmed => 'Ačiū. Kai WhatsApp bus paruošta, ji pasirodys čia.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Kol kas naudoti Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Nepavyko atidaryti $app. Įsitikinkite, kad ji įdiegta, ir bandykite dar kartą.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Ką vakar pažadėjau Samui?';
+
+  @override
+  String get chatAppsDoesSave => 'Išsaugo prisiminimus ir tvarko jūsų užduotis';
+
+  @override
+  String get chatAppsOnTheList => 'Sąraše';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Pokalbių dar nėra';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Programoje $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi atidarys Telegram su privačia nuoroda, skirta tik jums.';
+
+  @override
+  String get chatAppsOpenMessages => 'Atidaryti Žinutes';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Atjungti $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Sveikata, finansai ir viskas, ką pažymėjote kaip privatų, lieka už pokalbių programų ribų.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Atsiųskite Omi vieną žinutę iš numerio, kurį norite naudoti. Joje esantis kodas susieja tą numerį su jūsų paskyra.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'Dirbame, kad Omi atkeliautų į WhatsApp. Kai bus paruošta, ji pasirodys čia.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Pokalbiai su Omi programoje $app rodomi čia.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Peržiūrėti pokalbius';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi nustos atsakinėti programoje $app ir ištrins jai saugomą pokalbių istoriją. Žinutės, jau esančios programoje $app, ten ir liks.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Čia šie pokalbiai tik skaitomi. Atsakykite programoje $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Pridėti Omi prie kontaktų';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi prisimena kontekstą visose programose';
+
+  @override
+  String get chatAppsWhatsAppMeantime =>
+      'Telegram ir iMessage veikia jau dabar, su tais pačiais prisiminimais ir užduotimis.';
+
+  @override
+  String get chatAppsComingLater => 'Netrukus';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Per daug bandymų. Palaukite minutę ir bandykite dar kartą.';
+
+  @override
+  String get chatAppsMessage => 'Žinutė';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Atidaryti $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Nustatykite dviem palietimais';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Nepavyko įkelti pokalbių programų';
+
+  @override
+  String get chatAppsInsights => 'Omi įžvalgos';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Išjungta: matote juos tik programoje $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Rašykite Omi iš Telegram ir iMessage';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Atsiųskite balso žinutę, o Omi į ją atsakys.';
+
+  @override
+  String get chatAppsPartOfPro => 'Pokalbių programos įeina į Pro';
+
+  @override
+  String get chatAppsMessagesApp => 'Žinutės';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram kitame įrenginyje?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Klauskite apie savo dieną, išsaugokite prisiminimus ir tvarkykite užduotis iš Telegram ar iMessage. Pokalbiai lieka jūsų naudojamoje programoje, o Omi prisimena, apie ką kalbėjote, visur.';
+
+  @override
+  String get chatAppsTryRemind => 'Priminti paskambinti mamai sekmadienį';
+
+  @override
+  String get chatAppsChannelsTitle => 'Pokalbių programos';
+
+  @override
+  String get chatAppsDoesAnswer => 'Atsako į klausimus apie jūsų pokalbius ir prisiminimus';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app pokalbiai';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'ĮTRAUKTA Į OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Nuoroda';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Niekada nerašo kitiems žmonėms jūsų vardu';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Neprijungta';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Jūsų pokalbius su Omi taip pat saugo Telegram. Omi atsako tik jums, niekada kitiems žmonėms, o atsijungti galite bet kada.';
+
+  @override
+  String get chatAppsProblemOffline => 'Esate neprisijungę. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Rašykite Omi iš savo telefono numerio';
+
+  @override
+  String get chatAppsPrivateMemories => 'Laikyti privačius prisiminimus programoje';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Prijungti Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Leiskite Omi čia atsiųsti apibendrinimą ar įžvalgą.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Laukiama, kol palieskosite Pradėti Telegram…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Kalbėkitės su Omi programose, kurias naudojate kiekvieną dieną.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Prisijungta kaip $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Išsaugokite prisiminimus ir tvarkykite užduotis tiesiai pokalbyje';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Parašykite Omi, kad prijungtumėte';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Išsiųskite žinutę programoje Žinutės. Šis ekranas atsinaujins, kai tik Omi ją gaus.';
+
+  @override
+  String get chatAppsShowInApp => 'Rodyti šiuos pokalbius Omi programoje';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Gaukite naują kodą ir išsiųskite jį iš Žinučių.';
+
+  @override
+  String get chatAppsNoMessages => 'Žinučių nėra';
+
+  @override
+  String get chatAppsHeroTitle => 'Kalbėkitės su Omi ten, kur jau kalbatės';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage ir daugiau';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kodas baigs galioti po $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Ši pokalbių programa buvo atjungta.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi atsako tik jums. Pirma niekada nerašo.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Atjungus ištrinama istorija, kurią Omi saugo apie $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Rašykite Omi programoje $app bet kada.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Pabandykite paklausti';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Grįžkite čia. Patvirtinsime, kad pavyko.';
+
+  @override
+  String get chatAppsDoesFiles => 'Siunčia ir gauna failus, nuotraukas ir balso žinutes';
+
+  @override
+  String get chatAppsTryWeek => 'Apibendrink mano savaitę trimis eilutėmis';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Jūsų $app pokalbiai lieka programoje $app. Omi vis tiek žino, apie ką kalbėjote šioje ir kitose pokalbių programose.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp jau netrukus';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Šis kodas nebegalioja';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Pokalbių programos jūsų paskyrai dar neprieinamos.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Ką Omi daro pokalbių programose';
+
+  @override
+  String get chatAppsVoiceNotes => 'Balso žinutės';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Dar neprieinama';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Atidaryti Žinutes dar kartą';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Prijungta $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Laukiama jūsų žinutės';
+
+  @override
+  String get chatAppsEntryTitle => 'Kalbėkitės su Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Žemiau palieskite Atidaryti Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Įjungta: jie rodomi Omi programoje kaip tik skaitomi pokalbiai.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Atjungti $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Pokalbyje su Omi palieskite Pradėti';
+
+  @override
+  String get chatAppsLocked => 'Reikia Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Sveika, Omi, susiejimo kodas $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Pokalbis programoje $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontaktai';
+
+  @override
+  String get chatAppsCodeNote => 'Kodas veikia vieną kartą ir baigia galioti po 10 minučių.';
+
+  @override
+  String get chatAppsMoreComing => 'Netrukus bus daugiau programų.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Kol kas';
+
+  @override
+  String get chatAppsGetNewCode => 'Gauti naują kodą';
+
+  @override
+  String get chatAppsNotifyMe => 'Pranešti man';
+
+  @override
+  String get chatAppsPrefilled => 'Iš anksto užpildyta';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Neatsidarė? Atsiųskite tai numeriu $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Ta nuoroda nebegalioja. Palieskite Atidaryti Telegram, kad gautumėte naują.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Kam: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 
   @override
   String get singlePress => 'Vienas paspaudimas';

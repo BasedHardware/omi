@@ -69,27 +69,38 @@ export function pendantHealthQuery(days: number): string {
 // PostHog rejects a window function in WHERE (the drain CTE's second
 // lagInFrame over pairs) and cannot see person_id unless that CTE projects
 // it. Both lags are computed once in `pairs`; the aggregate stays outside.
-// The timestamp predicate is repeated on the outer query so the scan stays
-// bounded — a filter that exists only inside the CTE 504s.
-// Unknown charging counts as drain on either endpoint; only an explicit
-// true excludes the interval. `!= true` drops NULL and would hide those pairs.
-// app_version is aggregated with max() so the bar label can show it without
-// adding a GROUP BY key — one OS + build stays one row. String max is
-// deterministic; these versions are 1.0.558-style, not zero-padded.
+// v2 presence is per OS/build, including invalid v2 baselines: once a build
+// emits v2, stale v1 pairs cannot contaminate its quantiles. Both candidate
+// counts remain visible during migration. Delivery timestamps only serve v1.
+// Equal-weight per-interval quantiles; the pooled sum(drops)/sum(hours)
+// estimator is tracked in the watchdog analysis, not this route.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (
       SELECT person_id,
              coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
-             coalesce(properties.$app_build, properties.app_build) AS build,
+             if(toInt(properties.schema_version) = 2,
+                properties.battery_observation_build,
+                coalesce(properties.$app_build, properties.app_build)) AS build,
              coalesce(nullIf(properties.$app_version,''), nullIf(properties.app_version,''), '') AS app_version,
              timestamp,
+             coalesce(toInt(properties.schema_version), 1) AS schema_version,
              toFloat(properties.battery_level) AS level,
-             properties.battery_charging AS charging
+             properties.battery_charging AS charging,
+             toFloat(properties.previous_battery_level) AS previous_level,
+             properties.previous_battery_charging AS previous_charging,
+             toFloat(properties.battery_interval_seconds) AS interval_s,
+             properties.battery_interval_validity AS validity,
+             properties.charging_observed_in_interval AS charging_observed
       FROM events
       WHERE event = 'Phone Battery Sample'
         AND timestamp >= now() - INTERVAL ${days} DAY
         AND coalesce(nullIf(properties.$os_name,''), properties.platform) IN ('Android','iOS')
+    ),
+    build_presence AS (
+      SELECT os, build, countIf(schema_version = 2) > 0 AS has_v2
+      FROM samples
+      GROUP BY os, build
     ),
     pairs AS (
       SELECT os, build, app_version, person_id, timestamp, level, charging,
@@ -97,20 +108,41 @@ export function phoneHealthQuery(days: number): string {
              lagInFrame(level, 1, level) OVER (PARTITION BY person_id ORDER BY timestamp) - level AS level_drop,
              lagInFrame(charging, 1, charging) OVER (PARTITION BY person_id ORDER BY timestamp) AS prev_charging
       FROM samples
+      WHERE schema_version = 1
+    ),
+    intervals AS (
+      SELECT os, build, app_version, person_id, elapsed_s, level_drop, 1 AS interval_schema
+      FROM pairs
+      WHERE timestamp >= now() - INTERVAL ${days} DAY
+        AND elapsed_s BETWEEN 900 AND 7200
+        AND level_drop > 0
+        AND (charging = false OR isNull(charging))
+        AND (prev_charging = false OR isNull(prev_charging))
+      UNION ALL
+      SELECT os, build, app_version, person_id, interval_s AS elapsed_s,
+             previous_level - level AS level_drop, 2 AS interval_schema
+      FROM samples
+      WHERE timestamp >= now() - INTERVAL ${days} DAY
+        AND schema_version = 2
+        AND validity = 'same_build'
+        AND interval_s BETWEEN 900 AND 7200
+        AND level BETWEEN 0 AND 100 AND previous_level BETWEEN 0 AND 100
+        AND previous_level - level >= 0
+        AND charging = false AND previous_charging = false
+        AND (charging_observed = false OR isNull(charging_observed))
     )
-    SELECT os, build,
+    SELECT intervals.os AS os, intervals.build AS build,
            max(app_version) AS app_version,
-           count() AS n_pairs,
-           uniqExact(person_id) AS users,
-           round(quantile(0.5)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p50_drain_per_hour,
-           round(quantile(0.9)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p90_drain_per_hour
-    FROM pairs
-    WHERE timestamp >= now() - INTERVAL ${days} DAY
-      AND elapsed_s BETWEEN 900 AND 7200
-      AND level_drop > 0
-      AND (charging = false OR isNull(charging))
-      AND (prev_charging = false OR isNull(prev_charging))
+           countIf(if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS n_pairs,
+           uniqExactIf(person_id, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS users,
+           round(quantileIf(0.5)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p50_drain_per_hour,
+           round(quantileIf(0.9)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p90_drain_per_hour,
+           countIf(interval_schema = 1) AS n_v1_pairs,
+           countIf(interval_schema = 2) AS n_v2_intervals
+    FROM intervals
+    INNER JOIN build_presence ON intervals.os = build_presence.os AND intervals.build = build_presence.build
     GROUP BY os, build
+    HAVING n_pairs > 0
     ORDER BY os, build
   `;
 }
@@ -147,6 +179,8 @@ export interface PhoneHealthRow {
   app_version: string;
   label: string;
   n_pairs: number;
+  n_v1_pairs: number;
+  n_v2_intervals: number;
   users: number;
   p50_drain_per_hour: number | null;
   p90_drain_per_hour: number | null;
@@ -261,6 +295,8 @@ function mapPhone(rows: unknown[][]): PhoneHealthRow[] {
       app_version: appVersion,
       label: phoneLabel(os, build, appVersion),
       n_pairs: count(row[3]),
+      n_v1_pairs: count(row[7]),
+      n_v2_intervals: count(row[8]),
       users: count(row[4]),
       p50_drain_per_hour: finiteNumber(row[5]),
       p90_drain_per_hour: finiteNumber(row[6]),

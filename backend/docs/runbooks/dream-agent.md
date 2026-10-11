@@ -84,7 +84,7 @@ repeated writes; it does not claim fewer billed writes for multi-reference batch
 Drain considers the highest weighted score first, at most 100 users per
 invocation. A pass reads distinct queued references newest first, at most 400
 before enrichment, stopping when their conservatively encoded triage excerpts
-would exceed `min(6000, Caps.tokens / 3)` including schema/framing/completion.
+would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
 versions actually selected; failed passes retain the queue. Missing or invisible
@@ -95,8 +95,24 @@ The dirty set is authoritative. The timestamp `watermark` is a diagnostic
 frontier and never advances past older unread references; it does not filter the
 queue. Existing shadow-only sequence `events` documents are ignored and are not
 backfilled or deleted. No historical customer records are rewritten. The model
-sees bounded excerpts; mutation tools retain complete snapshots and fence the
-current records.
+sees collection-specific text: conversation title/overview/category followed by
+merged speaker transcript lines, memory content/category, task description/status/due,
+people names/aliases, candidate description/status, entity names/summaries/fact text,
+and screen app/window/OCR text. Speaker names reuse identities already read for
+this pass; own speech is labeled `You`. Record refs remain the dictionary keys,
+while segment IDs, timestamps and provider/speaker-scope metadata stay out of the
+projection. Long text keeps head and tail with an explicit omitted-character count.
+
+Queue selection and inference share the same projection and conservative transport
+gate. Triage gets `min(12000, Caps.tokens // 2)`; reasoning gets the pass budget minus
+observed triage tokens. Per-record character allowances use the space left after
+schema, framing, refs and completion reserve, then halve until the encoded request
+fits. Triage retains an allowance of at least 600 characters per record; reasoning
+retains at least 1,500. Additional records that cannot fit at the triage floor stay
+queued for a later pass. A single triage record may shrink below its floor with
+head/tail retention if needed to fit the transport gate, preventing oversized
+records from blocking the queue. Short source text is never padded. Conversation summary fields retain space before transcript text
+is shortened. Mutation tools retain complete snapshots and fence current records.
 
 Triage uses `omi:auto:dream-triage` (Luna). Empty triage buys no reasoning. Main
 reasoning uses `omi:auto:dream-reasoning`: Luna before #20960, then the gateway's
@@ -285,8 +301,10 @@ One counts-only log line reports `Dream canary status=pass|fail
 stage=enqueue|admit|model|report error_type=<class>` plus the durable consecutive
 failure count. A verified success resets `dream_canary_health/current.canary_failures`.
 Prometheus exports `omi_dream_dirty_enqueue_total{outcome=ok|failed}`,
-`omi_dream_pass_total{status,error_type}`, `omi_dream_tokens_total`, and
-`omi_dream_canary_total{status,stage}`. Exception labels use a closed allowlist,
+`omi_dream_pass_total{status,error_type}`, `omi_dream_tokens_total`,
+`omi_dream_evidence_chars_total{lane=triage|reasoning}`, and
+`omi_dream_canary_total{status,stage}`. Pass logs report only status and projected evidence character counts for each lane.
+Exception labels use a closed allowlist,
 otherwise `other`; no metric labels contain a UID or arbitrary provider error.
 
 `backend/deploy/monitoring/dream-canary-failures.metric.json` and
@@ -305,3 +323,83 @@ These are offline checks; a deployed canary remains separate acceptance evidence
 User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
 sweep host (currently 24 in the production source declarations), along with the
 same global spend/token-price limits, so GET presents the scheduler's allowance.
+
+## Response validation and bounded failed-record retries
+
+Transport caps array prefixes at the original schema bounds, then validates the
+Plan object and its list types strictly. It validates each retained item in
+`edits`, `questions`, `vocabulary`, `frames`, `feedback`, and `slow_tasks`
+independently; Triage does the same for `clusters`. Invalid items are dropped
+before any effects. Pydantic constraints, Review payload matching, evidence
+checks and feedback privacy gates remain authoritative. An invalid top-level
+object, list type or extra top-level field still fails the pass.
+
+Encrypted run reports and the existing counts-only pass log include
+`dropped_invalid` item counts per processed list and `validation_errors` error
+counts keyed by schema field path and Pydantic type, for example
+`edits.evidence:too_short`. An item with multiple errors contributes one dropped
+item and multiple error counts. Indices are removed; unknown keys become
+`unknown_field`. Values, messages, contexts, provider bodies and reproductions
+never enter diagnostics. Terminal ValidationError failures use the same counts.
+Item dropping also emits the shared degraded fallback event.
+
+A consumed dirty record version receives at most three failed, released passes
+that attempted reasoning and observed model tokens. Settlement increments
+`failed_passes` transactionally. The third such failure removes only that
+version from the dirty queue, recording `poisoned` in the encrypted report,
+plaintext numeric run counters, cumulative queue state and pass log. Product
+records are untouched; this does not apply proposed edits. A product write
+creates a fresh version and resets the streak to zero. Concurrent refreshes and
+unread versions survive settlement. Pre-reasoning failures, refunded admissions
+and retained timeout leases do not advance the streak. The diagnostic watermark
+stays behind unread rows; the dirty set remains the read authority.
+
+`backend/scripts/dream_reasoning_eval.py` exercises the real reasoning lane on a
+verified dev tunnel with invented evidence and no product effects. Fixture and
+five-run counts are under `backend/evals/dream_reasoning/`.
+
+Conversation `title` and `overview` edits require that conversation as evidence,
+exact `before`, and a nonempty bounded `after` (120/1,000 characters). A deterministic
+post-model gate runs before shadow persistence and again at apply: only empty
+titles or empty/whitespace overviews may be filled, with at least 40 transcript
+words across segments (`MIN_SUMMARY_TRANSCRIPT_WORDS` in `utils/dream_guards.py`).
+Existing overview sections are also preserved. Placeholder/absence/meta text in
+English or Vietnamese is rejected, as are titles shorter than three words, titles
+with no accent-insensitive transcript token match, and overviews shorter than
+eight words. Overviews must have the generator's `## heading`, blank line, `- ` bullet body
+shape from `render_sections_markdown`; a flat sentence is rejected. Non-English
+and mixed-language speech are valid and never translated. User titles, locks and visibility are respected.
+Apply fences speech and the fields it owns; separate title/overview edits can
+share a pass snapshot. Review journals each edit with undo and durable suppression.
+Overview edits clear old sections/claims atomically, preserving them for undo.
+Shadow reports proposals without applying them; no mode or cohort change is made.
+
+Feedback must be a generic invented failure description, with no success reports
+for clean input. Before shadow persistence or developer storage, the privacy gate
+normalizes Unicode and rejects supplied refs/IDs, full evidence text, short quoted
+substrings (including scripts without word boundaries), four-word overlap and
+proper names/vocabulary. Names are collected conservatively; lexical checks cannot
+prove absence of arbitrary semantic paraphrases. Invented language/quality evals
+and final five-repeat dev receipts are under `evals/dream_triage/quality-results.json`
+and `evals/dream_reasoning/quality-results.json`.
+
+
+Deterministic feedback policy first drops non-failure classes (`success`, `none`,
+`ok`), `info` severity and English/Vietnamese assurances of accuracy, no issues or
+no required edits (`not_a_failure`). The typed model accepts those class labels
+only so the policy can drop and count them; they never reach storage. It also
+rejects English/Vietnamese language or translation
+complaints (`language_not_defect`) and generic collection/hex refs or bare UUIDs
+(`ref_leak`), including refs absent from the supplied evidence. The existing
+privacy gate still applies. At most one privacy-valid feedback item survives per
+pass (`feedback_cap`). Run reports, counts-only logs and
+`omi_dream_rejected_total{reason}` count policy rejections by fixed reason; rejected
+proposal text is removed before shadow persistence. Short spelling-option arrays
+still contribute to `dropped_invalid.questions` and
+`validation_errors["questions.spelling.options:too_short"]`.
+
+`evals/dream_reasoning/guard-fixtures.json` contains invented near-empty untitled,
+good Markdown overview, clean bilingual and grounded empty-title cases. The dev
+eval applies the same policy and privacy checks, records raw/post-guard edits by
+kind plus rejection counts, and requires five repeats of every case. See that
+folder's README for the verified dev tunnel procedure.

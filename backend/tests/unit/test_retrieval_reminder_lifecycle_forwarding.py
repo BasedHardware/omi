@@ -43,6 +43,8 @@ def producer(request):
     chat_scope.chat_scope_from_config = lambda config: None
     agentic = ModuleType('utils.retrieval.agentic')
     agentic.agent_config_context = contextvars.ContextVar('reminder-test-config', default=None)
+    messaging_undo = ModuleType('utils.messaging.undo')
+    messaging_undo.record_write = MagicMock(return_value='')
     langchain_tools = ModuleType('langchain_core.tools')
     langchain_tools.tool = lambda fn: fn
     langchain_runnables = ModuleType('langchain_core.runnables')
@@ -56,6 +58,7 @@ def producer(request):
         'utils.retrieval.safety': safety,
         'utils.retrieval.chat_scope': chat_scope,
         'utils.retrieval.agentic': agentic,
+        'utils.messaging.undo': messaging_undo,
         'langchain_core.tools': langchain_tools,
         'langchain_core.runnables': langchain_runnables,
     }

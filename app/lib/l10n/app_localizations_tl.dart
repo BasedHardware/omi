@@ -12716,209 +12716,362 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nananatili sa itaas ng listahan mo ng Mga Tao ang mga naka-pin na tao, at hindi sila tinatanggal ng Linisin.';
 
   @override
-  String get buildAndShareApp => 'Bumuo at ibahagi ang iyong custom app';
+  String get chatAppsProblemFailed => 'May nangyaring mali. Subukan muli.';
 
   @override
-  String get membersAndCounting => '8000+ miyembro at patuloy na dumarami.';
-
-  @override
-  String get privacyIntro =>
-      'Sa Omi, kami ay nakatuon sa pagprotekta ng iyong privacy. Ang pahina na ito ay nagbibigay-daan sa iyo na kontrolin kung paano ginagamit at iniimbak ang iyong data.';
-
-  @override
-  String get dataProtectionDesc =>
-      'Ang iyong data ay protektado ng default gamit ang mataas na encryption. Suriin ang iyong mga setting at hinaharap na privacy options sa ibaba.';
-
-  @override
-  String get transcriptionConfig => 'I-configure ang STT provider';
-
-  @override
-  String get importDataConfig => 'I-import ang data mula sa ibang pinagkukunan';
-
-  @override
-  String get understandingSubtitle => 'Mga salitang nauunawaan mula sa iyong mga pag-uusap.';
-
-  @override
-  String get rememberingSubtitle => 'Mga katotohanan at detalye na naaalala para sa iyo.';
-
-  @override
-  String get debugLogsDesc => 'Tumutulong sa pag-diagnose ng mga isyu';
-
-  @override
-  String get deleteKnowledgeGraphMessage =>
-      'Ito ay tatanggal ang lahat ng derived knowledge graph data (nodes at connections). Ang iyong orihinal na mga alaala ay manatiling ligtas. Ang graph ay muling bubuo sa paglipas ng panahon o sa susunod na request.';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'Burahin ang lahat ng nodes at connections';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'Habang umuunlad ang aming modelo, maaari kaming magbigay ng mas mahusay na resulta ng transkeribsyon para sa iyong mga recording.';
-
-  @override
-  String get bestInClassTranscription => 'Best in class transcription na walang setup';
-
-  @override
-  String get optimizedForConversation => 'Naka-optimize para sa pag-usap';
-
-  @override
-  String get highAccuracy => 'High accuracy';
-
-  @override
-  String get privacyFirst => 'Privacy first';
-
-  @override
-  String get keepGoing => 'Patuloy, ang iyong ginagawa ay napakaganda';
-
-  @override
-  String get personalGrowthJourney => 'Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.';
-
-  @override
-  String get alwaysInContext => 'Palaging nasa konteksto';
-
-  @override
-  String get configureSttProvider => 'I-configure ang STT provider';
-
-  @override
-  String get clearAllNodesAndConnections => 'Burahin ang lahat ng nodes at connections';
-
-  @override
-  String get welcomeToOmiDescription =>
-      'Maligayang pagdating sa Omi! Ang iyong AI companion ay handa nang tulungan ka sa mga conversation, gawain, at marami pa.';
-
-  @override
-  String get conversationsProcessedAutomatically => 'Ang mga conversation ay awtomatikong napoproseso';
-
-  @override
-  String get getInsightsInstantly => 'Makakuha ng mga insight at summary kaagad';
-
-  @override
-  String get dailyScoreDescription => 'Isang puntuasyon upang tulungan kang mas mahusay\ntumuon sa pagpapatupad.';
-
-  @override
-  String get startConversation => 'Magsimula ng isang conversation at hayaan ang magic na magsimula';
-
-  @override
-  String get wearableAiCompanion => 'Wearable AI companion';
-
-  @override
-  String get organizeAndControlMemories => 'Mag-organize at kontrol ang iyong mga memories';
-
-  @override
-  String get setAllMemoriesToPrivate => 'Itakda ang lahat ng memories sa private visibility';
-
-  @override
-  String get setAllMemoriesToPublic => 'Itakda ang lahat ng memories sa public visibility';
-
-  @override
-  String get selectPreferredLanguageForBestExperience =>
-      'Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience';
-
-  @override
-  String get enableFeaturesForBestExperience =>
-      'Paganahin ang mga features para sa pinakamahusay na Omi experience sa iyong device.';
-
-  @override
-  String get deliveryTimeDescription => 'Kailan makakatanggap ng iyong daily summary';
-
-  @override
-  String get configureSTTProvider => 'I-configure ang STT provider';
-
-  @override
-  String get setConversationEndDescription => 'Itakda kung kailan mag-auto-end ang mga conversation';
-
-  @override
-  String get clearNodesDescription => 'I-clear ang lahat ng nodes at connections';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'Ito ay buburahin ang lahat ng derived knowledge graph data. Ang iyong original na mga memory ay manatiling ligtas.';
-
-  @override
-  String get createAndShareYourApp => 'Lumikha at ibahagi ang iyong app';
-
-  @override
-  String get e2eeDescription =>
-      'Ang end-to-end encryption ay ang gold standard para sa privacy. Kapag na-enable ito, ang iyong data ay naka-encrypt sa iyong device bago ipadala sa aming mga server. Ito ay nangangahulugang walang isa, hindi pa naman ang Omi, ay makaka-access sa iyong content.';
-
-  @override
-  String get secureEncryptionDescription =>
-      'Ang iyong data ay naka-encrypt gamit ang isang key na natatangi sa iyo sa aming mga server, hosted sa Google Cloud. Ito ay nangangahulugang ang iyong raw na content ay hindi accessible sa sinuman, kabilang ang Omi staff o Google, direkta mula sa database.';
-
-  @override
-  String get e2eeCardDescription =>
-      'Paganahin para sa maximum security kung saan lamang ikaw ay maka-access sa iyong data. Itap upang matuto pa.';
-
-  @override
-  String get yourOmiUnleashed =>
-      'Ang iyong Omi, na walang hanggan. Maging unlimited para sa walang hanggang posibilidad.';
-
-  @override
-  String get privacyIntroText =>
-      'Sa Omi, seryoso kami ang kinuha ang iyong privacy. Nais naming maging transparent tungkol sa data na aming kinukuha at kung paano namin ito ginagamit upang mapabuti ang aming produkto para sa iyo. Narito kung ano ang kailangan mong malaman:';
-
-  @override
-  String get commitmentText =>
-      'Kami ay nakatuon sa paggamit ng data na aming kinukuha lamang upang gawing mas mahusay na produkto ang Omi para sa iyo. Ang iyong privacy at tiwala ay pangunahin para sa amin.';
-
-  @override
-  String get thankYouText =>
-      'Salamat sa pagiging valued user ng Omi. Kung mayroon kang anumang mga katanungan o alalahanin, huwag mag-atubiling makipag-ugnayan sa amin sa team@basedhardware.com.';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'Ito ay magbabura ng lahat ng derived knowledge graph data (nodes at connections). Ang iyong mga orihinal na memories ay magiging ligtas. Ang graph ay muling mabubuo sa paglipas ng panahon o sa susunod na request.';
-
-  @override
-  String get howPeopleWorks =>
-      'Kapag lumikha ng isang tao, maaari kang pumunta sa isang conversation transcript, at italaan sa kanila ang kanilang corresponding segments, sa ganitong paraan ang Omi ay makakapag-recognize ng kanilang speech din!';
-
-  @override
-  String get buildAndShareYourCustomApp => 'Bumuo at ibahagi ang iyong custom na app';
-
-  @override
-  String get onboardingChooseYourPreference => 'Piliin ang iyong kagustuhan';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'Bigyan ng kinakailangang access';
-
-  @override
-  String get apiEnvironmentDescription => 'Pumili kung aling backend ang kukonektahan';
-
-  @override
-  String get phoneCallsUpsellFeature4 => 'Ang iyong mga call ay nananatiling private at secure';
-
-  @override
-  String get omisStorageDesc =>
-      'Kapag ang iyong Omi ay hindi konektado sa iyong phone, ito ay nag-store ng audio locally sa built-in memory nito. Hindi mo kailanman mawawalan ng recording.';
-
-  @override
-  String get permissionsSetupDescription => 'I-enable ang ilang permissions upang ang Omi ay gumawa ng mahika.';
-
-  @override
-  String get architectSubtitle => 'Power-user AI — libu-libong chat + agentic automation';
-
-  @override
-  String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
-
-  @override
-  String get speakerTagPromptSubtitle => 'Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw';
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return 'Panatilihin si $name at asahan sila sa mga usapan mo';
+  String chatAppsIsConnected(String app) {
+    return 'Nakakonekta na ang $app';
   }
 
   @override
-  String get pinPersonHonestLine => 'Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.';
+  String get chatAppsRefreshFailed => 'Hindi ma-refresh. Ipinapakita ang huling nakita namin.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return 'Ang Oo ay nagpapataas ng kumpiyansa kay $name.';
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Read-only. Sagutin si Omi sa $app.';
   }
 
   @override
-  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
+  String get chatAppsWaitlistConfirmed => 'Salamat. Lalabas ang WhatsApp dito kapag handa na.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Gamitin Muna ang Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Hindi mabuksan ang $app. Tiyaking naka-install ito at subukan muli.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Ano ang ipinangako ko kay Sam kahapon?';
+
+  @override
+  String get chatAppsDoesSave => 'Nagse-save ng mga alaala at namamahala ng mga gawain mo';
+
+  @override
+  String get chatAppsOnTheList => 'Nasa Listahan';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Wala pang chat';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Sa $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage =>
+      'Bubuksan ni Omi ang Telegram gamit ang pribadong link na para lang sa iyo.';
+
+  @override
+  String get chatAppsOpenMessages => 'Buksan ang Messages';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'I-disconnect ang $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Ang kalusugan, pera, at anumang minarkahan mong pribado ay hindi isasama sa mga chat app.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Magpadala kay Omi ng isang mensahe mula sa numerong gusto mong gamitin. Ang code sa mensahe ang magli-link sa numerong iyon sa account mo.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Pinagsisikapan naming dalhin si Omi sa WhatsApp. Lalabas ito rito kapag handa na.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Lalabas dito ang mga chat mo kay Omi sa $app.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Tingnan ang mga Chat';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Titigil si Omi sa pagsagot sa $app at buburahin ang chat history na itinatago nito para dito. Mananatili sa $app ang mga mensaheng nandoon na.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Read-only ang mga chat na ito rito. Sumagot sa $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Idagdag si Omi sa Contacts';
+
+  @override
+  String get chatAppsProPerkContext => 'Naaalala ni Omi ang konteksto sa bawat app';
+
+  @override
+  String get chatAppsWhatsAppMeantime =>
+      'Gumagana na ngayon ang Telegram at iMessage, na may parehong mga alaala at gawain.';
+
+  @override
+  String get chatAppsComingLater => 'Paparating pa lang';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Masyadong maraming pagsubok. Maghintay ng isang minuto at subukan muli.';
+
+  @override
+  String get chatAppsMessage => 'Mensahe';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Buksan ang $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'I-set up sa dalawang tap';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Hindi ma-load ang mga chat app';
+
+  @override
+  String get chatAppsInsights => 'Mga insight mula kay Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Naka-off: makikita mo lang ang mga ito sa $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Mag-text kay Omi mula sa Telegram at iMessage';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Magpadala ng voice note at sasagutin ito ni Omi.';
+
+  @override
+  String get chatAppsPartOfPro => 'Bahagi ng Pro ang mga chat app';
+
+  @override
+  String get chatAppsMessagesApp => 'Messages';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Nasa ibang device ang Telegram?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Magtanong tungkol sa araw mo, mag-save ng mga alaala, at mamahala ng mga gawain mula sa Telegram o iMessage. Nananatili ang mga chat mo sa app na ginagamit mo, at naaalala ni Omi ang pinag-usapan ninyo saanman.';
+
+  @override
+  String get chatAppsTryRemind => 'Paalalahanan akong tawagan si Mama sa Linggo';
+
+  @override
+  String get chatAppsChannelsTitle => 'Mga chat app';
+
+  @override
+  String get chatAppsDoesAnswer => 'Sumasagot sa mga tanong tungkol sa mga usapan at alaala mo';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Mga chat sa $app';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'KASAMA SA OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Link';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Hindi kailanman magme-message sa ibang tao para sa iyo';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Hindi nakakonekta';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Naka-store din sa Telegram ang mga chat mo kay Omi. Sa iyo lang sumasagot si Omi, hindi sa ibang tao, at puwede kang mag-disconnect anumang oras.';
+
+  @override
+  String get chatAppsProblemOffline => 'Offline ka. Tingnan ang koneksyon mo at subukan muli.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Mag-text kay Omi mula sa phone number mo';
+
+  @override
+  String get chatAppsPrivateMemories => 'Panatilihin ang mga pribadong alaala sa app';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Ikonekta ang Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Hayaan si Omi na magpadala ng recap o insight dito.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Hinihintay kang i-tap ang Simulan sa Telegram…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Makipag-usap kay Omi sa mga app na ginagamit mo araw-araw.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Nakakonekta bilang $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Mag-save ng mga alaala at mamahala ng mga gawain mismo sa chat';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Mag-text kay Omi para kumonekta';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Ipadala ang mensahe sa Messages. Mag-a-update ang screen na ito pagkatanggap ni Omi.';
+
+  @override
+  String get chatAppsShowInApp => 'Ipakita ang mga chat na ito sa Omi app';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Kumuha ng bagong code at ipadala ito mula sa Messages.';
+
+  @override
+  String get chatAppsNoMessages => 'Walang mensahe';
+
+  @override
+  String get chatAppsHeroTitle => 'Makipag-chat kay Omi kung saan ka na nakikipag-chat';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage, at iba pa';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Mag-e-expire ang code sa loob ng $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Na-disconnect na ang chat app na ito.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Sa iyo lang sumasagot si Omi. Hindi ito kailanman nauunang mag-text.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Buburahin ng pag-disconnect ang history na itinatago ni Omi para sa $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Mag-message kay Omi sa $app anumang oras.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Subukang magtanong';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Bumalik dito. Kukumpirmahin namin kung gumana.';
+
+  @override
+  String get chatAppsDoesFiles => 'Nagpapadala at tumatanggap ng mga file, litrato, at voice note';
+
+  @override
+  String get chatAppsTryWeek => 'Ibuod ang linggo ko sa tatlong linya';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Nananatili sa $app ang mga $app chat mo. Alam pa rin ni Omi ang pinag-usapan ninyo sa app at sa iba mo pang chat app.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'Paparating ang WhatsApp';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Nag-expire na ang code na ito';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Hindi pa available ang mga chat app para sa account mo.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Ang ginagawa ni Omi sa mga chat app';
+
+  @override
+  String get chatAppsVoiceNotes => 'Mga voice note';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Hindi pa available';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Buksan Muli ang Messages';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Nakakonekta noong $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Naghihintay sa text mo';
+
+  @override
+  String get chatAppsEntryTitle => 'Makipag-chat kay Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'I-tap ang Buksan ang Telegram sa ibaba';
+
+  @override
+  String get chatAppsShowInAppOn => 'Naka-on: lalabas ang mga ito sa Omi app bilang read-only na chat.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'I-disconnect ang $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'I-tap ang Simulan sa chat mo kay Omi';
+
+  @override
+  String get chatAppsLocked => 'Nangangailangan ng Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Hi Omi, link code $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Chat sa $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Contacts';
+
+  @override
+  String get chatAppsCodeNote => 'Isang beses lang gumagana ang code at mag-e-expire ito sa loob ng 10 minuto.';
+
+  @override
+  String get chatAppsMoreComing => 'May mga paparating pang app.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Sa ngayon';
+
+  @override
+  String get chatAppsGetNewCode => 'Kumuha ng Bagong Code';
+
+  @override
+  String get chatAppsNotifyMe => 'Ipaalam sa Akin';
+
+  @override
+  String get chatAppsPrefilled => 'Napunan na';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Hindi nagbukas? I-text ito sa $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Para kay: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 
   @override
   String get singlePress => 'Isang pindot';

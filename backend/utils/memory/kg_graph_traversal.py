@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from utils.memory.atom_keyword_index import is_indexable_long_term_atom
+from utils.messaging.memory_privacy import channel_private_filter_active, is_channel_private_memory
 from utils.memory.memory_system import (  # compatibility exports; never a gate
     MemorySystem as MemorySystem,
     resolve_memory_system as resolve_memory_system,
@@ -265,6 +266,8 @@ def traverse_knowledge_graph(
         for memory_id in cited_ids:
             item = items_by_id.get(memory_id)
             if item and is_indexable_long_term_atom(item):
+                if channel_private_filter_active() and is_channel_private_memory(item):
+                    continue
                 result.memory_citations.append({"memory_id": memory_id, "content": (item.content or "").strip()})
 
     return result

@@ -2881,6 +2881,85 @@
         "conversation-untitled-rendered"
       ],
       "correlation": null
+    },
+    {
+      "id": "chatAppConnectStarted",
+      "wire_name": "Chat App Connect Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppConnected",
+      "wire_name": "Chat App Connected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppDisconnected",
+      "wire_name": "Chat App Disconnected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppWaitlistJoined",
+      "wire_name": "Chat App Waitlist Joined",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
     }
   ]
 }

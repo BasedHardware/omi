@@ -12414,192 +12414,354 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pinPersonDescription => '置顶的人员会保留在你的人员列表顶部，且不会被清理删除。';
 
   @override
-  String get buildAndShareApp => '构建并分享您自己的应用';
+  String get chatAppsProblemFailed => '出了点问题。请重试。';
 
   @override
-  String get membersAndCounting => '8000+名成员并且还在增加。';
-
-  @override
-  String get privacyIntro => '在 Omi，我们致力于保护您的隐私。此页面允许您控制数据的保存和使用方式。';
-
-  @override
-  String get dataProtectionDesc => '默认情况下，您的数据受强加密保护。';
-
-  @override
-  String get transcriptionConfig => '配置 STT 提供商';
-
-  @override
-  String get importDataConfig => '从其他来源导入数据';
-
-  @override
-  String get understandingSubtitle => '从您的对话中理解的单词数。';
-
-  @override
-  String get rememberingSubtitle => '为您记住的事实和细节。';
-
-  @override
-  String get debugLogsDesc => '帮助诊断问题';
-
-  @override
-  String get deleteKnowledgeGraphMessage => '这将删除所有导出的图谱数据（节点和连接）。您的原始记忆保持安全。';
-
-  @override
-  String get deleteKnowledgeGraphDesc => '删除所有节点和连接';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc => '随着我们模型的改进，我们可以为您的录音提供更好的转录结果。';
-
-  @override
-  String get bestInClassTranscription => '一流的转录';
-
-  @override
-  String get optimizedForConversation => '为对话优化';
-
-  @override
-  String get highAccuracy => '高精度';
-
-  @override
-  String get privacyFirst => '隐私至上';
-
-  @override
-  String get keepGoing => '继续加油';
-
-  @override
-  String get personalGrowthJourney => '您的个人成长之旅，AI 倾听您的每一句话。';
-
-  @override
-  String get alwaysInContext => '始终包含在上下文中';
-
-  @override
-  String get configureSttProvider => '配置 STT 提供商';
-
-  @override
-  String get clearAllNodesAndConnections => '清除所有节点和连接';
-
-  @override
-  String get welcomeToOmiDescription => '欢迎来到Omi！您的AI伴侣已准备好帮助您进行对话、任务等。';
-
-  @override
-  String get conversationsProcessedAutomatically => '对话会自动处理';
-
-  @override
-  String get getInsightsInstantly => '立即获取见解和摘要';
-
-  @override
-  String get dailyScoreDescription => '帮助您更好地专注于\n执行的评分。';
-
-  @override
-  String get startConversation => '开始对话，让魔法开始';
-
-  @override
-  String get wearableAiCompanion => '可穿戴AI伴侣';
-
-  @override
-  String get organizeAndControlMemories => '整理和控制您的记忆';
-
-  @override
-  String get setAllMemoriesToPrivate => '将所有记忆设置为私密可见性';
-
-  @override
-  String get setAllMemoriesToPublic => '将所有记忆设置为公开可见性';
-
-  @override
-  String get selectPreferredLanguageForBestExperience => '选择您的首选语言以获得最佳 Omi 体验';
-
-  @override
-  String get enableFeaturesForBestExperience => '启用功能以在您的设备上获得最佳 Omi 体验。';
-
-  @override
-  String get deliveryTimeDescription => '何时接收您的每日摘要';
-
-  @override
-  String get configureSTTProvider => '配置 STT 提供商';
-
-  @override
-  String get setConversationEndDescription => '设置对话何时自动结束';
-
-  @override
-  String get clearNodesDescription => '清除所有节点和连接';
-
-  @override
-  String get deleteKnowledgeGraphWarning => '这将删除所有派生的知识图谱数据。您的原始记忆仍然安全。';
-
-  @override
-  String get createAndShareYourApp => '创建并分享您的应用';
-
-  @override
-  String get e2eeDescription => '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
-
-  @override
-  String get secureEncryptionDescription =>
-      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
-
-  @override
-  String get e2eeCardDescription => '启用以获得最大安全性，只有您可以访问您的数据。点击了解更多。';
-
-  @override
-  String get yourOmiUnleashed => '您的Omi，解放了。选择无限版，开启无限可能。';
-
-  @override
-  String get privacyIntroText => '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
-
-  @override
-  String get commitmentText => '我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。';
-
-  @override
-  String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
-
-  @override
-  String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
-
-  @override
-  String get howPeopleWorks => '创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！';
-
-  @override
-  String get buildAndShareYourCustomApp => '构建并分享您的自定义应用';
-
-  @override
-  String get onboardingChooseYourPreference => '选择您的偏好';
-
-  @override
-  String get onboardingGrantRequiredAccess => '授予所需权限';
-
-  @override
-  String get apiEnvironmentDescription => '选择要连接的服务器';
-
-  @override
-  String get phoneCallsUpsellFeature4 => '您的通话保持私密和安全';
-
-  @override
-  String get omisStorageDesc => '当 Omi 未连接到手机时，它会将音频存储在内置存储器中。您永远不会丢失任何录音。';
-
-  @override
-  String get permissionsSetupDescription => '启用一些权限，让 Omi 发挥它的魔力。';
-
-  @override
-  String get architectSubtitle => '高级用户 AI — 数千次对话 + 代理自动化';
-
-  @override
-  String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
-
-  @override
-  String get speakerTagPromptSubtitle => '快速确认最近两天的声音';
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return '保留 $name，并预期对方会出现在你的对话中';
+  String chatAppsIsConnected(String app) {
+    return '$app 已连接';
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi 会在匹配相近的声音前先询问你。';
+  String get chatAppsRefreshFailed => '无法刷新。显示的是上次获取的内容。';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return '选“是”会提升 $name 的可信度。';
+  String chatAppsReadOnlyBanner(String app) {
+    return '只读。请在 $app 中回复 Omi。';
   }
 
   @override
-  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
+  String get chatAppsWaitlistConfirmed => '谢谢。WhatsApp 准备就绪后会显示在这里。';
+
+  @override
+  String get chatAppsUseTelegramForNow => '先用 Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return '无法打开 $app。请确认已安装，然后重试。';
+  }
+
+  @override
+  String get chatAppsTryPromise => '我昨天答应了 Sam 什么？';
+
+  @override
+  String get chatAppsDoesSave => '保存记忆并管理你的任务';
+
+  @override
+  String get chatAppsOnTheList => '已加入名单';
+
+  @override
+  String get chatAppsNoChatsTitle => '暂无聊天';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return '在 $app 中';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi 会通过只属于你的私密链接打开 Telegram。';
+
+  @override
+  String get chatAppsOpenMessages => '打开“信息”';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return '断开 $app？';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle => '健康、财务以及你标记为私密的任何内容都不会进入聊天应用。';
+
+  @override
+  String get chatAppsConnectIMessageMessage => '用你想使用的号码给 Omi 发一条消息。消息中的验证码会把该号码与你的账户关联。';
+
+  @override
+  String get chatAppsWhatsAppMessage => '我们正在努力把 Omi 带到 WhatsApp。准备就绪后会显示在这里。';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return '你在 $app 中与 Omi 的聊天会显示在这里。';
+  }
+
+  @override
+  String get chatAppsViewChats => '查看聊天';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi 将停止在 $app 中回复，并删除为其保存的聊天历史记录。$app 中已有的消息会保留在那里。';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return '这些聊天在这里是只读的。请在 $app 中回复。';
+  }
+
+  @override
+  String get chatAppsAddToContacts => '将 Omi 添加到通讯录';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi 会在每个应用中记住上下文';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram 和 iMessage 现在就能用，记忆和任务都与此相同。';
+
+  @override
+  String get chatAppsComingLater => '即将推出';
+
+  @override
+  String get chatAppsProblemRateLimited => '尝试次数过多。请等一分钟后重试。';
+
+  @override
+  String get chatAppsMessage => '消息';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return '打开 $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => '两步轻松设置';
+
+  @override
+  String get chatAppsLoadFailedTitle => '无法加载聊天应用';
+
+  @override
+  String get chatAppsInsights => '来自 Omi 的洞察';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return '关闭：你只能在 $app 中看到它们。';
+  }
+
+  @override
+  String get chatAppsProPerkText => '在 Telegram 和 iMessage 里给 Omi 发消息';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => '发送语音备忘，Omi 会回复。';
+
+  @override
+  String get chatAppsPartOfPro => '聊天应用是 Pro 的一部分';
+
+  @override
+  String get chatAppsMessagesApp => '信息';
+
+  @override
+  String get chatAppsTelegramOtherDevice => '在另一台设备上使用 Telegram？';
+
+  @override
+  String get chatAppsHeroMessage => '在 Telegram 或 iMessage 里询问你的一天、保存记忆、管理任务。你的聊天仍留在你使用的应用中，而 Omi 会在所有地方记住你们聊过的内容。';
+
+  @override
+  String get chatAppsTryRemind => '提醒我周日给妈妈打电话';
+
+  @override
+  String get chatAppsChannelsTitle => '聊天应用';
+
+  @override
+  String get chatAppsDoesAnswer => '回答关于你的对话和记忆的问题';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app 聊天';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'OMI PRO 已包含';
+
+  @override
+  String get chatAppsLink => '链接';
+
+  @override
+  String get chatAppsNeverMessagesOthers => '绝不会代你给其他人发消息';
+
+  @override
+  String get chatAppsNotConnectedTitle => '未连接';
+
+  @override
+  String get chatAppsTelegramPrivacyNote => '你与 Omi 的聊天也会存储在 Telegram 中。Omi 只会回复你，绝不会回复其他人，你也可以随时断开连接。';
+
+  @override
+  String get chatAppsProblemOffline => '你已离线。请检查网络连接后重试。';
+
+  @override
+  String get chatAppsIMessageSubtitle => '用你的手机号给 Omi 发短信';
+
+  @override
+  String get chatAppsPrivateMemories => '将私密记忆保留在应用内';
+
+  @override
+  String get chatAppsConnectTelegramTitle => '连接 Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => '允许 Omi 在这里向你发送回顾或洞察。';
+
+  @override
+  String get chatAppsTelegramWaiting => '正在等待你在 Telegram 中点按“开始”…';
+
+  @override
+  String get chatAppsEntrySubtitle => '在你每天都在用的应用里和 Omi 聊天。';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return '已以 $handle 连接';
+  }
+
+  @override
+  String get chatAppsProPerkSave => '直接在聊天中保存记忆、管理任务';
+
+  @override
+  String get chatAppsConnectIMessageTitle => '给 Omi 发短信以完成连接';
+
+  @override
+  String get chatAppsWaitingMessage => '在“信息”中发送这条消息。Omi 一收到，此屏幕就会更新。';
+
+  @override
+  String get chatAppsShowInApp => '在 Omi 应用中显示这些聊天';
+
+  @override
+  String get chatAppsCodeExpiredMessage => '获取新验证码，并从“信息”中发送。';
+
+  @override
+  String get chatAppsNoMessages => '没有消息';
+
+  @override
+  String get chatAppsHeroTitle => '在你常聊天的地方和 Omi 聊天';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram、iMessage 等';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return '验证码将在 $time 后过期';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => '此聊天应用已断开连接。';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi 只会回复你，绝不会先发短信。';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return '断开连接会删除 Omi 为 $app 保存的历史记录。';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return '随时在 $app 中给 Omi 发消息。';
+  }
+
+  @override
+  String get chatAppsTryAsking => '试着问问';
+
+  @override
+  String get chatAppsTelegramStepReturn => '回到这里，我们会确认是否成功。';
+
+  @override
+  String get chatAppsDoesFiles => '发送和接收文件、照片和语音备忘';
+
+  @override
+  String get chatAppsTryWeek => '用三行总结我这一周';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return '你的 $app 聊天会保留在 $app 中。Omi 仍然知道你在应用内以及其他聊天应用中聊过什么。';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp 即将支持';
+
+  @override
+  String get chatAppsCodeExpiredTitle => '此验证码已过期';
+
+  @override
+  String get chatAppsProblemUnavailable => '你的账户暂时还不能使用聊天应用。';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Omi 在聊天应用中能做什么';
+
+  @override
+  String get chatAppsVoiceNotes => '语音备忘';
+
+  @override
+  String get chatAppsNotAvailableYet => '暂不可用';
+
+  @override
+  String get chatAppsOpenMessagesAgain => '再次打开“信息”';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return '连接于 $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => '正在等待你的短信';
+
+  @override
+  String get chatAppsEntryTitle => '和 Omi 聊天';
+
+  @override
+  String get chatAppsTelegramStepOpen => '点按下方的“打开 Telegram”';
+
+  @override
+  String get chatAppsShowInAppOn => '开启：它们会在 Omi 应用中以只读聊天的形式显示。';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return '断开 $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => '在与 Omi 的聊天中点按“开始”';
+
+  @override
+  String get chatAppsLocked => '需要 Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return '你好 Omi，关联码 $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return '$app 中的聊天';
+  }
+
+  @override
+  String get chatAppsContactsApp => '通讯录';
+
+  @override
+  String get chatAppsCodeNote => '验证码仅可使用一次，10 分钟后过期。';
+
+  @override
+  String get chatAppsMoreComing => '更多应用即将推出。';
+
+  @override
+  String get chatAppsInTheMeantime => '在此期间';
+
+  @override
+  String get chatAppsGetNewCode => '获取新验证码';
+
+  @override
+  String get chatAppsNotifyMe => '通知我';
+
+  @override
+  String get chatAppsPrefilled => '已预填';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return '没有打开？把这条短信发送到 $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => '该链接已过期。点按“打开 Telegram”获取新链接。';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return '收件人：Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 
   @override
   String get singlePress => '单击';
