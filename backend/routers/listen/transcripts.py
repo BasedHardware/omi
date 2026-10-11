@@ -558,7 +558,7 @@ class TranscriptProcessor:
             boundary_snapshot = (
                 observation.boundary_snapshot(conversation_id) if observation and conversation_id else None
             )
-            if boundary_snapshot:
+            if boundary_snapshot and observation:
                 try:
                     await self.host.persistence.call(
                         conversations_db.update_owner_recognition_diagnostics,
