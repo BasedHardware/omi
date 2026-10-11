@@ -3155,6 +3155,14 @@ updates by matcher generation, conversation, provider scope, and numeric speaker
 It retains at most 128 distinct timing intervals per slot, never fills silence
 gaps, and keeps the latest segment ID. A voice already running waits in its one
 pending slot until completion, rather than occupying task slots behind its lock.
+Active suppression follows the numeric matcher lock across provider scopes and
+generations, while pending keys remain distinct. After successful extraction,
+unselected intervals beyond a query's ten seconds remain in the same queue for
+normal scheduling after completion, with a new age for the served work quantum.
+Already-pending updates retain their age and latest ID. If the queue is full,
+those intervals remain in matcher metadata for the next ordinary update.
+Failures and denials introduce no retry, and every subsequent query reserves
+through the unchanged caps.
 Before five seconds of queue age, untried voices precede previously attempted
 voices, followed by existing acoustic near-owner preference and longer pooled
 clips. Once aged, ready work wins oldest-first, so at most 99 older pending slots

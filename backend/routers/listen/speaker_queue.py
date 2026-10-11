@@ -12,6 +12,24 @@ SPEAKER_QUEUE_MAX_WAIT_SECONDS = 5.0
 VoiceKey = tuple[int, Optional[str], str, int]
 
 
+def subtract_audio_ranges(
+    ranges: list[tuple[float, float]], used: list[tuple[float, float]]
+) -> list[tuple[float, float]]:
+    """Retain only unconsumed speech intervals, preserving gaps and partial clips."""
+    for used_start, used_end in used:
+        remaining = []
+        for start, end in ranges:
+            if used_end <= start or used_start >= end:
+                remaining.append((start, end))
+            else:
+                if start < used_start:
+                    remaining.append((start, used_start))
+                if used_end < end:
+                    remaining.append((used_end, end))
+        ranges = remaining
+    return ranges
+
+
 @dataclass
 class _QueuedVoice:
     segment: dict[str, Any]
@@ -40,7 +58,8 @@ class SpeakerMatchQueue:
         self._near_owner = near_owner
         self._clock = clock
         self._items: dict[VoiceKey, _QueuedVoice] = {}
-        self._active: set[VoiceKey] = set()
+        # The matcher lock is numeric even across scope/generation changes.
+        self._active: set[int] = set()
         self._changed = asyncio.Event()
         self.maxsize = MAX_QUEUED_VOICES
 
@@ -63,6 +82,12 @@ class SpeakerMatchQueue:
         return self.qsize() >= self.maxsize
 
     def put_nowait(self, segment: dict[str, Any]) -> None:
+        self._put_ranges(
+            segment,
+            [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
+        )
+
+    def _put_ranges(self, segment: dict[str, Any], ranges: list[tuple[float, float]]) -> None:
         # Only timing and identity metadata enter this queue, never PCM or text.
         work = {
             field: segment[field]
@@ -75,7 +100,7 @@ class SpeakerMatchQueue:
         if previous is None and self.full():
             raise asyncio.QueueFull
         intervals = list(previous.segment['_speaker_audio_ranges']) if previous is not None else []
-        intervals.append((work['abs_start'], min(work['abs_end'], work['abs_start'] + max(0.0, work['duration']))))
+        intervals.extend(ranges)
         merged: list[tuple[float, float]] = []
         for start, end in sorted(intervals):
             if end <= start:
@@ -88,8 +113,23 @@ class SpeakerMatchQueue:
         self._items[key] = _QueuedVoice(work, previous.arrived_at if previous is not None else self._clock())
         self._changed.set()
 
+    def retain_unselected(self, segment: dict[str, Any], ranges: list[tuple[float, float]]) -> None:
+        """Leave successfully unconsumed queued work ready after this voice completes.
+
+        A served quantum starts a new queue age; an already-pending provider
+        update keeps its age and latest identity. Full queues retain the audio
+        metadata in the matcher for ordinary future updates instead.
+        """
+        if not ranges or segment.get('_matcher_generation') != self._generation():
+            return
+        pending = self._items.get(self._key(segment))
+        try:
+            self._put_ranges(pending.segment if pending is not None else segment, ranges)
+        except asyncio.QueueFull:
+            pass
+
     def get_nowait(self) -> dict[str, Any]:
-        ready = [(key, item) for key, item in self._items.items() if key not in self._active]
+        ready = [(key, item) for key, item in self._items.items() if key[3] not in self._active]
         if not ready:
             raise asyncio.QueueEmpty
         now = self._clock()
@@ -107,7 +147,7 @@ class SpeakerMatchQueue:
                 ),
             )
         del self._items[key]
-        self._active.add(key)
+        self._active.add(key[3])
         return item.segment
 
     async def get(self) -> dict[str, Any]:
@@ -119,5 +159,5 @@ class SpeakerMatchQueue:
                 await self._changed.wait()
 
     def complete(self, segment: dict[str, Any]) -> None:
-        self._active.discard(self._key(segment))
+        self._active.discard(segment['speaker_id'])
         self._changed.set()

@@ -138,6 +138,117 @@ async def test_get_cancellation_does_not_lose_work_or_future_wakeups():
     assert (await asyncio.wait_for(queue.get(), timeout=1))['speaker_id'] == 1
 
 
+def test_numeric_active_voice_blocks_scope_and_generation_duplicates_without_blocking_other_voices():
+    queue, state = _queue()
+    queue.put_nowait(_work(1))
+    active = queue.get_nowait()
+    queue.put_nowait(_work(1, scope='next-provider'))
+    state.generation += 1
+    queue.put_nowait(_work(1, conversation='next-conversation'))
+    queue.put_nowait(_work(2))
+    other = queue.get_nowait()
+    assert other['speaker_id'] == 2
+    queue.complete(other)
+    with pytest.raises(asyncio.QueueEmpty):
+        queue.get_nowait()
+    queue.complete(active)
+    for _ in range(2):
+        work = queue.get_nowait()
+        assert work['speaker_id'] == 1
+        queue.complete(work)
+    assert queue.empty()
+
+
+@pytest.mark.anyio
+async def test_coalesced_audio_beyond_one_query_recovers_without_another_provider_update(monkeypatch):
+    _clock(monkeypatch)
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    noisy = np.array([[0.0, 1.0]], dtype=np.float32)
+    matcher, host, _ = _live_matcher(monkeypatch, [noisy, owner])
+    matcher.person_embeddings.pop('p1')
+    windows = []
+    extract = host.state.audio_ring_buffer.extract
+
+    def record(start, end):
+        windows.append((start, end))
+        return extract(start, end)
+
+    monkeypatch.setattr(host.state.audio_ring_buffer, 'extract', record)
+    for start, seconds in [(0, 10), (12, 5)]:
+        matcher.queue.put_nowait(_work(start=start, seconds=seconds, conversation=None))
+    work = await matcher.queue.get()
+    await matcher.match(1, work)
+    matcher.queue.complete(work)
+    assert matcher._pending_audio[1] == [(12, 17)]
+    assert 1 not in matcher.speaker_to_person
+    assert matcher.queue.qsize() == 1 and matcher._embedding_attempts[1] == 1
+    # The remaining already-queued clean interval waits for normal scheduling
+    # and still reserves through the unchanged caps, without another update.
+    work = await matcher.queue.get()
+    await matcher.match(1, work)
+    matcher.queue.complete(work)
+    assert windows == [(0, 10), (12, 17)]
+    assert 1 not in matcher._pending_audio
+    assert matcher.speaker_to_person[1] == ('user', 'User')
+    assert matcher._embedding_attempts[1] == 2 and matcher._socket_embedding_tokens == 14
+
+
+def test_retained_work_preserves_latest_update_and_age_and_cannot_cross_generation_or_queue_cap():
+    queue, state = _queue()
+    queue.put_nowait(_work(segment='old'))
+    active = queue.get_nowait()
+    state.now = 1
+    queue.put_nowait(_work(start=12, segment='latest'))
+    state.now = 5
+    queue.retain_unselected(active, [(6, 10)])
+    queue.complete(active)
+    state.attempts[1] = 1
+    state.now = 6
+    queue.put_nowait(_work(2))
+    retained = queue.get_nowait()
+    assert retained['id'] == 'latest' and retained['_speaker_audio_ranges'] == [(6, 10), (12, 17)]
+    queue.complete(retained)
+    other = queue.get_nowait()
+    assert other['speaker_id'] == 2
+    queue.complete(other)
+    state.generation += 1
+    queue.retain_unselected(active, [(6, 10)])
+    assert queue.empty()
+    for voice in range(2, 102):
+        queue.put_nowait(_work(voice))
+    active['_matcher_generation'] = state.generation
+    queue.retain_unselected(active, [(6, 10)])
+    assert queue.full() and queue.qsize() == 100
+
+
+@pytest.mark.anyio
+async def test_remaining_queued_work_cannot_raise_voice_ceiling_or_retry_a_budget_denial(monkeypatch):
+    _clock(monkeypatch)
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    noisy = np.array([[0.0, 1.0]], dtype=np.float32)
+    matcher, host, _ = _live_matcher(monkeypatch, [noisy] * 12 + [owner])
+    matcher.person_embeddings.pop('p1')
+    monkeypatch.setattr(host.state.audio_ring_buffer, 'get_time_range', lambda: (0, 200))
+    for i in range(26):
+        matcher.queue.put_nowait(_work(start=i * 6, seconds=5, conversation=None))
+    selected = 0
+    while not matcher.queue.empty():
+        work = await matcher.queue.get()
+        await matcher.match(1, work)
+        matcher.queue.complete(work)
+        selected += 1
+        assert selected <= 13
+    assert selected == 13  # twelve successful queries, one denial, no denial retry
+    assert matcher._embedding_attempts[1] == 12 and matcher._socket_embedding_tokens == 4
+    assert matcher._pending_audio[1] and 1 not in matcher.speaker_to_person
+    matcher.queue.put_nowait(_work(2, start=160, seconds=5, conversation=None))
+    work = await matcher.queue.get()
+    await matcher.match(2, work)
+    matcher.queue.complete(work)
+    assert matcher.speaker_to_person[2] == ('user', 'User')
+    assert matcher._embedding_attempts[2] == 1 and matcher._socket_embedding_tokens == 3
+
+
 @pytest.mark.anyio
 async def test_coalesced_pcm_uses_distinct_intervals_and_recovers_owner(monkeypatch):
     _clock(monkeypatch)

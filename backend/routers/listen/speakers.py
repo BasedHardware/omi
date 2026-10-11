@@ -58,7 +58,7 @@ from utils.observability.speaker_embedding_budget import (
     BUDGET_SOCKETS,
     EMBEDDING_ATTEMPTS,
 )
-from routers.listen.speaker_queue import SpeakerMatchQueue
+from routers.listen.speaker_queue import SpeakerMatchQueue, subtract_audio_ranges
 
 logger = logging.getLogger(__name__)
 
@@ -1029,17 +1029,7 @@ class SpeakerMatcher:
                     fresh[-1] = (fresh[-1][0], max(fresh[-1][1], end))
                 else:
                     fresh.append((start, end))
-            for used_start, used_end in covered:
-                remaining = []
-                for start, end in fresh:
-                    if used_end <= start or used_start >= end:
-                        remaining.append((start, end))
-                    else:
-                        if start < used_start:
-                            remaining.append((start, used_start))
-                        if used_end < end:
-                            remaining.append((used_end, end))
-                fresh = remaining
+            fresh = subtract_audio_ranges(fresh, covered)
             if not fresh:
                 # Zero fresh seconds left after subtracting embedded audio.
                 self._record_exit('no_fresh_audio', speaker_id)
@@ -1094,7 +1084,14 @@ class SpeakerMatcher:
                 return
             # Cover only successful embeddings; failed requests still spend budget.
             covered.extend(selected)
-            self._pending_audio.pop(speaker_id, None)
+            # Continue already-queued unselected speech after successful queries;
+            # failures and denials never create retries or exempt reservations.
+            unselected = subtract_audio_ranges(fresh, selected)[-128:]
+            if unselected:
+                self._pending_audio[speaker_id] = unselected
+            else:
+                self._pending_audio.pop(speaker_id, None)
+            self.queue.retain_unselected(segment, unselected)
             evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
             if speaker_id in self._competition_only and speaker_id not in self._competition_fresh:
                 evidence.clear()
