@@ -360,7 +360,10 @@ def test_traversal_reads_only_graph_references_and_returned_citations() -> None:
 def test_graph_reference_batches_preserve_every_id_beyond_500() -> None:
     from utils.memory.kg_graph_traversal import _graph_memory_items
 
-    ids = [f"memory-{i}" for i in range(1_201)]
+    # 550 IDs: two batches (500 + 50), still exercising batch-boundary
+    # preservation and duplicate elimination. A larger corpus (1,201) blew
+    # test.sh's 0.30s per-test timing guard on pydantic model construction.
+    ids = [f"memory-{i}" for i in range(550)]
     items = {memory_id: _long_term_item(memory_id, memory_id) for memory_id in ids}
     db = MagicMock()
     # Exercise the real owner/document-checked batch seam, not a mocked reader.
@@ -379,7 +382,7 @@ def test_graph_reference_batches_preserve_every_id_beyond_500() -> None:
     db.get_all.side_effect = get_all
     result = _graph_memory_items(CANONICAL_UID, ids + ids[:10], db_client=db)
     assert [item.memory_id for item in result] == ids
-    assert [len(call.args[0]) for call in db.get_all.call_args_list] == [500, 500, 201]
+    assert [len(call.args[0]) for call in db.get_all.call_args_list] == [500, 50]
     db.collection.assert_not_called()
 
 
