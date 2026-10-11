@@ -90,7 +90,26 @@ def _enabled_rollout_doc(uid='u1'):
 def test_developer_route_reads_use_universal_service_without_legacy_fallback():
     contents = _developer_source()
     assert 'service = MemoryService(db_client=db)' in contents
-    assert 'memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)' in contents
+    route = _compact_python(_function_source_for_route('/v1/dev/user/memories', 'get'))
+    assert 'read_developer_memories(service,uid,' in route
+    assert 'budget=budget' in route
+    helper = (Path(__file__).resolve().parents[2] / 'utils/memory/developer_memory_list.py').read_text(encoding='utf-8')
+    reads = [
+        node
+        for node in ast.walk(ast.parse(helper))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'service'
+        and node.func.attr == 'read'
+    ]
+    assert len(reads) == 2  # Unfiltered page and sparse category scan.
+    for read in reads:
+        assert ast.unparse(read.args[0]) == 'uid'
+        keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in read.keywords}
+        assert keywords['include_pending_processing'] == 'True'
+        assert keywords['budget'] == 'budget'
+        assert 'limit' in keywords and 'offset' in keywords
     assert 'MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))' in contents
     assert 'read_default_read_rollout' not in contents
     assert 'search_memory_default_developer_memories(' not in contents

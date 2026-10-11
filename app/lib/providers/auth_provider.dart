@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -46,6 +47,7 @@ class AuthenticationProvider extends BaseProvider {
   String? authToken;
   bool _loading = false;
   bool _requiresReauthentication = false;
+  AuthSessionExpirationReason? _sessionExpirationReason;
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
@@ -54,6 +56,9 @@ class AuthenticationProvider extends BaseProvider {
   @override
   bool get loading => _loading;
   bool get requiresReauthentication => _requiresReauthentication;
+
+  /// Why the current session expired, while [requiresReauthentication] is true.
+  AuthSessionExpirationReason? get sessionExpirationReason => _sessionExpirationReason;
   int get sessionExpirationGeneration => _sessionExpirationGeneration;
 
   AuthenticationProvider({bool initializeListeners = true}) {
@@ -69,6 +74,7 @@ class AuthenticationProvider extends BaseProvider {
     Future.microtask(() {
       _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
@@ -93,6 +99,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
@@ -119,6 +126,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
+        _sessionExpirationReason = event.reason;
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;

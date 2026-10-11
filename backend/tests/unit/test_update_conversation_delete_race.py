@@ -313,7 +313,8 @@ def raced_pusher_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+        assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 
     def run(update_result: bool):

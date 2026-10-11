@@ -275,11 +275,12 @@ uint8_t app_settings_get_mic_gain(void)
 
 int app_settings_save_muted(uint8_t new_muted)
 {
-    muted = new_muted ? 1U : 0U;
-    int err = settings_save_one("omi/muted", &muted, sizeof(muted));
+    const uint8_t requested = new_muted ? 1U : 0U;
+    int err = settings_save_one("omi/muted", &requested, sizeof(requested));
     if (err) {
         LOG_ERR("Failed to save muted (err %d)", err);
     } else {
+        muted = requested;
         LOG_INF("Saved muted: %u", muted);
     }
     return err;

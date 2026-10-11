@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -41,11 +42,36 @@ class KnowledgeGraphApi {
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
 
-  static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
-    final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
+  /// Triggers a rebuild of the knowledge graph.
+  ///
+  /// Accounts with canonical memory assertions return HTTP 409
+  /// (CANONICAL_GRAPH_MUTATION_CONFLICT) from the backend because their graph
+  /// is already derived and up to date. This method synthesizes a client-side
+  /// [wire.GeneratedRebuildResponse] with status `'canonical_up_to_date'` so
+  /// callers can recognize this terminal state without polling or failing.
+  static Future<Map<String, dynamic>> rebuildKnowledgeGraph({
+    @visibleForTesting
+    Future<http.Response?> Function({
+      required String url,
+      required Map<String, String> headers,
+      required String body,
+      required String method,
+    })? apiCaller,
+  }) async {
+    final makeCall = apiCaller ?? makeApiCall;
+    final response = await makeCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
+    }
+    if (response != null && response.statusCode == 409) {
+      Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
+      // Synthetic client status: account has canonical graph state and is already up to date.
+      return const wire.GeneratedRebuildResponse(
+        edgesCount: 0,
+        nodesCount: 0,
+        status: 'canonical_up_to_date',
+      ).toJson();
     }
     _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }

@@ -135,3 +135,32 @@ def group_chunks_by_coverage(
         else:
             groups[-1].append(chunk)
     return groups
+
+
+def get_extension_for_path(path: str) -> str:
+    """Extract the private cloud sync extension from a GCS path."""
+    if path.endswith('.batch.enc'):
+        return 'batch.enc'
+    elif path.endswith('.batch.bin'):
+        return 'batch.bin'
+    elif path.endswith('.opus.enc'):
+        return 'opus.enc'
+    elif path.endswith('.opus'):
+        return 'opus'
+    elif path.endswith('.enc'):
+        return 'enc'
+    elif path.endswith('.bin'):
+        return 'bin'
+    return 'bin'
+
+
+def strip_extension(filename: str) -> str:
+    """Strip private cloud sync extension to get the timestamp string.
+
+    Handles both single-chunk filenames (e.g. '1000.000.opus') and
+    batch filenames (e.g. '1000.000-1010.000.batch.bin').
+    """
+    for ext in ('.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin'):
+        if filename.endswith(ext):
+            return filename[: -len(ext)]
+    return filename.rsplit('.', 1)[0]

@@ -251,6 +251,132 @@ class StoreNotesTests(unittest.TestCase):
                 changelog.store_notes("v1.2.3", "ios")
 
 
+class PlatformTagTests(unittest.TestCase):
+    def test_platform_restricted_entry_ships_only_to_its_stores(self) -> None:
+        with patched_changelog_dirs() as (_unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {
+                    "version": "1.2.3",
+                    "date": "2026-09-24",
+                    "changes": [
+                        "Shared improvement",
+                        {"change": "Diagnostics now show Android disconnect reasons", "platforms": ["android"]},
+                        {"change": "Recordings appear on the Lock Screen", "platforms": ["ios"]},
+                    ],
+                },
+            )
+            ios = changelog.store_notes("1.2.3", "ios")
+            android = changelog.store_notes("1.2.3", "android")
+            self.assertIn("Shared improvement", ios)
+            self.assertIn("Lock Screen", ios)
+            self.assertNotIn("Android", ios)
+            self.assertIn("Shared improvement", android)
+            self.assertIn("Android disconnect reasons", android)
+            self.assertNotIn("Lock Screen", android)
+
+    def test_platform_tag_survives_recollection(self) -> None:
+        with patched_changelog_dirs() as (unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {
+                    "version": "1.2.3",
+                    "date": "2026-09-20",
+                    "changes": [{"change": "iOS-only line", "platforms": ["ios"]}],
+                },
+            )
+            write_fragment(unreleased, "20260924-new.json", {"change": "Later line"})
+            release = changelog.collect("1.2.3", "2026-09-24")
+            self.assertEqual(
+                release["changes"],
+                [{"change": "iOS-only line", "platforms": ["ios"]}, "Later line"],
+            )
+
+    def test_platform_fragment_restricts_its_line(self) -> None:
+        with patched_changelog_dirs() as (unreleased, _releases):
+            write_fragment(
+                unreleased,
+                "20260924-android.json",
+                {"change": "Android-only line", "platforms": ["android"]},
+            )
+            self.assertEqual(
+                changelog.read_unreleased_fragment(unreleased / "20260924-android.json"),
+                [{"change": "Android-only line", "platforms": ["android"]}],
+            )
+
+    def test_platform_fragment_validation(self) -> None:
+        cases = (
+            {"change": "text", "platforms": []},
+            {"change": "text", "platforms": ["web"]},
+            {"change": "text", "platforms": "ios"},
+            {"change": "text", "platforms": [5]},
+            {"change": "text", "platforms": ["ios"], "extra": 1},
+            {"platforms": ["ios"]},
+            {"change": 5, "platforms": ["ios"]},
+        )
+        for index, data in enumerate(cases):
+            with self.subTest(data=data), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / f"bad-{index}.json"
+                changelog.write_json(path, data)
+                with self.assertRaises(changelog.ChangelogError):
+                    changelog.read_unreleased_fragment(path)
+
+    def test_cross_platform_mention_in_ios_notes_fails(self) -> None:
+        with patched_changelog_dirs() as (_unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {"version": "1.2.3", "date": "2026-09-24", "changes": ["Omi no longer crashes on Android"]},
+            )
+            with self.assertRaises(changelog.ChangelogError):
+                changelog.store_notes("1.2.3", "ios")
+
+    def test_cross_platform_mention_in_android_notes_fails(self) -> None:
+        with patched_changelog_dirs() as (_unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {
+                    "version": "1.2.3",
+                    "date": "2026-09-24",
+                    "changes": ["See your recording in the Dynamic Island on iOS 18"],
+                },
+            )
+            with self.assertRaises(changelog.ChangelogError):
+                changelog.store_notes("1.2.3", "android")
+
+    def test_cross_platform_guard_is_whole_word(self) -> None:
+        with patched_changelog_dirs() as (_unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {
+                    "version": "1.2.3",
+                    "date": "2026-09-24",
+                    "changes": ["Curious behavior no longer fills your library"],
+                },
+            )
+            self.assertIn("Curious", changelog.store_notes("1.2.3", "ios"))
+
+    def test_tagged_entries_avoid_the_cross_platform_rejection(self) -> None:
+        with patched_changelog_dirs() as (_unreleased, releases):
+            changelog.write_json(
+                releases / "1.2.3.json",
+                {
+                    "version": "1.2.3",
+                    "date": "2026-09-24",
+                    "changes": [
+                        "Shared line",
+                        {"change": "Omi no longer crashes on Android", "platforms": ["android"]},
+                        {"change": "Recording controls arrive on the Lock Screen and Dynamic Island", "platforms": ["ios"]},
+                    ],
+                },
+            )
+            ios = changelog.store_notes("1.2.3", "ios")
+            android = changelog.store_notes("1.2.3", "android")
+            self.assertNotIn("Android", ios)
+            self.assertNotIn("Dynamic Island", android)
+            self.assertIn("Dynamic Island", ios)
+            self.assertIn("crashes on Android", android)
+
+
 class GatePathClassificationTests(unittest.TestCase):
     def test_internal_allowlist_paths_do_not_require_a_fragment(self) -> None:
         for path in sorted(checker.EXEMPT_APP_PATHS):

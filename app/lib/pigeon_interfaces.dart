@@ -193,11 +193,16 @@ abstract class BleHostApi {
   @SwiftFunction('writeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:data:)')
   void writeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data);
 
+  @async
   @SwiftFunction('subscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void subscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
 
   @SwiftFunction('unsubscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
+
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  @SwiftFunction('setCaptureAuthorized(uuid:authorized:)')
+  void setCaptureAuthorized(String uuid, bool authorized);
 
   // State
   @SwiftFunction('getBluetoothState()')
@@ -262,6 +267,9 @@ abstract class BleFlutterApi {
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  void onCaptureHealth(String peripheralUuid, String snapshot);
 
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.

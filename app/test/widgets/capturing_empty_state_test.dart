@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -26,6 +27,7 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/constants.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
@@ -75,6 +77,22 @@ class _Syncs {
   final phone = _PhoneSync();
 }
 
+class _QuietCapture extends CaptureProvider {
+  _QuietCapture()
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+              initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  bool get pendantCaptureVerified => false;
+}
+
 CaptureProvider _hermeticCapture() {
   return CaptureProvider(
     walService: _WalService(),
@@ -110,7 +128,8 @@ Future<void> _pumpCapturingPage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => people)..people = people),
+        ChangeNotifierProvider(
+            create: (_) => PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
@@ -137,6 +156,80 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
+
+  for (final withPhotos in [false, true]) {
+    for (final source in ['manual', 'carried', 'auto']) {
+      testWidgets('$source live label (photos: $withPhotos) opens the existing speaker assignment sheet',
+          (tester) async {
+        final capture = _hermeticCapture();
+        addTearDown(capture.dispose);
+        capture.segments = [
+          TranscriptSegment(
+            id: 'label',
+            text: 'hello',
+            speaker: 'SPEAKER_0',
+            isUser: false,
+            personId: 'maya',
+            translations: [],
+            start: 0,
+            end: 6,
+            speakerLabelSource: source,
+          ),
+        ];
+        if (withPhotos) capture.photos = [ConversationPhoto(id: 'photo', base64: '', createdAt: DateTime(2026))];
+        await _pumpCapturingPage(
+          tester,
+          capture: capture,
+          connectivity: _StubConnectivityProvider(true),
+          people: [Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))],
+        );
+        final label = find.byKey(const ValueKey('edit_speaker_label_label'));
+        expect(label, findsOneWidget);
+        expect(tester.getSize(label).height, greaterThanOrEqualTo(44));
+        expect(find.byKey(Key(source == 'auto' ? 'speaker_label_likely' : 'speaker_label_confirmed')), findsOneWidget);
+        await tester.tap(label);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(NameSpeakerBottomSheet), findsOneWidget);
+        final sheet = tester.widget<NameSpeakerBottomSheet>(find.byType(NameSpeakerBottomSheet));
+        expect(sheet.speakerId, 0);
+        expect(sheet.segmentId, 'label');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  for (final withPhotos in [false, true]) {
+    for (final isUser in [false, true]) {
+      for (final source in ['auto', 'manual', 'carried']) {
+        testWidgets('protected speaker (owner: $isUser, photos: $withPhotos, source: $source) has no edit label',
+            (tester) async {
+          final capture = _hermeticCapture();
+          addTearDown(capture.dispose);
+          capture.segments = [
+            TranscriptSegment(
+              id: 'protected',
+              text: 'Keep this line.',
+              speaker: 'SPEAKER_${isUser ? 0 : omiSpeakerId}',
+              isUser: isUser,
+              personId: null,
+              translations: [],
+              start: 0,
+              end: 6,
+              speakerLabelSource: source,
+            ),
+          ];
+          if (withPhotos) capture.photos = [ConversationPhoto(id: 'photo', base64: '', createdAt: DateTime(2026))];
+          await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
+          expect(find.byKey(const ValueKey('edit_speaker_label_protected')), findsNothing);
+          expect(find.text('Keep this line.', findRichText: true), findsOneWidget);
+          if (withPhotos || !isUser) expect(find.text(isUser ? 'You' : 'Omi'), findsOneWidget);
+          expect(find.byKey(const Key('speaker_label_likely')), findsNothing);
+          expect(find.byKey(const Key('speaker_label_confirmed')), findsNothing);
+          await tester.pumpWidget(const SizedBox.shrink());
+        });
+      }
+    }
+  }
 
   testWidgets('Someone Else waits for the rejection receipt before opening naming', (tester) async {
     final capture = _hermeticCapture();
@@ -208,6 +301,32 @@ void main() {
     // repeats the same sentence instead of the stale Listening placeholder.
     expect(find.textContaining('recording continues on device and will process later'), findsNWidgets(2));
     expect(find.textContaining('a transcript will appear here'), findsNothing);
+  });
+
+  testWidgets('quiet unverified pendant retains live page transcript and Pause with a neutral header', (tester) async {
+    final capture = _QuietCapture();
+    addTearDown(capture.dispose);
+    capture.segments = [
+      TranscriptSegment(
+          id: 'quiet-segment',
+          text: 'Keep this transcript.',
+          speaker: 'SPEAKER_0',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 3,
+          translations: []),
+    ];
+    await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
+    expect(find.textContaining('Keep this transcript.', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('capture_pause_button')), findsOneWidget);
+    expect(find.textContaining('Listening'), findsNothing);
+    expect(find.text('Pendant'), findsOneWidget);
+    await tester.pump(const Duration(minutes: 1));
+    expect(find.textContaining('Keep this transcript.', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('capture_pause_button')), findsOneWidget);
+    expect(find.textContaining('Listening'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('a healthy session keeps the Listening placeholder', (tester) async {

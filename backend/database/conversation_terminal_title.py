@@ -29,6 +29,7 @@ from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
 
 # Terminal failure codes after which a user reprocess can still succeed: the
@@ -37,15 +38,12 @@ from utils.conversations.recovery import structured_has_protected_content
 # to summarize, so a retry gives the same answer) and BYOK abandonment.
 SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt_failed'})
 
-# Firestore's maximum document size, and the headroom kept for estimation error.
-FIRESTORE_MAX_DOCUMENT_BYTES = 1_048_576
+# Headroom kept below FIRESTORE_MAX_DOCUMENT_BYTES for estimation error.
 # Generous on purpose: dropping a title near the ceiling costs nothing, while
 # an underestimate aborts the terminal write.
 TERMINAL_SIZE_HEADROOM_BYTES = 65_536
 # Bounded probe for a described photo in the child collection.
 PHOTO_DESCRIPTION_PROBE_LIMIT = 64
-# Used when a test double exposes no document path.
-_FALLBACK_DOCUMENT_NAME_BYTES = 256
 
 
 def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[str], bool]:
@@ -182,43 +180,6 @@ def fit_document_limit(
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
         return dict(base_update)
     return combined
-
-
-def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: str | None) -> int:
-    """Firestore's documented storage size of one document.
-
-    Document name: each path segment plus one byte, plus 16. Document: the
-    fields plus 32. Field: name (UTF-8 plus one) plus value. Strings are UTF-8
-    plus one; booleans and null one; numbers and timestamps eight; geo points
-    sixteen; bytes their length; arrays the sum of their values; maps are sized
-    like an embedded document (their fields plus 32). See
-    https://firebase.google.com/docs/firestore/storage-size.
-    """
-    if document_path:
-        name_bytes = sum(len(part.encode('utf-8')) + 1 for part in document_path.split('/')) + 16
-    else:
-        name_bytes = _FALLBACK_DOCUMENT_NAME_BYTES
-    return name_bytes + 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(value) for key, value in data.items())
-
-
-def _value_bytes(value: Any) -> int:
-    if value is None or isinstance(value, bool):
-        return 1
-    if isinstance(value, (int, float, datetime)):
-        return 8
-    if isinstance(value, str):
-        return len(value.encode('utf-8')) + 1
-    if isinstance(value, (bytes, bytearray, memoryview)):
-        return len(value)
-    if isinstance(value, Mapping):
-        # A map is sized like an embedded document: its fields plus 32 bytes.
-        return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
-        return sum(_value_bytes(item) for item in value)
-    if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
-        return 16
-    # Unknown SDK value: over-estimate rather than under-estimate.
-    return len(str(value).encode('utf-8')) + 1
 
 
 def _has_described_photo(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:

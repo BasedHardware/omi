@@ -4,7 +4,11 @@ from models.other import Person
 from types import SimpleNamespace
 
 from models.transcript_segment import TranscriptSegment
-from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
+from utils.sync.speaker_identity import (
+    PersonEmbeddingsCache,
+    SpeakerIdentityDependencies,
+    identify_speakers_for_segments,
+)
 from utils.people_stats import aggregate_people_stats, apply_people_stats, collect_people_stats
 
 
@@ -41,17 +45,22 @@ def test_ignores_locked_and_malformed_rows():
     assert set(stats) == {"p3"} and stats["p3"]["talk_seconds"] == 0.0
 
 
-def test_collect_stops_at_cap_and_short_page():
+def test_collect_stops_at_cap_and_iterator_end():
     rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(30)]
-    calls = []
+    assert collect_people_stats(iter(rows), scan_cap=25)["p1"]["conversation_count"] == 25
+    assert collect_people_stats(iter(rows), scan_cap=100)["p1"]["conversation_count"] == 30
 
-    def fetch(limit, offset):
-        calls.append((limit, offset))
-        return rows[offset : offset + limit]
 
-    assert collect_people_stats(fetch, scan_cap=25, batch=10)["p1"]["conversation_count"] == 25
-    assert calls == [(10, 0), (10, 10), (5, 20)]
-    assert collect_people_stats(fetch, scan_cap=100, batch=10)["p1"]["conversation_count"] == 30
+def test_collect_pulls_no_rows_past_the_cap():
+    pulled = []
+
+    def rows():
+        for index in range(30):
+            pulled.append(index)
+            yield _conv(None, {"person_id": "p1", "start": 0, "end": 1})
+
+    assert collect_people_stats(rows(), scan_cap=25)["p1"]["conversation_count"] == 25
+    assert len(pulled) == 25
 
 
 def test_auto_conversation_count_needs_every_label_automatic():
@@ -98,7 +107,7 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
                 id='manual', text='hello', speaker_id=speaker_id, is_user=False, person_id='p2', start=6, end=9
             ),
         ]
-        identify_speakers_for_segments(segments, None, {}, 'u', dependencies=deps)
+        identify_speakers_for_segments(segments, None, PersonEmbeddingsCache(True), 'u', dependencies=deps)
         assert segments[0].person_id == 'p1'
         assert segments[0].speaker_match_source == 'sync_text'
         assert segments[1].person_id == ('p1' if speaker_id > 0 else None)
@@ -107,3 +116,49 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
         stats = aggregate_people_stats([_conv(None, *(segment.model_dump() for segment in segments))])
         assert stats['p1']['auto_conversation_count'] == 1
         assert stats['p2']['auto_conversation_count'] == 0
+
+
+# --- #19908: a dropped invisible row must not end the scan -------------------
+#
+# collect_people_stats consumes one iterator owned by
+# ``database.conversation_scan.iter_conversations``: paging is by snapshot
+# cursor (never offset), invisible rows advance the cursor, and budget
+# exhaustion returns the honest prefix. The skip-without-truncating
+# regressions for that contract live in tests/unit/test_conversation_scan.py;
+# these pin what the aggregator owes any iterable it is given.
+
+
+def test_collect_consumes_a_single_iterator_once():
+    consumed = []
+
+    def rows():
+        for index in range(25):
+            consumed.append(index)
+            yield _conv(None, {"person_id": "p1", "start": 0, "end": 1})
+
+    stats = collect_people_stats(rows(), scan_cap=100)
+    assert stats["p1"]["conversation_count"] == 25
+    assert len(consumed) == 25
+
+
+def test_collect_counts_every_row_a_thin_iterator_yields():
+    # A window thinned by tombstones reaches the aggregator as exactly the
+    # visible rows; all of them count.
+    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(9)]
+    stats = collect_people_stats(iter(rows), scan_cap=10)
+    assert stats["p1"]["conversation_count"] == 9
+
+
+def test_aggregate_skips_discarded_rows():
+    """An include_discarded reader still delivers them; stats ignore them."""
+    t = datetime(2026, 9, 5, tzinfo=timezone.utc)
+    stats = aggregate_people_stats(
+        [
+            _conv(t, {"person_id": "p1", "start": 0, "end": 5}),
+            _conv(t, {"person_id": "p1", "start": 0, "end": 5}, discarded=True),
+            _conv(t, {"person_id": "p2", "start": 0, "end": 2}),
+        ]
+    )
+    assert stats["p1"]["conversation_count"] == 1
+    assert stats["p1"]["talk_seconds"] == 5.0
+    assert stats["p2"]["conversation_count"] == 1

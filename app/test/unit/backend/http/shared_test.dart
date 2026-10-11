@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -185,10 +186,12 @@ void main() {
       final url = '${env.requestBaseUrl}clock-skew';
       final eventFuture = nextClockSkewEvent();
 
-      final chunks = await makeStreamingApiCall(url: url).toList();
+      await expectLater(
+        makeStreamingApiCall(url: url).toList(),
+        throwsA(isA<ChatStreamException>()),
+      );
       final event = await eventFuture;
 
-      expect(chunks, isEmpty);
       expect(event.skewMinutes, 15);
       expect(requestCount, 1);
     });
@@ -200,10 +203,12 @@ void main() {
       final url = '${env.requestBaseUrl}clock-skew';
       final eventFuture = nextClockSkewEvent();
 
-      final chunks = await makeMultipartStreamingApiCall(url: url, files: [file]).toList();
+      await expectLater(
+        makeMultipartStreamingApiCall(url: url, files: [file]).toList(),
+        throwsA(isA<ChatStreamException>()),
+      );
       final event = await eventFuture;
 
-      expect(chunks, isEmpty);
       expect(event.skewMinutes, 15);
       expect(requestCount, 1);
     });

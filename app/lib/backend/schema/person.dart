@@ -104,6 +104,10 @@ class Person {
     List<String>? speechSamples,
     bool? pinned,
     DateTime? Function()? pinnedAt,
+    int? Function()? conversationCount,
+    DateTime? Function()? lastHeardAt,
+    double? Function()? talkSeconds,
+    int? Function()? autoConversationCount,
   }) {
     return Person(
       id: id,
@@ -115,10 +119,10 @@ class Person {
       speechSamplesVersion: speechSamplesVersion,
       colorIdx: colorIdx,
       voiceReadiness: voiceReadiness,
-      conversationCount: conversationCount,
-      lastHeardAt: lastHeardAt,
-      talkSeconds: talkSeconds,
-      autoConversationCount: autoConversationCount,
+      conversationCount: conversationCount != null ? conversationCount() : this.conversationCount,
+      lastHeardAt: lastHeardAt != null ? lastHeardAt() : this.lastHeardAt,
+      talkSeconds: talkSeconds != null ? talkSeconds() : this.talkSeconds,
+      autoConversationCount: autoConversationCount != null ? autoConversationCount() : this.autoConversationCount,
       pinned: pinned ?? this.pinned,
       pinnedAt: pinnedAt != null ? pinnedAt() : this.pinnedAt,
       confidence: confidence,
@@ -203,4 +207,24 @@ class Person {
   Map<String, dynamic> toJson() {
     return {...toGenerated().toJson(), 'color_idx': colorIdx};
   }
+}
+
+List<Person> preserveCachedPeopleStats(List<Person> incoming, List<Person> cached) {
+  final byId = {for (final person in cached) person.id: person};
+  return incoming.map((person) {
+    final prior = byId[person.id];
+    if (prior == null ||
+        (prior.conversationCount == null &&
+            prior.lastHeardAt == null &&
+            prior.talkSeconds == null &&
+            prior.autoConversationCount == null)) {
+      return person;
+    }
+    return person.copyWith(
+      conversationCount: () => prior.conversationCount,
+      lastHeardAt: () => prior.lastHeardAt,
+      talkSeconds: () => prior.talkSeconds,
+      autoConversationCount: () => prior.autoConversationCount,
+    );
+  }).toList();
 }

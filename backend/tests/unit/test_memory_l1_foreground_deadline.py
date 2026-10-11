@@ -185,7 +185,6 @@ def test_get_llm_gateway_mode_passes_memory_l1_the_foreground_deadline(monkeypat
     _capturing_gateway(monkeypatch, captured)
     monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: True)
     monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
-    monkeypatch.setattr("utils.llm.clients.maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
 
     import utils.llm.clients as clients
 
@@ -195,23 +194,19 @@ def test_get_llm_gateway_mode_passes_memory_l1_the_foreground_deadline(monkeypat
     assert captured["feature"] == "memory_l1"
 
 
-def test_get_llm_direct_route_carries_the_foreground_deadline(monkeypatch):
-    import utils.llm.clients as clients
-
-    monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: False)
-    monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
+def test_get_llm_managed_route_carries_the_foreground_deadline_even_when_optional_gateway_is_off(monkeypatch):
     captured: dict = {}
+    _capturing_gateway(monkeypatch, captured)
+    monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: False)
+    monkeypatch.setattr("utils.llm.clients.should_route_company_paid_features_through_gateway", lambda: True)
+    monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
 
-    def fake_default_client(model, provider, streaming, options=None):
-        captured.update(model=model, provider=provider, options=dict(options or {}))
-        return object()
-
-    monkeypatch.setattr(clients, "get_default_client", fake_default_client)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
+    import utils.llm.clients as clients
 
     clients.get_llm("memory_l1")
 
     assert captured["options"]["request_timeout"] == model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    assert captured["feature"] == "memory_l1"
 
 
 def test_get_llm_byok_gateway_branch_carries_the_foreground_deadline(monkeypatch):
@@ -229,7 +224,6 @@ def test_get_llm_byok_gateway_branch_carries_the_foreground_deadline(monkeypatch
         return object()
 
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm_for_byok", fake_byok_gateway)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
 
     clients.get_llm("memory_l1")
 
@@ -241,7 +235,6 @@ def test_get_llm_background_feature_stays_on_the_gateway_transport_deadline(monk
     _capturing_gateway(monkeypatch, captured)
     monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: True)
     monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
-    monkeypatch.setattr("utils.llm.clients.maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
 
     import utils.llm.clients as clients
 
@@ -255,7 +248,6 @@ def test_an_explicit_request_timeout_still_wins_over_the_route(monkeypatch):
     _capturing_gateway(monkeypatch, captured)
     monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: True)
     monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
-    monkeypatch.setattr("utils.llm.clients.maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
 
     import utils.llm.clients as clients
 

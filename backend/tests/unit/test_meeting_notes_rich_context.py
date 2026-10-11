@@ -22,13 +22,13 @@ from testing.import_isolation import stub_modules  # noqa: E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from models.conversation_enums import ConversationSource  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_gate import should_gather_meeting_context
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     PersonFact,
     PriorMeetingNote,
     render_meeting_context_pack,
-    should_gather_meeting_context,
 )
 from utils.conversations.meeting_participants import (  # noqa: E402
     MeetingRoster,
@@ -399,7 +399,7 @@ class TestNormalizeMeetingParticipants:
 
 class TestRosterPromptPrefix:
     def _build(self, *, roster=None, speaker_map=None, calendar_context=None, desktop_capture=False):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         return build_conversation_prompt_prefix(
             conversation_id='conv-rich',
@@ -519,241 +519,6 @@ class TestRosterPromptPrefix:
             'FULL TRANSCRIPT\n'
             '[s1 0] hello everyone\n[s2 1] hi'
         )
-
-
-class TestRichConversationNotes:
-    def _call(self, monkeypatch, *, payload, meeting_context=None, roster=None, rich_enabled=True):
-        from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-
-        captured: dict = {}
-
-        class Model:
-            def invoke(self, messages):
-                captured['messages'] = messages
-                return SimpleNamespace(content=json.dumps(payload))
-
-        monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: Model())
-        monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
-        prefix = ConversationPromptPrefix(
-            conversation_id='conv-rich',
-            context='CONVERSATION METADATA\n- Captured at: now (UTC)\n\nFULL TRANSCRIPT\nAsh Kalb and Priya Rao met.',
-        )
-        structured = conversation_processing.get_conversation_notes(
-            prefix,
-            started_at=START,
-            language_code='en',
-            output_language_code='en',
-            tz='UTC',
-            task_intelligence_capture=True,
-            meeting_context=meeting_context,
-            rich_context_enabled=rich_enabled,
-            roster=roster,
-        )
-        return structured, captured['messages'], prefix
-
-    def _message_text(self, message) -> str:
-        content = message.content if hasattr(message, 'content') else message['content']
-        if isinstance(content, list):
-            return ''.join(part.get('text', '') for part in content if isinstance(part, dict))
-        return str(content)
-
-    def test_rich_fields_parse_and_validate(self, monkeypatch):
-        roster = _roster(
-            [
-                _entry('David', 'david@acme.com', kind='owner'),
-                _entry('Ash Kalb', 'ash@fulcra.com'),
-            ]
-        )
-        payload = {
-            'title': 'Fulcra Sync',
-            'overview': 'compat',
-            'emoji': '🧠',
-            'category': 'work',
-            'sections': [
-                {'heading': 'Plan', 'body_markdown': '- Decided the date', 'kind': 'main'},
-                {'heading': 'Banter', 'body_markdown': '- Fantasy football tangent', 'kind': 'side_notes'},
-            ],
-            'action_items': [],
-            'events': [],
-            'meeting_type': 'one_on_one',
-            'participants': [
-                {'name': 'David', 'email': 'david@acme.com', 'source': 'roster'},
-                {'name': 'Ash Kalb', 'email': 'ash@fulcra.com', 'source': 'roster'},
-                {'name': 'Nobody Invented', 'source': 'transcript'},
-                {'name': 'Priya Rao', 'source': 'transcript'},
-            ],
-            'insights': [{'text': 'Short insight', 'kind': 'prior_meeting'}],
-        }
-        structured, messages, prefix = self._call(
-            monkeypatch,
-            payload=payload,
-            meeting_context='BACKGROUND CONTEXT (not part of this conversation)\n\nPRIOR MEETINGS\n- met before',
-            roster=roster,
-        )
-        assert structured.meeting_type == 'one_on_one'
-        # Owner dropped; uncorroborated name dropped; roster and transcript names kept.
-        names = [p.name for p in structured.participants]
-        assert names == ['Ash Kalb', 'Priya Rao']
-        assert structured.insights[0].kind == 'prior_meeting'
-        assert structured.sections[-1].kind == 'side_notes'
-        assert structured.sections[-1].heading == 'Side notes'
-        static_text = self._message_text(messages[0])
-        volatile_text = self._message_text(messages[1])
-        # The headed background block and its content live only in the volatile
-        # suffix; the static rules describe it but never carry the payload.
-        assert 'BACKGROUND CONTEXT (not part of this conversation)' in volatile_text
-        assert 'PRIOR MEETINGS' not in static_text
-        assert 'met before' not in static_text
-        assert 'PRIOR MEETINGS' not in prefix.context
-        assert 'meeting_type' in static_text  # rich schema ships in the format instructions
-
-    def test_prompt_split_keeps_legacy_language_out_of_rich(self, monkeypatch):
-        payload = {
-            'title': 't',
-            'overview': 'o',
-            'emoji': '🧠',
-            'category': 'work',
-            'sections': [{'heading': 'h', 'body_markdown': '- b'}],
-            'action_items': [],
-            'events': [],
-        }
-        _, off_messages, _ = self._call(monkeypatch, payload=payload, rich_enabled=False)
-        _, on_messages, prefix = self._call(
-            monkeypatch,
-            payload=payload,
-            meeting_context='BACKGROUND CONTEXT (not part of this conversation)\n\nGOALS\n- ship',
-            roster=_roster([_entry('Ash Kalb', 'ash@fulcra.com')]),
-        )
-        off_text = self._message_text(off_messages[0]) + '\n' + self._message_text(off_messages[1])
-        on_text = self._message_text(on_messages[0]) + '\n' + self._message_text(on_messages[1])
-        on_static = self._message_text(on_messages[0])
-        on_volatile = self._message_text(on_messages[1])
-        assert 'Prefer one or two substantial bullets per section' in off_text
-        assert 'Omit repetition,\n  incidental tangents' in off_text
-        assert 'Prefer one or two substantial bullets per section' not in on_text
-        assert 'Omit repetition,\n  incidental tangents' not in on_text
-        assert 'BACKGROUND CONTEXT (not part of this conversation)' in on_volatile
-        assert 'PRIOR MEETINGS' not in on_static
-        assert 'PRIOR MEETINGS' not in prefix.context
-
-    def test_flag_off_structured_serialization_keeps_legacy_shape(self, monkeypatch):
-        from models.structured import Section
-
-        payload = {
-            'title': 't',
-            'overview': 'o',
-            'emoji': '🧠',
-            'category': 'work',
-            'sections': [{'heading': 'h', 'body_markdown': '- b'}],
-            'action_items': [],
-            'events': [],
-        }
-        structured, _, _ = self._call(monkeypatch, payload=payload, rich_enabled=False)
-        assert set(structured.model_dump()) == {
-            'title',
-            'overview',
-            'emoji',
-            'category',
-            'sections',
-            'action_items',
-            'events',
-        }
-        assert set(Section(heading='h', body_markdown='- b').model_dump()) == {
-            'heading',
-            'body_markdown',
-            'source_segment_ids',
-        }
-
-    def test_legacy_conversation_document_stamps_no_rich_keys(self):
-        from models.conversation import Conversation
-        from models.structured import Section, Structured
-
-        conversation = Conversation(
-            id='c1',
-            created_at=START,
-            started_at=START,
-            finished_at=START + timedelta(minutes=30),
-            structured=Structured(
-                title='t',
-                overview='o',
-                sections=[Section(heading='h', body_markdown='- b')],
-            ),
-        )
-        structured_dump = conversation.model_dump()['structured']
-        assert 'meeting_type' not in structured_dump
-        assert 'participants' not in structured_dump
-        assert 'insights' not in structured_dump
-        assert 'kind' not in structured_dump['sections'][0]
-
-    def test_insights_empty_without_background_and_capped(self, monkeypatch):
-        payload = {
-            'title': 't',
-            'overview': 'o',
-            'emoji': '🧠',
-            'category': 'work',
-            'sections': [],
-            'action_items': [],
-            'events': [],
-            'participants': [],
-            'insights': [{'text': ' '.join(['word'] * 40), 'kind': 'memory'}] * 6,
-        }
-        structured, _, _ = self._call(monkeypatch, payload=payload, meeting_context=None, roster=_roster([]))
-        assert structured.insights == []
-
-        structured, _, _ = self._call(
-            monkeypatch,
-            payload=payload,
-            meeting_context='BACKGROUND CONTEXT (not part of this conversation)\n\nGOALS\n- ship',
-            roster=_roster([]),
-        )
-        assert len(structured.insights) == 4
-        assert all(len(insight.text.split()) <= 30 for insight in structured.insights)
-
-    def test_side_notes_sections_merge_into_one_last_section(self, monkeypatch):
-        payload = {
-            'title': 't',
-            'overview': 'o',
-            'emoji': '🧠',
-            'category': 'work',
-            'sections': [
-                {'heading': 'Plan', 'body_markdown': '- Decided the date', 'kind': 'main'},
-                {'heading': 'Aside', 'body_markdown': '- Keyboard tangent\n- Coffee rec', 'kind': 'side_notes'},
-                {'heading': 'Work', 'body_markdown': '- Scope agreed', 'kind': 'main'},
-                {
-                    'heading': 'More aside',
-                    'body_markdown': '- Book link\n- Keyboard tangent\n- Third\n- Fourth\n- Fifth extra',
-                    'kind': 'side_notes',
-                },
-            ],
-            'action_items': [],
-            'events': [],
-            'participants': [],
-            'insights': [],
-        }
-        structured, _, _ = self._call(monkeypatch, payload=payload, roster=_roster([]))
-        side = [s for s in structured.sections if s.kind == 'side_notes']
-        assert len(side) == 1
-        assert structured.sections[-1].kind == 'side_notes'
-        assert structured.sections[-1].heading == 'Side notes'
-        bullets = [line for line in structured.sections[-1].body_markdown.split('\n') if line.strip()]
-        # Earlier tangents merge in, duplicates collapse, and the cap holds.
-        assert len(bullets) == 4
-        assert '- Coffee rec' in bullets
-        assert '- Book link' in bullets
-        assert bullets.count('- Keyboard tangent') == 1
-
-    def test_render_sections_markdown_puts_side_notes_last(self):
-        from models.structured import Section
-        from utils.conversations.summary_selection import render_sections_markdown
-
-        rendered = render_sections_markdown(
-            [
-                Section(heading='Side notes', body_markdown='- tangent', kind='side_notes'),
-                Section(heading='Plan', body_markdown='- work'),
-            ]
-        )
-        assert rendered.index('## Plan') < rendered.index('## Side notes')
 
 
 class TestMeetingContextPack:
@@ -1029,8 +794,10 @@ class TestRichFailOpen:
             raise ValueError('malformed people document with private details')
 
         monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(
+            wiring.meeting_context_sources(), 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',))
+        )
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
         conversation = SimpleNamespace(source=ConversationSource.omi, external_data={})
         roster, people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
@@ -1060,7 +827,7 @@ class TestRichFailOpen:
         import utils.conversations.meeting_notes_wiring as wiring
 
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError('pack exploded')),
         )
@@ -1070,7 +837,7 @@ class TestRichFailOpen:
             is None
         )
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: MeetingContextPack(goals=('g',)),
         )
@@ -1096,9 +863,6 @@ class TestRichFailOpen:
         def boom(*a, **k):
             raise ValueError('malformed legacy data')
 
-        monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: True)
-        monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: True)
-        monkeypatch.setattr(pc, '_meeting_notes_screen_text_context_enabled', lambda: False)
         monkeypatch.setattr(pc, '_proposes_task_candidates', lambda conversation: False)
         monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
         monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
@@ -1106,10 +870,12 @@ class TestRichFailOpen:
         monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
         monkeypatch.setattr(pc, 'validate_structured_source_segment_ids', lambda *a, **k: None)
         monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(
+            wiring.meeting_context_sources(), 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',))
+        )
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
-        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', boom)
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'gather_meeting_context_pack', boom)
 
         captured = {}
 
@@ -1154,36 +920,3 @@ def test_rich_prompt_anchors_still_match_legacy_wording():
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
     assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text
-
-
-def test_participant_names_corroborated_by_screen_background_are_kept():
-    from models.structured import Participant, Structured
-    from utils.llm.meeting_notes_validation import validate_rich_meeting_notes
-
-    roster = normalize_meeting_participants(
-        _context(
-            [MeetingParticipant(email='someone@duck.com'), MeetingParticipant(name='Boardy Boardman')],
-            title='Meet - abc-defg-hij',
-            source='screen_activity',
-            platform='Google Meet',
-        ),
-        ConversationSource.desktop,
-        owner_name='David Zhang',
-        owner_emails=['david@acme.com'],
-        people=[],
-    )
-    structured = Structured(
-        participants=[
-            Participant(name='Priya Raman', role='Founding-engineer candidate', source='roster'),
-            Participant(name='Invented Person', role='guess', source='transcript'),
-        ]
-    )
-    background = 'BACKGROUND CONTEXT\nSCREEN ACTIVITY\nWindows open during the meeting:\n- Google Chrome | Priya Raman | LinkedIn'
-    validated = validate_rich_meeting_notes(
-        structured,
-        transcript_body='hello there',
-        roster=roster,
-        has_background_context=True,
-        background_body=background,
-    )
-    assert [p.name for p in validated.participants] == ['Priya Raman']

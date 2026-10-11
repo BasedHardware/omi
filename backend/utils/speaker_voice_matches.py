@@ -83,6 +83,7 @@ def _conversation_matches(
     ignored: set,
     deadline: float,
     limit: int,
+    competitors: dict[str, np.ndarray],
 ) -> list[VoiceMatch]:
     """One storage worker; never compute embeddings, download audio, or write."""
     conversation_id = conversation['id']
@@ -137,9 +138,16 @@ def _conversation_matches(
         pooled = unit_voice_vector(np.sum(weighted, axis=0))
         if pooled is None:
             continue
-        distance = voice_cosine_distance(pooled, voiceprint)
-        if not select_speaker_match({person_id: distance}, threshold=VOICE_MATCH_THRESHOLD).accepted:
+        distances = {
+            identity: voice_cosine_distance(pooled, vector)
+            for identity, vector in competitors.items()
+            if vector.shape == pooled.shape
+        }
+        distances[person_id] = voice_cosine_distance(pooled, voiceprint)
+        decision = select_speaker_match(distances, threshold=VOICE_MATCH_THRESHOLD)
+        if decision.person_id != person_id:
             continue
+        distance = decision.best_distance
         durations = [max(0.0, float(s.get('end') or 0) - float(s.get('start') or 0)) for s in segments]
         longest = segments[max(range(len(segments)), key=lambda index: durations[index])]
         clip_start = max(0.0, float(longest.get('start') or 0))
@@ -164,6 +172,25 @@ def _conversation_matches(
     return matches
 
 
+def _competing_voiceprints(uid: str) -> dict[str, np.ndarray]:
+    """Called only after the request entitlement; include owner and usable people."""
+    prints = {}
+    # 'user' is the owner identity that select_speaker_match reserves.
+    competitors = [('user', users_db.get_user_speaker_embedding(uid))]
+    competitors += [(person.get('id'), usable_person_voiceprint(person)) for person in users_db.get_people(uid) or []]
+    for identity, raw in competitors:
+        if raw is None:
+            continue
+        try:
+            vector = unit_voice_vector(raw)
+        except (TypeError, ValueError):
+            # One unusable stored embedding must not 500 the whole scan.
+            continue
+        if vector is not None:
+            prints[identity] = vector
+    return prints
+
+
 async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesResponse:
     deadline = time.monotonic() + SCAN_SECONDS
     now = datetime.now(timezone.utc)
@@ -172,12 +199,15 @@ async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesRes
         person = await _read(db_executor, partial(users_db.get_person, uid, person_id), deadline)
         if person is None:
             raise LookupError('Person not found')
+        if not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
+            return VoiceMatchesResponse()
         raw_print = usable_person_voiceprint(person)
         if raw_print is None:
             return VoiceMatchesResponse()
         voiceprint = unit_voice_vector(raw_print)
-        if voiceprint is None or not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
+        if voiceprint is None:
             return VoiceMatchesResponse()
+        competitors = await _read(db_executor, partial(_competing_voiceprints, uid), deadline)
         ignored = await _read(db_executor, partial(_ignored_voices, uid), deadline)
         conversations = await _read(db_executor, partial(_recent_conversations, uid, now), deadline)
         for conversation in conversations:
@@ -192,6 +222,7 @@ async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesRes
                     ignored,
                     deadline,
                     MAX_MATCHES - len(matches),
+                    competitors,
                 ),
                 deadline,
             )

@@ -57,14 +57,10 @@ Wiring and defaults only — no new product surface:
    the landing object: the chat surface opens on the postcard when a new
    summary exists (arm-gated INV-CHAT-2 admission seed), and the hub stage
    leads with the postcard section. Chat remains fully available.
-2. **Interject on**, through the existing merged flag path
-   (`desktop_interject` / `desktop_interject_kill`): armed users get
-   Interject == (arm == memory_v1); the fleet kill switch still disarms
-   every arm.
-3. **Director starved.** The context-director pipeline
-   (`ContextBucketsFeature.isEnabled`) returns false for this arm — the
-   existing gate, not a new director. JIT memory processing is untouched.
-4. **Generic web Q&A starved** in the agent prompt: a memory-identity
+2. **Retired treatments.** Interject and the context director were removed in
+   the 2026-10-03 proactivity v2 cut. Their treatment and flag overrides no longer
+   exist. The shared JIT canonical-memory authority remains unchanged.
+3. **Generic web Q&A starved** in the agent prompt: a memory-identity
    response instruction (answers not requiring the user's day are one short
    sentence pointing back to their day) plus no public-web routing prefix
    in the agent runtime. Personal retrieval (memories, conversations,

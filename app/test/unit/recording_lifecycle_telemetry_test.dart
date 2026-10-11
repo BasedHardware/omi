@@ -56,6 +56,7 @@ void main() {
     telemetry.complete();
 
     expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
       RecordingLifecycleTelemetry.startedEvent,
       RecordingLifecycleTelemetry.completedEvent,
     ]);
@@ -156,8 +157,11 @@ void main() {
     telemetry.prepare(source: 'phone_mic_batch');
     telemetry.failStart(failureClass: 'permission_denied');
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties, {
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties, {
       'recording_id': 'recording-denied',
       'recording_source': 'phone_mic_batch',
       'failure_class': 'permission_denied',
@@ -174,8 +178,11 @@ void main() {
     telemetry.prepare(source: 'pendant_live');
     telemetry.failStart(failureClass: 'capture_unavailable');
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties, {
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties, {
       'recording_id': 'recording-unavailable',
       'recording_source': 'pendant_live',
       'failure_class': 'capture_unavailable',
@@ -192,8 +199,21 @@ void main() {
     telemetry.prepare(source: 'pendant_live');
     telemetry.complete();
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties['failure_class'], 'pipeline_closed');
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties['failure_class'], 'pipeline_closed');
+  });
+
+  test('silent capture remains an attempted recording and repeated prepare is idempotent', () {
+    final events = <String>[];
+    final telemetry = RecordingLifecycleTelemetry(emitter: (name, _) => events.add(name));
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.subscriptionFailed();
+    telemetry.complete();
+    expect(events, ['Recording Requested', 'Recording Subscription Failed', 'Recording Start Failed']);
   });
 
   test('the recording UUID is attached to the authoritative listen request', () {

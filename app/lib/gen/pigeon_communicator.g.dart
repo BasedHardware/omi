@@ -24,18 +24,20 @@ List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty
   }
   return <Object?>[error.code, error.message, error.details];
 }
-
 bool _deepEquals(Object? a, Object? b) {
   if (a is List && b is List) {
-    return a.length == b.length && a.indexed.every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
+    return a.length == b.length &&
+        a.indexed
+        .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
   }
   if (a is Map && b is Map) {
-    return a.length == b.length &&
-        a.entries.every((MapEntry<Object?, Object?> entry) =>
-            (b as Map<Object?, Object?>).containsKey(entry.key) && _deepEquals(entry.value, b[entry.key]));
+    return a.length == b.length && a.entries.every((MapEntry<Object?, Object?> entry) =>
+        (b as Map<Object?, Object?>).containsKey(entry.key) &&
+        _deepEquals(entry.value, b[entry.key]));
   }
   return a == b;
 }
+
 
 /// Discovered BLE peripheral info passed from native to Dart.
 class BlePeripheral {
@@ -64,8 +66,7 @@ class BlePeripheral {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BlePeripheral decode(Object result) {
     result as List<Object?>;
@@ -91,7 +92,8 @@ class BlePeripheral {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// Discovered BLE service with its characteristic UUIDs.
@@ -113,8 +115,7 @@ class BleService {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BleService decode(Object result) {
     result as List<Object?>;
@@ -138,7 +139,8 @@ class BleService {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// A single disconnect event stored in native preferences.
@@ -207,8 +209,7 @@ class BleDisconnectEvent {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BleDisconnectEvent decode(Object result) {
     result as List<Object?>;
@@ -240,7 +241,8 @@ class BleDisconnectEvent {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// A single battery level reading persisted by the native BLE layer.
@@ -262,8 +264,7 @@ class BleBatteryPoint {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BleBatteryPoint decode(Object result) {
     result as List<Object?>;
@@ -287,7 +288,8 @@ class BleBatteryPoint {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// Diagnostics data read from native preferences on demand.
@@ -330,8 +332,7 @@ class BleDeviceDiagnostics {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BleDeviceDiagnostics decode(Object result) {
     result as List<Object?>;
@@ -359,7 +360,8 @@ class BleDeviceDiagnostics {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// A pair of Ray-Ban Meta glasses reported by the Meta Wearables toolkit.
@@ -381,8 +383,7 @@ class RayBanMetaGlasses {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static RayBanMetaGlasses decode(Object result) {
     result as List<Object?>;
@@ -406,7 +407,8 @@ class RayBanMetaGlasses {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// A Bluetooth Hands-Free Profile input exposed by iOS.
@@ -428,8 +430,7 @@ class BluetoothHfpInput {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static BluetoothHfpInput decode(Object result) {
     result as List<Object?>;
@@ -453,8 +454,10 @@ class BluetoothHfpInput {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList());
+  int get hashCode => Object.hashAll(_toList())
+;
 }
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -463,25 +466,25 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is BlePeripheral) {
+    }    else if (value is BlePeripheral) {
       buffer.putUint8(129);
       writeValue(buffer, value.encode());
-    } else if (value is BleService) {
+    }    else if (value is BleService) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    } else if (value is BleDisconnectEvent) {
+    }    else if (value is BleDisconnectEvent) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is BleBatteryPoint) {
+    }    else if (value is BleBatteryPoint) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is BleDeviceDiagnostics) {
+    }    else if (value is BleDeviceDiagnostics) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is RayBanMetaGlasses) {
+    }    else if (value is RayBanMetaGlasses) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is BluetoothHfpInput) {
+    }    else if (value is BluetoothHfpInput) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
     } else {
@@ -526,15 +529,15 @@ class WatchRecorderHostAPI {
   final String pigeonVar_messageChannelSuffix;
 
   Future<void> startRecording() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.startRecording$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.startRecording$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -549,15 +552,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> stopRecording() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.stopRecording$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.stopRecording$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -572,15 +575,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> sendAudioData(Uint8List audioData) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.sendAudioData$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.sendAudioData$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audioData]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -595,16 +598,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> sendAudioChunk(Uint8List audioChunk, int chunkIndex, bool isLast, double sampleRate) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.sendAudioChunk$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.sendAudioChunk$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[audioChunk, chunkIndex, isLast, sampleRate]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[audioChunk, chunkIndex, isLast, sampleRate]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -619,15 +621,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<bool> isWatchPaired() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchPaired$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchPaired$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -647,15 +649,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<bool> isWatchReachable() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchReachable$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchReachable$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -675,15 +677,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<bool> isWatchSessionSupported() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchSessionSupported$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchSessionSupported$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -703,15 +705,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<bool> isWatchAppInstalled() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchAppInstalled$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.isWatchAppInstalled$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -731,15 +733,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> requestWatchMicrophonePermission() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestWatchMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestWatchMicrophonePermission$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -754,15 +756,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> requestMainAppMicrophonePermission() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -777,15 +779,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<bool> checkMainAppMicrophonePermission() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.checkMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.checkMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -805,15 +807,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<double> getWatchBatteryLevel() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchBatteryLevel$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchBatteryLevel$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -833,15 +835,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<int> getWatchBatteryState() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchBatteryState$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchBatteryState$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -861,15 +863,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<void> requestWatchBatteryUpdate() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestWatchBatteryUpdate$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.requestWatchBatteryUpdate$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -884,15 +886,15 @@ class WatchRecorderHostAPI {
   }
 
   Future<Map<String, String>> getWatchInfo() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchInfo$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.WatchRecorderHostAPI.getWatchInfo$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -931,16 +933,11 @@ abstract class WatchRecorderFlutterAPI {
 
   void onWatchBatteryUpdate(double batteryLevel, int batteryState);
 
-  static void setUp(
-    WatchRecorderFlutterAPI? api, {
-    BinaryMessenger? binaryMessenger,
-    String messageChannelSuffix = '',
-  }) {
+  static void setUp(WatchRecorderFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingStarted$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingStarted$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -951,7 +948,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -959,8 +956,7 @@ abstract class WatchRecorderFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingStopped$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingStopped$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -971,7 +967,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -986,7 +982,7 @@ abstract class WatchRecorderFlutterAPI {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onAudioData was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onAudioData was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_audioData = (args[0] as Uint8List?);
           assert(arg_audioData != null,
@@ -996,7 +992,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1011,7 +1007,7 @@ abstract class WatchRecorderFlutterAPI {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onAudioChunk was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onAudioChunk was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_audioChunk = (args[0] as Uint8List?);
           assert(arg_audioChunk != null,
@@ -1030,7 +1026,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1038,15 +1034,14 @@ abstract class WatchRecorderFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingError$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingError$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingError was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onRecordingError was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_error = (args[0] as String?);
           assert(arg_error != null,
@@ -1056,7 +1051,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1064,15 +1059,14 @@ abstract class WatchRecorderFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMicrophonePermissionResult$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMicrophonePermissionResult$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMicrophonePermissionResult was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMicrophonePermissionResult was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final bool? arg_granted = (args[0] as bool?);
           assert(arg_granted != null,
@@ -1082,7 +1076,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1090,15 +1084,14 @@ abstract class WatchRecorderFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final bool? arg_granted = (args[0] as bool?);
           assert(arg_granted != null,
@@ -1108,7 +1101,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1116,15 +1109,14 @@ abstract class WatchRecorderFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final double? arg_batteryLevel = (args[0] as double?);
           assert(arg_batteryLevel != null,
@@ -1137,7 +1129,7 @@ abstract class WatchRecorderFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1161,15 +1153,15 @@ class BleHostApi {
   final String pigeonVar_messageChannelSuffix;
 
   Future<void> startScan(int timeoutSeconds, List<String> serviceUuids) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.startScan$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.startScan$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[timeoutSeconds, serviceUuids]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1184,15 +1176,15 @@ class BleHostApi {
   }
 
   Future<void> stopScan() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.stopScan$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.stopScan$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1207,15 +1199,15 @@ class BleHostApi {
   }
 
   Future<void> manageDevice(String uuid, bool requiresBond) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.manageDevice$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.manageDevice$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid, requiresBond]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1230,15 +1222,15 @@ class BleHostApi {
   }
 
   Future<void> unmanageDevice(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1253,15 +1245,15 @@ class BleHostApi {
   }
 
   Future<bool> requestBond(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1281,16 +1273,15 @@ class BleHostApi {
   }
 
   Future<Uint8List> readCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.readCharacteristic$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.readCharacteristic$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1309,18 +1300,16 @@ class BleHostApi {
     }
   }
 
-  Future<void> writeCharacteristic(
-      String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.writeCharacteristic$pigeonVar_messageChannelSuffix';
+  Future<void> writeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.writeCharacteristic$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid, data]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid, data]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1335,16 +1324,15 @@ class BleHostApi {
   }
 
   Future<void> subscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.subscribeCharacteristic$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.subscribeCharacteristic$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1359,16 +1347,39 @@ class BleHostApi {
   }
 
   Future<void> unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.unsubscribeCharacteristic$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unsubscribeCharacteristic$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[peripheralUuid, serviceUuid, characteristicUuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  Future<void> setCaptureAuthorized(String uuid, bool authorized) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.setCaptureAuthorized$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid, authorized]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1383,15 +1394,15 @@ class BleHostApi {
   }
 
   Future<String> getBluetoothState() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBluetoothState$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBluetoothState$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1413,15 +1424,15 @@ class BleHostApi {
   /// (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
   /// once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
   Future<bool> enableBluetooth() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.enableBluetooth$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.enableBluetooth$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1441,15 +1452,15 @@ class BleHostApi {
   }
 
   Future<bool> isPeripheralConnected(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1469,15 +1480,15 @@ class BleHostApi {
   }
 
   Future<void> startRssiStreaming(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.startRssiStreaming$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.startRssiStreaming$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1492,15 +1503,15 @@ class BleHostApi {
   }
 
   Future<void> stopRssiStreaming(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.stopRssiStreaming$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.stopRssiStreaming$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1515,15 +1526,15 @@ class BleHostApi {
   }
 
   Future<BleDeviceDiagnostics> getDeviceDiagnostics(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.getDeviceDiagnostics$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getDeviceDiagnostics$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1544,15 +1555,15 @@ class BleHostApi {
 
   /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
   Future<String> getExtendedDeviceDiagnostics(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1572,15 +1583,15 @@ class BleHostApi {
   }
 
   Future<List<BleBatteryPoint>> getBatteryHistory(String uuid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1601,15 +1612,15 @@ class BleHostApi {
 
   /// (Android only) Check if any CompanionDeviceManager association exists.
   Future<bool> hasCompanionDeviceAssociation() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1630,15 +1641,15 @@ class BleHostApi {
 
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   Future<String> requestCompanionDeviceAssociation(String deviceAddress) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[deviceAddress]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1669,34 +1680,31 @@ abstract class BleFlutterApi {
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
 
-  void onCharacteristicValueUpdated(
-      String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
+  void onCharacteristicValueUpdated(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
 
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
 
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  void onCaptureHealth(String peripheralUuid, String snapshot);
+
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
 
-  static void setUp(
-    BleFlutterApi? api, {
-    BinaryMessenger? binaryMessenger,
-    String messageChannelSuffix = '',
-  }) {
+  static void setUp(BleFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBluetoothStateChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBluetoothStateChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBluetoothStateChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBluetoothStateChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_state = (args[0] as String?);
           assert(arg_state != null,
@@ -1706,7 +1714,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1721,7 +1729,7 @@ abstract class BleFlutterApi {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDiscovered was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDiscovered was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final BlePeripheral? arg_peripheral = (args[0] as BlePeripheral?);
           assert(arg_peripheral != null,
@@ -1731,7 +1739,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1745,7 +1753,8 @@ abstract class BleFlutterApi {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null, 'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady was null.');
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_peripheralUuid = (args[0] as String?);
           assert(arg_peripheralUuid != null,
@@ -1758,7 +1767,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1766,15 +1775,14 @@ abstract class BleFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_peripheralUuid = (args[0] as String?);
           assert(arg_peripheralUuid != null,
@@ -1785,7 +1793,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1793,15 +1801,14 @@ abstract class BleFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_peripheralUuid = (args[0] as String?);
           assert(arg_peripheralUuid != null,
@@ -1816,12 +1823,11 @@ abstract class BleFlutterApi {
           assert(arg_value != null,
               'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated was null, expected non-null Uint8List.');
           try {
-            api.onCharacteristicValueUpdated(
-                arg_peripheralUuid!, arg_serviceUuid!, arg_characteristicUuid!, arg_value!);
+            api.onCharacteristicValueUpdated(arg_peripheralUuid!, arg_serviceUuid!, arg_characteristicUuid!, arg_value!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1835,7 +1841,8 @@ abstract class BleFlutterApi {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null, 'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate was null.');
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_peripheralUuid = (args[0] as String?);
           assert(arg_peripheralUuid != null,
@@ -1848,7 +1855,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1862,7 +1869,8 @@ abstract class BleFlutterApi {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null, 'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored was null.');
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final List<String>? arg_peripheralUuids = (args[0] as List<Object?>?)?.cast<String>();
           assert(arg_peripheralUuids != null,
@@ -1872,7 +1880,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1880,15 +1888,42 @@ abstract class BleFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_peripheralUuid = (args[0] as String?);
+          assert(arg_peripheralUuid != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth was null, expected non-null String.');
+          final String? arg_snapshot = (args[1] as String?);
+          assert(arg_snapshot != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth was null, expected non-null String.');
+          try {
+            api.onCaptureHealth(arg_peripheralUuid!, arg_snapshot!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_fileName = (args[0] as String?);
           assert(arg_fileName != null,
@@ -1898,7 +1933,7 @@ abstract class BleFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1928,15 +1963,15 @@ class RayBanMetaHostAPI {
   /// 'full' (DAT SDK linked + Meta app credentials configured),
   /// 'audio_only' (no DAT — platform Bluetooth audio route only), or 'none'.
   Future<String> getAvailabilityMode() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailabilityMode$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailabilityMode$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1956,15 +1991,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> initialize() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.initialize$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.initialize$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -1980,15 +2015,15 @@ class RayBanMetaHostAPI {
 
   /// 'unregistered' | 'registering' | 'registered' ('unavailable' without DAT).
   Future<String> getRegistrationState() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getRegistrationState$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getRegistrationState$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2009,15 +2044,15 @@ class RayBanMetaHostAPI {
 
   /// Launches the Meta AI companion app to authorize this app for the glasses.
   Future<void> startRegistration() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startRegistration$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startRegistration$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2032,15 +2067,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> unregister() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.unregister$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.unregister$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2055,15 +2090,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<List<RayBanMetaGlasses>> getAvailableGlasses() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailableGlasses$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailableGlasses$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2083,15 +2118,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> connect(String deviceId) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.connect$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.connect$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[deviceId]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2106,15 +2141,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> disconnect() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.disconnect$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.disconnect$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2130,15 +2165,15 @@ class RayBanMetaHostAPI {
 
   /// 'disconnected' | 'connecting' | 'connected'.
   Future<String> getConnectionState() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getConnectionState$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getConnectionState$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2159,15 +2194,15 @@ class RayBanMetaHostAPI {
 
   /// DAT camera permission for the glasses: resolves 'granted' | 'denied'.
   Future<String> requestCameraPermission() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.requestCameraPermission$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.requestCameraPermission$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2188,15 +2223,15 @@ class RayBanMetaHostAPI {
 
   /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
   Future<String> getCameraPermissionStatus() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2218,15 +2253,15 @@ class RayBanMetaHostAPI {
   /// Starts capturing the glasses microphone over the Bluetooth HFP route and
   /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
   Future<void> startAudioCapture(String? inputUid) async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[inputUid]);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2241,15 +2276,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> stopAudioCapture() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopAudioCapture$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopAudioCapture$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2265,15 +2300,15 @@ class RayBanMetaHostAPI {
 
   /// True when the active audio input route is the glasses' Bluetooth HFP mic.
   Future<bool> isGlassesAudioRouteActive() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.isGlassesAudioRouteActive$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.isGlassesAudioRouteActive$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2296,15 +2331,15 @@ class RayBanMetaHostAPI {
   /// fallback when the DAT SDK is not part of this build. The UID is the
   /// stable identity; the user-visible name may change.
   Future<List<BluetoothHfpInput>> getBluetoothHfpInputs() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputs$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputs$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2326,15 +2361,15 @@ class RayBanMetaHostAPI {
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).
   Future<void> startCamera() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2349,15 +2384,15 @@ class RayBanMetaHostAPI {
   }
 
   Future<void> stopCamera() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopCamera$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopCamera$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2373,15 +2408,15 @@ class RayBanMetaHostAPI {
 
   /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
   Future<void> capturePhoto() async {
-    final String pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.capturePhoto$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.capturePhoto$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -2422,23 +2457,18 @@ abstract class RayBanMetaFlutterAPI {
 
   void onError(String code, String message);
 
-  static void setUp(
-    RayBanMetaFlutterAPI? api, {
-    BinaryMessenger? binaryMessenger,
-    String messageChannelSuffix = '',
-  }) {
+  static void setUp(RayBanMetaFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_state = (args[0] as String?);
           assert(arg_state != null,
@@ -2448,7 +2478,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2456,15 +2486,14 @@ abstract class RayBanMetaFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final RayBanMetaGlasses? arg_glasses = (args[0] as RayBanMetaGlasses?);
           assert(arg_glasses != null,
@@ -2474,7 +2503,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2482,15 +2511,14 @@ abstract class RayBanMetaFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_deviceId = (args[0] as String?);
           assert(arg_deviceId != null,
@@ -2503,7 +2531,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2518,7 +2546,7 @@ abstract class RayBanMetaFlutterAPI {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_pcm16Frame = (args[0] as Uint8List?);
           assert(arg_pcm16Frame != null,
@@ -2531,7 +2559,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2539,15 +2567,14 @@ abstract class RayBanMetaFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final bool? arg_glassesRouteActive = (args[0] as bool?);
           assert(arg_glassesRouteActive != null,
@@ -2557,7 +2584,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2572,7 +2599,7 @@ abstract class RayBanMetaFlutterAPI {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_jpegBytes = (args[0] as Uint8List?);
           assert(arg_jpegBytes != null,
@@ -2585,7 +2612,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2593,15 +2620,14 @@ abstract class RayBanMetaFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_state = (args[0] as String?);
           assert(arg_state != null,
@@ -2611,7 +2637,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2619,15 +2645,14 @@ abstract class RayBanMetaFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged$messageChannelSuffix',
-          pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_status = (args[0] as String?);
           assert(arg_status != null,
@@ -2637,7 +2662,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -2651,7 +2676,8 @@ abstract class RayBanMetaFlutterAPI {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null, 'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError was null.');
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_code = (args[0] as String?);
           assert(arg_code != null,
@@ -2664,7 +2690,7 @@ abstract class RayBanMetaFlutterAPI {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });

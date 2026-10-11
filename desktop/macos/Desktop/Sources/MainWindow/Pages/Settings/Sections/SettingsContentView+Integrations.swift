@@ -62,7 +62,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             } else {
-              Text("Reads recent emails using browser cookies — no OAuth needed")
+              Text("Reads your recent email through your signed-in browser. No separate Google sign-in needed.")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             }
@@ -254,7 +254,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             } else {
-              Text("Reads Google Calendar using browser cookies — no OAuth needed")
+              Text("Reads your Google Calendar through your signed-in browser. No separate Google sign-in needed.")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             }

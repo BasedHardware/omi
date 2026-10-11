@@ -31,10 +31,7 @@ void main() {
     await File('${stale.path}/chunk.part').writeAsString('partial');
     final staleB = await _exportDir(tempRoot, _uuidB);
 
-    final deleted = await cleanupStaleExportDirectories(
-      tempRoot,
-      now: DateTime.now().add(const Duration(days: 2)),
-    );
+    final deleted = await cleanupStaleExportDirectories(tempRoot, now: DateTime.now().add(const Duration(days: 2)));
 
     expect(deleted, 2);
     expect(await stale.exists(), isFalse);
@@ -58,10 +55,7 @@ void main() {
     final target = await _exportDir(tempRoot, 'real-target');
     await Link('${tempRoot.path}/$_uuidA').create(target.path);
 
-    final deleted = await cleanupStaleExportDirectories(
-      tempRoot,
-      now: DateTime.now().add(const Duration(days: 2)),
-    );
+    final deleted = await cleanupStaleExportDirectories(tempRoot, now: DateTime.now().add(const Duration(days: 2)));
 
     expect(deleted, 0);
     expect(await FileSystemEntity.isLink('${tempRoot.path}/$_uuidA'), isTrue);
@@ -97,10 +91,7 @@ void main() {
 
   test('deletion budget bounds a single sweep', () async {
     for (var i = 0; i < 6; i++) {
-      await _exportDir(
-        tempRoot,
-        'omi-export-11111111-2222-4333-8444-${i.toString().padLeft(12, '0')}',
-      );
+      await _exportDir(tempRoot, 'omi-export-11111111-2222-4333-8444-${i.toString().padLeft(12, '0')}');
     }
 
     final deleted = await cleanupStaleExportDirectories(
@@ -145,15 +136,9 @@ void main() {
     await _exportDir(tempRoot, 'omi-export-11111111-2222-1333-8444-555555555555');
     await _exportDir(tempRoot, _uuidC);
 
-    final deleted = await cleanupStaleExportDirectories(
-      tempRoot,
-      now: DateTime.now().add(const Duration(days: 2)),
-    );
+    final deleted = await cleanupStaleExportDirectories(tempRoot, now: DateTime.now().add(const Duration(days: 2)));
 
     expect(deleted, 1);
-    expect(
-      await Directory('${tempRoot.path}/omi-export-11111111-2222-1333-8444-555555555555').exists(),
-      isTrue,
-    );
+    expect(await Directory('${tempRoot.path}/omi-export-11111111-2222-1333-8444-555555555555').exists(), isTrue);
   });
 }

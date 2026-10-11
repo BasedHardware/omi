@@ -269,7 +269,12 @@ def trigger_matches(pattern: str, path: str) -> bool:
         return True
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
-    if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
+    if fnmatch.fnmatchcase(path, pattern):
+        return True
+    # Path.match treats a slash-free pattern as a final-component glob, so a
+    # trigger written as `package.json` also selects `web/frontend/package.json`.
+    # A literal trigger names one repo path. Glob patterns still use Path.match.
+    if ("/" in pattern or glob.has_magic(pattern)) and PurePath(path).match(pattern):
         return True
     if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
         return True

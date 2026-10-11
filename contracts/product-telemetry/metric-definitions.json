@@ -10,7 +10,7 @@
   "isolation": ["namespace", "environment", "app_build", "platform"],
   "metrics": {
     "journey_reliability": {
-      "definition": "successful Product Journey Outcome divided by Product Journey Started attempts",
+      "definition": "successful Product Journey Outcome divided by Product Journey Started attempts or recording attempts anchored on Recording Requested (Recording Started or Phone Mic Recording Started for historical clients); deduplicated by attempt identity",
       "outcomes": ["success", "empty", "failure", "cancelled", "superseded", "unobserved"],
       "policy": "Recording Completed alone proves neither server persistence nor usable content; native batch observation gaps are unknown"
     },
@@ -21,7 +21,7 @@
       "definition": "started attempts older than one hour without an outcome, or explicitly unobserved"
     },
     "time_to_first_result_ms": {
-      "definition": "event-time latency from Product Journey Started to Product Journey First Result"
+      "definition": "event-time latency from Product Journey Started or Recording Requested to Product Journey First Result; Recording Started or Phone Mic Recording Started is the historical recording fallback, independent of export row order"
     },
     "activation_rate": {
       "definition": "signed-up users with a Product Value event"
@@ -60,10 +60,10 @@
       "definition": "mean duration to the first post-frame callback for bounded named surfaces"
     },
     "capture_audio_observation_rate": {
-      "definition": "recording sessions with an explicit audio observation divided by recording sessions that emitted Recording Started"
+      "definition": "recording sessions with an explicit audio observation divided by recording attempts emitting Recording Requested, with Recording Started or Phone Mic Recording Started as the historical fallback, deduplicated by recording identity"
     },
     "capture_transcript_observation_rate": {
-      "definition": "recording sessions with an explicit transcript observation divided by recording sessions that emitted Recording Started"
+      "definition": "recording sessions with an explicit transcript observation divided by recording attempts emitting Recording Requested, with Recording Started or Phone Mic Recording Started as the historical fallback, deduplicated by recording identity"
     },
     "recording_conversation_linkage": {
       "definition": "recording sessions with an explicit conversation_id/object_id join divided by recording sessions observed",

@@ -8,7 +8,7 @@ import os
 import asyncio
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -26,9 +26,10 @@ from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import background_wipe_user_data, start_account_deletion
+from services.users.account_deletion import run_deletion_wipe_with_lease, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
+from database.conversation_scan import conversation_scan_budget, people_stats_scan
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -54,6 +55,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
+from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -122,7 +124,7 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -139,12 +141,14 @@ from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
+from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
     get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
+from utils.people_stats import apply_people_stats, collect_people_stats
 from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
@@ -359,13 +363,7 @@ async def run_account_deletion_wipe(
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        ok = await run_blocking(
-            cleanup_executor,
-            background_wipe_user_data,
-            uid,
-            task_authentication.retry_count,
-            terminal,
-        )
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 
@@ -574,14 +572,14 @@ class OnboardingStateUpdate(BaseModel):
 @router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
 def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
-    current_state = get_user_onboarding_state(uid)
+    updates = {}
     if data.completed is not None:
-        current_state['completed'] = data.completed
+        updates['completed'] = data.completed
     if data.acquisition_source is not None:
-        current_state['acquisition_source'] = data.acquisition_source
+        updates['acquisition_source'] = data.acquisition_source
     if data.device_onboarding_completed is not None:
-        current_state['device_onboarding_completed'] = data.device_onboarding_completed
-    set_user_onboarding_state(uid, current_state)
+        updates['device_onboarding_completed'] = data.device_onboarding_completed
+    set_user_onboarding_state(uid, updates)
     return {'status': 'ok'}
 
 
@@ -655,16 +653,17 @@ def get_all_people(
     include_speech_samples: bool = True,
     include_stats: bool = False,
     uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     logger.info(f'get_all_people {include_speech_samples}')
+    budget = conversation_scan_budget(request, route='people-stats') if include_stats else None
     people = Person.deserialize_many_safe(get_people(uid))
     if include_stats and people:
-        from utils.people_stats import apply_people_stats, collect_people_stats
-
-        stats = collect_people_stats(
-            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
-        )
+        stats = collect_people_stats(people_stats_scan(uid, budget=budget), uid=uid, budget=budget)
         apply_people_stats(people, stats)
+    if budget is not None:
+        finish_list_budget(response, budget)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -1595,11 +1594,19 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 class DailySummarySettingsResponse(BaseModel):
     enabled: bool
     hour: int  # Local hour (0-23) in user's timezone
+    depth: DailySummaryDepth = DEFAULT_DAILY_SUMMARY_DEPTH
 
 
 class DailySummarySettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+    depth: Optional[DailySummaryDepth] = None
+
+
+class DailySummarySettingsUpdateResponse(UserStatusResponse):
+    # An echo lets a new desktop client detect an older backend that silently
+    # ignores the additive PATCH field instead of falsely claiming it was saved.
+    depth: Optional[DailySummaryDepth] = None
 
 
 @router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
@@ -1610,6 +1617,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     Returns:
         - enabled: Whether daily summary notifications are enabled (default: True)
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+        - depth: Recap detail level (brief by default)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
     local_hour = notification_db.get_daily_summary_hour_local(uid)
@@ -1618,10 +1626,12 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     if local_hour is None:
         local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
 
-    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+    return DailySummarySettingsResponse(
+        enabled=enabled, hour=local_hour, depth=notification_db.get_daily_summary_depth(uid)
+    )
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsUpdateResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1630,6 +1640,7 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         - enabled: Enable/disable daily summary notifications
         - hour: Preferred hour in local timezone (0-23).
                 Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+        - depth: brief, normal, or deep for newly generated recaps
 
     Note: Hour is stored as local time. The system determines when to send
     based on the user's timezone and will send the summary at the correct local time
@@ -1647,7 +1658,10 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
             logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
             raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
-    return {'status': 'ok'}
+    if data.depth is not None:
+        notification_db.set_daily_summary_depth(uid, data.depth)
+
+    return {'status': 'ok', 'depth': data.depth}
 
 
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):

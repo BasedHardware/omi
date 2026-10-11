@@ -89,6 +89,41 @@ def assert_public_http_url(url: str) -> str:
     return first_safe_ip
 
 
+def assert_public_http_url_all(url: str) -> list[str]:
+    """Return every resolved public IP for `url` in answer order.
+
+    Same validation contract as `assert_public_http_url` — any
+    private/loopback/link-local/reserved answer rejects the whole URL — but
+    keeps all safe answers so pinned delivery can fall back across them.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {parsed.scheme!r}')
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise UnsafeWebhookURLError('URL has no hostname')
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: {e}')
+
+    safe_ips: list[str] = []
+    for _family, _type, _proto, _canonname, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if _is_unsafe_ip(ip):
+            raise UnsafeWebhookURLError(f'{hostname!r} resolves to non-public address {ip}')
+        text = str(ip)
+        if text not in safe_ips:
+            safe_ips.append(text)
+
+    if not safe_ips:
+        raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: no addresses returned')
+
+    return safe_ips
+
+
 def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """Rewrite `url` to connect directly to `resolved_ip` instead of trusting
     a second DNS lookup at connect time. Returns (pinned_url, extra) where
@@ -99,12 +134,16 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     like a normal request to the original hostname.
     """
     parsed = urlparse(url)
-    hostname = parsed.hostname
+    hostname = parsed.hostname or ''
+    host_header = f'[{hostname}]' if ':' in hostname else hostname
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
         netloc += f':{parsed.port}'
+        host_header += f':{parsed.port}'
+    if '@' in parsed.netloc:
+        netloc = parsed.netloc.rsplit('@', 1)[0] + '@' + netloc
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': hostname}}
     return pinned_url, extra
 
 
@@ -115,6 +154,29 @@ def safe_request_target(url: str) -> tuple[str, dict]:
     for anything private/loopback/link-local/reserved/unresolvable."""
     resolved_ip = assert_public_http_url(url)
     return pin_to_resolved_ip(url, resolved_ip)
+
+
+def safe_request_targets(url: str) -> list[tuple[str, dict]]:
+    """Pin `url` to every safe resolved address, best candidate first.
+
+    Like ``safe_request_target`` but preserves HTTPX's normal fallback across
+    public answers: dual-stack or multi-A endpoints should not lose delivery
+    just because the first answer is unreachable. Any unsafe answer in the
+    full set still rejects the target outright.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ''
+    addresses = assert_public_http_url_all(url)
+    seen: list[str] = []
+    targets: list[tuple[str, dict]] = []
+    for resolved_ip in addresses:
+        if resolved_ip in seen:
+            continue
+        seen.append(resolved_ip)
+        targets.append(pin_to_resolved_ip(url, resolved_ip))
+    if not targets:
+        raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: no usable addresses returned')
+    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +477,27 @@ def get_webhook_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=2.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
+            trust_env=False,
+        ),
+    )
+
+
+def get_pinned_delivery_client() -> httpx.AsyncClient:
+    """Return the client used only for pinned webhook deliveries.
+
+    Pinned URLs connect by resolved IP while presenting another hostname, so a
+    pooled connection could be reused across hostnames and skip TLS
+    verification of the next pinned target. Keep-alive is therefore disabled
+    here; every other caller (including other webhook consumers such as the
+    web-search gateway) keeps the pooled ``webhook`` client above and must not
+    pay a TLS handshake per request.
+    """
+    return _get_client(
+        'webhook_pinned',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=2.0),
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=0),
+            trust_env=False,
         ),
     )
 

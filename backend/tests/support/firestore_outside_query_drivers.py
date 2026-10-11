@@ -22,8 +22,8 @@ SKIPS: dict[str, SkipEntry] = {}
 BODY_DIGEST = {
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
     'routers.desktop_proxy._read_request_body': 'e71ed271b768274df479a8429ce363d1152a85073b59c8d034445bd8fc87c6b7',
-    'utils.multipart._size_limited_stream': 'b77a69f35b7e37aa7b68cc93748bb83fdf159e7e5f98f03ae2ee0d473efe857d',
-    'utils.multipart.parse_multipart_form': 'cf7bb921eb61427b97be7c4ab3a8a22fc11b8b2a12788dbe44a1884a1beb58fa',
+    'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',
+    'utils.multipart.parse_multipart_form': 'bf33b0fe208c6ed0fceb935908a2396c47596bc730543543b4c0bb3c10435495',
     'utils.memory.canonical_graph._build_canonical_graph_items_query': '55a8b4ccfc9b7e98d6482495590fdf15f04a6f325485b2345043419846862bbd',
 }
 LIMIT = (25, 'bounds the read window, not filters or ordering')
@@ -579,18 +579,6 @@ _driver(
     ),
 )
 _driver(
-    'utils.memory.jit_trigger_snapshot.read_authoritative_trigger_snapshot',
-    base={'uid': UID},
-    patchers=(
-        _stub(
-            'utils.memory.jit_trigger_snapshot.read_memory_v3_trusted_account_generation',
-            SimpleNamespace(
-                account_generation=1, head_commit_id='head-1', commit_sequence=1, require_account_generation=lambda: 1
-            ),
-        ),
-    ),
-)
-_driver(
     'utils.memory.non_active_route_audit._fetch_non_active_route_docs',
     base={'uid': UID},
     domains={'run_id': [None, 'run-1']},
@@ -655,7 +643,6 @@ DRIVERS['utils.task_intelligence.chat_first_materialization_health._documents'] 
 _driver(
     'utils.x_connector.run_x_sync_job',
     neutrals={'job_started_at': (None, 'model budget clock only')},
-    patchers=(_stub('database.redis_db.try_acquire_x_sync_window_lock', True),),
     profile='scheduled-x-sync',
 )
 
@@ -675,6 +662,7 @@ COVERED_BY['utils.other.list_budget.budgeted_stream_list'] = CoveredByEntry(
 _driver(
     'utils.other.list_budget.budgeted_stream_iter',
     base={'query': ref_collection(f'users/{UID}/memory_items'), 'budget': None},
+    neutrals={'retry': (None, 'optional retry override; forwarded to stream, no filter effect')},
     profile='request-budgeted-iterator',
 )
 

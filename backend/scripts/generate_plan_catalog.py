@@ -258,21 +258,11 @@ def _validate_allocation_profiles(profiles: Any, errors: list[str]) -> tuple[set
             if not isinstance(profile, dict):
                 errors.append(f'{path}: expected an object')
                 continue
-            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors', 'proactivity_daily'}, path, errors)
+            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors'}, path, errors)
             if not isinstance(profile.get('full_desktop'), bool):
                 errors.append(f'{path}.full_desktop: expected a boolean')
             if not isinstance(profile.get('cloud_screen_vectors'), bool):
                 errors.append(f'{path}.cloud_screen_vectors: expected a boolean')
-            limits = profile.get('proactivity_daily')
-            if not isinstance(limits, dict):
-                errors.append(f'{path}.proactivity_daily: expected an object')
-                continue
-            _unexpected_keys(
-                limits, {'proactive_extraction', 'proactive_reasoning'}, f'{path}.proactivity_daily', errors
-            )
-            for operation, value in limits.items():
-                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                    errors.append(f'{path}.proactivity_daily.{operation}: expected a positive integer')
 
     fair_use = profiles.get('fair_use')
     if isinstance(fair_use, dict):
@@ -383,6 +373,7 @@ def _find_floats(value: Any, path: str = 'catalog') -> Iterable[str]:
 def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     expected_root_keys = {
+        'proactivity_v2_budget',
         'schema_version',
         'catalog_revision',
         'authority',
@@ -394,6 +385,23 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
         'recognized_stripe_products',
     }
     _unexpected_keys(catalog, expected_root_keys, 'catalog', errors)
+    budget = catalog.get('proactivity_v2_budget', {})
+    if (
+        not isinstance(budget, dict)
+        or budget.get('fraction_basis_points') != 1000
+        or budget.get('days_per_month') != 30
+    ):
+        errors.append('catalog.proactivity_v2_budget: expected 10 percent over 30 days')
+    else:
+        prices = budget.get('monthly_reference_cents')
+        if (
+            not isinstance(prices, dict)
+            or prices.get('basic') != 0
+            or not any(type(v) is int and v > 0 for v in prices.values())
+        ):
+            errors.append('catalog.proactivity_v2_budget: nonnegative integer reference prices required')
+        elif any(type(v) is not int or v < 0 for v in prices.values()):
+            errors.append('catalog.proactivity_v2_budget: invalid reference price')
     if catalog.get('schema_version') != 1:
         errors.append('catalog.schema_version: expected 1')
     revision = catalog.get('catalog_revision')
@@ -830,6 +838,7 @@ CATALOG_SHA256: Final = {catalog_digest(catalog)!r}
 CATALOG_REVISION: Final = {catalog['catalog_revision']!r}
 CATALOG_AUTHORITY: Final = {_python_literal(catalog['authority'])}
 OPEN_PLAN_DECISIONS: Final = {_python_literal(catalog['open_decisions'])}
+PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {_python_literal(catalog.get('proactivity_v2_budget', {}))}
 MEASUREMENT_CONTRACTS: Final = {_python_literal(catalog['measurement_contracts'])}
 PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {_python_literal(plan_data)}
 PLAN_TYPE_VALUES: Final[frozenset[str]] = frozenset({_python_literal(plan_ids)})

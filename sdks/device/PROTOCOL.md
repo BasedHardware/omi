@@ -26,7 +26,13 @@ Capture mute is persisted in NVS (`muted`). Disconnect must not resume capture;
 only an explicit unmute (app write or offline double-tap) does. Support is
 announced by bit 10 (`0x400`) of the features characteristic
 (`19b10021-e8f2-537e-4f6c-d104768a1214`). `19b10014` / bit 9 is allocated to
-device name; mute uses the next free characteristic and feature bit.
+device name in #13704. These two PRs must preserve both allocations when
+combined. The alternative firmware proposal #10604 reuses both UUIDs and
+feature bits for different meanings; its protocol must be reconciled before
+combining it with these changes.
+A write succeeds only after NVS persistence. Storage failure returns ATT
+`Unlikely Error` and preserves the last confirmed runtime value. Clients must
+await the write and verify readback before confirming the pause/resume locally.
 
 ## Codec IDs (first byte of codec characteristic)
 

@@ -19,6 +19,11 @@ from typing import Any, Mapping
 from config.jev_decisions import JEV_MODEL, capture_jev_shadow_enabled
 from database import conversations as conversations_db
 from database import redis_db
+from utils.conversations.capture_containment import (
+    capture_group_containment_mode,
+    measure_capture_containment,
+    record_capture_containment,
+)
 from utils.conversations.shared_speech import transcript_words
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.jev_client import ask_jev, truncate_state
@@ -336,6 +341,14 @@ def _run(uid: str, decision: str, first_id: str, second_id: str, deadline: float
             score,
             answers.served_model,
         )
+        if decision == 'same_scene':
+            containment_mode = capture_group_containment_mode()
+            if containment_mode != 'off':
+                try:
+                    containment = measure_capture_containment(first, second, mode=containment_mode)
+                    record_capture_containment(containment, mode=containment_mode, phase='jev', jev_p=score)
+                except Exception:
+                    logger.warning('capture_group_containment detector failed')
     except Exception:
         _skip(decision, 'error')
         logger.warning('capture Jev shadow failed decision=%s', decision)

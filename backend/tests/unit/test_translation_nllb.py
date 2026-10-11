@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import json
 import pytest
 
 from config.translation import TranslationProvider, resolve_translation_profile
@@ -20,13 +19,13 @@ from utils.translation import TranslationService, TranslationStatus
 from utils.translation_core.cache import TranslationCache
 from utils.translation_core.metrics import NoopTranslationMetrics
 from utils.translation_core.providers import (
-    GeminiTranslationBatch,
-    GeminiTranslationProvider,
+    LunaTranslationBatch,
+    LunaTranslationProvider,
     NllbTranslationProvider,
     TranslationProviderChain,
     TranslationProviderError,
 )
-from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema
+from llm_gateway.gateway.vertex_wire import _vertex_request
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -74,7 +73,7 @@ def test_filtered_configured_primary_records_recovered_fallback_after_google_suc
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'gemini'
+    assert recorder.events[0].fields['to_mode'] == 'luna'
     assert recorder.events[0].fields['reason'] == 'config_incomplete'
     assert recorder.events[0].fields['outcome'] == 'recovered'
 
@@ -156,7 +155,7 @@ def test_nllb_timeout_recovers_through_google_with_shared_fallback_event():
 
     assert outcomes[0].text == 'Hola'
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'gemini'
+    assert recorder.events[0].fields['to_mode'] == 'luna'
     assert recorder.events[0].fields['reason'] == 'timeout'
     assert recorder.events[0].fields['outcome'] == 'recovered'
 
@@ -204,7 +203,7 @@ def test_exhausted_provider_chain_records_truthful_outcome():
     assert store.puts == []
     assert recorder.events[0].fields['outcome'] == 'exhausted'
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'gemini'
+    assert recorder.events[0].fields['to_mode'] == 'luna'
 
 
 def test_google_first_can_recover_through_nllb_when_configured():
@@ -221,7 +220,7 @@ def test_google_first_can_recover_through_nllb_when_configured():
     )
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
-    assert recorder.events[0].fields['from_mode'] == 'gemini'
+    assert recorder.events[0].fields['from_mode'] == 'luna'
     assert recorder.events[0].fields['to_mode'] == 'nllb'
 
 
@@ -487,7 +486,7 @@ def test_nllb_adapter_detects_supported_source_only_when_not_supplied(monkeypatc
     assert client.calls[0][1]['source_language_code'] == 'fr'
 
 
-class FakeGeminiClient:
+class FakeLunaClient:
     def __init__(self, response: object = None, error: Exception | None = None) -> None:
         self.response = response
         self.error = error
@@ -504,10 +503,10 @@ class FakeGeminiClient:
         return self.response
 
 
-def test_gemini_adapter_maps_request_and_response_without_network():
-    response = GeminiTranslationBatch(translations=[{'text': 'Hola', 'detected_language': 'en'}])
-    client = FakeGeminiClient(response)
-    provider = GeminiTranslationProvider(client_factory=lambda: client)
+def test_luna_adapter_maps_request_and_response_without_network():
+    response = LunaTranslationBatch(translations=[{'text': 'Hola', 'detected_language': 'en'}])
+    client = FakeLunaClient(response)
+    provider = LunaTranslationProvider(client_factory=lambda: client)
 
     result = provider.translate(['Hello'], 'es', 'en', profile())
 
@@ -519,7 +518,7 @@ def test_gemini_adapter_maps_request_and_response_without_network():
     ]
 
 
-def test_gemini_adapter_uses_translation_feature_client(monkeypatch):
+def test_luna_adapter_uses_translation_feature_client(monkeypatch):
     calls: list[str] = []
     client = object()
     monkeypatch.setattr(
@@ -527,12 +526,12 @@ def test_gemini_adapter_uses_translation_feature_client(monkeypatch):
         lambda feature: calls.append(feature) or client,
     )
 
-    assert GeminiTranslationProvider()._get_client() is client
+    assert LunaTranslationProvider()._get_client() is client
     assert calls == ['translation']
 
 
-def test_gemini_adapter_wraps_sdk_failures_as_typed_provider_errors():
-    provider = GeminiTranslationProvider(client_factory=lambda: FakeGeminiClient(error=RuntimeError('boom')))
+def test_luna_adapter_wraps_provider_failures_as_typed_errors():
+    provider = LunaTranslationProvider(client_factory=lambda: FakeLunaClient(error=RuntimeError('boom')))
 
     with pytest.raises(TranslationProviderError) as raised:
         provider.translate(['Hello'], 'es', 'en', profile())
@@ -541,10 +540,20 @@ def test_gemini_adapter_wraps_sdk_failures_as_typed_provider_errors():
     assert raised.value.reason == 'other'
 
 
-def test_gemini_translation_batch_schema_is_inlined_for_vertex():
-    schema = GeminiTranslationBatch.model_json_schema()
-    converted = _json_schema_to_vertex_response_schema(schema)
-    dumped = json.dumps(converted)
-    assert '$ref' not in dumped
-    assert '$defs' not in dumped
-    assert converted['properties']['translations']['items']['type'] == 'object'
+def test_luna_translation_batch_schema_uses_vertex_json_schema():
+    schema = LunaTranslationBatch.model_json_schema()
+    payload = _vertex_request(
+        {
+            'messages': [{'role': 'user', 'content': 'synthetic translation'}],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': schema}},
+        }
+    )
+    config = payload['generationConfig']
+    assert config['responseMimeType'] == 'application/json'
+    assert 'responseSchema' not in config
+    converted = config['responseJsonSchema']
+    items = converted['properties']['translations']['items']
+    assert items == {'$ref': '#/$defs/LunaTranslationItem'}
+    assert converted['$defs']['LunaTranslationItem']['type'] == 'object'
+    assert converted['$defs']['LunaTranslationItem']['required'] == ['text', 'detected_language']
+    assert schema == LunaTranslationBatch.model_json_schema()

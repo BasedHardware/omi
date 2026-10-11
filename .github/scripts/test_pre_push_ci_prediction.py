@@ -196,10 +196,29 @@ class PrePushCiPredictionTests(unittest.TestCase):
         for path in ("app/android/app/build.gradle", "app/lib/pigeon_interfaces.dart", "app/pubspec.lock"):
             with self.subTest(path=path):
                 self.assertEqual(github_outputs(self.plan([path]))["has_app_android_pr"], "true")
-        for path in ("app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
-                     "app/lib/services/capture/capture_service.dart"):
+        for path in (
+            "app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
+            "app/lib/services/capture/capture_service.dart",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(github_outputs(self.plan([path]))["has_app_journeys_pr"], "true")
+
+    def test_startup_wal_and_emulator_owner_inputs_select_android_acceptance(self):
+        for path in (
+            "app/lib/main.dart",
+            "app/lib/startup/startup_controller.dart",
+            "app/lib/services/wals/local_wal_sync.dart",
+            "app/lib/services/capture/capture_controller.dart",
+            "app/scripts/android_emulator.py",
+            "app/scripts/android_startup_smoke.py",
+            "app/scripts/android_fgs_probe.py",
+            "app/integration_test/android_fgs_probe/build.gradle",
+            ".github/workflows/mobile-app-checks.yml",
+        ):
+            with self.subTest(path=path):
+                outputs = github_outputs(self.plan([path]))
+                self.assertEqual(outputs["has_app_android_pr"], "true")
+                self.assertEqual(outputs["has_app_compile_smoke"], "true")
 
     def test_generated_dart_and_l10n_do_not_wake_journeys(self) -> None:
         plan = self.plan(["app/lib/models/task.g.dart", "app/lib/l10n/app_fr.arb"])
@@ -326,6 +345,79 @@ class PrePushCiPredictionTests(unittest.TestCase):
         l10n = self.plan(["app/lib/l10n/app_en.arb"])
         self.assertTrue(l10n.includes("flutter-l10n"))
         self.assertEqual(github_outputs(l10n)["has_flutter_generated"], "true")
+
+    def test_generated_only_prs_compile_app_and_tests_without_executing_suites(self) -> None:
+        generated = "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift"
+        for paths in (
+            [generated],
+            ["desktop/macos/Desktop/Sources/Generated/Notification.generated.swift"],
+            [generated, "backend/routers/dream.py", "docs/api-reference/app-client-openapi.json"],
+            [generated, "desktop/macos/Desktop/Sources/Generated/nested/Other.generated.swift"],
+        ):
+            with self.subTest(paths=paths):
+                outputs = github_outputs(self.plan(paths, event="pull_request"))
+                self.assertEqual(outputs["should_run"], "true")
+                self.assertEqual(outputs["should_run_tests"], "false")
+                self.assertEqual(outputs["should_test_compile"], "true")
+                self.assertEqual(outputs["should_release_compile"], "false")
+                self.assertEqual(outputs["should_notification_release_regression"], "false")
+                self.assertEqual(outputs["should_siri_advisory"], "false")
+
+    def test_any_other_desktop_path_or_selector_edit_restores_full_generated_pr_lane(self) -> None:
+        generated = "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift"
+        for extra in (
+            "desktop/macos/Desktop/Sources/Chat/ChatProvider.swift",
+            "desktop/macos/Desktop/Tests/ProbeTests.swift",
+            "desktop/macos/Desktop/Sources/Generated/README.md",
+            "desktop/macos/Desktop/Sources/Generated/Handwritten.swift",
+            "desktop/macos/AGENTS.md",
+            "desktop/macos/Resources/probe.json",
+            "desktop/macos/Desktop/Package.swift",
+            "scripts/pre_push_ci_prediction.py",
+            ".github/workflows/desktop-swift-ci.yml",
+        ):
+            with self.subTest(extra=extra):
+                outputs = github_outputs(self.plan([generated, extra], event="pull_request"))
+                self.assertEqual(outputs["should_run_tests"], "true")
+                self.assertEqual(outputs["should_test_compile"], "false")
+
+    def test_generated_shortcut_never_applies_to_non_pr_events(self) -> None:
+        for event in ("local", "push", "schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                outputs = github_outputs(self.plan(
+                    ["desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift"], event=event
+                ))
+                self.assertEqual(outputs["should_run_tests"], "true")
+                self.assertEqual(outputs["should_test_compile"], "false")
+                if event != "local":
+                    self.assertEqual(outputs["should_release_compile"], "true")
+                    self.assertEqual(outputs["should_release_test_compile"], "true")
+        self.assertFalse(self.plan(["backend/routers/dream.py"], event="pull_request").includes(
+            "desktop-swift-test-compile"
+        ))
+
+    def test_siri_advisory_pr_selector_owns_siri_and_compiler_inputs(self) -> None:
+        for path in (
+            "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift",
+            "desktop/macos/Desktop/Sources/SiriIntegration/future/Intent.swift",
+            "desktop/macos/Desktop/Tests/SiriIntentServiceTests.swift",
+            "desktop/macos/scripts/embed-app-intents-metadata.sh",
+            "desktop/macos/Desktop/Package.swift",
+            "desktop/macos/Desktop/Package.resolved",
+            "desktop/macos/ci/xcode-pin.json",
+            ".github/workflows/desktop-swift-ci.yml",
+            "scripts/pre_push_ci_prediction.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path], event="pull_request"))["should_siri_advisory"], "true")
+        for path in (
+            "backend/routers/dream.py",
+            "desktop/macos/Desktop/Sources/Chat/ChatProvider.swift",
+            "desktop/macos/Desktop/Tests/ProbeTests.swift",
+            ".github/workflows/mobile-app-checks.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path], event="pull_request"))["should_siri_advisory"], "false")
 
     def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
         """Ordinary desktop PRs keep one hosted Mac; release inputs and pushes compile release.

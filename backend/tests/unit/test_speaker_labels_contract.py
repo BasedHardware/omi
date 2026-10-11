@@ -175,6 +175,7 @@ def test_reject_route_rejects_malformed_body(client):
 
 
 def test_voice_matches_route_returns_empty_list_without_voiceprint(client, monkeypatch):
+    monkeypatch.setattr(speaker_voice_matches, 'named_speaker_prompts_allowed', lambda uid: True)
     monkeypatch.setattr(speaker_voice_matches.users_db, 'get_person', lambda uid, pid: {'id': pid})
     response = client.get('/v1/users/people/p1/voice-matches')
     assert response.status_code == 200

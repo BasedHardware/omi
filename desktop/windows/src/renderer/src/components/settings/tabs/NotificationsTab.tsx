@@ -154,8 +154,8 @@ export function NotificationsTab(): React.JSX.Element {
 
       <SettingRow
         icon={Lightbulb}
-        title="Proactive insights"
-        subtitle="Proactive insights are configured in Settings → Rewind."
+        title="Notification presentation"
+        subtitle="Notification style and screen privacy are configured in Settings → Rewind."
         keywords="insights proactive suggestion notification rewind"
       />
     </>

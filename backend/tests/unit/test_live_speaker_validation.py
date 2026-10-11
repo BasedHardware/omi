@@ -122,6 +122,7 @@ def _match_failures(caplog):
 async def _teardown(stack, *tasks):
     stack.state.active = False
     stack.state.shutdown_event.set()
+    await stack.finish()
     try:
         for task in tasks:
             await asyncio.wait_for(task, timeout=30)
@@ -148,6 +149,7 @@ def test_enqueue_normalizes_missing_ids_once_at_admission(monkeypatch, v2):
         assert given['id'] == 'provider-seg-9'
         stack.processor.enqueue([missing])
         assert missing.get('id') == ids[0], 'a repeated/retried raw keeps its minted id'
+        assert stack.receive_task is None, 'sync admission never mounts the receive loop'
     finally:
         stack.restore()
 

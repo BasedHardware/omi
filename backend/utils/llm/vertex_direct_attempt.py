@@ -5,6 +5,7 @@ import os
 from collections.abc import Mapping
 
 from utils.llm import vertex_pt_routing as ptr
+from config.vertex_reservations import RESERVATIONS
 
 
 def request_body(body: bytes, url: str) -> bytes:
@@ -12,21 +13,22 @@ def request_body(body: bytes, url: str) -> bytes:
         return body
     model = url.split('/models/')[-1].split(':')[0]
     payload = json.loads(body)
+    if not isinstance(payload, Mapping):
+        return body
     if model != ptr.PT_MODEL_TARGET:
         config = payload.get('generationConfig', payload.get('generation_config', {}))
+        if not isinstance(config, Mapping):
+            return body
         thinking = config.get('thinkingConfig', config.get('thinking_config', {}))
-        if 'thinkingLevel' not in thinking and 'thinking_level' not in thinking:
+        if not isinstance(thinking, Mapping) or ('thinkingLevel' not in thinking and 'thinking_level' not in thinking):
             return body
     return json.dumps(ptr.model_payload(payload, model), separators=(',', ':')).encode()
 
 
 def target_url(model: str, action: str, capacity: str, default: str) -> str:
-    if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
+    if model not in RESERVATIONS or capacity != ptr.REQUEST_TYPE_DEDICATED:
         return default
-    location = os.getenv(
-        ptr.PT_TARGET_LOCATION_ENV, os.getenv(ptr.MULTI_REGION_LOCATION_ENV, ptr.MULTI_REGION_LOCATION)
-    )
-    host, location = ptr.target_capacity_endpoint(location=location)
+    host, location = ptr.reservation_endpoint(model, os.environ)
     project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
     return f'https://{host}/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
 

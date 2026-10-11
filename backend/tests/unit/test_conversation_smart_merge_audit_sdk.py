@@ -10,8 +10,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
-from google.auth.credentials import AnonymousCredentials
-from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.transaction import Transaction
 from google.cloud.firestore_v1.types import BatchGetDocumentsResponse, CommitResponse, Document
@@ -21,6 +19,7 @@ from database import smart_merge as smart_merge_db
 from database import smart_merge_audit as audit_db
 from tests.unit.test_conversation_smart_merge import UID, World
 from tests.unit.test_conversation_smart_merge_audit import GATE, MARKER, _audit_path, _gate, _merge
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 from utils.conversations import smart_merge
 
 
@@ -29,7 +28,7 @@ def sdk_world(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.setenv(config.SMART_MERGE_AUDIT_ENV, 'on')
     world = World(monkeypatch)
-    client = firestore.Client(project='synthetic-audit-test', credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project='synthetic-audit-test')
     api = MagicMock()
     client._firestore_api_internal = api
     monkeypatch.setattr(smart_merge_db, 'get_firestore_client', lambda: client)

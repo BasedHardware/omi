@@ -1,0 +1,38 @@
+version: 2
+name: proactivity-retirement
+tier: manual
+description: Synthetic migration, preserved rollout authority and generated-feed notification adapter contracts
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyReplyTokenSanitizer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProactivityNotificationAdapter.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityCardFeedback.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityFeedConsumer.swift
+  - desktop/macos/Desktop/Sources/Proactivity/ProactivityReceiptStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITRolloutFlags.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/LegacyContextBucketMigrations.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/LegacyJITMigrations.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactivityRetirementMigration.swift
+preconditions:
+  - isolated_test_storage
+steps:
+  - id: S1
+    name: Upgrade synthetic historical databases
+    do: "Build tests with xcrun swift build --build-tests --jobs 2 --package-path Desktop, then run xcrun swift test --skip-build --package-path Desktop --filter ProactivityRetirementMigrationTests. Verify retired tables disappear while subject bindings, canonical mirror members/aliases and KEEP sentinel rows survive; fresh and repeated migration must pass with no foreign-key violations. Never use an installed user database."
+  - id: S2
+    name: Preserve canonical rollout authority
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter JITRolloutClientTests and --filter MemoryLedgerMirrorTests. Verify disabled/incomplete decisions remain fail-closed and canonical mirror round trips retain their metadata. These tests use synthetic owners and isolated storage."
+  - id: S3
+    name: Validate generated feed projection and owner fences
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter ProactivityNotificationAdapterTests and --filter ProactivityWireTests. Verify conversation/task targets, terminal-item rejection, foreign-owner rejection, stable outcome identity and no duplicate chat journaling. Feed polling and receipt persistence belong to the feed consumer."
+  - id: S4
+    name: Preserve shared display behavior
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter NotificationDisplayTimerTests and --filter LegacyReplyTokenSanitizerTests. Verify hover pauses the shared display timer and historical reply machine tokens remain hidden. Use floating-bar-functional for live renderer acceptance; unit results alone do not establish visible app acceptance."
+  - id: S5
+    name: Durable consumer receipts and retry
+    do: "Run xcrun swift test --skip-build --package-path Desktop --filter ProactivityReceiptStoreTests. Verify one shown receipt across feed/push/relaunch, stable event IDs after a transport failure, owner-switch and sign-out purge, no timeout outcome, and server-clock notification expiry. Tests must use temporary synthetic storage."
+  - id: S6
+    name: Visible feed card and feedback acceptance
+    do: "In an isolated non-production bundle with synthetic feed fixtures, foreground the app with several fresh items and verify only one card mounts. A further poll must not stack cards behind an outstanding presentation. Use the Helpful and Not helpful controls, then open its linked conversation or task; verify opened is emitted only after that target appears. Repeat the item on refresh and after relaunch and verify it is not shown again. Explicit dismissal records dismissed, timeout records nothing, and a queued expired item never renders. Sign out and switch synthetic owners during a delayed response and verify no prior-owner card appears. Use floating-bar-functional for shared renderer acceptance; unit tests alone do not establish this live acceptance."

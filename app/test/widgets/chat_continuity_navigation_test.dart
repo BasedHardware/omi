@@ -213,6 +213,34 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('Send stays enabled while history is still loading and reaches the streamer', (tester) async {
+    final provider = await pumpChat(tester, _HistoryServer());
+    provider.isLoadingMessages = true;
+    provider.notifyListeners();
+    await tester.pump();
+
+    final sends = <String>[];
+    provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+      sends.add(text);
+      yield ServerMessageChunk(
+        'answer',
+        'Done',
+        MessageChunkType.done,
+        message: ServerMessage('answer', DateTime.utc(2026, 9, 29, 2), 'Done', MessageSender.ai, MessageType.text, null,
+            false, [], [], []),
+      );
+    };
+    await tester.enterText(find.byKey(const ValueKey('omi.chat.input')), 'hello while loading');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
+    await tester.pumpAndSettle();
+
+    expect(sends, ['hello while loading']);
+    expect(provider.isLoadingMessages, isFalse);
+    expect(provider.messages.last.text, 'Done');
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('tapping a follow-up sends it once in the continuous chat and retains the previous messages',
       (tester) async {
     final server = _HistoryServer();

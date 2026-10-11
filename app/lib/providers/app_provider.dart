@@ -505,6 +505,13 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Loads what the app catalog (Settings → Integrations) draws. Keyed on [groupedApps], not [apps]:
+  /// start-up fills [apps] from the cache, but only a catalog fetch fills the groups.
+  Future<void> ensureCatalogLoaded() async {
+    if (groupedApps.isEmpty) await getApps();
+    if (popularApps.isEmpty) await getPopularApps();
+  }
+
   Future<void> getApps() {
     final inFlight = _appsLoad;
     if (inFlight != null) return inFlight;

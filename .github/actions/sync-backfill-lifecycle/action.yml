@@ -154,9 +154,9 @@ runs:
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
-          --max-instances=15
-          --max=15
-          --concurrency=3
+          --max-instances=18
+          --max=18
+          --concurrency=6
           --cpu=2
           --memory=8Gi
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
@@ -195,6 +195,8 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
+        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
+        # to isolate instance packing from higher downstream load.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
@@ -208,7 +210,7 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=36 \
+            --max-concurrent-dispatches=40 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
@@ -216,7 +218,7 @@ runs:
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=36 \
+            --max-concurrent-dispatches=40 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s

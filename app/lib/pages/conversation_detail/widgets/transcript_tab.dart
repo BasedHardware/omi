@@ -14,19 +14,25 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
-import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/speaker_labeling_session_bar.dart';
+import 'package:omi/pages/conversation_detail/widgets/speaker_quick_picker.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/expandable_text.dart';
+import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/pages/review/widgets/review_question_card.dart';
+import 'package:omi/providers/review_provider.dart';
 
 /// The conversation detail's Transcript tab: the speaker-summary action, then the transcript (or
 /// the imported text of an external conversation), with segment editing and speaker naming.
@@ -35,6 +41,7 @@ class TranscriptWidgets extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
+  final ConversationPlaybackController? playbackController;
 
   const TranscriptWidgets({
     super.key,
@@ -42,6 +49,7 @@ class TranscriptWidgets extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
+    this.playbackController,
   });
 
   @override
@@ -58,10 +66,78 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   late final SpeakerTagOutcomeController _outcome =
       context.read<SpeakerTagOutcomeController?>() ?? (_ownOutcome = SpeakerTagOutcomeController());
 
+  /// Lines chosen to name together; null outside selection mode.
+  Set<String>? _selection;
+
+  /// The last person tagged during a labeling pass. Its outcome card waits for Done instead of
+  /// interrupting every label.
+  ({String personId, String personName, int linesLabeled})? _deferredOutcome;
+
   @override
   void dispose() {
     _ownOutcome?.dispose();
     super.dispose();
+  }
+
+  void _beginSelection(ConversationDetailProvider provider) {
+    if (!_readyForTranscriptEdit(provider)) return;
+    provider.beginSpeakerLabelingSession();
+    setState(() => _selection = {});
+  }
+
+  void _toggleSelection(TranscriptSegment segment) {
+    final selection = _selection;
+    if (selection == null) return;
+    setState(() {
+      if (!selection.remove(segment.id)) selection.add(segment.id);
+    });
+  }
+
+  void _assignSelection(ConversationDetailProvider provider) {
+    final selection = _selection;
+    if (selection == null || selection.isEmpty || !_readyForTranscriptEdit(provider)) return;
+    final conversation = provider.conversation;
+    final lines = conversation.transcriptSegments.where((s) => selection.contains(s.id)).toList();
+    if (lines.isEmpty) return;
+    showSpeakerQuickPicker(
+      context,
+      segments: conversation.transcriptSegments,
+      onPicked: (personId, personName) {
+        final assigned = _startSpeakerAssignment(
+          provider,
+          conversation.id,
+          lines.first.speakerId,
+          personId,
+          personName,
+          [for (final line in lines) line.id],
+          false,
+        );
+        if (assigned && mounted) setState(() => _selection = null);
+        return assigned;
+      },
+    );
+  }
+
+  /// Done: one summary update for the whole pass, then the outcome of the last tag.
+  void _finishLabeling(ConversationDetailProvider provider) {
+    OmiHaptics.light();
+    setState(() => _selection = null);
+    provider.confirmSpeakerLabelingSession();
+    final deferred = _deferredOutcome;
+    _deferredOutcome = null;
+    if (deferred != null) {
+      _outcome.follow(
+        personId: deferred.personId,
+        personName: deferred.personName,
+        linesLabeled: deferred.linesLabeled,
+      );
+    }
+  }
+
+  Future<void> _undoLabel(ConversationDetailProvider provider) async {
+    OmiHaptics.light();
+    final undone = await provider.undoLastSpeakerLabel();
+    if (!undone && mounted) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
   }
 
   void _dismissSearchIfEmpty() {
@@ -75,8 +151,59 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     return false;
   }
 
+  /// Transcript and speaker edits wait while the conversation is being reprocessed (the reprocess replaces the
+  /// lines they would change); say so instead of ignoring the tap.
+  bool _readyForTranscriptEdit(ConversationDetailProvider provider) {
+    if (!provider.loadingReprocessConversation) return _requireConnection();
+    OmiFeedback.info(context, context.l10n.waitForReprocessing);
+    return false;
+  }
+
+  /// What an empty Transcript tab says while its lines may still come: loading, couldn't load
+  /// (Try Again), or being processed. Null when the conversation really has no transcript, or
+  /// carries imported text instead, which the caller shows.
+  Widget? _pendingTranscriptState(
+    BuildContext context,
+    ConversationDetailProvider provider,
+    ServerConversation conversation,
+  ) {
+    if ((conversation.externalIntegration?.text ?? '').trim().isNotEmpty) return null;
+    final l10n = context.l10n;
+    final Widget state;
+    if (provider.detailLoad == ConversationDetailLoad.loading) {
+      state = OmiLoadingState(key: const Key('transcript_loading'), label: l10n.loadingTranscript);
+    } else if (provider.detailLoad == ConversationDetailLoad.failed) {
+      state = OmiErrorState(
+        key: const Key('transcript_load_failed'),
+        message: l10n.transcriptLoadFailed,
+        onRetry: () => provider.refreshConversation(trackLoad: true),
+      );
+    } else if (conversation.status == ConversationStatus.processing ||
+        conversation.status == ConversationStatus.in_progress ||
+        provider.isReprocessingOpenConversation) {
+      state = OmiLoadingState(key: const Key('transcript_processing'), label: l10n.processingConversationProgress);
+    } else if (conversation.status == ConversationStatus.failed) {
+      state = OmiErrorState(
+        key: const Key('transcript_processing_failed'),
+        message: l10n.conversationProcessingFailedMessage,
+        onRetry: provider.loadingReprocessConversation ? null : () => provider.reprocessConversation(),
+      );
+    } else {
+      state = OmiEmptyState(
+        key: const Key('transcript_empty'),
+        icon: Icons.notes,
+        title: l10n.noTranscriptAvailable,
+        message: l10n.noTranscriptMessage,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xxl),
+      child: state,
+    );
+  }
+
   void _editSegmentText(ConversationDetailProvider provider, int segmentIndex) {
-    if (!_requireConnection()) return;
+    if (!_readyForTranscriptEdit(provider)) return;
     final segments = provider.conversation.transcriptSegments;
     final segment = segments[segmentIndex];
     final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
@@ -84,6 +211,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       segments,
       people: people,
       l10n: context.l10n,
+      unresolved: provider.conversation.speakerResolution?.status == 'unavailable',
     ).forSegment(segment);
     PlatformManager.instance.analytics.editSegmentTextStarted();
     bool saved = false;
@@ -102,17 +230,16 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     );
   }
 
-  void _nameSpeaker(
-    ConversationDetailProvider provider,
-    String segmentId,
-    int speakerId,
-  ) {
-    if (!_requireConnection()) return;
+  void _nameSpeaker(ConversationDetailProvider provider, String segmentId, int speakerId) {
+    if (!_readyForTranscriptEdit(provider)) return;
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
       segmentId: segmentId,
       segments: provider.conversation.transcriptSegments,
+      unresolvedSpeakers: provider.conversation.speakerResolution?.status == 'unavailable',
+      // The name heads a turn; naming it names that voice's lines, which the sheet lists to uncheck.
+      defaultApplyToSpeaker: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         return _startSpeakerAssignment(
           provider,
@@ -134,7 +261,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   /// "Yes" under a line Omi named by voice: the user's answer for every line from that voice.
   void _confirmSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) {
     final personId = segment.personId;
-    if (personId == null || !_requireConnection()) return;
+    if (personId == null || !_readyForTranscriptEdit(provider)) return;
     final name = context.read<PeopleProvider>().people.where((p) => p.id == personId).firstOrNull?.name ?? '';
     OmiHaptics.light();
     _startSpeakerAssignment(provider, provider.conversation.id, segment.speakerId, personId, name, [segment.id], true);
@@ -142,7 +269,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 
   /// "Not <name>": clears that label from the voice and tells Omi not to match it that way again.
   Future<void> _rejectSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) async {
-    if (!_requireConnection()) return;
+    if (!_readyForTranscriptEdit(provider)) return;
     OmiHaptics.light();
     final rejected = await provider.rejectSpeakerLabel(segment, SpeakerRejection.notPerson);
     if (!mounted) return;
@@ -186,16 +313,14 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     bool applyToSpeaker,
   ) {
     final peopleProvider = context.read<PeopleProvider>();
+    if (provider.conversationOrNull?.id != conversationId || provider.loadingReprocessConversation) return false;
+    // Every label joins a labeling pass, so the summary updates once at Done, not after each pause.
+    provider.beginSpeakerLabelingSession();
     final newPerson = personId.isEmpty;
     final temporaryId = newPerson ? 'optimistic-person:${DateTime.now().microsecondsSinceEpoch}' : null;
     if (temporaryId != null) {
       peopleProvider.addOptimisticPerson(
-        Person(
-          id: temporaryId,
-          name: personName,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
+        Person(id: temporaryId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
     }
     var resolvedId = personId;
@@ -239,11 +364,13 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       pending.then((saved) {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
         if (saved) {
-          PlatformManager.instance.analytics.taggedSegment(
-            resolvedId == 'user' ? 'User' : 'User Person',
-          );
+          PlatformManager.instance.analytics.taggedSegment(resolvedId == 'user' ? 'User' : 'User Person');
           if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {
-            _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
+            if (provider.speakerLabelingSessionActive) {
+              _deferredOutcome = (personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
+            } else {
+              _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
+            }
           }
         }
       }),
@@ -267,25 +394,35 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             final photos = conversation.photos;
 
             if (segments.isEmpty && photos.isEmpty) {
+              final pending = _pendingTranscriptState(context, provider, conversation);
+              if (pending != null) return pending;
               return Padding(
                 padding: const EdgeInsets.only(top: OmiSpacing.xxl),
                 child: ExpandableTextWidget(
                   text: (conversation.externalIntegration?.text ?? '').decodeString,
                   maxLines: 1000,
                   linkColor: OmiColors.textSecondary,
-                  style: OmiType.subhead.copyWith(
-                    color: OmiColors.textSecondary,
-                    height: 1.3,
-                  ),
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
                   toggleExpand: provider.toggleIsTranscriptExpanded,
                   isExpanded: provider.isTranscriptExpanded,
                 ),
               );
             }
 
+            final selection = _selection;
             return Column(
               children: [
                 SpeakerSummaryAction(provider: provider),
+                if (provider.speakerLabelingSessionActive || selection != null)
+                  SpeakerLabelingSessionBar(
+                    linesRelabeled: provider.speakerLabelingSessionLineCount,
+                    selectedCount: selection?.length,
+                    onDone: () => _finishLabeling(provider),
+                    onSelect: () => _beginSelection(provider),
+                    onCancelSelection: () => setState(() => _selection = null),
+                    onAssign: () => _assignSelection(provider),
+                    onUndo: provider.canUndoSpeakerLabel ? () => _undoLabel(provider) : null,
+                  ),
                 ListenableBuilder(
                   listenable: _outcome,
                   builder: (context, _) {
@@ -299,30 +436,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   },
                 ),
                 Expanded(
-                  child: getTranscriptWidget(
-                    false,
-                    segments,
-                    photos,
-                    null,
-                    conversationId: conversation.id,
-                    horizontalMargin: false,
-                    topMargin: false,
-                    canDisplaySeconds: provider.canDisplaySeconds,
-                    isConversationDetail: true,
-                    unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
-                    bottomMargin: 150,
-                    searchQuery: widget.searchQuery,
-                    currentResultIndex: widget.currentResultIndex,
-                    onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-                    onSegmentTap: widget.onSegmentTap,
-                    onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
-                    editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
-                    onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
-                    onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
-                    startedAt: conversation.startedAt ?? conversation.createdAt,
-                    leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
-                    leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
-                  ),
+                  child: widget.playbackController == null
+                      ? _buildTranscript(null)
+                      : ListenableBuilder(
+                          listenable: widget.playbackController!,
+                          builder: (context, _) => _buildTranscript(widget.playbackController),
+                        ),
                 ),
               ],
             );
@@ -331,36 +450,181 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       ),
     );
   }
+
+  Widget _buildTranscript(ConversationPlaybackController? controller) {
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        final conversation = provider.conversation;
+        final segments = conversation.transcriptSegments;
+        final photos = conversation.photos;
+        // Review's "Who said this?" for this conversation sits above the lines it asks about.
+        final reviewQuestion = context.watch<ReviewProvider?>()?.speakerQuestionIn(conversation.id);
+        controller?.updateSegments(segments);
+        return getTranscriptWidget(
+          false,
+          segments,
+          photos,
+          null,
+          conversationId: conversation.id,
+          horizontalMargin: false,
+          topMargin: false,
+          canDisplaySeconds: provider.canDisplaySeconds,
+          isConversationDetail: true,
+          unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
+          bottomMargin: 150,
+          searchQuery: widget.searchQuery,
+          currentResultIndex: widget.currentResultIndex,
+          onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+          onSegmentTap: widget.onSegmentTap,
+          onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
+          editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+          onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
+          onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
+          startedAt: conversation.startedAt ?? conversation.createdAt,
+          leadingItems: [
+            if (segments.isNotEmpty)
+              _TranscriptHeading(
+                conversation: conversation,
+                onSelect: provider.speakerLabelingSessionActive || _selection != null
+                    ? null
+                    : () => _beginSelection(provider),
+              ),
+            if (segments.isNotEmpty && reviewQuestion != null)
+              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
+          ],
+          leadingItemIds: [
+            if (segments.isNotEmpty) 'transcript-heading',
+            if (segments.isNotEmpty && reviewQuestion != null) 'review-question-${reviewQuestion.itemId}',
+          ],
+          currentSegmentId: controller?.currentSegmentId,
+          followTargetSegmentId: controller?.followTargetSegmentId,
+          // Follow while the reader hasn't taken the scroll back AND playback
+          // is either running or a fresh explicit request (line tap, scrub,
+          // Play, back-to-current) asks for it — an idle first open does not.
+          followCurrentSegment:
+              controller != null && controller.isFollowing && (controller.isPlaying || controller.followRequest > 0),
+          playbackFollowRequest: controller?.followRequest ?? 0,
+          onUserScroll: controller?.suspendFollowing,
+          onTopVisibleSegmentChanged: controller?.readerMovedTo,
+          selectedSegmentIds: _selection,
+          onToggleSegmentSelection: _toggleSelection,
+        );
+      },
+    );
+  }
 }
 
-/// "Transcript · 14m · 2 speakers" over the lines (Omi v8 transcript heading): the length by the
-/// list row's rule, and how many voices took part, counting the owner once.
+/// "Transcript · 2 speakers" over the lines (Omi v8 transcript heading): how many voices took part,
+/// counting the owner once. The length is in the header's date chip, so it is not repeated here.
 class _TranscriptHeading extends StatelessWidget {
-  const _TranscriptHeading({required this.conversation});
+  const _TranscriptHeading({required this.conversation, this.onSelect});
 
   final ServerConversation conversation;
+
+  /// "Select": choose several lines and name their speaker at once. Null hides it (already labeling).
+  final VoidCallback? onSelect;
+
+  /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
+  /// "others" rule.
+  static int? _speakerCount(ServerConversation conversation) {
+    final resolution = conversation.speakerResolution;
+    if (resolution == null || !resolution.countable) return null;
+    final segments = conversation.transcriptSegments;
+    final ownerIds = {
+      for (final segment in segments)
+        if (segment.isUser) segment.speakerId,
+    };
+    final personIdsBySpeaker = <int, Set<String>>{};
+    for (final segment in segments) {
+      if (segment.isUser || segment.speakerId == omiSpeakerId) continue;
+      final personId = segment.personId;
+      if (personId != null && personId.trim().isNotEmpty) {
+        personIdsBySpeaker.putIfAbsent(segment.speakerId, () => {}).add(personId);
+      }
+    }
+    final voices = <String>{};
+    for (final rawId in resolution.participantSpeakerIds.toSet()) {
+      if (ownerIds.contains(rawId) || rawId == omiSpeakerId) continue;
+      final personIds = personIdsBySpeaker[rawId];
+      if (personIds == null || personIds.isEmpty) {
+        voices.add('speaker-$rawId');
+      } else {
+        voices.addAll(personIds.map((id) => 'person-$id'));
+      }
+    }
+    return voices.length + (ownerIds.isEmpty ? 0 : 1);
+  }
+
+  static bool _hasUnnamedVoice(ServerConversation conversation, List<Person> people) {
+    if (conversation.speakerResolution?.status != 'unavailable') return false;
+    return conversation.transcriptSegments.any((segment) {
+      if (segment.isUser || segment.speakerId == omiSpeakerId) return false;
+      final person = personById(people, segment.personId);
+      return person == null || person.name.trim().isEmpty;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final voices = {
-      for (final segment in conversation.transcriptSegments) segment.isUser ? 'owner' : 'speaker-${segment.speakerId}',
-    };
-    final duration = conversationDurationLabel(conversation, l10n);
-    final label = [
-      l10n.transcript,
-      if (duration.isNotEmpty) duration,
-      l10n.transcriptSpeakerCount(voices.length),
-    ].join(' · ');
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    final count = _speakerCount(conversation);
+    final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: ConversationDetailChip(
-          key: const Key('conversation_transcript_heading'),
-          icon: const Icon(Icons.notes),
-          label: label,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: ConversationDetailChip(
+                    key: const Key('conversation_transcript_heading'),
+                    icon: const Icon(Icons.notes),
+                    label: label,
+                  ),
+                ),
+              ),
+              if (onSelect != null)
+                OmiButton.tertiary(
+                  key: const Key('transcript_select_lines'),
+                  label: l10n.selectOption,
+                  icon: Icons.checklist,
+                  size: OmiButtonSize.compact,
+                  onPressed: onSelect,
+                ),
+            ],
+          ),
+          if (_hasUnnamedVoice(conversation, people))
+            InkWell(
+              key: const Key('transcript_unresolved_speakers_notice'),
+              onTap: () => showOmiSheet<void>(
+                context: context,
+                title: context.l10n.unresolvedSpeakersTitle,
+                builder: (sheetContext) => SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                    child: Text(
+                      sheetContext.l10n.unresolvedSpeakersMessage,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ),
+                ),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    l10n.unresolvedSpeakersNotice,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

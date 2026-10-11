@@ -20,8 +20,20 @@ CaptureEnvironment environment(
   bool batch = false,
   bool batchSuspended = false,
   bool call = false,
+  String? cardRecordingId,
+  int cardRevision = 0,
+  int livenessEpoch = 0,
+  bool appSuspended = false,
+  bool? socketConnected,
+  bool transcriptReady = false,
+  DateTime? appSuspendedAt,
+  DateTime? appResumedAt,
 }) =>
     CaptureEnvironment(
+      livenessEpoch: livenessEpoch,
+      appSuspended: appSuspended,
+      appSuspendedAt: appSuspendedAt,
+      appResumedAt: appResumedAt,
       policyMuted: muted,
       paused: muted,
       batchModeEnabled: batch,
@@ -30,17 +42,20 @@ CaptureEnvironment environment(
       networkConnected: true,
       signedIn: () => true,
       phoneMicSupportsBatch: true,
-      transcriptReady: false,
-      socketConnected: state.phoneOwns || state.pendantOwns,
+      transcriptReady: transcriptReady,
+      socketConnected: socketConnected ?? (state.phoneOwns || state.pendantOwns),
       deviceServiceReady: state.connectedDevice != null || state.phoneOwns,
       callActive: call,
       deviceRecording: state.phase == CapturePhase.pendantLive,
       micCapturing: state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.audioInterrupted,
+      systemSurfaceRecordingId: cardRecordingId,
+      systemSurfaceConversationRevision: cardRevision,
     );
 
 class HarnessPorts {
   String? snapshot = CaptureCoordinatorState.idle().encode();
   bool muted = false;
+  bool deviceMuted = false;
   bool batch = false;
   bool batchSuspended = false;
   bool permitPhone = true;
@@ -140,6 +155,7 @@ class HarnessPorts {
         },
         runStage: (stage) async {
           await _record('stage:${stage.runtimeType}');
+          if (stage is PersistDeviceMuteStage) deviceMuted = stage.muted;
           if (stage is UpdateRecordingDeviceStage) devicePresent = stage.device != null;
           if (stage is StopDeviceSessionStage && stage.cleanDevice) devicePresent = false;
           if ((stage is StartDeviceSessionStage ||
@@ -820,6 +836,11 @@ void main() {
       steps: [16, 26, 4],
       phase: CapturePhase.phoneBatchPaused,
     ),
+    (
+      name: 'closing onboarding over a live pendant with batch mode off does not turn batch on',
+      steps: [0, 20, 21],
+      phase: CapturePhase.pendantLive,
+    ),
   ]) {
     test(episode.name, () async {
       final model = SequenceModel();
@@ -1138,6 +1159,35 @@ void main() {
     expect(model.state.active?.sessionKey, id);
   });
 
+  test('a Live Activity tap applies only while its recording and conversation are current', () {
+    final model = SequenceModel();
+    model.step(const ScriptStep(2));
+    final live = model.state;
+    final env = environment(live, cardRecordingId: 'recording-2', cardRevision: 4);
+    for (final stale in const [
+      SystemSurfaceTarget(recordingId: 'recording-1', conversationRevision: 4),
+      SystemSurfaceTarget(recordingId: 'recording-2', conversationRevision: 3),
+    ]) {
+      for (final event in [
+        PauseCaptureRequested(target: stale),
+        ResumeCaptureRequested(target: stale),
+        FinishRequested(target: stale),
+      ]) {
+        final rejected = transitionCapture(live, event, env);
+        expect(rejected.state, same(live));
+        expect(rejected.effects, isEmpty);
+        expect(rejected.result, isA<StaleSystemSurfaceTarget>());
+      }
+    }
+    final paused = transitionCapture(
+      live,
+      const PauseCaptureRequested(target: SystemSurfaceTarget(recordingId: 'recording-2', conversationRevision: 4)),
+      env,
+    );
+    expect(paused.state.phase, CapturePhase.phonePaused);
+    expect(paused.effects.whereType<PolicyWrite>().single.muted, isTrue);
+  });
+
   test('permission denial leaves the live pendant and its recording unprocessed', () async {
     final fake = HarnessPorts();
     late CaptureCoordinator coordinator;
@@ -1450,6 +1500,7 @@ void main() {
     await coordinator.dispatch(const PauseCaptureRequested());
     expect(coordinator.state.phase, CapturePhase.pendantBatchPaused);
     expect(fake.muted, isTrue);
+    expect(fake.deviceMuted, isTrue);
     expect(fake.nativeBatchBin, isTrue);
     final before = coordinator.state.encode();
     final id = fake.recordingId;
@@ -1460,6 +1511,7 @@ void main() {
     expect(result.result, isFalse);
     expect(coordinator.state.encode(), before);
     expect(fake.muted, isTrue);
+    expect(fake.deviceMuted, isTrue);
     expect(fake.nativeBatchBin, isTrue);
     expect(fake.recordingId, id);
     expect(fake.snapshot, before);
@@ -1695,10 +1747,12 @@ void main() {
     final pause = coordinator.dispatch(const DevicePauseRequested());
     final drop = coordinator.dispatch(const DeviceUpdated(null));
     await Future<void>.delayed(Duration.zero);
-    expect(fake.log.last, 'policy:true');
+    expect(fake.log.last, 'stage:PersistDeviceMuteStage');
+    expect(fake.muted, isFalse, reason: 'local pause waits for the device acknowledgement');
     held.complete();
     expect((await pause).failed, isFalse);
     expect((await drop).failed, isFalse);
+    expect(fake.deviceMuted, isTrue);
     expect(coordinator.state.phase, CapturePhase.idle);
     expect(fake.ble, isFalse);
     expect(fake.socket, isFalse);

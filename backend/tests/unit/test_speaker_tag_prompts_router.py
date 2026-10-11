@@ -35,19 +35,15 @@ def _answer_body(**extra):
 
 
 def test_list_returns_service_payload(monkeypatch):
-    monkeypatch.setattr(router_module.service, 'get_prompts', lambda uid: SpeakerTagPromptsResponse(status='cooldown'))
+    monkeypatch.setattr(
+        router_module.service, 'get_prompts', lambda uid, **kwargs: SpeakerTagPromptsResponse(status='cooldown')
+    )
     response = _client(monkeypatch).get('/v1/speaker-tag-prompts')
     assert response.status_code == 200 and response.json()['status'] == 'cooldown'
 
 
-def test_answer_maps_entitlement_and_validation_errors(monkeypatch):
+def test_answer_maps_lookup_and_validation_errors(monkeypatch):
     client = _client(monkeypatch)
-
-    def forbidden(*args, **kwargs):
-        raise router_module.service.TagPromptForbidden('paid')
-
-    monkeypatch.setattr(router_module.service, 'apply_answer', forbidden)
-    assert client.post('/v1/speaker-tag-prompts/answer', json=_answer_body()).status_code == 402
 
     def missing(*args, **kwargs):
         raise LookupError('Person not found')

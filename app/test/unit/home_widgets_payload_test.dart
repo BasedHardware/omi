@@ -1,13 +1,16 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/home_widgets_service.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 
 /// What the iOS Home Screen widgets are given (ios/BatteryWidget/SharedDefaults.swift reads it).
 void main() {
+  setUpAll(() => initializeDateFormatting());
   final en = lookupAppLocalizations(const Locale('en'));
 
   BtDevice device(String id, String name, DeviceType type) => BtDevice(id: id, name: name, type: type, rssi: -50);
@@ -41,8 +44,13 @@ void main() {
 
     test('nothing connected: every paired device, none live; the phone is never listed', () {
       final omi = device('omi-1', '', DeviceType.omi);
-      final doc =
-          HomeWidgetsPayload.devices(saved: [omi], connected: null, isConnected: false, battery: 80, charging: false);
+      final doc = HomeWidgetsPayload.devices(
+        saved: [omi],
+        connected: null,
+        isConnected: false,
+        battery: 80,
+        charging: false,
+      );
       final devices = (doc['devices'] as List).cast<Map<String, Object?>>();
       expect(devices, hasLength(1));
       expect(devices.single['name'], 'Omi', reason: 'an unnamed pendant still has a name');
@@ -75,8 +83,12 @@ void main() {
         task('tomorrow', due: DateTime.utc(2026, 9, 27)),
       ];
       expect(HomeWidgetsPayload.pickUpNext(today, open).map((t) => t.id), ['today', 'tomorrow', 'next-week']);
-      expect(HomeWidgetsPayload.pickUpNext(today, open, limit: 5).map((t) => t.id),
-          ['today', 'tomorrow', 'next-week', 'undated']);
+      expect(HomeWidgetsPayload.pickUpNext(today, open, limit: 5).map((t) => t.id), [
+        'today',
+        'tomorrow',
+        'next-week',
+        'undated',
+      ]);
     });
 
     test('nothing due today: upcoming tasks still show ahead of their day', () {
@@ -101,8 +113,12 @@ void main() {
   });
 
   group('Latest', () {
-    ServerConversation conversation(String id,
-        {bool discarded = false, ConversationStatus? status, String title = ''}) {
+    ServerConversation conversation(
+      String id, {
+      bool discarded = false,
+      ConversationStatus? status,
+      String title = '',
+    }) {
       final structured = Structured(title, '')..actionItems = [ActionItem('Call back')];
       return ServerConversation(
         id: id,
@@ -130,8 +146,17 @@ void main() {
       expect(doc['title'], 'Call Chitapa reminder');
       expect(doc['at'], DateTime.utc(2026, 9, 26, 19, 14).millisecondsSinceEpoch / 1000);
       expect(doc['detail'], startsWith('1 task · '));
-      expect(HomeWidgetsPayload.latest(conversation('untitled'), en)!['title'], en.untitledConversation);
+      expect(HomeWidgetsPayload.latest(conversation('untitled'), en)!['title'], isNot(contains('·')));
       expect(HomeWidgetsPayload.latest(null, en), isNull);
+    });
+
+    test('an untitled conversation honors the device 24-hour clock setting', () {
+      final date = OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: en);
+      final doc = HomeWidgetsPayload.latest(conversation('untitled'), en, dates: date)!;
+      final startedAt = DateTime.utc(2026, 9, 26, 19, 14).toLocal();
+      expect(doc['title'], date.dateTime(startedAt));
+      expect(doc['title'], isNot(contains('AM')));
+      expect(doc['title'], isNot(contains('PM')));
     });
   });
 }

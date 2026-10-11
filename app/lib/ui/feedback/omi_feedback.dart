@@ -34,7 +34,8 @@ Color get _infoIconColor => OmiColors.textSecondary;
 ///   "not undone", so its caller commits).
 /// * The surface stays neutral (the theme's snackbar colour); colour lives on the icon only, so
 ///   text keeps its contrast.
-/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance].
+/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance], and of a
+///   pushed page's pinned bottom action via [OmiFeedbackClearance].
 ///
 /// ```dart
 /// OmiFeedback.confirm(context, l10n.memoryUpdated);
@@ -159,6 +160,8 @@ abstract final class OmiFeedback {
   }
 
   static double _extraBottom(BuildContext context) {
+    final local = context.getInheritedWidgetOfExactType<OmiFeedbackClearance>();
+    if (local != null) return local.bottom;
     final clearance = bottomClearance;
     if (clearance == null) return 0;
     final navigator = Navigator.maybeOf(context, rootNavigator: true);
@@ -182,4 +185,18 @@ abstract final class OmiFeedback {
         ),
     };
   }
+}
+
+/// Lifts toasts shown from inside [child] by [bottom] points, clear of a pinned bottom action the
+/// page draws over its content (the conversation page's Ask Omi bar). Takes precedence over
+/// [OmiFeedback.bottomClearance] for those toasts. A sheet shown from the page is not inside it; pass
+/// the page's context to [OmiFeedback] when such a toast lands on the page.
+class OmiFeedbackClearance extends InheritedWidget {
+  const OmiFeedbackClearance({super.key, required this.bottom, required super.child});
+
+  /// Extra space above the safe area.
+  final double bottom;
+
+  @override
+  bool updateShouldNotify(OmiFeedbackClearance oldWidget) => bottom != oldWidget.bottom;
 }

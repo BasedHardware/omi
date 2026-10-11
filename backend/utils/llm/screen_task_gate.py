@@ -58,7 +58,13 @@ def decide_screen_task(state: str, *, audit_draw: float | None = None) -> Screen
     # One attempt: caller latency is bounded and a missing decision must preserve recall.
     answers = ask_jev(state, QUESTIONS, lane='screen_task', timeout_seconds=2.0, max_attempts=1)
     if answers is None:
-        record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='recovered')
+        record_fallback(
+            component='screen_task_gate',
+            from_mode='jev',
+            to_mode='gemini_3_8',
+            reason='gate_unavailable',
+            outcome='recovered',
+        )
         return ScreenTaskGateDecision(True, 'fail_open')
     if answers.noul('needs_extraction') >= _probability_env('SCREEN_TASK_JEV_THRESHOLD', 0.5):
         return ScreenTaskGateDecision(True, 'passed')

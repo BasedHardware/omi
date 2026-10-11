@@ -2,11 +2,15 @@
   "schema_version": 1,
   "id": "FC-device-mute-cleared-on-disconnect",
   "violated_contract": "An explicit pause/mute is a privacy boundary owned by the CV1 pendant. Disconnecting Bluetooth must not resume capture, and reconnect must restore the paused UI from device state. Only an explicit unmute may start storing or transmitting audio again.",
-  "canonical_prevention": "Persist mute in NVS under the settings key muted, expose it on the settings mute characteristic, drop pusher TX and offline storage while muted, write the flag from the app on pause/resume, and resolve reconnect pause from the device bit with a local-pref fallback for firmware that lacks the characteristic.",
+  "canonical_prevention": "Persist mute in NVS under the settings key muted, expose it on the settings mute characteristic, drop pusher TX and offline storage while muted, write the flag from the app on pause/resume, and resolve reconnect pause from the device bit with a local-pref fallback for firmware that lacks the characteristic. A mute write is acknowledged only after NVS succeeds, failed writes preserve the last confirmed state, and the app verifies device readback before committing local policy; superseded intent restores the winning hardware mute.",
   "canonical_prevention_artifact": [
     "app/test/unit/device_mute_sync_test.dart",
     "app/test/unit/omi_capture_mute_ble_test.dart",
-    "app/test/providers/capture_provider_test.dart"
+    "app/test/providers/capture_provider_test.dart",
+    "omi/firmware/omi/tests/test_capture_mute_settings.c",
+    "app/test/services/capture/capture_device_pause_test.dart",
+    "app/test/services/capture/capture_coordinator_test.dart",
+    "app/test/services/capture/tiered_capture_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [
@@ -15,7 +19,9 @@
     "omi/firmware/omi/src/settings.c",
     "app/lib/services/capture/device_mute_sync.dart",
     "app/lib/services/capture/capture_controller.dart",
-    "app/lib/services/devices/connectors/omi_connection.dart"
+    "app/lib/services/devices/connectors/omi_connection.dart",
+    "app/lib/services/capture/capture_coordinator.dart",
+    "app/lib/services/capture/capture_silence_policy.dart"
   ],
   "status": "open"
 }

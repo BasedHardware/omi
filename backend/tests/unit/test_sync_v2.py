@@ -9,11 +9,13 @@ v1 remains completely unchanged.
 """
 
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 
 import asyncio
 import json
@@ -1298,11 +1300,17 @@ def _install_sync_observability_stubs():
     fallback_mod.record_fallback = MagicMock()
     transcription_mod = types.ModuleType('utils.observability.transcription')
     transcription_mod.record_sync_transcription_outcome = MagicMock()
+    transcription_mod.record_sync_intake_outcome = MagicMock()
+    journeys_mod = types.ModuleType('utils.observability.journeys')
+    journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
+    sys.modules['utils.observability.journeys'] = journeys_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
+    obs_pkg.journeys = journeys_mod
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
     return fallback_mod
 
@@ -1371,6 +1379,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
+            'utils.conversations.smart_merge_policy',
             'utils.conversations.process_conversation',
             'utils.sync.bridge',
             'utils.conversations.factory',
@@ -1403,9 +1412,11 @@ class TestAsyncCoordinatorBehavioral:
             'utils.sync.backfill',
             'utils.sync.content_id',
             'utils.speaker_assignment',
+            'utils.speaker_permissions',
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -1413,6 +1424,15 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
+
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
 
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is
@@ -1427,11 +1447,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
         sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
 
-        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
-        # models.structured.Structured at module scope; both would otherwise be
-        # MagicMocks here. Register a minimal real pydantic Structured and the real
-        # enum member BEFORE the exec — the module is pure, so its title logic
-        # then runs for real.
+        # Keep deterministic title logic real with Structured and CategoryEnum before exec.
         from pydantic import BaseModel as _BaseModel
 
         class _Structured(_BaseModel):
@@ -2933,7 +2949,8 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
             assert result['failed_segments'] == 1
             assert result['total_segments'] == 1
-            assert result['errors'] == ['stt_upstream_error']
+            assert result['errors'] == ['sync_persistence_failed']
+            assert result['provider'] == result['model'] == 'unknown'
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -3377,6 +3394,7 @@ class TestV2EndpointExecution:
             'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
+            'utils.conversations.smart_merge_policy',
             'utils.conversations.process_conversation',
             'utils.sync.bridge',
             'utils.conversations.factory',
@@ -3409,9 +3427,11 @@ class TestV2EndpointExecution:
             'utils.sync.backfill',
             'utils.sync.content_id',
             'utils.speaker_assignment',
+            'utils.speaker_permissions',
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -3419,6 +3439,15 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
+
+        # The speaker entitlement must be a visible, fixed contract, not a truthy
+        # MagicMock: sync identification consults it when building the person
+        # cache, so pin it to paid explicitly.
+        sys.modules['utils.speaker_permissions'].named_speaker_prompts_allowed = lambda uid: True
 
         # New conversation-assignment seam: pipeline imports the pure
         # deterministic minimum and the lifecycle intake. The former is
@@ -3433,11 +3462,7 @@ class TestV2EndpointExecution:
         saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
         sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
 
-        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
-        # models.structured.Structured at module scope; both would otherwise be
-        # MagicMocks here. Register a minimal real pydantic Structured and the real
-        # enum member BEFORE the exec — the module is pure, so its title logic
-        # then runs for real.
+        # Keep deterministic title logic real with Structured and CategoryEnum before exec.
         from pydantic import BaseModel as _BaseModel
 
         class _Structured(_BaseModel):
@@ -3963,12 +3988,12 @@ class TestConversationFinalizerExecutor:
     def test_process_conversation_uses_postprocess_bulkhead(self):
         source = self._read_finalizer_source()
         assert 'postprocess_executor' in source
-        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
+        assert re.search(
+            r'run_blocking\(\s+postprocess_executor,\s+process_with_episode_budget,\s+process_conversation', source
+        )
 
 
-# ---------------------------------------------------------------------------
 # 14. Bulkhead executor infrastructure tests
-# ---------------------------------------------------------------------------
 
 
 class TestBulkheadExecutors:

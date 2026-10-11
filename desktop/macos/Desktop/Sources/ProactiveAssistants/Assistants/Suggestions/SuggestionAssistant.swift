@@ -20,21 +20,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
-      // Deliberately independent of ContextBucketsFeature. The buckets rollout gated this
-      // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
-      // live suggestions — it delivered almost nothing, and with the flag at 100% of all
-      // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
-      //
-      // The JIT ambient lane *is* the explicit, evidenced replacement (owner decision
-      // 2026-09-01): it emits `focus_nudge` under the same Focus badge and Settings toggle,
-      // and `JITProactivityLaneState` is set only from the backend's own admission verdict
-      // per context visit — so an unknown or disabled rollout keeps this assistant live.
-      // The migration is judged by delivered-per-kind-per-day on the dogfood account, not
-      // by the flag flipping.
-      await MainActor.run {
-        SuggestionAssistantSettings.shared.isEnabled
-          && !JITProactivityLaneState.isActive(ownerID: RuntimeOwnerIdentity.currentOwnerId())
-      }
+      await MainActor.run { SuggestionAssistantSettings.shared.isEnabled }
     }
   }
 
@@ -104,6 +90,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       apiKey: apiKey,
       model: model,
       fallbackModel: "gemini-2.5-flash",
+      lane: .suggestions,
       workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)

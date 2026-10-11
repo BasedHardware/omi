@@ -115,6 +115,7 @@ enum RealtimeHubSessionHandoffReason: String, Equatable {
   case providerSettings = "provider_settings"
   case systemWake = "system_wake"
   case voiceLanguages = "voice_languages_changed"
+  case assistantVoice = "assistant_voice"
   case transportFailure = "transport_failure"
 }
 

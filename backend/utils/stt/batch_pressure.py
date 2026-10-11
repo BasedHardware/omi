@@ -45,8 +45,6 @@ class BatchPressure:
         self._configured = True
 
     def start_from_env(self) -> None:
-        if os.getenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false').lower() != 'true':
-            return
         try:
             allocation = float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
             min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))

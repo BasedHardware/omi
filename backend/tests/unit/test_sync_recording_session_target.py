@@ -8,6 +8,7 @@ from copy import deepcopy
 
 import pytest
 
+from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
 from utils.sync.recording_session_target import (
@@ -233,7 +234,8 @@ def test_truncated_candidate_query_cannot_establish_uniqueness():
     assert client.query_limit == 6
 
 
-def test_matching_recording_session_dedupes_into_the_live_conversation():
+def test_matching_recording_session_dedupes_into_the_live_conversation(monkeypatch):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     store = StrictFirestore()
     original = live_row()
     store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)
@@ -247,7 +249,8 @@ def test_matching_recording_session_dedupes_into_the_live_conversation():
     assert len(conversations(store)) == 1
 
 
-def test_live_bound_mixed_wal_drops_one_near_exact_repeat_and_keeps_new_speech():
+def test_live_bound_mixed_wal_drops_one_near_exact_repeat_and_keeps_new_speech(monkeypatch):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     store = StrictFirestore()
     original = live_row()
     store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)
@@ -264,6 +267,29 @@ def test_live_bound_mixed_wal_drops_one_near_exact_repeat_and_keeps_new_speech()
         TEXT,
         'A new discussion after the repeated line.',
     ]
+
+
+@pytest.mark.parametrize('skew', [1, 30])
+def test_flag_on_keeps_short_repeat_that_coverage_cannot_prove(skew):
+    """The default-on conservative rule never drops a 7-token line it cannot prove."""
+    store = StrictFirestore()
+    original = live_row()
+    store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)
+    incoming = chunk('wal', 1000 + skew, text=TEXT)
+    expected_survivors = 1
+    if skew == 1:
+        incoming['finished_at'] = incoming['started_at'] + (original['finished_at'] - original['started_at']) * 2
+        incoming['transcript_segments'].append(
+            {'start': 10.0, 'end': 19.5, 'text': 'A new discussion after the repeated line.', 'speaker_id': 0}
+        )
+        expected_survivors = 2
+    result, created, survivors = intake(store, incoming, target_id=select([original]))
+    assert not created and result['id'] == 'live'
+    assert len(survivors) == expected_survivors
+    stored = [segment['text'] for segment in result['transcript_segments']]
+    assert TEXT in stored
+    if skew == 1:
+        assert 'A new discussion after the repeated line.' in stored
 
 
 def test_live_bound_mixed_wal_keeps_single_match_with_loose_time_alignment():

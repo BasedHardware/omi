@@ -2,6 +2,8 @@ import asyncio
 import io
 import os
 import sys
+import threading
+import time
 import wave
 from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -11,7 +13,9 @@ import httpx
 import pytest
 import soundfile as sf
 
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 from starlette.websockets import WebSocketDisconnect
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -335,7 +339,7 @@ class TestV1TranscribeEndpoint:
     def test_v1_batch_submit_returns_result(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {
                 "text": "batch result",
                 "timestamp": {"segment": [{"segment": "batch result", "start": 0.0, "end": 1.0}]},
@@ -365,6 +369,195 @@ class TestV1TranscribeEndpoint:
         assert "overloaded" in resp.json()["detail"].lower()
 
 
+class TestV1QueueDeadline:
+
+    def test_live_budget_header_propagates_queue_deadline(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        t_before = time.monotonic()
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '3.5'},
+        )
+        t_after = time.monotonic()
+        assert resp.status_code == 200
+        deadline = engine.submit.await_args.kwargs['queue_deadline']
+        assert t_before + 3.5 <= deadline <= t_after + 3.5
+
+    def test_live_absent_budget_defaults_to_eight_seconds(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        t_before = time.monotonic()
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Surface': 'live-window'},
+        )
+        t_after = time.monotonic()
+        assert resp.status_code == 200
+        deadline = engine.submit.await_args.kwargs['queue_deadline']
+        assert t_before + 8.0 <= deadline <= t_after + 8.0
+
+    def test_live_invalid_budgets_reject_400_before_file_write(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        for bad in ('bogus', 'nan', 'inf', '-0.5', '0'):
+            resp = client.post(
+                "/v1/transcribe",
+                files={"file": ("test.wav", b"fake", "audio/wav")},
+                headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': bad},
+            )
+            assert resp.status_code == 400, bad
+        engine.submit.assert_not_called()
+
+    def test_backfill_ignores_budget_header(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Timeout-Seconds': 'bogus'},
+        )
+        assert resp.status_code == 200
+        assert engine.submit.await_args.kwargs['queue_deadline'] is None
+        assert engine.submit.await_args.kwargs['lane'] == 'backfill'
+
+    @pytest.mark.asyncio
+    async def test_live_expired_budget_returns_503_queue_timeout(self, monkeypatch, tmp_path):
+        app, mod, gpu, _ = _make_app_with_mocks(gpu_ready=True)
+        engine = BatchEngine(gpu, max_batch_size=1, max_inflight=1, vram_safety_factor=0)
+        monkeypatch.setattr(mod, 'batch_engine', engine)
+        monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: 1.0)
+        inflight = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+
+        def hang_submit(*_args):
+            entered.set()
+            return inflight, None
+
+        gpu.submit.side_effect = hang_submit
+
+        clock = [time.monotonic()]
+        fake_time = SimpleNamespace(monotonic=lambda: clock[0])
+        monkeypatch.setattr(mod, 'time', fake_time)
+        monkeypatch.setattr(sys.modules['batch_engine'], 'time', fake_time)
+
+        written = []
+
+        def slow_write(path, data):
+            clock[0] += 0.2
+            with open(path, "wb") as f:
+                f.write(data)
+            written.append(path)
+
+        monkeypatch.setattr(mod, '_write_file', slow_write)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        refusals_before = mod.LANE_REFUSALS.labels(lane='live', reason='queue_timeout')._value.get()
+
+        await engine.start()
+        blocker = asyncio.create_task(engine.submit('synthetic-blocker.wav', lane='live'))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                resp = await client.post(
+                    '/v1/transcribe',
+                    files={'file': ('a.wav', b'abc')},
+                    headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '0.05'},
+                )
+            assert resp.status_code == 503
+            assert resp.json() == {
+                'detail': 'Queued transcription request expired — try again',
+                'error': 'queue_timeout',
+            }
+            assert resp.headers['x-omi-stt-error'] == 'queue_timeout'
+            assert mod.LANE_REFUSALS.labels(lane='live', reason='queue_timeout')._value.get() == refusals_before + 1
+            assert gpu.submit.call_count == 1
+            assert written and not os.path.exists(written[0])
+        finally:
+            if not inflight.done():
+                inflight.set_result([{'text': ''}])
+            await asyncio.gather(blocker, return_exceptions=True)
+            await engine.stop()
+
+    @pytest.mark.asyncio
+    async def test_cancelled_during_upload_write_unlinks_owned_file_after_write_finishes(self, monkeypatch, tmp_path):
+        _, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        write_started = threading.Event()
+        write_gate = threading.Event()
+        write_done = threading.Event()
+        written = []
+
+        def gated_write(path, data):
+            written.append(path)
+            write_started.set()
+            write_gate.wait(timeout=10)
+            try:
+                with open(path, "wb") as f:
+                    f.write(data)
+            finally:
+                write_done.set()
+
+        monkeypatch.setattr(mod, '_write_file', gated_write)
+        cancelled_before = mod.REQUESTS_TOTAL.labels(endpoint='v1_transcribe', status='cancelled')._value.get()
+
+        request = Request(
+            {
+                'type': 'http',
+                'method': 'POST',
+                'headers': [(b'x-omi-stt-surface', b'live-window')],
+            }
+        )
+        upload = UploadFile(file=io.BytesIO(b'abc'), filename='a.wav')
+        task = asyncio.create_task(mod.transcribe(request, upload))
+        try:
+            deadline = asyncio.get_running_loop().time() + 5
+            while not write_started.is_set():
+                assert asyncio.get_running_loop().time() < deadline
+                await asyncio.sleep(0.001)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert not engine.submit.called
+            write_gate.set()
+            assert write_done.wait(timeout=5)
+            deadline = asyncio.get_running_loop().time() + 5
+            while os.path.exists(written[0]):
+                assert asyncio.get_running_loop().time() < deadline
+                await asyncio.sleep(0.001)
+        finally:
+            write_gate.set()
+        assert mod.REQUESTS_TOTAL.labels(endpoint='v1_transcribe', status='cancelled')._value.get() == (
+            cancelled_before + 1
+        )
+
+    def test_failed_upload_write_removes_partial_owned_file(self, monkeypatch, tmp_path):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        written = []
+
+        def fail_write(path, data):
+            written.append(path)
+            with open(path, "wb") as f:
+                f.write(b'partial')
+            raise OSError('disk full')
+
+        monkeypatch.setattr(mod, '_write_file', fail_write)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("a.wav", b"abc", "audio/wav")})
+        assert resp.status_code == 500
+        assert not engine.submit.called
+        assert written and not os.path.exists(written[0])
+
+
 class TestV2TranscribeEndpoint:
 
     def test_v2_returns_503_when_loading(self):
@@ -378,7 +571,7 @@ class TestV2TranscribeEndpoint:
     def test_v2_batch_submit_with_diarize_false(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -410,7 +603,7 @@ class TestV2TranscribeEndpoint:
     def _post_v2_with_mocked_transcriber(self, data):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -536,7 +729,7 @@ class TestAudioDurationFromBytes:
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -636,7 +829,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -668,7 +861,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 0.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -681,7 +874,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -699,7 +892,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 5.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)

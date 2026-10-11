@@ -193,7 +193,8 @@ describe('executeKeywordSearchWith (injected)', () => {
         status: 'active',
         similarity: null,
         match_type: 'fts',
-        relevance_score: 3
+        relevance_score: 3,
+        source: 'action_item'
       },
       {
         id: 2,
@@ -201,7 +202,8 @@ describe('executeKeywordSearchWith (injected)', () => {
         status: 'completed',
         similarity: null,
         match_type: 'fts',
-        relevance_score: null
+        relevance_score: null,
+        source: 'action_item'
       },
       {
         id: 1,
@@ -209,7 +211,8 @@ describe('executeKeywordSearchWith (injected)', () => {
         status: 'active',
         similarity: null,
         match_type: 'fts',
-        relevance_score: null
+        relevance_score: null,
+        source: 'staged_task'
       }
     ])
   })
@@ -269,6 +272,8 @@ describe('executeKeywordSearchWith (real FTS)', () => {
     expect(results.find((r) => r.description === 'Falcon budget recap')?.status).toBe('completed')
     // Two results share id 1 (one action, one staged) — proof there is no id-dedupe.
     expect(results.filter((r) => r.id === 1)).toHaveLength(2)
+    expect(results.find((r) => r.description === 'review the Falcon budget')?.source).toBe('action_item')
+    expect(results.find((r) => r.description === 'draft the Falcon launch email')?.source).toBe('staged_task')
   })
 })
 

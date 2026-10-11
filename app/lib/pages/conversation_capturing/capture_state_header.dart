@@ -9,10 +9,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// title with a status dot (or a spinner while processing). The state is announced when it
 /// changes.
 class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ConversationStateAppBar({super.key, required this.state, this.backKey, this.bufferingFor, this.sourceLabel});
+  const ConversationStateAppBar(
+      {super.key, required this.state, this.backKey, this.bufferingFor, this.sourceLabel, this.showStatus = true});
 
   /// What is recording ("Pendant", "Phone mic"), shown after the state: "Listening · Pendant".
   final String? sourceLabel;
+  final bool showStatus;
 
   /// The state, named from the shared table in `capture_state_labels.dart` so the live page, the
   /// processing page and the conversation list's capture card never give one moment two names.
@@ -56,34 +58,36 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
       backgroundColor: OmiColors.surface0,
       centerTitle: true,
       leading: Center(child: OmiBackButton.circled(key: backKey)),
-      title: Semantics(
-        liveRegion: true,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            ExcludeSemantics(child: indicator),
-            const SizedBox(width: OmiSpacing.xs),
-            Flexible(
-              child: Text(
-                // A sentence status keeps all its room; a source adds to a one-word state only.
-                sourceLabel == null || sentenceStatus
-                    ? captureStateLabel(context.l10n, state, bufferingFor: bufferingFor)
-                    : context.l10n.captureStatusWithSource(
-                        captureStateLabel(context.l10n, state, bufferingFor: bufferingFor), sourceLabel!),
-                style: sentenceStatus
-                    ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
-                    : sourceLabel == null
-                        ? OmiType.headline
-                        : OmiType.headline.copyWith(height: 1.15),
-                maxLines: sentenceStatus ? 3 : (sourceLabel == null ? 1 : 2),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+      title: !showStatus
+          ? Text(sourceLabel ?? '', style: OmiType.headline)
+          : Semantics(
+              liveRegion: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ExcludeSemantics(child: indicator),
+                  const SizedBox(width: OmiSpacing.xs),
+                  Flexible(
+                    child: Text(
+                      // A sentence status keeps all its room; a source adds to a one-word state only.
+                      sourceLabel == null || sentenceStatus
+                          ? captureStateLabel(context.l10n, state, bufferingFor: bufferingFor)
+                          : context.l10n.captureStatusWithSource(
+                              captureStateLabel(context.l10n, state, bufferingFor: bufferingFor), sourceLabel!),
+                      style: sentenceStatus
+                          ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
+                          : sourceLabel == null
+                              ? OmiType.headline
+                              : OmiType.headline.copyWith(height: 1.15),
+                      maxLines: sentenceStatus ? 3 : (sourceLabel == null ? 1 : 2),
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }

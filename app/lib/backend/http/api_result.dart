@@ -139,9 +139,11 @@ Future<ApiResult<T>> executeApi<T>({
   ApiSend? send,
   ApiExecutionSeams? execution,
   DateTime Function()? now,
+  bool Function()? canSend,
 }) async {
   final clock = now ?? DateTime.now;
   try {
+    if (canSend != null && !canSend()) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
     if (send != null) {
       return _classifyResponse(await send(request), decode, clock);
     }
@@ -152,6 +154,7 @@ Future<ApiResult<T>> executeApi<T>({
       body: request.body,
       method: request.method,
       execution: execution,
+      canSend: canSend,
       onAuthRefresh: (result) => observedRefresh = result,
     );
     if (response.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {

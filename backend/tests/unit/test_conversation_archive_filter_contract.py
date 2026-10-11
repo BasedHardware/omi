@@ -180,6 +180,10 @@ def conversations_db():
     utils_other.__path__ = []
     utils_conversations = ModuleType("utils.conversations")
     utils_conversations.__path__ = []
+    utils_llm = ModuleType("utils.llm")
+    utils_llm.__path__ = []
+    utils_llm_model_constants = ModuleType("utils.llm.model_constants")
+    utils_llm_model_constants.LUNA_MODEL = "gpt-6-luna"
 
     fakes = {
         "google": google,
@@ -191,6 +195,8 @@ def conversations_db():
         "database._client": database_client,
         "database.firestore_read_metrics": firestore_read_metrics,
         "database.helpers": database_helpers,
+        "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
+        "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
         "models": models,
         "models.audio_file": AutoMockModule("models.audio_file"),
@@ -199,11 +205,16 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.llm": utils_llm,
+        "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
         # database.conversations imports this helper at module load, but archive
         # filtering never calls it; keep the contract isolated from its graph.
         "utils.person_evidence": AutoMockModule("utils.person_evidence"),
+        "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
+        "utils.observability.speaker_learning_jobs": AutoMockModule("utils.observability.speaker_learning_jobs"),
+        "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
@@ -237,10 +248,16 @@ def conversations_db():
         "utils.manual_speaker_assignments",
         os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
     )
+    fakes["models.note_claims"] = load_module_fresh("models.note_claims", str(_BACKEND / "models" / "note_claims.py"))
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
     fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
     fakes["utils.manual_speaker_assignments"] = manual_assignments_real
+    # The write-only score size guard is pure; keep its real module available
+    # when the fixture replaces the utils package with an empty import path.
+    fakes["utils.firestore_document_size"] = load_module_fresh(
+        "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(

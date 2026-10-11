@@ -37,9 +37,7 @@ class ChatAppsDrawer extends StatelessWidget {
     final l10n = context.l10n;
     return Drawer(
       backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
           builder: (context, messageProvider, appProvider, child) {
@@ -67,16 +65,11 @@ class ChatAppsDrawer extends StatelessWidget {
                   ),
                 ),
                 Divider(color: OmiColors.border, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
-                  child: Text(
-                    l10n.selectApp,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-                  ),
-                ),
                 Expanded(
+                  // The rows say what they are: no "Select App" label above them, and no empty-state
+                  // sentence that explains the Enable Apps row below it.
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
                     children: [
                       _AppRow(
                         avatar: const ChatOmiAvatar(),
@@ -92,13 +85,17 @@ class ChatAppsDrawer extends StatelessWidget {
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
                         ),
-                      if (chatApps.isEmpty)
+                      if (messageProvider.isLoadingChatApps && chatApps.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(OmiSpacing.lg),
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                        )
+                      else if (messageProvider.chatAppsProblem != null)
                         Padding(
-                          padding: const EdgeInsets.all(OmiSpacing.lg),
-                          child: Text(
-                            l10n.noChatAppsEnabled,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                            textAlign: TextAlign.center,
+                          padding: const EdgeInsets.all(OmiSpacing.md),
+                          child: OmiErrorState(
+                            message: l10n.chatAppsLoadFailed,
+                            onRetry: messageProvider.fetchChatApps,
                           ),
                         ),
                       ListTile(

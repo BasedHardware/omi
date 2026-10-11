@@ -12,7 +12,25 @@ enum BYOKValidator {
     case notChecked
     case checking
     case ok
+    /// The provider answered about the key: it does not authenticate.
     case failed(String)
+    /// The check produced no verdict about the key — transport failure,
+    /// timeout, a provider 5xx, or a rate limit. Never deactivate an
+    /// enrollment on this; the next validation retries.
+    case transient(String)
+  }
+
+  /// True when the outcome says nothing about whether the key works.
+  ///
+  /// Only a provider verdict (`.ok`, `.failed`) may drive enrollment
+  /// activation or teardown. Treating a transient non-answer as a rejection
+  /// turned an offline launch or a provider blip into a permanent BYOK
+  /// teardown: the key text stayed in Settings, the server-side free-plan
+  /// flag flipped off, and every later chat silently rode the managed lane
+  /// into billing 402s.
+  static func isTransient(_ status: Status) -> Bool {
+    if case .transient = status { return true }
+    return false
   }
 
   /// Hit the provider and return whether the key authenticates.
@@ -60,7 +78,7 @@ enum BYOKValidator {
     do {
       let (_, response) = try await URLSession.shared.data(for: request)
       guard let http = response as? HTTPURLResponse else {
-        return .failed("No HTTP response")
+        return .transient("No HTTP response")
       }
       if (200..<300).contains(http.statusCode) {
         return .ok
@@ -68,9 +86,12 @@ enum BYOKValidator {
       if http.statusCode == 401 || http.statusCode == 403 {
         return .failed("Rejected (HTTP \(http.statusCode))")
       }
+      if http.statusCode == 429 || (500...599).contains(http.statusCode) {
+        return .transient("HTTP \(http.statusCode)")
+      }
       return .failed("HTTP \(http.statusCode)")
     } catch {
-      return .failed(error.localizedDescription)
+      return .transient(error.localizedDescription)
     }
   }
 

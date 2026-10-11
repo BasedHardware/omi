@@ -39,10 +39,18 @@ class AudioRingBuffer:
         self._buffered_bytes = 0
 
     def _append_bytes(self, data: bytes) -> None:
-        for byte in data:
-            self.buffer[self.write_pos] = byte
-            self.write_pos = (self.write_pos + 1) % self.capacity
-        self.total_bytes_written += len(data)
+        n = len(data)
+        copy = min(n, self.capacity)
+        source_offset = n - copy
+        start = (self.write_pos + source_offset) % self.capacity
+        dest = memoryview(self.buffer)
+        source = memoryview(data)[source_offset:]
+        first = min(copy, self.capacity - start)
+        dest[start : start + first] = source[:first]
+        if first < copy:
+            dest[: copy - first] = source[first:]
+        self.write_pos = (self.write_pos + n) % self.capacity
+        self.total_bytes_written += n
 
     def _record_span(self, start_ts: float, n_bytes: int) -> None:
         if n_bytes <= 0:

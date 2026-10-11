@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import math
 from types import SimpleNamespace
@@ -264,3 +265,12 @@ def test_live_replaces_a_near_match_for_the_same_speaker(monkeypatch):
     matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1', 'p2'}, 's2', set())
     assert matcher._suggested_person[3] == 'p2'
     assert emitted[-1] == ((3, '', 'Sam', 's2'), {'suggested_person_id': 'p2'})
+
+
+@pytest.fixture(autouse=True)
+def paid_named_speaker_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+    from routers.listen import speakers
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

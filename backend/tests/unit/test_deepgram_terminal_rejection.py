@@ -98,6 +98,13 @@ class _RejectedSocket:
         self.finished = True
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions retain the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 def _deepgram_receiver() -> SimpleNamespace:
     host = SimpleNamespace(
         state=SimpleNamespace(active=True),
@@ -476,6 +483,7 @@ async def test_the_fallback_chain_names_an_account_refusal_as_auth():
         patch.object(streaming, 'record_fallback') as record,
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
             connect_modulate=AsyncMock(return_value=modulate_socket),
@@ -497,6 +505,7 @@ async def test_an_exhausted_chain_still_counts_the_refusal_on_the_circuit():
         pytest.raises(RuntimeError, match='No STT fallback provider was configured'),
     ):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
         )
@@ -513,6 +522,7 @@ async def test_the_next_leg_telemetry_carries_the_auth_reason_forward():
         patch.object(streaming, 'record_fallback') as record,
     ):
         _, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
             connect_modulate=AsyncMock(side_effect=RuntimeError('modulate exploded')),
@@ -543,6 +553,7 @@ async def test_a_deployment_without_modulate_walks_straight_to_parakeet_on_a_ref
         patch.object(streaming, 'record_fallback'),
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
             connect_modulate=None,
@@ -564,6 +575,7 @@ async def test_a_typed_rejection_opens_the_deepgram_circuit_at_threshold():
         pytest.raises(RuntimeError, match='No STT fallback provider was configured'),
     ):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
         )
@@ -586,9 +598,10 @@ async def test_the_open_circuit_shields_the_account_from_a_second_refusal():
     ):
         with pytest.raises(RuntimeError, match='No STT fallback provider was configured'):
             await streaming.connect_stt_socket_with_fallback(
-                primary_service=STTService.deepgram, connect_primary=connect_primary
+                use_config=False, primary_service=STTService.deepgram, connect_primary=connect_primary
             )
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=connect_primary,
             connect_modulate=AsyncMock(return_value=modulate_socket),
@@ -613,10 +626,13 @@ async def test_the_circuit_recovers_when_a_later_session_connects_healthy():
     ):
         with pytest.raises(RuntimeError, match='No STT fallback provider was configured'):
             await streaming.connect_stt_socket_with_fallback(
-                primary_service=STTService.deepgram, connect_primary=AsyncMock(side_effect=_refusal(402))
+                use_config=False,
+                primary_service=STTService.deepgram,
+                connect_primary=AsyncMock(side_effect=_refusal(402)),
             )
         clock[0] += 31.0  # cooldown elapsed → half-open probe
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(return_value=dg_socket),
         )
@@ -636,6 +652,7 @@ async def test_a_refusal_never_opens_the_parakeet_circuit():
         patch.object(streaming, 'record_fallback'),
     ):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
             connect_modulate=AsyncMock(return_value=_LiveSocket()),

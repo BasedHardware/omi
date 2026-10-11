@@ -1,8 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -49,8 +55,23 @@ abstract interface class CaptureBleListeners {
 }
 
 /// Production [CaptureBleListeners] over the shared [BleBridge] singleton.
-class BleBridgeCaptureListeners implements CaptureBleListeners {
+class BleBridgeCaptureListeners implements CaptureBleListeners, CaptureIngressPort {
   const BleBridgeCaptureListeners();
+
+  @override
+  bool get supportsIngressHealth => defaultTargetPlatform == TargetPlatform.iOS;
+  @override
+  CaptureIngressHealth? ingressHealth(String deviceId) => BleBridge.instance.ingressHealth(deviceId);
+  @override
+  void addIngressListener(VoidCallback listener) => BleBridge.instance.addIngressListener(listener);
+  @override
+  void removeIngressListener(VoidCallback listener) => BleBridge.instance.removeIngressListener(listener);
+  @override
+  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async {
+    if (!supportsIngressHealth) return;
+    await BleHostApi().setCaptureAuthorized(deviceId, authorized);
+    BleBridge.instance.setNativeIngressOwner(deviceId, authorized);
+  }
 
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) =>
@@ -87,14 +108,21 @@ typedef CaptureConversationSocketOpen = Future<TranscriptSegmentSocketService?> 
 
 /// Auth identity boundary for the capture pipeline.
 ///
-/// Covers the two production reads of [AuthService] on the recovery path:
-/// whether a reconnect may run, and the bounded refresh after the server
-/// rejects a token (websocket close code 4001).
+/// Covers the production reads of [AuthService] on the recovery path:
+/// whether a reconnect may run, the bounded refresh after the server rejects
+/// a token (websocket close code 4001), and the terminal sign-out when the
+/// server closes because the account is being deleted (close code 4005,
+/// [accountDeletionWebSocketCloseCode]).
 class CaptureAuthBoundary {
-  const CaptureAuthBoundary({required this.isSignedIn, required this.refreshIdToken});
+  const CaptureAuthBoundary({
+    required this.isSignedIn,
+    required this.refreshIdToken,
+    this.expireDeletedAccountSession = _productionExpireDeletedAccountSession,
+  });
 
   final bool Function() isSignedIn;
   final Future<Object?> Function() refreshIdToken;
+  final Future<void> Function() expireDeletedAccountSession;
 
   /// The production boundary over the shared [AuthService] singleton.
   static const CaptureAuthBoundary production = CaptureAuthBoundary(
@@ -105,6 +133,10 @@ class CaptureAuthBoundary {
   static bool _productionIsSignedIn() => AuthService.instance.isSignedIn();
 
   static Future<Object?> _productionRefreshIdToken() => AuthService.instance.refreshIdToken();
+
+  static Future<void> _productionExpireDeletedAccountSession() => AuthService.instance.expireSession(
+        const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.accountDeleted, code: 'websocket_4005'),
+      );
 }
 
 /// Connectivity boundary.

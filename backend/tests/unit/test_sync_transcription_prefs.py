@@ -228,9 +228,7 @@ def _build_intake_fakes() -> dict:
 def sync_module():
     """Load routers.sync + utils.stt.pre_recorded under stubbed heavy deps.
 
-    Ensures the heavy transitive imports (database/google/firebase/deepgram/native
-    audio) are faked *before* the target modules are exec'd, then evicts the
-    stub-fed modules on teardown so nothing leaks to other test files.
+    Fake dependencies before imports and evict them on teardown.
     """
     os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
     os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
@@ -238,6 +236,7 @@ def sync_module():
     import google.cloud.storage as _gcs
 
     fakes = _build_fakes()
+    fakes['utils.speaker_permissions'] = MagicMock(named_speaker_prompts_allowed=lambda uid: True)
     _intake_fakes = _build_intake_fakes()
     _orig_storage_client = getattr(_gcs, 'Client', None)
     _gcs.Client = MagicMock
@@ -977,6 +976,43 @@ class TestBuildPersonEmbeddingsCache:
 
         cache = build_person_embeddings_cache('uid1')
         assert cache == {}
+
+    @patch('utils.sync.speaker_identity.named_speaker_prompts_allowed', lambda uid: False)
+    @patch('utils.sync.pipeline.get_user_name', MagicMock(return_value='David'))
+    @patch('utils.sync.pipeline.users_db')
+    def test_free_plan_loads_owner_only(self, mock_users_db):
+        """The PR's core sync gate: a free plan keeps the owner and prunes people."""
+        pipeline = importlib.import_module('utils.sync.pipeline')
+
+        mock_users_db.get_user_speaker_embedding.return_value = [0.1] * 512
+        mock_users_db.get_people.return_value = [
+            {
+                'id': 'p1',
+                'name': 'Alice',
+                'speaker_embedding': [0.2] * 512,
+                'speech_samples': ['sample-1'],
+                'speech_samples_version': 3,
+            }
+        ]
+
+        cache = pipeline.build_person_embeddings_cache('uid1')
+
+        assert set(cache) == {'user'}
+        assert cache['user']['name'] == 'David'
+        assert mock_users_db.get_people.call_count == 0
+
+    def test_free_plan_identify_prunes_non_owner_candidates(self, monkeypatch):
+        """No non-owner person_id or is_user assignment may happen on a free plan."""
+        from utils.sync import speaker_identity
+
+        monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: False)
+        cache = speaker_identity.PersonEmbeddingsCache(False)
+        cache['p1'] = {'embedding': np.ones((1, 2)), 'name': 'Alice'}
+        segments = [_make_transcript_segment(speaker_id=1, start=0.0, end=6.0, text='hello', seg_id='s1')]
+        speaker_identity.identify_speakers_for_segments(segments, None, cache, 'uid1')
+
+        assert segments[0].person_id is None
+        assert segments[0].is_user is False
 
 
 class TestExtractSpeakerClipWav:

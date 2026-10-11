@@ -1,19 +1,24 @@
 """Wire/error expectations captured from origin/main (afa78002), without live calls.
 
-Each request uses a deterministic clock to pin the full deadline and retry budget,
+Each request advances a deterministic clock by 300ms during the state read,
+then pins the full inference deadline and retry budget,
 including origin/main's acceptance of a valid body on a 3xx response.
+All generation aliases now use the active dedicated reservation; embeddings retain shared capacity.
 """
 
 import json
 
 import httpx
 import pytest
+from config.vertex_reservations import State
 
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.providers import ProviderFailure, VertexGeminiProvider
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.desktop_gemini_gateway import gemini_body_to_openai_chat
+from llm_gateway.gateway.vertex_wire import _vertex_request
 
 
 @pytest.mark.asyncio
@@ -21,9 +26,9 @@ from utils.llm import vertex_pt_routing as ptr
 @pytest.mark.parametrize(
     'anchor,served,location,capacity',
     [
-        ('gemini-2.5-flash', 'gemini-2.5-flash', 'us-central1', 'dedicated'),
-        ('gemini-2.5-flash-lite', 'gemini-2.5-flash-lite', 'us-central1', 'shared'),
-        ('gemini-2.5-pro', 'gemini-3.1-flash-lite', 'us', 'shared'),
+        ('gemini-2.5-flash-lite', 'gemini-2.5-flash', 'us-central1', 'dedicated'),
+        ('gemini-2.5-pro', 'gemini-2.5-flash', 'us-central1', 'dedicated'),
+        ('gemini-3.8-flash', 'gemini-2.5-flash', 'us-central1', 'dedicated'),
     ],
 )
 @pytest.mark.parametrize(
@@ -43,6 +48,7 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.REGIONAL_LOCATION_ENV, 'us-central1')
     monkeypatch.setenv(ptr.MULTI_REGION_LOCATION_ENV, 'us')
+    monkeypatch.setenv('OMI_VERTEX_PT_TARGET_LOCATION', 'us')
     monkeypatch.setenv('LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS', 'false')
     for name in [ptr.PT_MODEL_OVERRIDE_ENV, ptr.OVERFLOW_MODEL_OVERRIDE_ENV, ptr.OVERFLOW_ENABLED_ENV]:
         monkeypatch.delenv(name, raising=False)
@@ -76,13 +82,17 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
     async def token():
         return 'synthetic-token'
 
-    overflow = status == 429 and capacity == 'dedicated' and message.startswith('Provisioned')
     expected = [(served, location, capacity, 60.0)]
-    if overflow:
-        expected.append(('gemini-3.1-flash-lite', 'us', 'shared', 59.75))
-        failure = None
+    if status == 429 and 'provisioned' in message.lower():
+        failure = FailureClass.RESERVED_CAPACITY_UNAVAILABLE
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: now[0])
+
+        async def slow_state_read(*args, **kwargs):
+            now[0] += 0.3
+            return {ptr.PT_MODEL_CURRENT: State.ACTIVE}
+
+        monkeypatch.setattr(provider._reservations, 'refresh', slow_state_read)
         provider._model_unavailable_at[served] = -1000.0  # Expired observation; model is eligible again.
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model=anchor),
@@ -109,7 +119,9 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
                 await call()
             assert raised.value.failure_class == failure
             assert str(raised.value) == 'provider request failed'
-            assert raised.value.retry_after_seconds == (7 if status == 429 else None)
+            assert raised.value.retry_after_seconds == (
+                7 if status == 429 and failure != FailureClass.RESERVED_CAPACITY_UNAVAILABLE else None
+            )
         else:
             await call()
     assert len(seen) == len(expected)
@@ -128,83 +140,25 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
         # Do not derive this expectation using the helper under test.
         assert json.loads(request.content) == {
             'contents': [{'role': 'user', 'parts': [{'text': 'synthetic parity input'}]}],
-            'generationConfig': {'maxOutputTokens': 64, 'thinkingConfig': {'thinkingBudget': 0}},
+            'generationConfig': {
+                'maxOutputTokens': 64,
+                'thinkingConfig': ({'thinkingLevel': 'low'} if model == 'gemini-3.8-flash' else {'thinkingBudget': 0}),
+            },
         }
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
-@pytest.mark.parametrize('ready', [False, True])
-@pytest.mark.parametrize('probed_at', [None, 17.0])
-async def test_non_target_traffic_leaves_cross_request_target_promotion_state_untouched(
-    monkeypatch, stream, ready, probed_at
-):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
-    seen = []
-    status = 200
-
-    def handler(request):
-        seen.append(request)
-        body = (
-            {'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}]}
-            if status == 200
-            else {'error': {'message': 'synthetic unclassified error'}}
-        )
-        content = json.dumps(body)
-        if stream and status == 200:
-            content = 'data: ' + content + '\n\n'
-        return httpx.Response(status, content=content)
-
-    async def token():
-        return 'synthetic-token'
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: 100.0)
-        provider._pt_target_ready = ready
-        provider._pt_target_probed_at = probed_at
-        for anchor, status in [
-            ('gemini-2.5-flash', 200),
-            ('gemini-2.5-flash', 401),
-            ('gemini-2.5-flash', 500),
-            ('gemini-2.5-flash', 429),
-            ('gemini-2.5-flash-lite', 200),
-            ('gemini-2.5-pro', 200),
-        ]:
-            kwargs = dict(
-                provider_ref=ProviderRef(provider='gemini', model=anchor),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=60000,
-            )
-            request = {'messages': [{'role': 'user', 'content': 'synthetic parity input'}]}
-
-            async def call():
-                if stream:
-                    return [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-                return await provider.create_chat_completion(request, **kwargs)
-
-            if status >= 400:
-                with pytest.raises(ProviderFailure):
-                    await call()
-            else:
-                await call()
-            assert provider._pt_target_ready is ready
-            assert provider._pt_target_probed_at == probed_at
-        assert len(seen) == 6
-        assert all(ptr.PT_MODEL_TARGET not in str(request.url) for request in seen)
-        assert [request.headers[ptr.REQUEST_TYPE_HEADER] for request in seen[:4]] == [
-            'shared' if ready else 'dedicated'
-        ] * 4
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize('status', [200, 302, 400, 401, 429, 500])
-async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missing_usage(monkeypatch, status):
+@pytest.mark.parametrize('token_delay_seconds', [0.0, 0.25])
+async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missing_usage(
+    monkeypatch, status, token_delay_seconds
+):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.REGIONAL_LOCATION_ENV, 'us-central1')
     monkeypatch.setenv('LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS', 'false')
     monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
     seen = []
+    now = [100.0]
 
     def handler(request):
         seen.append(request)
@@ -222,10 +176,11 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
         )
 
     async def token():
+        now[0] += token_delay_seconds
         return 'synthetic-token'
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: now[0])
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model='gemini-embedding-001'),
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
@@ -254,8 +209,7 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
                 'model': 'gemini-embedding-001',
             }
             assert response.accounting.usage is None
-        assert provider._pt_target_ready is False
-        assert provider._pt_target_probed_at is None
+        assert provider._reservation_states.get(ptr.PT_MODEL_TARGET) != State.ACTIVE
     assert len(seen) == 1
     outgoing = seen[0]
     assert str(outgoing.url) == (
@@ -266,7 +220,31 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
     assert outgoing.headers['authorization'] == 'Bearer synthetic-token'
     assert outgoing.headers['content-type'] == 'application/json'
     assert outgoing.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    # A single predict preserves its exact wire timeout after authentication.
     assert outgoing.extensions['timeout'] == dict(connect=60.0, read=60.0, write=60.0, pool=60.0)
     assert json.loads(outgoing.content) == {
         'instances': [{'content': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}]
     }
+
+
+@pytest.fixture(autouse=True)
+def held_discovery_leases_for_request_matrix(monkeypatch):
+    """Keep synthetic discovery separate from customer-attempt/accounting fixtures."""
+    from utils.llm import vertex_reservation_state
+
+    monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
+
+
+@pytest.mark.parametrize('thinking', [{'thinkingBudget': 0}, {'thinkingLevel': 'high'}])
+def test_bff_to_vertex_wire_accepts_explicit_zero_budget_and_flash_lite_level(thinking):
+    body = {
+        'contents': [{'role': 'user', 'parts': [{'text': 'synthetic'}]}],
+        'generationConfig': {'thinkingConfig': thinking},
+    }
+    translated = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-vertex-flash-lite', stream=False)
+    assert _vertex_request(translated)['generationConfig']['thinkingConfig'] == thinking
+
+
+@pytest.fixture(autouse=True)
+def active_reserved_order(monkeypatch):
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', '{"gemini-2.5-flash":"active","gemini-3.8-flash":"inactive"}')

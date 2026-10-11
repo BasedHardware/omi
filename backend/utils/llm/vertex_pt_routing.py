@@ -1,8 +1,9 @@
 """Vertex Provisioned Throughput routing policy for company-paid Gemini text.
 
-Pure decision logic: which model serves company-paid text, which endpoint a
-model is addressed at, which models may absorb its traffic when it cannot serve
-it, and when a pending PT order has become live. No I/O, no clock, no Redis —
+Pure decision logic: reserved_generation_model selects the sole active order
+model for paid generation. Inactive or ambiguous orders use Luna at the gateway.
+Endpoint and legacy direct-routing helpers are retained for the BYOK boundary;
+the shared Gemini ladders below cannot serve company-paid generation. No I/O, no clock, no Redis —
 the proxy injects observations and owns every side effect, so every rule here
 is unit-testable without a network.
 
@@ -15,13 +16,15 @@ Prices per 1M tokens (Vertex list, captured 2026-08-18):
 
 `gemini-3.1-flash-lite` is NOT the same price class as `gemini-2.5-flash-lite`
 (2.5x in / 3.75x out). It is cheaper than `gemini-2.5-flash` and far cheaper
-than `gemini-2.5-pro`, which is why it absorbs overflow and Pro but must never
-absorb the lanes that clients already pin to `gemini-2.5-flash-lite`.
+than `gemini-2.5-pro`. These historical prices explain the legacy shared
+ladder; they do not authorize company-paid generation on shared capacity.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+
+from config.vertex_reservations import RESERVATIONS, State, policy
 
 # --- Provisioned Throughput orders ----------------------------------------
 # The prepaid model today: 5 GSU, us-central1, flat ~$290.32/day until
@@ -249,19 +252,14 @@ def company_paid_vertex_text_model(model: str, *, knob: str = '') -> str:
     )
 
 
-def resolve_pt_model(*, target_dedicated_ready: bool, override: str = '') -> str:
-    """Which model currently owns prepaid capacity.
-
-    `override` is the operator escape hatch and wins unconditionally, so a bad
-    auto-detection can be pinned back without a code change. It must name a
-    declared company-paid anchor: any other value — in particular a
-    Pro/image-output shape — fails closed instead of becoming the served
-    model (SCA-481).
-    """
-    pinned = _normalize(override)
-    if pinned:
-        return company_paid_vertex_text_model(pinned, knob='pt model override')
-    return PT_MODEL_TARGET if target_dedicated_ready else PT_MODEL_CURRENT
+def resolve_pt_models(states: Mapping[str, State], *, override: str = '') -> frozenset[str]:
+    """All protected capacity, after per-model override resolution at the boundary."""
+    protected = protected_reservations(states)
+    if override:
+        pinned = company_paid_vertex_text_model(override, knob='pt model override')
+        if pinned not in RESERVATIONS:
+            protected |= {pinned}
+    return protected
 
 
 def lane_overflow_origin(lane_key: str) -> str:
@@ -320,7 +318,9 @@ def resolve_overflow_model(*, pt_model: str, override: str = '', origin_model: s
     return resolve_overflow_ladder(pt_model=pt_model, override=override, origin_model=origin_model)[0]
 
 
-def resolve_overflow_ladder(*, pt_model: str, override: str = '', origin_model: str = '') -> tuple[str, ...]:
+def resolve_overflow_ladder(
+    *, pt_model: str, override: str = '', origin_model: str = '', protected_models: Iterable[str] = ()
+) -> tuple[str, ...]:
     """Every on-demand model that may absorb work, best first.
 
     A ladder rather than a single model so a rung that cannot be called at all
@@ -334,14 +334,14 @@ def resolve_overflow_ladder(*, pt_model: str, override: str = '', origin_model: 
     protected = _normalize(pt_model)
     pinned = _normalize(override)
     if pinned:
-        if pinned == protected:
+        if pinned == protected or pinned in protected_models:
             raise ValueError(
                 f'overflow override {pinned!r} equals the provisioned model; '
                 'overflow must never consume the protected reservation'
             )
         ladder: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='overflow model override'),)
     else:
-        ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected)
+        ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected and c not in protected_models)
     ladder = _under_origin_ceiling(ladder, origin_model)
     if not ladder:
         origin = _normalize(origin_model)
@@ -360,6 +360,7 @@ def resolve_fallback_chain(
     unreachable: Iterable[str] = (),
     override: str = '',
     origin_model: str = '',
+    protected_models: Iterable[str] = (),
 ) -> tuple[str, ...]:
     """Models that may serve `model`'s traffic when `model` itself cannot, best first.
 
@@ -385,7 +386,7 @@ def resolve_fallback_chain(
     dead = {_normalize(name) for name in unreachable}
     pinned = _normalize(override)
     if pinned:
-        if pinned == protected:
+        if pinned == protected or pinned in protected_models:
             raise ValueError(
                 f'fallback override {pinned!r} equals the provisioned model; '
                 'fallback must never consume the protected reservation'
@@ -395,7 +396,12 @@ def resolve_fallback_chain(
         chain = MODEL_FALLBACKS.get(head, ())
     return _under_origin_ceiling(
         _under_origin_ceiling(
-            tuple(rung for rung in chain if rung != protected and rung != head and rung not in dead), head
+            tuple(
+                rung
+                for rung in chain
+                if rung != protected and rung not in protected_models and rung != head and rung not in dead
+            ),
+            head,
         ),
         origin_model,
     )
@@ -412,10 +418,11 @@ def request_type_for(*, model: str, pt_model: str) -> str:
 
 
 def is_provisioned_capacity_exhausted(status: int, message: str) -> bool:
-    """Whether a response means 'prepaid capacity is full', not 'slow down'.
+    """Whether a response matches the ambiguous absent-or-full capacity signature.
 
-    Vertex returns 429 for both a saturated PT order and ordinary per-project
-    rate limiting. Only the former should fall back to on-demand; treating a
+    Vertex returns the same capacity signature for absent and saturated orders.
+    Neither establishes reservation state. Ordinary per-project rate limiting
+    must not fall back to on-demand; treating a
     generic 429 as overflow would convert real backpressure into extra spend.
     """
     if status != 429:
@@ -481,7 +488,7 @@ def desktop_text_lane_id(model: str) -> str | None:
     return DESKTOP_TEXT_LANES.get(_normalize(model))
 
 
-def desktop_serving_model(model: str, *, target_dedicated_ready: bool, override: str = '') -> str:
+def desktop_serving_model(model: str, *, override: str = '') -> str:
     """The model that actually serves a company-paid desktop request for `model`.
 
     Pro retains its inexpensive 3.1 Flash-Lite remap. Old Flash clients retain
@@ -491,12 +498,9 @@ def desktop_serving_model(model: str, *, target_dedicated_ready: bool, override:
     normalized = _normalize(model)
     if override:
         company_paid_vertex_text_model(override, knob='pt model override')
-    if normalized == 'gemini-2.5-pro':
-        return 'gemini-3.1-flash-lite'
-    # Old clients retain their original model/list price after migration. The
-    # capacity header changes to shared; 3.8 PayGo is not a safe price remap.
-    if normalized == PT_MODEL_CURRENT:
-        return PT_MODEL_CURRENT
+    action = policy(normalized, State.UNKNOWN)
+    if action.kind == 'remap':
+        return action.model
     return normalized
 
 
@@ -516,20 +520,103 @@ def target_capacity_endpoint(*, location: str) -> tuple[str, str]:
 
 
 def model_payload(payload: Mapping[str, object], model: str) -> dict[str, object]:
-    """Adapt thinking for each real attempt, including cross-family fallback."""
+    """Adapt thinking and legacy tool history for the model actually serving."""
     adapted = dict(payload)
     key = 'generation_config' if 'generation_config' in adapted else 'generationConfig'
     value = adapted.get(key, {})
     config = dict(value) if isinstance(value, Mapping) else {}
     thinking_key = 'thinking_config' if 'thinking_config' in config else 'thinkingConfig'
     thinking = config.get(thinking_key)
-    if model == PT_MODEL_TARGET:
+    if model in RESERVATIONS and RESERVATIONS[model].thinking_level:
         config.pop('thinking_config', None)
-        config['thinkingConfig'] = {'thinkingLevel': 'low'}
+        config['thinkingConfig'] = {'thinkingLevel': RESERVATIONS[model].thinking_level}
     elif not uses_multi_region_endpoint(model) and isinstance(thinking, Mapping):
         level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
         if level is not None:
             config.pop('thinking_config', None)
             config['thinkingConfig'] = {'thinkingBudget': 0 if level == 'minimal' else 1024}
     adapted[key] = config
+    contents = payload.get('contents')
+    if model.startswith('gemini-3') and isinstance(contents, list):
+        # Old desktop builds (and histories predating signature preservation)
+        # cannot recover a signature the gateway discarded. Google's documented
+        # migration marker admits that history. Preserve real signatures and
+        # only fill the first function call: parallel calls need not each sign.
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+        adapted['contents'] = [_legacy_tool_signature(content) for content in contents]
     return adapted
+
+
+def _legacy_tool_signature(content: object) -> object:
+    if not isinstance(content, Mapping) or content.get('role') != 'model':
+        return content
+    parts = content.get('parts')
+    if not isinstance(parts, list):
+        return content
+    for index, part in enumerate(parts):
+        if not isinstance(part, Mapping) or 'functionCall' not in part:
+            continue
+        if part.get('thoughtSignature') or part.get('thought_signature'):
+            return content
+        signed = {**part, 'thoughtSignature': 'skip_thought_signature_validator'}
+        return {**content, 'parts': [*parts[:index], signed, *parts[index + 1 :]]}
+    return content
+
+
+def reservation_capacity(model: str, states: Mapping[str, State], *, override: str = '') -> str:
+    if override:
+        company_paid_vertex_text_model(override, knob='pt model override')
+        if model not in RESERVATIONS:
+            return request_type_for(model=model, pt_model=override)
+    return policy(model, states.get(model, State.UNKNOWN)).kind
+
+
+def protected_reservations(states: Mapping[str, State]) -> frozenset[str]:
+    return frozenset(m for m in RESERVATIONS if policy(m, states.get(m, State.UNKNOWN)).kind == 'dedicated')
+
+
+def reservation_endpoint(model: str, env: Mapping[str, str]) -> tuple[str, str]:
+    spec = RESERVATIONS[model]
+    return target_capacity_endpoint(
+        location=env.get(spec.location_env, spec.location) if spec.location_env else spec.location
+    )
+
+
+def recovery_action(model: str, capacity: str, status: int, message: str, *, overflow_enabled: bool) -> str:
+    """One transport-independent policy; generic backpressure never buys a retry."""
+    spec = RESERVATIONS.get(model)
+    capacity_error = is_provisioned_capacity_exhausted(status, message) or is_provisioned_capacity_absent(
+        status, message
+    )
+    unavailable = is_model_unavailable(status, message)
+    if spec and spec.overflow == 'shared' and capacity == REQUEST_TYPE_DEDICATED:
+        if overflow_enabled and (capacity_error or unavailable):
+            return 'shared'
+        return 'none'
+    if unavailable:
+        return 'unavailable'
+    if overflow_enabled and capacity == REQUEST_TYPE_DEDICATED and capacity_error:
+        return 'overflow'
+    return 'none'
+
+
+RESERVED_CAPACITY_OPTION = 'reserved_capacity_only'
+LUNA_FALLBACK = {'provider': 'openai', 'model': 'gpt-6-luna'}
+
+
+def reserved_generation_model(anchor: str, states: Mapping[str, State], *, override: str = '') -> str | None:
+    """Resolve a desktop alias to the active model of the exclusive Flash order.
+
+    Unknown evidence never admits customer inference. Synthetic dedicated probes
+    remain responsible for discovery. Conflicting active models fail to Luna.
+    """
+    anchor = _normalize(anchor)
+    if anchor not in DESKTOP_TEXT_LANES:
+        return None
+    if override and _normalize(override) not in RESERVATIONS:
+        raise ValueError('OMI_VERTEX_PT_MODEL must name a declared reservation model')
+    order = RESERVATIONS[PT_MODEL_CURRENT].order
+    active = [m for m, spec in RESERVATIONS.items() if spec.order == order and states.get(m) == State.ACTIVE]
+    if len(active) != 1:
+        return None
+    return active[0]

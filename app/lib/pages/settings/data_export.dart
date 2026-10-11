@@ -143,10 +143,7 @@ class DataExport {
       }
       try {
         final routeCompleted = sheetRoute?.completed;
-        await Future.wait<dynamic>([
-          sheetDone,
-          if (routeCompleted != null) routeCompleted,
-        ]);
+        await Future.wait<dynamic>([sheetDone, if (routeCompleted != null) routeCompleted]);
       } catch (_) {}
       disposeBytes();
     }
@@ -172,12 +169,14 @@ class DataExport {
         );
       },
     );
-    unawaited(sheetDone.then((_) {
-      if (!sheetClosed && !downloadDone && !abort.isCompleted) {
-        cancelled = true;
-        abort.complete();
-      }
-    }));
+    unawaited(
+      sheetDone.then((_) {
+        if (!sheetClosed && !downloadDone && !abort.isCompleted) {
+          cancelled = true;
+          abort.complete();
+        }
+      }),
+    );
 
     Future<void> cleanup() async {
       final dir = exportDir;
@@ -249,11 +248,7 @@ class DataExport {
       final touchLease = shareLease ?? touchExportShareLease;
       _RetainedExportShare? retained;
       void retainForRetry() {
-        retained = _RetainedExportShare(
-          filePath: exportedPath,
-          directory: exportDir!,
-          snapshot: snapshot,
-        );
+        retained = _RetainedExportShare(filePath: exportedPath, directory: exportDir!, snapshot: snapshot);
         _retainedShare = retained;
         exportDir = null;
       }
@@ -479,11 +474,7 @@ class DataExport {
 }
 
 class _RetainedExportShare {
-  const _RetainedExportShare({
-    required this.filePath,
-    required this.directory,
-    required this.snapshot,
-  });
+  const _RetainedExportShare({required this.filePath, required this.directory, required this.snapshot});
 
   final String filePath;
   final Directory directory;
@@ -514,7 +505,9 @@ class _ExportProgressContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: OmiSpacing.lg),
-        Center(child: OmiButton.secondary(label: l10n.cancel, onPressed: onCancel)),
+        Center(
+          child: OmiButton.secondary(label: l10n.cancel, onPressed: onCancel),
+        ),
       ],
     );
   }

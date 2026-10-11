@@ -42,6 +42,7 @@ AUDIT_KEYS = {
     'model',
     'question_version',
     'mode',
+    'flattened_ancestor_count',
 }
 GATE = ('legal_hold_deletion_gates', UID)
 MARKER = ('account_deletions', UID)
@@ -175,7 +176,7 @@ def test_no_audit_and_no_gate_read_when_the_pair_is_skipped_or_rejected(world, r
     world.add('n', 71, 10)  # gap outside the window: never reaches Jev
     assert world.finish('n') is False
     result = smart_merge_db.absorb_conversation(
-        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None)
+        UID, 'p', 'n', expected_revision=0, plan=lambda *a: ('survivor_changed', None, None, {})
     )
     assert result.outcome == 'rejected' and result.audit == 'none'
     assert GATE not in [path for _, path in reads]
@@ -535,6 +536,14 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
     }
     purged = []
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: row)
+    # Donor tombstone writes bind to their own module-level client; keep the
+    # purge hermetic and assert the intent was recorded before the donor purge.
+    tombstones = []
+    monkeypatch.setattr(
+        merge_conversations.conversation_tombstones,
+        'record_deletion',
+        lambda uid, cid: tombstones.append(cid),
+    )
     monkeypatch.setattr(
         merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: purged.append(cid)
     )
@@ -542,7 +551,7 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
         merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: purged.append(cid)
     )
     merge_conversations.delete_conversation_with_sync_sources(UID, 'p')
-    assert purged == ['n', 'p'] and recorded.deleted == ['lt_1h']
+    assert purged == ['n', 'p'] and recorded.deleted == ['lt_1h'] and tombstones == ['n']
 
 
 def test_failed_survivor_delete_is_not_counted(recorded, monkeypatch):

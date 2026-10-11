@@ -26,21 +26,24 @@ class NoConversationsHero extends StatelessWidget {
 /// The conversation list with nothing to show under the current filters.
 class EmptyConversationsWidget extends StatelessWidget {
   final bool isStarredFilterActive;
+  final String? dateFilterLabel;
 
-  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false});
+  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false, this.dateFilterLabel});
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(top: 48),
-      child: isStarredFilterActive
-          ? OmiEmptyState(
-              glyph: const FaIcon(FontAwesomeIcons.star),
-              title: l10n.noStarredConversations,
-              message: l10n.starConversationHint,
-            )
-          : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+      child: dateFilterLabel != null
+          ? OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsOnDate(dateFilterLabel!))
+          : isStarredFilterActive
+              ? OmiEmptyState(
+                  glyph: const FaIcon(FontAwesomeIcons.star),
+                  title: l10n.noStarredConversations,
+                  message: l10n.starConversationHint,
+                )
+              : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
     );
   }
 }

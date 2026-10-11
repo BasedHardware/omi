@@ -44,7 +44,6 @@ enum StartupWarmupTaskID: Hashable {
   case databaseWarmup
   case dashboardNetworkRefresh
   case chatPromptContextWarmup
-  case mcpKeyWarmup
   case databaseRetry
   case agentVMProvisioning
   case conversationWarmup
@@ -100,7 +99,6 @@ enum StartupWarmupPolicy {
   /// over. Generous relative to typical (sub-second to low-single-digit-second)
   /// opens so it never false-trips a merely slow first-launch migration.
   static let databaseInitTimeout: Duration = .seconds(30)
-  static let mcpKeyWarmupDelay: TimeInterval = 0.5
   static let dashboardNetworkRefreshDelay: TimeInterval = 4.0
   static let initialSettingsSyncDelay: TimeInterval = 5.0
   static let apiKeyFetchDelay: TimeInterval = 9.0

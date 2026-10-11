@@ -29,6 +29,7 @@ def _drive(monkeypatch, overview):
     sent = []
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *a, **k: True)
     monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *a, **k: None)
+    monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', lambda *a, **k: None)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [{'is_locked': False, 'id': 'c1'}])
     monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_FakeConvo() for _ in items])
     monkeypatch.setattr(
@@ -43,10 +44,12 @@ def _drive(monkeypatch, overview):
     # card. Without a stub this reaches the real MemoryService and issues a live
     # Firestore query from a unit test, which hangs under api_core's retry.
     monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
-    monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append(a))
+    # Scheduled delivery now uses the result-bearing send API so it can retain
+    # recipients when no device accepted the push.
+    monkeypatch.setattr(notif, 'send_notification_result', lambda *a, **k: sent.append(a) or 1)
 
     notif._send_summary_notification(('u1', ['tok1']))
-    assert sent, 'send_notification was not called'
+    assert sent, 'send_notification_result was not called'
     return sent[0][2]  # summary_body is the 3rd positional arg
 
 

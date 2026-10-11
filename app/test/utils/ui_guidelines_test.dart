@@ -15,9 +15,7 @@ void main() {
         label: const TextStyle(fontSize: 10),
       );
 
-      final newTheme = theme.copyWith(
-        title: const TextStyle(fontSize: 20),
-      );
+      final newTheme = theme.copyWith(title: const TextStyle(fontSize: 20));
 
       expect((newTheme as AppTheme).title.fontSize, 20);
       expect(newTheme.subtitle.fontSize, 10);

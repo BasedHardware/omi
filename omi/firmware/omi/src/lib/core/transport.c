@@ -30,6 +30,7 @@
 #include "monitor.h"
 #endif
 #include "capture_mute.h"
+#include "capture_mute_gatt.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
@@ -399,6 +400,9 @@ static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn,
                                                 uint16_t offset,
                                                 uint8_t flags)
 {
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
     if (len != 1) {
         LOG_WRN("Invalid length for dim ratio write: %u", len);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
@@ -476,19 +480,7 @@ static ssize_t settings_mute_write_handler(struct bt_conn *conn,
                                            uint16_t offset,
                                            uint8_t flags)
 {
-    if (len != 1) {
-        LOG_WRN("Invalid length for mute write: %u", len);
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-
-    uint8_t new_muted = ((uint8_t *) buf)[0] ? 1U : 0U;
-    LOG_INF("Received capture mute: %u", new_muted);
-    int err = capture_mute_set(new_muted != 0);
-    if (err) {
-        LOG_ERR("Failed to apply mute setting: %d", err);
-    }
-
-    return len;
+    return capture_mute_gatt_write(buf, len, offset);
 }
 
 static ssize_t settings_mute_read_handler(struct bt_conn *conn,

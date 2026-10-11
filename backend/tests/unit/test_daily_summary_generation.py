@@ -2,7 +2,8 @@
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -67,11 +68,12 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
         'create_daily_summary',
         lambda uid, payload: created.append(payload) or payload.get('id'),
     )
+    monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', lambda *_a: None)
     # Without this stub the scheduled path reaches the real MemoryService and issues a
     # live Firestore query from a unit test, which hangs under api_core's retry (the
     # empty-overview suite documents the same trap).
     monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
-    monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append({'args': a, 'kwargs': k}))
+    monkeypatch.setattr(notif, 'send_notification_result', lambda *a, **k: sent.append({'args': a, 'kwargs': k}) or 1)
 
     # A coroutine, like the real one. The webhook is awaited inline now, so a sync stub would
     # hand asyncio.run a None and the harness itself would be the thing under test.
@@ -190,7 +192,7 @@ def test_existing_day_is_one_firestore_read_and_no_llm(monkeypatch):
     gen = MagicMock()
     monkeypatch.setattr(notif, 'generate_comprehensive_daily_summary', gen)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', MagicMock())
-    monkeypatch.setattr(notif, 'send_notification', MagicMock())
+    monkeypatch.setattr(notif, 'send_notification_result', MagicMock(return_value=1))
 
     record = notif.generate_and_store_daily_summary('u1', date_str, datetime.utcnow(), datetime.utcnow())
     assert record['id'] == 'existing'
@@ -778,3 +780,224 @@ def test_a_backfill_failure_does_not_swallow_the_webhook(monkeypatch):
     assert created, 'the current day was stored before the backfill ran'
     assert len(sent) == 1, 'and pushed'
     assert len(webhooks) == 1, 'so its webhook must still have been sent'
+
+
+def test_scheduled_tokens_are_read_only_for_a_new_recap(monkeypatch):
+    generated_dates, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    reads = []
+    monkeypatch.setattr(
+        notif.notification_db, 'get_all_tokens', lambda uid, **kwargs: reads.append((uid, kwargs)) or ['tok1']
+    )
+    user = ('uid1', notif.summary_budget.DeferredTokens('legacy'), 'UTC')
+    notif._send_summary_notification(user)
+    assert reads == [('uid1', {'legacy_token': 'legacy', 'user_document_loaded': True})]
+    assert len(created) == len(sent) == 1
+    assert sent[0]['kwargs']['tokens'] == ['tok1']
+
+    # A repeated tick encounters the durable record, even after Redis expiry.
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: created[0])
+    notif._send_summary_notification(user)
+    assert len(reads) == 1
+    assert len(created) == len(sent) == 1
+
+
+def test_dormant_or_contended_owner_costs_no_token_reads(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(
+        notif.notification_db, 'get_all_tokens', lambda *_a: (_ for _ in ()).throw(AssertionError('token read'))
+    )
+    monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *_a, **_k: [])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a: False)
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+
+
+def test_token_read_failure_cannot_persist_an_undeliverable_recap(monkeypatch):
+    generated, created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+
+    def unavailable(_uid):
+        raise RuntimeError('token query unavailable')
+
+    monkeypatch.setattr(notif.notification_db, 'get_all_tokens', unavailable)
+    with pytest.raises(RuntimeError, match='token query unavailable'):
+        notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert generated == created == sent == []
+    assert len(released) == 1
+    monkeypatch.setattr(notif.notification_db, 'get_all_tokens', lambda _uid: ['tok1'])
+    notif._send_summary_notification(('uid1', None, 'UTC'))
+    assert len(generated) == len(created) == len(sent) == 1
+
+
+def test_failed_generation_releases_its_day_lock_for_the_next_tick(monkeypatch):
+    generated, created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    working_generator = notif.generate_comprehensive_daily_summary
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError('generation unavailable')
+
+    monkeypatch.setattr(notif, 'generate_comprehensive_daily_summary', unavailable)
+    with pytest.raises(RuntimeError, match='generation unavailable'):
+        notif._send_summary_notification(('uid1', ['tok1'], 'UTC'))
+    assert generated == created == sent == []
+    assert len(released) == 1
+    monkeypatch.setattr(notif, 'generate_comprehensive_daily_summary', working_generator)
+    notif._send_summary_notification(('uid1', ['tok1'], 'UTC'))
+    assert len(generated) == len(created) == len(sent) == 1
+
+
+def test_failed_push_retries_stored_recap_once_without_regeneration(monkeypatch):
+    generated, created, sent, released, webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    working_send = notif.send_notification_result
+    monkeypatch.setattr(notif, 'send_notification_result', lambda *_a, **_k: 0)
+    cohort = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+    user = ('uid1', ['tok1'], 'UTC', cohort)
+
+    with pytest.raises(notif.DailySummaryDeliveryError):
+        notif._send_summary_notification(user)
+    assert len(generated) == len(created) == len(released) == 1
+    assert sent == webhooks == []
+
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: created[0])
+    monkeypatch.setattr(notif, 'send_notification_result', working_send)
+    notif._send_summary_notification((*user, True, True))
+    assert len(generated) == len(created) == len(sent) == len(webhooks) == 1
+    notif._send_summary_notification(user)
+    assert len(generated) == len(created) == len(sent) == len(webhooks) == 1
+
+
+def test_contended_retry_stays_pending_without_releasing_another_workers_lock(monkeypatch):
+    _generated, _created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a: False)
+    with pytest.raises(RuntimeError, match='retry still locked'):
+        notif._send_summary_notification(('uid1', ['tok1'], 'UTC', None, False, True))
+    assert sent == released == []
+
+
+@pytest.mark.parametrize('late_push_succeeds', [False, True])
+def test_timeout_after_persistence_retries_uncertain_push_and_honors_late_receipt(monkeypatch, late_push_succeeds):
+    generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    stored = {}
+    receipts = []
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: stored or None)
+
+    def create(_uid, payload):
+        created.append(payload)
+        stored.update(payload)
+        return payload['id']
+
+    def acknowledge(_uid, summary_id):
+        assert summary_id == stored['id']
+        stored['notification_delivery_completed'] = True
+        receipts.append(summary_id)
+
+    monkeypatch.setattr(notif.daily_summaries_db, 'create_daily_summary', create)
+    monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', acknowledge)
+    monkeypatch.setattr(notif, 'DAILY_SUMMARY_USER_BUDGET_SECONDS', 0.05)
+    entered_push, release_push, worker_finished = threading.Event(), threading.Event(), threading.Event()
+    send_attempts = []
+    working_send = notif.send_notification_result
+
+    def blocked_send(*args, **kwargs):
+        assert stored, 'the real worker must persist the recap before the timeout'
+        send_attempts.append(args)
+        entered_push.set()
+        assert release_push.wait(timeout=5)
+        return working_send(*args, **kwargs) if late_push_succeeds else 0
+
+    monkeypatch.setattr(notif, 'send_notification_result', blocked_send)
+    working_worker = notif._send_summary_notification
+
+    def worker(user):
+        try:
+            working_worker(user)
+        finally:
+            worker_finished.set()
+
+    monkeypatch.setattr(notif, '_send_summary_notification', worker)
+    cohort = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+    user = ('uid1', ['tok1'], 'UTC', cohort, False, False)
+    stats = notif.DailySummaryJobStats()
+    try:
+        asyncio.run(notif._send_bulk_summary_notification([user], stats=stats, target_hour=11))
+        assert entered_push.is_set()
+        assert stats.timed_out == 1
+        assert stats.retry_recipients == {'uid1': True}, 'wait_for must mark unacknowledged delivery as uncertain'
+    finally:
+        release_push.set()
+        assert worker_finished.wait(timeout=5)
+
+    monkeypatch.setattr(notif, 'send_notification_result', working_send)
+    retry_stats = notif.DailySummaryJobStats(retry_recipients=dict(stats.retry_recipients))
+    asyncio.run(
+        notif._send_bulk_summary_notification(
+            [(*user[:4], stats.retry_recipients['uid1'], True)], stats=retry_stats, target_hour=11
+        )
+    )
+    assert len(generated) == len(created) == len(sent) == len(receipts) == 1
+    assert retry_stats.retry_recipients == {}
+    assert len(send_attempts) == 1
+
+
+@pytest.mark.parametrize('later_failure', ['backfill', 'webhook', 'timeout'])
+def test_retry_push_acknowledged_before_later_work_cannot_be_sent_again(monkeypatch, later_failure):
+    generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    cohort = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+    stored = {'id': 'stored-recap', 'date': '2026-10-02', 'headline': 'H'}
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: stored)
+    order = []
+
+    def acknowledge(_uid, summary_id):
+        assert summary_id == stored['id']
+        stored['notification_delivery_completed'] = True
+        order.append('acknowledged')
+
+    monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', acknowledge)
+    release_later_work, worker_finished = threading.Event(), threading.Event()
+    working_worker = notif._send_summary_notification
+
+    def worker(user):
+        try:
+            working_worker(user)
+        finally:
+            worker_finished.set()
+
+    monkeypatch.setattr(notif, '_send_summary_notification', worker)
+    monkeypatch.setattr(notif, 'DAILY_SUMMARY_USER_BUDGET_SECONDS', 0.05)
+
+    def later_work(*_args):
+        assert len(sent) == 1 and stored['notification_delivery_completed']
+        order.append('later_work')
+        if later_failure == 'timeout':
+            assert release_later_work.wait(timeout=5)
+            return
+        raise RuntimeError('later work failed')
+
+    monkeypatch.setattr(
+        notif, '_backfill_recent_daily_summaries', later_work if later_failure != 'webhook' else lambda *_a: None
+    )
+    if later_failure == 'webhook':
+        monkeypatch.setattr(notif, '_deliver_day_summary_webhook', later_work)
+    user = ('uid1', ['tok1'], 'UTC', cohort, True, True)
+    stats = notif.DailySummaryJobStats(retry_recipients={'uid1': True})
+    try:
+        asyncio.run(notif._send_bulk_summary_notification([user], stats=stats, target_hour=11))
+    finally:
+        release_later_work.set()
+        assert worker_finished.wait(timeout=5)
+    if later_failure == 'timeout':
+        assert stats.timed_out == 1, 'exercise wait_for abandoning work after successful delivery'
+    assert stats.retry_recipients == {'uid1': False}, 'post-delivery failure must clear the push retry flag'
+    assert order == ['acknowledged', 'later_work']
+    assert generated == created == []
+
+    # Even a stale saved cursor with a true delivery flag must respect the receipt.
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    retry_stats = notif.DailySummaryJobStats(retry_recipients={'uid1': True})
+    asyncio.run(notif._send_bulk_summary_notification([user], stats=retry_stats, target_hour=11))
+    assert retry_stats.retry_recipients == {}
+    assert len(sent) == 1

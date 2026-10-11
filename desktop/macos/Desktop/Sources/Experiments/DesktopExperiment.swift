@@ -5,7 +5,7 @@ import Sentry
 ///
 /// One shell; the arm is a parameter pack. `control` is byte-identical to the
 /// un-enrolled experience. `memory_v1` changes only wiring and defaults:
-/// postcard-first landing, Interject on, director starved, generic web Q&A
+/// postcard-first landing and generic web Q&A
 /// starved in the agent prompt. See `backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md`.
 ///
 /// The experiment id is the assignment salt server-side: **never rename it**.
@@ -50,7 +50,7 @@ struct DesktopExperimentAssignment: Equatable {
 }
 
 /// Resolves the arm once per owner, **before the main shell paints**, and
-/// publishes it for every consumer (landing, Interject, director, chat
+/// publishes it for every consumer (landing, chat
 /// prompt, telemetry, Sentry, logs).
 ///
 /// Fail-closed: any error, timeout, gate refusal, or kill switch resolves to

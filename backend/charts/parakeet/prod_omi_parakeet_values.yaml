@@ -195,7 +195,9 @@ autoscaling:
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 300
+        # Request the next replica sooner. A new GPU pod is not serving until
+        # startup succeeds. Cold starts still need the three-pod floor and fallback.
+        periodSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 600
       policies:
@@ -205,6 +207,9 @@ autoscaling:
   # Live window admission refuses new sessions at ~3 active requests per pod and ~27% GPU
   # (measured 2026-10-01 evening peak: 6.7% refusals while the old 20 / 70 targets never
   # fired). Scale before the live gate refuses, not after.
+  # The 2026-10-04 dev L4 test passed eight paced sessions provisionally, but
+  # synchronized uploads missed POST p95 <3s and final-step DCGM read all zeros.
+  # Retain these targets until delivery and GPU telemetry qualify higher ones.
   requestsPerPod: 2
   targetGPUUtilization: 35
 

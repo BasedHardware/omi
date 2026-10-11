@@ -14,6 +14,12 @@ use `connectAndListen(deviceId, onPacket)`. Its service and characteristic disco
 filters use Noble's lowercase UUID format without dashes; exported protocol UUIDs
 retain their standard dashed format.
 
+The local Whisper transcriber's `stop()` closes audio input and queues any buffered
+tail. Accepted batches finish in input order, including work already running when
+stopped. `stop()` returns immediately, so transcript callbacks can continue afterward.
+Empty or failed runner results are skipped without blocking later batches; repeated
+stops and PCM appended after stopping do not submit more work.
+
 Run the component's hermetic tests with the repository CI version, Bun 1.3.14:
 
 ```sh

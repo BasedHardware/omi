@@ -17,18 +17,46 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import subprocess
 import sys
 
-OPENAI = pathlib.Path.home() / ".hermes/skills/openai-platform-admin/scripts/openai_admin.py"
-ANTHROPIC = (
-    pathlib.Path.home() / ".hermes/skills/openai-platform-admin/anthropic-platform/scripts/anthropic_platform.py"
-)
+HERE = pathlib.Path(__file__).resolve().parent
+if os.environ.get("FINOPS_AUTH") == "cloudrun":
+    # vendored copies ship inside the producer image (no ~/.hermes there)
+    OPENAI = HERE / "vendor" / "openai_admin.py"
+    ANTHROPIC = HERE / "vendor" / "anthropic-platform" / "anthropic_platform.py"
+else:
+    OPENAI = pathlib.Path.home() / ".hermes/skills/openai-platform-admin/scripts/openai_admin.py"
+    ANTHROPIC = (
+        pathlib.Path.home() / ".hermes/skills/openai-platform-admin/anthropic-platform/scripts/anthropic_platform.py"
+    )
 
 
-def run_json(cmd: list[str]) -> dict:
-    p = subprocess.run([sys.executable] + cmd, capture_output=True, text=True, timeout=900)
+CLOUDRUN = os.environ.get("FINOPS_AUTH") == "cloudrun"
+
+if CLOUDRUN:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import cloudrun
+    import tempfile
+
+    # Materialise mounted secrets as env-file for the admin scripts, without printing values.
+    # openai_admin.py reads OPENAI_ADMIN_KEY from env; anthropic_platform.py takes --env-file.
+    _tmpdir = tempfile.mkdtemp(prefix="finops-prov-")
+    _openai_env = pathlib.Path(_tmpdir) / "openai.env"
+    _openai_env.write_text("OPENAI_ADMIN_KEY=%s\n" % cloudrun.secret("openai"))
+    _anthropic_env = pathlib.Path(_tmpdir) / "anthropic.env"
+    _anthropic_env.write_text("ANTHROPIC_ADMIN_API_KEY=%s\n" % cloudrun.secret("anthropic"))
+    _OPENAI_ENV_FLAG = []
+    _ANTHROPIC_ENV_FLAG = ["--env-file", str(_anthropic_env)]
+else:
+    _OPENAI_ENV_FLAG = []
+    _ANTHROPIC_ENV_FLAG = []
+
+
+def run_json(cmd: list[str], env: dict | None = None) -> dict:
+    p = subprocess.run([sys.executable] + cmd, capture_output=True, text=True, timeout=900, env=env)
     if p.returncode != 0:
         raise SystemExit("provider pull failed: %s\n%s" % (cmd[0], p.stderr[-1500:]))
     return json.loads(p.stdout)
@@ -39,10 +67,15 @@ def openai_costs(start: str, end_excl: str) -> dict:
     t1 = int(dt.datetime.fromisoformat(end_excl).replace(tzinfo=dt.timezone.utc).timestamp())
     days = max(1, (t1 - t0) // 86400)
     merged = None
+    _env = None
+    if CLOUDRUN:
+        _env = dict(os.environ)
+        _env["OPENAI_ADMIN_KEY"] = cloudrun.secret("openai")
     while True:
         page = run_json(
             [
                 str(OPENAI),
+                *_OPENAI_ENV_FLAG,
                 "costs",
                 "--start-time",
                 str(t0),
@@ -54,7 +87,8 @@ def openai_costs(start: str, end_excl: str) -> dict:
                 str(min(180, days)),
                 "--group-by",
                 "line_item,project_id",
-            ]
+            ],
+            env=_env,
         )
         if merged is None:
             merged = page
@@ -74,7 +108,17 @@ def openai_costs(start: str, end_excl: str) -> dict:
 
 def anthropic_costs(start: str, end_excl: str) -> dict:
     return run_json(
-        [str(ANTHROPIC), "cost", "--start", start + "T00:00:00Z", "--end", end_excl + "T00:00:00Z", "--limit", "31"]
+        [
+            str(ANTHROPIC),
+            *_ANTHROPIC_ENV_FLAG,
+            "cost",
+            "--start",
+            start + "T00:00:00Z",
+            "--end",
+            end_excl + "T00:00:00Z",
+            "--limit",
+            "31",
+        ]
     )
 
 

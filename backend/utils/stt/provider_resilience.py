@@ -12,11 +12,24 @@ import os
 import threading
 import time
 import weakref
-from typing import Any, Callable, Final
+from typing import Any, Callable, Final, NamedTuple
 
 from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN
 
 logger = logging.getLogger(__name__)
+
+
+class _SelectionState(NamedTuple):
+    """Selection evidence an account bench temporarily supersedes."""
+
+    state: str
+    opened_at: float
+    failures: int
+    opened_by_serve_error: bool
+    remaining_successes_to_close: int
+
+
+_CLOSED_SELECTION = _SelectionState('closed', 0.0, 0, False, 1)
 
 EXPECTED_REJECTIONS = frozenset({'capacity_full', 'allocation_rejected'})
 
@@ -121,6 +134,8 @@ class ProviderCircuitBreaker:
         self._opened_by_serve_error = False
         self._remaining_successes_to_close = 1
         self._account_cooldown: float | None = None
+        self._account_identity: str | None = None
+        self._selection_snapshot: _SelectionState | None = None
         self._generation = 0
         self._lock = threading.RLock()
         # Observability only: publishes omi_stt_provider_circuit_open on every
@@ -268,6 +283,7 @@ class ProviderCircuitBreaker:
             # previous ladder had climbed.
             self._serve_error_events = 0
             self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._selection_snapshot = None
             self._publish_state()
 
     def record_failure(self) -> None:
@@ -279,6 +295,34 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 if self._opened_by_serve_error:
                     self._remaining_successes_to_close = self._serve_error_successes_to_close
+                self._publish_state()
+                return
+            if self._account_cooldown is not None:
+                snapshot = self._selection_snapshot or _CLOSED_SELECTION
+                if snapshot.state == 'half_open':
+                    snapshot = snapshot._replace(
+                        state='open',
+                        opened_at=self._clock(),
+                        remaining_successes_to_close=(
+                            self._serve_error_successes_to_close
+                            if snapshot.opened_by_serve_error
+                            else snapshot.remaining_successes_to_close
+                        ),
+                    )
+                else:
+                    failures = snapshot.failures + 1
+                    if failures >= self._failure_threshold:
+                        snapshot = snapshot._replace(
+                            state='open',
+                            opened_at=self._clock(),
+                            failures=failures,
+                            opened_by_serve_error=False,
+                            remaining_successes_to_close=1,
+                        )
+                    else:
+                        snapshot = snapshot._replace(failures=failures)
+                self._selection_snapshot = snapshot
+                self._generation += 1
                 self._publish_state()
                 return
             self._failures += 1
@@ -307,10 +351,6 @@ class ProviderCircuitBreaker:
         """
         with self._lock:
             self._probes_in_flight = 0
-            self._state = 'open'
-            self._generation += 1
-            self._opened_at = self._clock()
-            self._opened_by_serve_error = True
             # Escalate: each serve death within an unbroken benching cycle
             # arms a longer next window (baseline for the first death, doubled
             # per further death, capped at 8x), so a provider that keeps
@@ -320,6 +360,19 @@ class ProviderCircuitBreaker:
             self._serve_error_bench_seconds = serve_bench_seconds(
                 self._serve_error_cooldown_seconds, self._serve_error_events - 1
             )
+            self._generation += 1
+            if self._account_cooldown is not None:
+                self._selection_snapshot = (self._selection_snapshot or _CLOSED_SELECTION)._replace(
+                    state='open',
+                    opened_at=self._clock(),
+                    opened_by_serve_error=True,
+                    remaining_successes_to_close=self._serve_error_successes_to_close,
+                )
+                self._publish_state()
+                return
+            self._state = 'open'
+            self._opened_at = self._clock()
+            self._opened_by_serve_error = True
             self._remaining_successes_to_close = self._serve_error_successes_to_close
             self._publish_state()
 
@@ -374,6 +427,14 @@ class ProviderCircuitBreaker:
     def record_account_failure(self, cooldown_seconds: float = 1800) -> None:
         with self._lock:
             self._probes_in_flight = 0
+            if self._account_cooldown is None:
+                self._selection_snapshot = _SelectionState(
+                    self._state,
+                    self._opened_at,
+                    self._failures,
+                    self._opened_by_serve_error,
+                    self._remaining_successes_to_close,
+                )
             self._state = 'open'
             self._generation += 1
             self._opened_at = self._clock()
@@ -393,6 +454,76 @@ class ProviderCircuitBreaker:
         """
 
         self.record_success(serving=True)
+
+    def sync_account_identity(self, identity: str) -> None:
+        """Record the credential fingerprint; a changed identity clears account state only.
+
+        A credential rotation clears the account bench and restores the
+        selection evidence it superseded (a half-open snapshot conservatively
+        re-opens with its original deadline); endpoint-scoped connect/serve
+        evidence is preserved. The generation bump strands the old
+        credential's callbacks.
+        """
+        with self._lock:
+            if self._account_identity == identity:
+                return
+            if self._account_identity is None:
+                self._account_identity = identity
+                return
+            self._account_identity = identity
+            self._probes_in_flight = 0
+            self._generation += 1
+            if self._account_cooldown is not None:
+                self._account_cooldown = None
+                snapshot = self._selection_snapshot or _CLOSED_SELECTION
+                self._selection_snapshot = None
+                self._state = 'open' if snapshot.state == 'half_open' else snapshot.state
+                self._opened_at = snapshot.opened_at
+                self._failures = snapshot.failures
+                self._opened_by_serve_error = snapshot.opened_by_serve_error
+                self._remaining_successes_to_close = snapshot.remaining_successes_to_close
+            self._publish_state()
+
+    def reset_selection(self) -> None:
+        """Clear connect/serve evidence only; an armed account bench keeps its deadline."""
+        with self._lock:
+            self._probes_in_flight = 0
+            self._generation += 1
+            self._failures = 0
+            self._opened_by_serve_error = False
+            self._remaining_successes_to_close = 1
+            self._serve_error_events = 0
+            self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._selection_snapshot = _CLOSED_SELECTION if self._account_cooldown is not None else None
+            if self._account_cooldown is not None:
+                self._state = 'open'
+            else:
+                self._state = 'closed'
+                self._opened_at = 0.0
+            self._publish_state()
+
+    def reset(self) -> None:
+        """Clear every bench as if the breaker had just been constructed.
+
+        The full clear also drops the recorded account identity and any saved
+        selection snapshot, so a subsequent ``sync_account_identity`` records
+        its identity as the first. Bumping the generation strands callbacks
+        already handed out, exactly like any other superseding transition.
+        """
+        with self._lock:
+            self._probes_in_flight = 0
+            self._state = 'closed'
+            self._generation += 1
+            self._opened_at = 0.0
+            self._opened_by_serve_error = False
+            self._account_cooldown = None
+            self._remaining_successes_to_close = 1
+            self._failures = 0
+            self._serve_error_events = 0
+            self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._account_identity = None
+            self._selection_snapshot = None
+            self._publish_state()
 
     def replacement_callbacks(self, *, serving: bool) -> tuple[Callable[[], None], Callable[[], None]]:
         """Callbacks a long-lived session uses to settle ITS admission.

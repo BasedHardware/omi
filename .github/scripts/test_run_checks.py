@@ -654,6 +654,23 @@ class RunnerBehaviorTests(unittest.TestCase):
 
             self.assertTrue(Path(resolved).samefile(bash))
 
+    def test_windows_bash_resolution_from_git_hook_exec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "mingw64/libexec/git-core/git.exe"
+            git.parent.mkdir(parents=True)
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
     def test_windows_bash_path_is_converted_back_to_native(self) -> None:
         commands: list[list[str]] = []
 
@@ -1199,6 +1216,47 @@ class PlatformTests(unittest.TestCase):
         self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
         self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
         self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_literal_package_json_does_not_select_nested_copies(self):
+        """Root firebase-tools pins must not wake admission when a web package changes.
+
+        The iOS compile runner executes macOS-exclusive checks and has no backend
+        venv. `web/frontend/package.json` is not the Firestore emulator pin.
+        """
+        self.assertTrue(trigger_matches("package.json", "package.json"))
+        self.assertFalse(trigger_matches("package.json", "web/frontend/package.json"))
+        self.assertFalse(trigger_matches("package-lock.json", "web/frontend/package-lock.json"))
+        self.assertTrue(trigger_matches("**/AGENTS.md", "backend/AGENTS.md"))
+        self.assertFalse(trigger_matches("AGENTS.md", "backend/AGENTS.md"))
+
+        manifest = load_manifest(MANIFEST_PATH)
+        web_share = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml", "web/frontend/package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+                manifest_changed_ids={"web-share-http-tests"},
+            )
+        }
+        self.assertNotIn("desktop-beta-admission-firestore-contention", web_share)
+
+        root_pin = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+            )
+        }
+        self.assertIn("desktop-beta-admission-firestore-contention", root_pin)
+
+        nested_agents = {check.id for check in resolve_checks(manifest, ["backend/AGENTS.md"], "ci")}
+        self.assertIn("agents-md-lean", nested_agents)
 
     def test_root_level_source_change_selects_plan_catalog_contract(self):
         """The Stripe-literal scan walks from the root, so selection must too.

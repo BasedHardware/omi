@@ -34,3 +34,11 @@ def action_item_identity_preserve_enabled() -> bool:
 
 def action_item_identity_anchor_shadow_enabled() -> bool:
     return _default_on(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV)
+
+
+ACTION_ITEM_REFRESH_PRESERVE_ENV = 'ACTION_ITEM_REFRESH_PRESERVE_ENABLED'
+
+
+def action_item_refresh_preserve_enabled() -> bool:
+    """Preserve tasks on automatic refresh only; unset/blank on, unknown off."""
+    return _default_on(ACTION_ITEM_REFRESH_PRESERVE_ENV)

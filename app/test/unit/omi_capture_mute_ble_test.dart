@@ -10,6 +10,10 @@ class _MuteTransport extends DeviceTransport {
 
   final int features;
   List<int> muteValue;
+  Object? writeError;
+  Object? featureReadError;
+  bool acceptWrite = true;
+  bool malformedFeatures = false;
   final List<(String, String, List<int>)> writes = [];
 
   @override
@@ -33,6 +37,8 @@ class _MuteTransport extends DeviceTransport {
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     if (characteristicUuid == OmiDeviceConnection.featuresCharacteristicUuid) {
+      if (featureReadError != null) throw featureReadError!;
+      if (malformedFeatures) return [];
       return [
         features & 0xff,
         (features >> 8) & 0xff,
@@ -48,7 +54,9 @@ class _MuteTransport extends DeviceTransport {
 
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
+    if (writeError != null) throw writeError!;
     writes.add((serviceUuid, characteristicUuid, List<int>.from(data)));
+    if (acceptWrite) muteValue = List<int>.from(data);
   }
 
   @override
@@ -95,6 +103,28 @@ void main() {
     final connection = _connection(transport);
 
     expect(await connection.getCaptureMuted(), isTrue);
+  });
+
+  test('a refused mute write reaches the caller', () async {
+    final transport = _MuteTransport()..writeError = StateError('ATT persistence failure');
+    await expectLater(_connection(transport).setCaptureMuted(true), throwsStateError);
+  });
+
+  test('unmute is acknowledged only when the device confirms the new state', () async {
+    final transport = _MuteTransport()..acceptWrite = false;
+    await expectLater(_connection(transport).setCaptureMuted(false), throwsStateError);
+    transport.acceptWrite = true;
+    await _connection(transport).setCaptureMuted(false);
+    expect(transport.muteValue, [0]);
+  });
+
+  test('failed or malformed feature reads are not mistaken for legacy firmware', () async {
+    final transport = _MuteTransport()..featureReadError = StateError('disconnected');
+    await expectLater(_connection(transport).setCaptureMuted(true), throwsStateError);
+    transport.featureReadError = null;
+    transport.malformedFeatures = true;
+    await expectLater(_connection(transport).setCaptureMuted(true), throwsStateError);
+    expect(transport.writes, isEmpty);
   });
 
   test('legacy firmware without the mute feature does not write and reports unknown', () async {

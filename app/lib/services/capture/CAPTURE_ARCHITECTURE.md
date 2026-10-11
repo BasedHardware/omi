@@ -102,6 +102,21 @@ User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
 `TranscriptionSettingsChanged`, `RecordProfileChanged`,
 `OnboardingBatchChanged`.
 
+A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
+`FinishRequested` with the card's `SystemSurfaceTarget` (recording id and
+conversation revision). The reducer compares it with the environment when it
+applies the event and rejects a stale tap with no effects
+(`StaleSystemSurfaceTarget`), so a tap queued behind a stop, handoff or finish
+never acts on the recording or conversation that replaced the card's.
+
+The card is quiet by default. Healthy pendant capture shows no Live Activity;
+`CapturePresentationPolicy` (`app/ios/LiveActivity/OmiCaptureAttributes.swift`)
+shows one only while capture needs the user: paused, the pendant unheard for two
+minutes, or its battery at 15% or less. A phone recording the user started keeps
+the recording card. iOS starts a Live Activity only while Omi is in the
+foreground, so a notice that begins in the background appears the next time Omi
+is opened.
+
 External signals: `CallStateChanged`, `MicInterruptionChanged`,
 `NativeMicStalled`, `AppForegrounded`, `SocketClosed`, `SocketConnected`,
 `SocketError`, `KeepAliveTick`, `LaunchRecovery`.
@@ -445,10 +460,17 @@ dispatches simply sanitizes again next launch.
   `wasPaused` intent; no device control opens BLE beneath a phone or call.
   With no owner, the old device-pause API still writes the durable mute
   policy without opening hardware.
+- Explicit pendant pause/resume runs `PersistDeviceMuteStage` before the local
+  `PolicyWrite`. A supported device must acknowledge storage and return matching
+  readback; failures reach the UI caller instead of confirming the new state.
+  A superseded policy restores the winning hardware intent before keeping the
+  prior owner. Phone-only, automatic silence, and call suspension never write
+  this persistent hardware setting.
 - Resume while idle is policy-only: `ResumeCaptureRequested`/
-  `OfflineMuteToggled` with no owner emits `PolicyWrite(false)` and nothing
+  `OfflineMuteToggled` with no connected device emits `PolicyWrite(false)` and nothing
   else — no `ResumeDeviceTailStage`, no socket, no BLE open. An offline
-  unmute changes admission, never ownership.
+  unmute changes admission, never ownership. With a connected pendant, hardware
+  confirmation precedes the policy write but still starts no local capture.
 - A device start admitted under a muted policy is a legitimate paused
   capture: telemetry marks it started, not `failStart`. Any other failed
   start stage fails the transition closed rather than committing a session

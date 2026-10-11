@@ -20,7 +20,6 @@ from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
-from llm_gateway.gateway.request_context import jit_budget_forward_headers
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -1437,31 +1436,10 @@ def _gateway_request_headers(
     request_id: str,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
     platform: str | None = None,
-    jit_headers: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
-    if jit_headers:
-        headers.update(jit_headers)
     return headers
-
-
-def _jit_headers_for_forward(
-    contract_version: str | None,
-    run_id: str | None,
-    max_attempts: str | None,
-    max_output_tokens: str | None,
-    max_input_tokens: str | None,
-    max_spend_micro_usd: str | None,
-) -> dict[str, str]:
-    return jit_budget_forward_headers(
-        contract_version,
-        run_id,
-        max_attempts,
-        max_output_tokens,
-        max_input_tokens,
-        max_spend_micro_usd,
-    )
 
 
 def _record_gateway_result(
@@ -1497,7 +1475,6 @@ async def _stream_gateway(
     request_id: str = 'unknown',
     platform: str | None = None,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
-    jit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
@@ -1514,7 +1491,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id, platform, jit_headers),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1744,10 +1721,8 @@ async def _chat_completions_unobserved(
             x_omi_jit_max_spend_micro_usd,
         )
     )
-    try:
-        jit_headers = _jit_headers_for_forward(*jit_header_values)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid request parameters.") from exc
+    if any(value is not None for value in jit_header_values):
+        raise HTTPException(status_code=410, detail={'error': 'feature_retired'})
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1756,7 +1731,7 @@ async def _chat_completions_unobserved(
     }
     # Hermetic offline profile: short-circuit before quota / Anthropic, matching
     # the retired Rust llm_stub intercept so T2 chat flows stay deterministic.
-    if llm_stub_enabled() and not jit_headers:
+    if llm_stub_enabled():
         if body.get('stream') is True:
             return StreamingResponse(
                 stub_chat_completions_stream(body),
@@ -1767,13 +1742,10 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
-        if jit_headers and not gateway_mode:
-            _log_desktop_chat_unavailable(reason='jit_requires_gateway', request_id=request_id)
-            raise RuntimeError('JIT qualification requires the managed gateway')
         # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
         # thinking escalations stay on the gateway instead of falling back to
         # direct Anthropic (which would 400 on the Luna alias).
-        if gateway_mode and not jit_headers and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
+        if gateway_mode and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
                 from_mode='managed_gateway',
@@ -1822,7 +1794,7 @@ async def _chat_completions_unobserved(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model, jit_headers),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1860,7 +1832,7 @@ async def _chat_completions_unobserved(
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model, x_app_platform, jit_headers),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1877,8 +1849,6 @@ async def _chat_completions_unobserved(
                 'X-Omi-Chat-Contract-Version': '1',
                 'X-Request-Id': request_id,
             }
-            if jit_headers and response.headers.get('x-omi-jit-gateway-receipt'):
-                response_headers['X-Omi-Jit-Gateway-Receipt'] = response.headers['x-omi-jit-gateway-receipt']
             return JSONResponse(
                 response_body,
                 headers=response_headers,

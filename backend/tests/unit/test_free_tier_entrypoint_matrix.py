@@ -77,6 +77,10 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     def put(mod: ModuleType, attr: str, value: Any) -> None:
         setattr(mod, attr, value)
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    put(refresh, 'preserve', lambda *a, **k: False)
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     put(database_pkg, '__path__', [str(_BACKEND / 'database')])
     add('database', database_pkg)
@@ -153,12 +157,9 @@ def _build_fakes() -> dict[str, ModuleType | None]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())

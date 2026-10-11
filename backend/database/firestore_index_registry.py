@@ -1,15 +1,13 @@
 """Repository-owned Firestore query and index requirements.
-
-The Firebase manifest is generated from this registry.  Query specs are added
-incrementally: a registered query spec both builds its production query and
-declares the exact composite index that query needs.  Existing index-only
-requirements remain explicit here until their callers are migrated.
+The generated Firebase manifest follows query specs that own their builders and indexes.
+Index-only requirements stay explicit until callers migrate to query specs.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
+from database.review_queries import REVIEW_QUERY_SPECS
+from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -34,6 +32,46 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *MESSAGING_INDEX_REQUIREMENTS,
+    FirestoreIndexRequirement(
+        'proactivity_followup_source_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('source_id'), _asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_delivered_history',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _asc('state'), _asc('delivered'), _desc('delivered_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_recent_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_feed_state_created',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_producer_cohort',
+        'proactivity_items',
+        'COLLECTION_GROUP',
+        (
+            _asc('producer'),
+            _asc('created_at'),
+            _asc('acted_count'),
+            _asc('charged_micro_usd'),
+            _asc('delivered_count'),
+            _asc('negative_count'),
+            _asc('unknown_count'),
+            _asc('__name__'),
+        ),
+    ),
     # I024: database.conversations.get_conversations_count; macOS
     # LiveConversationRemoteDataSource.count builds folder + starred + day bounds
     # on GET /v1/conversations/count. Reachability report 871737adf7e87104.
@@ -1845,6 +1883,7 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,

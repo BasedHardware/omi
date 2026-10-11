@@ -15,9 +15,16 @@ from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.messaging.memory_privacy import (
+    channel_private_filter_active,
+    is_channel_private_memory,
+    omit_channel_private,
+)
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
+from utils.messaging.projection import surface_runtime
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,6 +33,19 @@ logger = logging.getLogger(__name__)
 # all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
 # are handed to the model at once; the most recent are kept.
 MAX_MEMORIES_FOR_LLM = 300
+
+
+def _channel_empty_memories(date_info=''):
+    runtime = surface_runtime.get()
+    if runtime is None or runtime.surface == 'app':
+        return None
+    return (
+        f"No memories are available to this chat for this query{date_info}. "
+        "Privacy, review, and temporal filters can withhold saved memories. "
+        "This does not prove the user has no saved personal facts. "
+        "Use any supplied activity context accurately and distinguish it from retrieved memories."
+    )
+
 
 # Import agent_config_context for fallback config access
 try:
@@ -282,7 +302,7 @@ def get_memories_tool(
                     visible.append(memory)
                 if len(batch) < fetch_limit:
                     break
-        memories = visible[max(offset, 0) : target_end]
+        memories = omit_channel_private(visible[max(offset, 0) : target_end], configurable)
     except Exception as e:
         logger.error(e)
 
@@ -307,7 +327,9 @@ def get_memories_tool(
         elif end_dt:
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
-        msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
+        msg = _channel_empty_memories(date_info)
+        if msg is None:
+            msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
         if scan_truncated:
             msg += " The bounded scan reached its safety limit; more memories may exist."
         logger.info(f"⚠️ get_memories_tool - {msg}")
@@ -378,7 +400,7 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    logger.info(f"🔧 search_memories_tool called with query: {query}, view: {view}")
+    logger.info('search_memories_tool called view=%s', view)
 
     # Get config from parameter or context variable
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -401,7 +423,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     try:
         requested_view = normalize_temporal_read_view(view)
@@ -463,10 +485,13 @@ def search_memories_tool(
                 matches = service.search(uid, query, limit=limit, candidate_limit=candidate_limit)
             else:
                 matches = service.search(uid, query, limit=limit)
+        hide_private = channel_private_filter_active(configurable)
         matches = [
             match
             for match in matches
-            if not match.memory.is_locked and not (belief_model_enabled() and memory_use_suppressed(match.memory))
+            if not match.memory.is_locked
+            and not (belief_model_enabled() and memory_use_suppressed(match.memory))
+            and not (hide_private and is_channel_private_memory(match.memory))
         ]
         if scope_start_dt or scope_end_dt:
             matches = [
@@ -479,10 +504,14 @@ def search_memories_tool(
                 )
             ][:limit]
         if not matches:
+            channel_msg = _channel_empty_memories()
+            if channel_msg is not None:
+                logger.info('search_memories_tool empty channel result')
+                return channel_msg
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
             )
-            logger.info(f"⚠️ search_memories_tool - {msg}")
+            logger.info('search_memories_tool empty result')
             return msg
 
         records = []

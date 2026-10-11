@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -16,6 +16,7 @@ import database.goals as goals_db
 import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
@@ -23,7 +24,7 @@ from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
-from utils.goals_response import normalize_goal_history_entry
+from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
@@ -65,6 +66,7 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
@@ -81,20 +83,17 @@ from utils.conversations.transcript_hash import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
-from utils.conversations.mcp_transcript_search import (
-    merge_summary_and_transcript_ids,
-    resolve_mcp_conversation_search_ids,
-)
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
 from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
-    record_and_persist_finalized_meeting_receipt,
+    record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.developer_memory_list import read_developer_memories
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
@@ -352,6 +351,8 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
@@ -366,6 +367,7 @@ def get_memories(
             logger.error(f"Invalid category in developer memories: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
+    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -383,45 +385,18 @@ def get_memories(
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
-    if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
-        valid_memories = []
-        for memory in memories:
-            try:
-                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-            except (AttributeError, TypeError, ValidationError, ValueError):
-                logger.warning("Skipping malformed memory in Developer API list")
-        return valid_memories
-    # Category is a sparse filter.  Read ordered universal pages until the
-    # requested category page is filled instead of filtering after a raw page
-    # (which returned short/empty pages whenever non-matching memories led it).
-    target_end = offset + limit
-    scan_offset = 0
-    matched = []
-    max_scan = 5000
-    while scan_offset < max_scan and len(matched) < target_end:
-        batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
-        if not batch:
-            break
-        scan_offset += len(batch)
-        if allowed is None:
-            matched.extend(batch)
-        else:
-            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
-        if len(batch) < batch_limit:
-            break
-    memories = matched[offset:target_end]
-    valid_memories = []
-    for memory in memories:
-        try:
-            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-        except (AttributeError, TypeError, ValidationError, ValueError):
-            # MemoryService normally returns validated MemoryDB rows, but a
-            # malformed historical adapter row must not turn this compatibility
-            # endpoint into a 500 for every otherwise healthy memory.
-            logger.warning("Skipping malformed memory in Developer API list")
-    return valid_memories
+    memories = read_developer_memories(
+        service,
+        uid,
+        limit=limit,
+        offset=offset,
+        allowed=allowed,
+        budget=budget,
+        response_model=CleanerMemory,
+        logger=logger,
+    )
+    finish_list_budget(response, budget)
+    return memories
 
 
 @router.get(
@@ -900,12 +875,15 @@ def create_action_item(
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
     # Send FCM data message if action item has a due date
-    if request.due_at:
+    if action_item.get('due_at'):
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
-            description=request.description.strip(),
-            due_at=request.due_at.isoformat(),
+            description=action_item.get('description', ''),
+            due_at=action_item['due_at'].isoformat(),
+            completed=bool(action_item.get('completed')),
+            status=action_item.get('status'),
+            deleted=bool(action_item.get('deleted')),
         )
 
     return ActionItemResponse(**action_item)
@@ -953,13 +931,16 @@ def create_action_items_batch(
     created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
     # Send FCM messages for items with due dates
-    for idx, item in enumerate(created_items_list):
-        if idx < len(request.action_items) and request.action_items[idx].due_at:
+    for item in created_items_list:
+        if item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
-                description=request.action_items[idx].description.strip(),
-                due_at=request.action_items[idx].due_at.isoformat(),
+                description=item.get('description', ''),
+                due_at=item['due_at'].isoformat(),
+                completed=bool(item.get('completed')),
+                status=item.get('status'),
+                deleted=bool(item.get('deleted')),
             )
 
     # Convert to response objects
@@ -1039,21 +1020,25 @@ def update_action_item(
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
+    updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
     # (#5085).
     if 'completed' in update_data or 'due_at' in update_data:
-        description = request.description.strip() if request.description else action_item.get('description', '')
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
-            description=description,
-            completed=bool(update_data.get('completed', action_item.get('completed'))),
-            due_at=update_data.get('due_at', action_item.get('due_at')),
+            description=updated_item.get('description', ''),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
+            status=updated_item.get('status'),
+            deleted=bool(updated_item.get('deleted')),
         )
 
-    return action_items_db.get_action_item(uid, action_item_id)
+    return updated_item
 
 
 # ******************************************************
@@ -1468,15 +1453,7 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     except ConversationSearchUnavailableError as exc:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    summary_ids = [item["id"] for item in items if item.get("id")]
-    transcript_ids = resolve_mcp_conversation_search_ids(
-        uid,
-        question,
-        limit=request.limit,
-        query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
-    )
-    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
@@ -1538,7 +1515,7 @@ def get_conversations(
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
         offset = max(0, offset)
-        limit = max(1, min(limit, 25 if include_transcript else 100))
+        limit = max(1, min(limit, 200))
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
@@ -1992,6 +1969,21 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
@@ -2014,7 +2006,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2100,7 +2092,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2155,6 +2147,31 @@ def _create_conversation_from_segments(
     if client_projection is not None and not request.client_session_id:
         conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
+        # A delete committing while processing ran must win: re-check intent
+        # before the final persist, otherwise the loser of the admission race
+        # re-persists the row the user just deleted. Both identities are
+        # checked (derived uuid5 and the raw session id, matching admission),
+        # and a hit also purges the processing/processing-completed row this
+        # call may have created or completed, so the retired identity is not
+        # published by our own response path.
+        suppress_id = None
+        if conversation_tombstones.is_deleted(uid, conversation.id):
+            suppress_id = conversation.id
+        elif conversation_tombstones.is_deleted(uid, request.client_session_id):
+            suppress_id = request.client_session_id
+        if suppress_id is not None:
+            logger.info(
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s suppress_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation.id,
+                suppress_id,
+            )
+            try:
+                conversations_db.delete_conversation(uid, conversation.id)
+            except Exception:
+                logger.exception('tombstone suppress row cleanup failed uid=%s conversation=%s', uid, conversation.id)
+            return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,
@@ -2174,7 +2191,7 @@ def _create_conversation_from_segments(
             else {}
         ),
     }
-    receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
+    receipt = record_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
     # Only new successful ingests reach here; idempotent replays return above.
@@ -2310,6 +2327,7 @@ def delete_conversation_endpoint(
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
     from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 
+    conversation_tombstones.record_deletion(uid, conversation_id)
     delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
@@ -2446,6 +2464,7 @@ class UpdateGoalRequest(BaseModel):
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
     """Convert datetime objects to ISO strings for JSON serialization."""
+    goal = normalize_goal_response(goal)
     if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
         goal['created_at'] = goal['created_at'].isoformat()
     if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
@@ -2468,16 +2487,14 @@ def get_goals(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     limit = max(1, min(limit, 1000))
-    if include_inactive:
-        # Pass the clamp down so the response honours the documented limit. The bound is
-        # applied after the in-Python newest-first sort rather than at the query, because a
-        # Firestore order_by('created_at') would silently exclude legacy goals that lack the
-        # field; see get_all_goals.
-        goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
-    else:
-        goals = goals_db.get_user_goals(uid, limit=limit)
-
-    return [_serialize_goal_datetimes(g) for g in goals]
+    return list_developer_goals(
+        uid,
+        limit=limit,
+        include_inactive=include_inactive,
+        goals_db=goals_db,
+        response_model=GoalResponse,
+        logger=logger,
+    )
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")

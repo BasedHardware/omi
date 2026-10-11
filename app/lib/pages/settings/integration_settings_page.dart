@@ -93,57 +93,35 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.all(OmiSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(OmiSpacing.sm),
-                margin: const EdgeInsets.only(bottom: OmiSpacing.xl),
-                decoration: BoxDecoration(
-                  color: OmiColors.successSurface,
-                  borderRadius: OmiRadius.smAll,
-                  border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
+          children: [
+            // Status and what the connection does, in one row; Disconnect follows the content
+            // instead of sitting at the bottom of an otherwise empty screen.
+            OmiSettingsGroup(
+              children: [
+                OmiSettingsRow(
+                  leading: Icon(Icons.check_circle, color: OmiColors.success),
+                  title: context.l10n.connectedToApp(widget.appName),
+                  subtitle: widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: OmiColors.success, size: 16),
-                    const SizedBox(width: OmiSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        context.l10n.connectedToApp(widget.appName),
-                        style: OmiType.subhead.copyWith(color: OmiColors.success),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(context.l10n.account, style: OmiType.headline),
-              const SizedBox(height: OmiSpacing.xs),
-              Text(
-                widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-              ),
-              const SizedBox(height: OmiSpacing.xxl),
-              // Wrap children in Expanded with SingleChildScrollView to handle overflow
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children),
-                ),
-              ),
-              const SizedBox(height: OmiSpacing.md),
-              OmiButton.destructive(
-                label: context.l10n.disconnect,
-                icon: Icons.logout,
-                // Not the future: the button spins only while the disconnect runs, not while the
-                // confirm dialog is open.
-                onPressed: () => unawaited(_disconnect()),
-                isLoading: _disconnecting,
-                expand: true,
-              ),
+              ],
+            ),
+            if (widget.children.isNotEmpty) ...[
+              const SizedBox(height: OmiSpacing.xl),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children),
             ],
-          ),
+            const SizedBox(height: OmiSpacing.xl),
+            OmiButton.destructive(
+              label: context.l10n.disconnect,
+              icon: Icons.logout,
+              // Not the future: the button spins only while the disconnect runs, not while the
+              // confirm dialog is open.
+              onPressed: () => unawaited(_disconnect()),
+              isLoading: _disconnecting,
+              expand: true,
+            ),
+          ],
         ),
       ),
     );

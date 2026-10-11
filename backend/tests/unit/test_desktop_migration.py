@@ -20,9 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
-# ---------------------------------------------------------------------------
 # Paths
-# ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -171,6 +169,8 @@ models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 _stub_package("utils")
 _stub_package("utils.other")
 _stub_package("utils.observability")
+profile_authority_stub = _stub_module("database.speaker_profile_authority")
+profile_authority_stub.person_teaching_authorized = MagicMock(return_value=False)
 fallback_stub = _stub_module("utils.observability.fallback")
 fallback_stub.record_fallback = MagicMock()
 utils_sub_stub = _stub_module("utils.subscription")
