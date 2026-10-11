@@ -90,6 +90,19 @@ def _photo_created_at_sort_key(photo: Dict) -> datetime:
     return created_at
 
 
+def _merge_order_key(conv: Dict) -> datetime:
+    """When a source happened, for ordering sources chronologically.
+
+    ``started_at`` is the capture origin; a source that has none (an API or
+    legacy doc, or an unparseable value degraded to None by the normaliser)
+    still has ``created_at``. Falling straight to ``_UTC_MIN`` sorted such a
+    source first whatever its real time, so a conversation created at noon
+    was placed before one recorded at 10:00, became the transcript origin,
+    and lent the merged conversation its ``created_at``.
+    """
+    return _coerce_dt(conv.get("started_at")) or _coerce_dt(conv.get("created_at")) or _UTC_MIN
+
+
 # Timestamp fields touched by the merge pipeline. Coerced once at the entry
 # point so every downstream caller (sort key, max(), .isoformat(), gap math
 # in _merge_transcript_segments) can assume a uniform tz-aware datetime
@@ -181,8 +194,7 @@ def validate_merge_compatibility(
 
     # Generate warnings for large gaps (but don't reject)
     warnings = []
-    _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-    sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get("started_at")) or _UTC_MIN)
+    sorted_convs = sorted(conversations, key=_merge_order_key)
 
     for i in range(1, len(sorted_convs)):
         prev_finished = _coerce_dt(sorted_convs[i - 1].get("finished_at"))
@@ -252,10 +264,9 @@ def perform_merge_async(
         # details and rationale.
         conversations = _normalize_conversation_timestamps(conversations)
 
-        # Sort by started_at (earliest first). _UTC_MIN keeps sort total even
-        # if a doc has no (or an unparseable) started_at.
-        _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-        sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
+        # Sort by started_at (earliest first), falling back to created_at for a
+        # source without one; _UTC_MIN keeps the sort total when it has neither.
+        sorted_convs = sorted(conversations, key=_merge_order_key)
 
         # 2. Merge raw data
         merged_segments = _merge_transcript_segments(sorted_convs)
