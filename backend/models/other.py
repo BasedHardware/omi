@@ -3,7 +3,7 @@ from enum import Enum
 import math
 from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
-from zoneinfo import ZoneInfo
+import pytz
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -25,8 +25,10 @@ class SyncUserTimeZoneRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("time_zone must be a non-empty IANA timezone")
+        # The daily-summary scheduler selects recipients from pytz's zone list, so a
+        # zone pytz does not know is never scheduled however valid ZoneInfo finds it.
         try:
-            ZoneInfo(stripped)
+            pytz.timezone(stripped)
         except Exception as exc:
             raise ValueError("time_zone must be a valid IANA timezone") from exc
         return stripped
