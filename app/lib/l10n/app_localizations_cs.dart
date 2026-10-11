@@ -9785,6 +9785,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get chatBlockMemory => 'Vzpomínka';
 
   @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Vráceno zpět';
+
+  @override
+  String get chatBlockUndoFailed => 'Tuto změnu se nepodařilo vrátit';
+
+  @override
   String get chatBlockQuestion => 'Otázka';
 
   @override

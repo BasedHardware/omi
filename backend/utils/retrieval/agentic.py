@@ -8,10 +8,12 @@ Anthropic's native streaming contract.
 """
 
 from __future__ import annotations
+from utils.messaging.projection import chat_write_runtime, SurfaceRuntime
+from utils.messaging.contracts import Principal
 from dataclasses import replace
-from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface, channel_evidence
+from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface, channel_evidence, EDIT_GUARDRAIL
 from utils.messaging.projection import project_runtime_tools, surface_runtime
-from utils.messaging.undo import prepare_channel_write
+from utils.messaging.undo import prepare_channel_write, APP_RECEIPT_SCOPE
 
 
 import base64
@@ -40,6 +42,10 @@ from utils.retrieval.tools import (
     get_action_items_tool,
     create_action_item_tool,
     update_action_item_tool,
+    update_conversation,
+    rename_person,
+    edit_memory,
+    delete_memory,
     get_omi_product_info_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
@@ -277,6 +283,10 @@ CORE_TOOLS = [
     get_action_items_tool,
     create_action_item_tool,
     update_action_item_tool,
+    update_conversation,
+    rename_person,
+    edit_memory,
+    delete_memory,
     get_omi_product_info_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
@@ -1806,7 +1816,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # The typed lanes almost never end an answer with a question, so a turn that
     # had an obvious next hop still ends the session. The tail is stripped from
     # the visible text below and delivered as one structured chip instead.
-    system_prompt += FOLLOWUP_PROMPT_SECTION
+    system_prompt += EDIT_GUARDRAIL + FOLLOWUP_PROMPT_SECTION
 
     # The callback is created before tool conversion because device tools close
     # over it: their execution is a round trip to the client on this stream.
@@ -1895,6 +1905,25 @@ user chose not to send; acknowledge that rather than retrying.
 
     # Store config in context variable for tools that use agent_config_context
     agent_config_context.set({"configurable": configurable})
+    # App edit receipts do not enable channel continuity or change mobile routing.
+    write_receipts = []
+    channel_items = []
+    configurable['channel_items'] = channel_items
+    if callback_data is not None:
+        callback_data['action_receipts'] = write_receipts
+        callback_data['channel_items'] = channel_items
+    write_context_token = None
+    if surface_runtime.get() is None or surface_runtime.get().surface == 'app':
+        write_context_token = chat_write_runtime.set(
+            SurfaceRuntime(
+                'app',
+                '',
+                Principal(uid),
+                session_id=configurable['chat_session_id'] or APP_RECEIPT_SCOPE,
+                action_receipts=write_receipts,
+                turn_id=configurable['thread_id'],
+            )
+        )
 
     # Store run_id and prompt metadata in callback_data
     if callback_data is not None:
@@ -2073,5 +2102,7 @@ user chose not to send; acknowledge that rather than retrying.
     finally:
         if not task.done():
             task.cancel()
+        if write_context_token is not None:
+            chat_write_runtime.reset(write_context_token)
 
     yield None  # Signal completion

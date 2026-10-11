@@ -9801,6 +9801,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get chatBlockMemory => 'Prisiminimas';
 
   @override
+  String get chatBlockPerson => 'Asmuo';
+
+  @override
+  String get chatBlockUndone => 'Atšaukta';
+
+  @override
+  String get chatBlockUndoFailed => 'Nepavyko atšaukti šio pakeitimo';
+
+  @override
   String get chatBlockQuestion => 'Klausimas';
 
   @override

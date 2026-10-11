@@ -9830,6 +9830,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chatBlockMemory => 'Amintire';
 
   @override
+  String get chatBlockPerson => 'Persoană';
+
+  @override
+  String get chatBlockUndone => 'Anulat';
+
+  @override
+  String get chatBlockUndoFailed => 'Modificarea nu a putut fi anulată';
+
+  @override
   String get chatBlockQuestion => 'Întrebare';
 
   @override

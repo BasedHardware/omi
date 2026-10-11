@@ -9821,6 +9821,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatBlockMemory => 'Воспоминание';
 
   @override
+  String get chatBlockPerson => 'Человек';
+
+  @override
+  String get chatBlockUndone => 'Отменено';
+
+  @override
+  String get chatBlockUndoFailed => 'Не удалось отменить это изменение';
+
+  @override
   String get chatBlockQuestion => 'Вопрос';
 
   @override

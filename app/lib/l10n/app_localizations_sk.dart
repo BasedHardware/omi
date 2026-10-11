@@ -9775,6 +9775,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chatBlockMemory => 'Spomienka';
 
   @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Vrátené späť';
+
+  @override
+  String get chatBlockUndoFailed => 'Túto zmenu sa nepodarilo vrátiť späť';
+
+  @override
   String get chatBlockQuestion => 'Otázka';
 
   @override

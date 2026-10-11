@@ -9773,6 +9773,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chatBlockMemory => 'Mälestus';
 
   @override
+  String get chatBlockPerson => 'Isik';
+
+  @override
+  String get chatBlockUndone => 'Tühistatud';
+
+  @override
+  String get chatBlockUndoFailed => 'Seda muudatust ei õnnestunud tühistada';
+
+  @override
   String get chatBlockQuestion => 'Küsimus';
 
   @override

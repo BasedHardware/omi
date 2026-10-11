@@ -74,7 +74,13 @@ from .knowledge_ledger_write_tools import (
     save_playbook,
 )
 
+from .edit_tools import update_conversation, rename_person, edit_memory, delete_memory
+
 __all__ = [
+    'update_conversation',
+    'rename_person',
+    'edit_memory',
+    'delete_memory',
     'get_conversations_tool',
     'search_conversations_tool',
     'get_memories_tool',
