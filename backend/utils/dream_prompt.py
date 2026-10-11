@@ -163,6 +163,8 @@ def project_record(ref, row, *, chars, names):
         fields = [
             ('description', text(row.get('description'))),
             ('status', status),
+            ('created_at', str(row.get('created_at') or '')),
+            ('updated_at', str(row.get('updated_at') or '')),
             ('due', str(row.get('due_at') or row.get('due') or row.get('due_date') or '')),
         ]
     elif collection == 'people':

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from database import review_store
 from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
+from utils.dream_cleanup import add_seed
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -59,7 +60,8 @@ def read_record(uid, ref):
             return row.model_dump(mode='python')
         return None
     if collection == 'people':
-        return users.get_person(uid, key)
+        row = users.get_person(uid, key)
+        return {**row, 'entity_id': 'person:' + key, 'type': 'person'} if row else None
     if collection in {'knowledge_nodes', 'workstreams'}:
         return resolve_entity(uid, key)
     return None
@@ -102,6 +104,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
             records[ref] = row
             records.targets.add(ref)
         consumed.append(item)
+    records = add_seed(uid, records, lease, caps, vocabulary, read_record=read_record)
     records = add_context(
         records,
         context_candidates(

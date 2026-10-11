@@ -29,6 +29,25 @@ def admission_state(client, args, trial):
 
 def entries():
     return (
+        DriverEntry(
+            'database.dream_history.history_page',
+            base={'uid': UID},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'after': [None, 'one'],
+                'limit': [1, 40],
+            },
+        ),
+        DriverEntry(
+            'database.dream_history.history_count',
+            base={'uid': UID},
+            domains={'collection': ['conversations', 'action_items', 'people', 'memory_items']},
+        ),
+        DriverEntry(
+            'database.dream_history.history_at_rank',
+            base={'uid': UID},
+            domains={'collection': ['conversations', 'action_items', 'people', 'memory_items'], 'rank': [0, 17]},
+        ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
         DriverEntry(
@@ -75,6 +94,8 @@ def entries():
             },
             domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
             neutrals={
+                'reviewed': ([], 'metadata writes only'),
+                'cleanup_cursor': (None, 'metadata writes only'),
                 'consumed': ([], 'post-query acknowledgement versions'),
                 'release': (True, 'post-query lease policy'),
             },

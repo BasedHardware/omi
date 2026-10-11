@@ -24,3 +24,8 @@ unsupported correction automatically: **ungrounded auto-applies 1 → 0**;
 vocabulary still permit automatic correction. Derived facts and substring or
 accent-insensitive matches cannot authorize it. These are deterministic scripted
 model-response comparisons, not measured live-model accuracy.
+
+
+Older-data signal replay (`test_dream_cleanup.py`): an old task, a near-duplicate people pair, a near-duplicate private memory pair and an eligible empty conversation are absent from a dirty-only pass (0 reachable signals). Weighted history seeding makes all six records eligible (scores 2,3,3,3,3,2); duplicate operands are admitted together. A review less than 30 days old suppresses every candidate. These are deterministic retrieval/guard findings, not model precision claims.
+
+The epsilon branch draws a uniform global rank across owner-scoped collection counts, hydrates one record, and does not redraw after visibility/age/cooldown rejection. For a stable population every stored record has the same draw probability. Concurrent writes may change counts/ranks; report random-source counts separately. Firestore offsets bill skipped reads, so this is not a constant-cost sample; RPCs have 3-second deadlines and default epsilon is 10% of the default 10% backfill attempts. Set the random share to zero to disable that cost.

@@ -26,6 +26,8 @@ class EvidenceRecords(dict):
     def __init__(self, records=(), *, targets=None):
         super().__init__(records)
         self.targets = set(self if targets is None else targets)
+        self.target_sources = dict(getattr(records, 'target_sources', {ref: 'dirty' for ref in self.targets}))
+        self.cleanup_cursor = dict(getattr(records, 'cleanup_cursor', {}))
 
 
 def target_refs(records):
@@ -125,5 +127,7 @@ def add_context(targets, candidates, caps, vocabulary=None):
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):
             break
+        candidate.target_sources = dict(records.target_sources)
+        candidate.cleanup_cursor = dict(records.cleanup_cursor)
         records = candidate
     return records

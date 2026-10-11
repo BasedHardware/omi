@@ -476,3 +476,12 @@ The OpenAPI schema and Review/Dream Dart DTOs are regenerated from source. Mobil
 rendering of `agent_proposal` is separate owner work, detailed in
 `backend/docs/review_surface.mdx`. This source change does not enable flags,
 change cohorts/schedules, or deploy anything.
+
+
+### Older cleanup admission
+
+`DREAM_AGENT_BACKFILL_SHARE` defaults to 0.1; `DREAM_AGENT_RANDOM_SEED_SHARE` defaults to 0.1 of those attempts. Seeds must be at least 7 days old and not reviewed within 30 days. Weighted selection uses problem score times days since review/creation within a rotating 40-ID collection page. Seeds joining dirty targets must share identity, rare terms or the same week. At most one seed or one duplicate pair is added, then ordinary neighbourhood retrieval runs. Target/context roles and per-pass budget remain authoritative; reports carry `target_source_counts` without content.
+
+Registered, previously processed owners with empty dirty queues may run again after one hour under the same daily caps. Successful model passes record target review timestamps atomically with completion; failed passes do not. Empty passes refund inference admission but persist page progress. Synthetic canaries skip backfill.
+
+Uniform epsilon sampling uses collection counts and a random document rank, without rerolling filtered records. Offsets can bill linear skipped reads and large histories can hit the 3-second RPC deadline; this cost is outside the model USD reservation. Disable the random share when that cost is unsuitable. The sample is unbiased for a stable stored population before visibility/age/cooldown rejection, not an unbiased sample of automatically editable records.

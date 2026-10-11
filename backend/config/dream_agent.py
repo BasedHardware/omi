@@ -125,3 +125,11 @@ class Caps:
     @property
     def reservation_usd(self) -> float:
         return self.tokens * self.max_usd_per_token
+
+
+def backfill_share() -> float:
+    return min(1.0, number('DREAM_AGENT_BACKFILL_SHARE', 0.1))
+
+
+def random_seed_share() -> float:
+    return min(1.0, number('DREAM_AGENT_RANDOM_SEED_SHARE', 0.1))

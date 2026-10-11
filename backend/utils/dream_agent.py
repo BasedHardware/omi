@@ -151,6 +151,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         'cost_usd': 0.0,
     }
     consumed = []
+    reviewed = set()
+    cleanup_cursor = None
     refund = False
     success = False
     release = True
@@ -158,6 +160,11 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         async with asyncio.timeout(timeout_seconds):
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
             records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
+            reviewed = target_refs(records)
+            cleanup_cursor = getattr(records, 'cleanup_cursor', None)
+            report['target_source_counts'] = dict(
+                Counter(getattr(records, 'target_sources', {ref: 'dirty' for ref in reviewed}).values())
+            )
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
             report['role_counts'] = {
@@ -347,6 +354,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         consumed=consumed,
         release=release,
         refund=refund,
+        reviewed=reviewed,
+        cleanup_cursor=cleanup_cursor,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
     )
     record_pass(report)

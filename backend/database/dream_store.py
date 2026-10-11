@@ -13,8 +13,9 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from config.dream_agent import Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
+from config.dream_agent import backfill_share, Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
 from config.plan_catalog import PAID_PLAN_IDS
+from database.dream_history import review_id
 from database._client import get_firestore_client
 
 
@@ -162,12 +163,20 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
                 return None
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
+        last_pass = data.get('last_pass_at')
+        cleanup_due = (
+            not canary
+            and trigger == 'schedule'
+            and backfill_share() > 0
+            and isinstance(last_pass, datetime)
+            and now - last_pass >= timedelta(hours=1)
+        )
         if (
             mode() == 'off'
             or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
-            or data.get('score', 0) <= 0
+            or (data.get('score', 0) <= 0 and not cleanup_due)
             or (trigger != 'manual' and passes >= caps.passes)
             or caps.tokens < 1024
             or caps.edits < 1
@@ -184,7 +193,9 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             'dirty_dropped': int(data.get('dirty_dropped', 0)),
             'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
             'reservation_usd': caps.reservation_usd,
-            'score': data['score'],
+            'score': data.get('score', 0),
+            'cleanup_cursor': data.get('cleanup_cursor', {}),
+            'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'trigger': trigger,
             'started_at': now,
@@ -212,7 +223,18 @@ def assert_lease(uid, run_id, *, firestore_client=None):
 
 
 def finish(
-    uid, lease, report, *, success, consumed=(), release=True, refund=False, count_failure=False, firestore_client=None
+    uid,
+    lease,
+    report,
+    *,
+    success,
+    consumed=(),
+    release=True,
+    refund=False,
+    count_failure=False,
+    reviewed=(),
+    cleanup_cursor=None,
+    firestore_client=None,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -298,6 +320,15 @@ def finish(
             tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
+        if success:
+            if cleanup_cursor is not None:
+                patch['cleanup_cursor'] = cleanup_cursor
+            if not refund:
+                patch['last_pass_at'] = lease['started_at']
+                for ref in sorted(set(reviewed))[:8]:
+                    tx.set(
+                        state.collection('reviews').document(review_id(ref)), {'last_reviewed_at': lease['started_at']}
+                    )
         tx.update(state, patch)
         return settled
 
