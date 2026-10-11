@@ -91,6 +91,25 @@ void main() {
   });
 
   group('Speaker label display', () {
+    for (final source in ['auto', 'manual']) {
+      testWidgets('Omi speaker with $source label stays inert', (tester) async {
+        await setupSharedPreferences();
+        var edits = 0;
+        final segment = segmentFor('omi', omiSpeakerId)..speakerLabelSource = source;
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment], editSegment: (_, __) => edits++)),
+        ));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('edit_speaker_label_omi')), findsNothing);
+        expect(find.text('Omi'), findsOneWidget);
+        await tester.tap(find.text('Omi'));
+        await tester.pump();
+        expect(edits, 0);
+      });
+    }
+
     testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();
       await setupSharedPreferences(

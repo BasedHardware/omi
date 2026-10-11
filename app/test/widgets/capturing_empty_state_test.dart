@@ -27,6 +27,7 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/constants.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
@@ -194,6 +195,39 @@ void main() {
         expect(sheet.segmentId, 'label');
         await tester.pumpWidget(const SizedBox.shrink());
       });
+    }
+  }
+
+  for (final withPhotos in [false, true]) {
+    for (final isUser in [false, true]) {
+      for (final source in ['auto', 'manual', 'carried']) {
+        testWidgets('protected speaker (owner: $isUser, photos: $withPhotos, source: $source) has no edit label',
+            (tester) async {
+          final capture = _hermeticCapture();
+          addTearDown(capture.dispose);
+          capture.segments = [
+            TranscriptSegment(
+              id: 'protected',
+              text: 'Keep this line.',
+              speaker: 'SPEAKER_${isUser ? 0 : omiSpeakerId}',
+              isUser: isUser,
+              personId: null,
+              translations: [],
+              start: 0,
+              end: 6,
+              speakerLabelSource: source,
+            ),
+          ];
+          if (withPhotos) capture.photos = [ConversationPhoto(id: 'photo', base64: '', createdAt: DateTime(2026))];
+          await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
+          expect(find.byKey(const ValueKey('edit_speaker_label_protected')), findsNothing);
+          expect(find.text('Keep this line.', findRichText: true), findsOneWidget);
+          if (withPhotos || !isUser) expect(find.text(isUser ? 'You' : 'Omi'), findsOneWidget);
+          expect(find.byKey(const Key('speaker_label_likely')), findsNothing);
+          expect(find.byKey(const Key('speaker_label_confirmed')), findsNothing);
+          await tester.pumpWidget(const SizedBox.shrink());
+        });
+      }
     }
   }
 

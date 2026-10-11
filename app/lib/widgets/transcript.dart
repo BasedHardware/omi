@@ -1026,6 +1026,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (!widget.isConversationDetail &&
+                              data.speakerId != omiSpeakerId &&
                               widget.editSegment != null &&
                               (SpeakerLabelSource.isConfirmed(data.speakerLabelSource) ||
                                   data.speakerLabelSource == SpeakerLabelSource.auto))

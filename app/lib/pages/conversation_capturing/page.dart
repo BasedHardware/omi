@@ -23,6 +23,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
@@ -592,8 +593,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (SpeakerLabelSource.isConfirmed(segment.speakerLabelSource) ||
-                        segment.speakerLabelSource == SpeakerLabelSource.auto)
+                    if (!isUser &&
+                        segment.speakerId != omiSpeakerId &&
+                        (SpeakerLabelSource.isConfirmed(segment.speakerLabelSource) ||
+                            segment.speakerLabelSource == SpeakerLabelSource.auto))
                       OmiButton.tertiary(
                         key: ValueKey('edit_speaker_label_${segment.id}'),
                         label: name,
