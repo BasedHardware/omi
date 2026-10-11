@@ -10806,11 +10806,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '文字起こし待ち $count';
-  }
-
-  @override
   String get captureSourceCall => '通話';
 
   @override

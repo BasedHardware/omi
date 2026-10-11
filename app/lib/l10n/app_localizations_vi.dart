@@ -10973,11 +10973,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Bản chép âm đang chờ $count';
-  }
-
-  @override
   String get captureSourceCall => 'Cuộc gọi';
 
   @override

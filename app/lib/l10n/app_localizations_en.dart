@@ -10961,11 +10961,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcriptions pending $count';
-  }
-
-  @override
   String get captureSourceCall => 'Call';
 
   @override

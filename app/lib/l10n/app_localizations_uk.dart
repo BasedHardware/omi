@@ -10997,11 +10997,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипцій у черзі $count';
-  }
-
-  @override
   String get captureSourceCall => 'Дзвінок';
 
   @override

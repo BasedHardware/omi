@@ -10965,11 +10965,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Ootel transkriptsioonid $count';
-  }
-
-  @override
   String get captureSourceCall => 'Kõne';
 
   @override

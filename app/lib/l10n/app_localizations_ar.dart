@@ -10907,11 +10907,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'نسخ معلّق $count';
-  }
-
-  @override
   String get captureSourceCall => 'مكالمة';
 
   @override

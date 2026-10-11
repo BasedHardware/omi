@@ -11025,11 +11025,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcrieri în așteptare $count';
-  }
-
-  @override
   String get captureSourceCall => 'Apel';
 
   @override

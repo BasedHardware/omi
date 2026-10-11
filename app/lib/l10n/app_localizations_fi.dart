@@ -10975,11 +10975,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Jonossa olevat transkriptiot $count';
-  }
-
-  @override
   String get captureSourceCall => 'Puhelu';
 
   @override

@@ -11033,11 +11033,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Trascrizioni in attesa $count';
-  }
-
-  @override
   String get captureSourceCall => 'Chiamata';
 
   @override

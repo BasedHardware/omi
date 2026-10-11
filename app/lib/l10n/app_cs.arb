@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.",
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
     "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
-    "transcriptionsPendingCount": "Čekající přepisy {count}",
     "captureSourceCall": "Hovor",
     "captureSourcePhoneMic": "Mikrofon telefonu",
     "captureStatusWithSource": "{status} · {source}",

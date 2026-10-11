@@ -11046,11 +11046,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
-  }
-
-  @override
   String get captureSourceCall => 'Κλήση';
 
   @override

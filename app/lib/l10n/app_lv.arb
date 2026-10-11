@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
     "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
-    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}",
     "captureSourceCall": "Zvans",
     "captureSourcePhoneMic": "Tālruņa mikrofons",
     "captureStatusWithSource": "{status} · {source}",

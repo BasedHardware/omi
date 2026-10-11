@@ -19,12 +19,9 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversations/auto_sync_page.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
-import 'package:omi/pages/home/widgets/header_sync_button.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -1012,17 +1009,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              // Sync: whenever a device is paired or recordings wait; badge counts the backlog.
-              Consumer<DeviceProvider>(
-                builder: (context, deviceProvider, child) => HeaderSyncButton(
-                  hasPairedDevice: deviceProvider.pairedDevice != null,
-                  onTap: () {
-                    OmiHaptics.selection();
-                    final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
-                    routeToPage(context, page);
-                  },
-                ),
-              ),
               if (onHome)
                 HeaderCircleButton(
                   key: const ValueKey('home_calendar_button'),

@@ -11005,11 +11005,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcripciones pendientes $count';
-  }
-
-  @override
   String get captureSourceCall => 'Llamada';
 
   @override

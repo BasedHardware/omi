@@ -10983,11 +10983,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Bekleyen transkriptler $count';
-  }
-
-  @override
   String get captureSourceCall => 'Arama';
 
   @override

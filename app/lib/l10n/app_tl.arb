@@ -10903,7 +10903,6 @@
     "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
     "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
     "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
-    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
     "captureSourceCall": "Tawag",
     "captureSourcePhoneMic": "Mic ng telepono",
     "captureStatusWithSource": "{status} · {source}",

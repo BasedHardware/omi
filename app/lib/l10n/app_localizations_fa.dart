@@ -10967,11 +10967,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'رونویسی‌های در انتظار $count';
-  }
-
-  @override
   String get captureSourceCall => 'تماس';
 
   @override

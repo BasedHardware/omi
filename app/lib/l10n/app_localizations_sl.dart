@@ -11003,11 +11003,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripcije v čakanju $count';
-  }
-
-  @override
   String get captureSourceCall => 'Klic';
 
   @override

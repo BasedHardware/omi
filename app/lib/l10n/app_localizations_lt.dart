@@ -10993,11 +10993,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Laukiančios transkripcijos $count';
-  }
-
-  @override
   String get captureSourceCall => 'Skambutis';
 
   @override

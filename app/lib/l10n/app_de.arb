@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "Fügen Sie auf Claude Desktop → Settings → Connectors einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret.",
     "transcriptionUnavailableRecordingContinues": "Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet",
     "transcriptionsPendingFraction": "Offene Transkriptionen {pending}/{total}",
-    "transcriptionsPendingCount": "Offene Transkriptionen {count}",
     "captureSourceCall": "Anruf",
     "captureSourcePhoneMic": "Telefonmikrofon",
     "captureStatusWithSource": "{status} · {source}",

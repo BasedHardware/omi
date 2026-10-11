@@ -11001,11 +11001,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Gaidošas transkripcijas $count';
-  }
-
-  @override
   String get captureSourceCall => 'Zvans';
 
   @override

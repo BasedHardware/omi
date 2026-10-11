@@ -11008,11 +11008,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkrypcje w kolejce $count';
-  }
-
-  @override
   String get captureSourceCall => 'Połączenie';
 
   @override

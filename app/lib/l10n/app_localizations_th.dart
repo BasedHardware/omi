@@ -10912,11 +10912,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'การถอดเสียงที่รออยู่ $count';
-  }
-
-  @override
   String get captureSourceCall => 'การโทร';
 
   @override

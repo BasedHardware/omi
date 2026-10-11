@@ -10989,11 +10989,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcrições pendentes $count';
-  }
-
-  @override
   String get captureSourceCall => 'Chamada';
 
   @override

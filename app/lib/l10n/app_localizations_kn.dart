@@ -11008,11 +11008,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
-  }
-
-  @override
   String get captureSourceCall => 'ಕರೆ';
 
   @override

@@ -3501,7 +3501,6 @@
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.",
     "transcriptionUnavailableRecordingContinues": "Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek",
     "transcriptionsPendingFraction": "Bekleyen transkriptler {pending}/{total}",
-    "transcriptionsPendingCount": "Bekleyen transkriptler {count}",
     "captureSourceCall": "Arama",
     "captureSourcePhoneMic": "Telefon mikrofonu",
     "captureStatusWithSource": "{status} · {source}",

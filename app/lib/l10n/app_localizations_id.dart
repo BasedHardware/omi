@@ -10977,11 +10977,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripsi tertunda $count';
-  }
-
-  @override
   String get captureSourceCall => 'Panggilan';
 
   @override

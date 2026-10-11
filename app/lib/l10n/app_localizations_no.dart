@@ -10974,11 +10974,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripsjoner i kø $count';
-  }
-
-  @override
   String get captureSourceCall => 'Anrop';
 
   @override

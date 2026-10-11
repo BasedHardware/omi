@@ -10903,7 +10903,6 @@
     "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors dodajte prilagođeni konektor i zalijepite URL servera. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i biće obrađeno kasnije",
     "transcriptionsPendingFraction": "Transkripcije na čekanju {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripcije na čekanju {count}",
     "captureSourceCall": "Poziv",
     "captureSourcePhoneMic": "Mikrofon telefona",
     "captureStatusWithSource": "{status} · {source}",

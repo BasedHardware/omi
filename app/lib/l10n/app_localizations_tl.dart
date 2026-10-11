@@ -11067,11 +11067,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Mga transcript na naghihintay $count';
-  }
-
-  @override
   String get captureSourceCall => 'Tawag';
 
   @override

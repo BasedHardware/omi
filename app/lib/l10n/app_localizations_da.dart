@@ -10960,11 +10960,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transskriptioner i kø $count';
-  }
-
-  @override
   String get captureSourceCall => 'Opkald';
 
   @override

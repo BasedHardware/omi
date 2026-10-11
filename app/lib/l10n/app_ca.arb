@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "A Claude Desktop → Settings → Connectors, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth.",
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripcions pendents {count}",
     "captureSourceCall": "Trucada",
     "captureSourcePhoneMic": "Micròfon del telèfon",
     "captureStatusWithSource": "{status} · {source}",

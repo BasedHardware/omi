@@ -19995,12 +19995,6 @@ abstract class AppLocalizations {
   /// **'Transcriptions pending {pending}/{total}'**
   String transcriptionsPendingFraction(int pending, int total);
 
-  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcriptions pending {count}'**
-  String transcriptionsPendingCount(int count);
-
   /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
   ///
   /// In en, this message translates to:

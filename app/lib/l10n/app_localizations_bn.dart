@@ -10972,11 +10972,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $count';
-  }
-
-  @override
   String get captureSourceCall => 'কল';
 
   @override

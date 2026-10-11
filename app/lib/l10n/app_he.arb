@@ -10903,7 +10903,6 @@
     "claudeDesktopConnectorSetup": "ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
-    "transcriptionsPendingCount": "תמלילים ממתינים {count}",
     "captureSourceCall": "שיחה",
     "captureSourcePhoneMic": "מיקרופון הטלפון",
     "captureStatusWithSource": "{status} · {source}",

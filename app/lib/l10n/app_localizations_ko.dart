@@ -10810,11 +10810,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '대기 중인 전사 $count';
-  }
-
-  @override
   String get captureSourceCall => '통화';
 
   @override

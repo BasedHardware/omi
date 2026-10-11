@@ -10888,11 +10888,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'תמלילים ממתינים $count';
-  }
-
-  @override
   String get captureSourceCall => 'שיחה';
 
   @override

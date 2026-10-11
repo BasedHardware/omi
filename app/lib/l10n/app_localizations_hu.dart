@@ -11018,11 +11018,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Függő átiratok $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hívás';
 
   @override

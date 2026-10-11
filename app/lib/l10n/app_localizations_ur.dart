@@ -10985,11 +10985,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'زیرِ التوا ٹرانسکرپشن $count';
-  }
-
-  @override
   String get captureSourceCall => 'کال';
 
   @override

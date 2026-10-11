@@ -11053,11 +11053,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
-  }
-
-  @override
   String get captureSourceCall => 'அழைப்பு';
 
   @override

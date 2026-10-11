@@ -11013,11 +11013,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипций в ожидании $count';
-  }
-
-  @override
   String get captureSourceCall => 'Звонок';
 
   @override

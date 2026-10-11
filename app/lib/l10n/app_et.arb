@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.",
     "transcriptionUnavailableRecordingContinues": "Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem",
     "transcriptionsPendingFraction": "Ootel transkriptsioonid {pending}/{total}",
-    "transcriptionsPendingCount": "Ootel transkriptsioonid {count}",
     "captureSourceCall": "Kõne",
     "captureSourcePhoneMic": "Telefoni mikrofon",
     "captureStatusWithSource": "{status} · {source}",

@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.",
     "transcriptionUnavailableRecordingContinues": "Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно",
     "transcriptionsPendingFraction": "Чакащи транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чакащи транскрипции {count}",
     "captureSourceCall": "Обаждане",
     "captureSourcePhoneMic": "Микрофон на телефона",
     "captureStatusWithSource": "{status} · {source}",

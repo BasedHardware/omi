@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "Στο Claude Desktop → Settings → Connectors, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.",
     "transcriptionUnavailableRecordingContinues": "Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα",
     "transcriptionsPendingFraction": "Αναμενόμενες απομαγνητοφωνήσεις {pending}/{total}",
-    "transcriptionsPendingCount": "Αναμενόμενες απομαγνητοφωνήσεις {count}",
     "captureSourceCall": "Κλήση",
     "captureSourcePhoneMic": "Μικρόφωνο τηλεφώνου",
     "captureStatusWithSource": "{status} · {source}",

@@ -10978,11 +10978,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkriptioner i kö $count';
-  }
-
-  @override
   String get captureSourceCall => 'Samtal';
 
   @override

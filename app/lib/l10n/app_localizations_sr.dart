@@ -10983,11 +10983,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипције на чекању $count';
-  }
-
-  @override
   String get captureSourceCall => 'Позив';
 
   @override

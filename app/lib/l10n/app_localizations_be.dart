@@ -11003,11 +11003,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрыпцый у чаканні $count';
-  }
-
-  @override
   String get captureSourceCall => 'Званок';
 
   @override

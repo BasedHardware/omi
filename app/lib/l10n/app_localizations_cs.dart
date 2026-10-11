@@ -10973,11 +10973,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Čekající přepisy $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hovor';
 
   @override

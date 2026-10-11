@@ -10790,11 +10790,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '待处理转录 $count';
-  }
-
-  @override
   String get captureSourceCall => '通话';
 
   @override

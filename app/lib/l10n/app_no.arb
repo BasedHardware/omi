@@ -3466,7 +3466,6 @@
     "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet.",
     "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
     "transcriptionsPendingFraction": "Transkripsjoner i kø {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsjoner i kø {count}",
     "captureSourceCall": "Anrop",
     "captureSourcePhoneMic": "Telefonmikrofon",
     "captureStatusWithSource": "{status} · {source}",

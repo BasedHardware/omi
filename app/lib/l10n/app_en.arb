@@ -13067,15 +13067,6 @@
             }
         }
     },
-    "transcriptionsPendingCount": "Transcriptions pending {count}",
-    "@transcriptionsPendingCount": {
-        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "captureSourceCall": "Call",
     "@captureSourceCall": {
         "description": "Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun."
