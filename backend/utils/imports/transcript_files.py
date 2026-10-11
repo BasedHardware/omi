@@ -187,7 +187,7 @@ def _seconds(value: str) -> Optional[float]:
 
 
 def _normalize(text: str) -> str:
-    return text.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
+    return re.sub(r'\r+\n|\r', '\n', text.lstrip('﻿'))
 
 
 def _unescape(text: str) -> str:
