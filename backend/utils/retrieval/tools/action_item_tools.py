@@ -631,9 +631,6 @@ def update_action_item_tool(
     if not existing_item:
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
 
-    before_snapshot = chat_edits.snapshot(uid, 'task', action_item_id)
-    write_state = {'before': before_snapshot}
-
     # Prepare update data
     update_data: Dict[str, Any] = {}
     changes: List[str] = []
@@ -686,6 +683,8 @@ def update_action_item_tool(
 
     # Update the action item
     try:
+        before_snapshot = chat_edits.snapshot(uid, 'task', action_item_id)
+        write_state = {'before': before_snapshot}
         success = action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
         if not success:
             return f"Error: Failed to update action item with ID '{action_item_id}'."
