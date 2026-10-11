@@ -468,6 +468,9 @@ Accept revalidates all evidence and the current task generation, then the existi
 writer fences storage in its transaction; stale accepts return 409. New
 suggestions share Dream question attention accounting, capped at three per pass
 and UTC day, and also respect the per-pass edit cap and remaining answer headroom.
+Attention-capped spelling targets stay queued with `deferred_until` set to the
+next UTC midnight. Later passes skip them before hydration and model reasoning;
+product updates preserve the deferral, and the next UTC day permits retry.
 Retries of unchanged proposals use no new slot. Shadow mode continues to record
 proposals without enqueueing or applying anything; each edit and vocabulary term
 in its report is labeled `auto` or `suggest`.

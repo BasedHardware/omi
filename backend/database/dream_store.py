@@ -245,11 +245,13 @@ def finish(
     *,
     success,
     consumed=(),
+    deferred=(),
     release=True,
     refund=False,
     count_failure=False,
     reviewed=(),
     cleanup_cursor=None,
+    now=None,
     firestore_client=None,
 ):
     database = client(firestore_client)
@@ -258,6 +260,9 @@ def finish(
     spend = database.collection('dream_spend').document(lease['day'])
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    deferred_until = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    deferred = set(deferred)
 
     @firestore.transactional
     def complete(tx):
@@ -270,11 +275,16 @@ def finish(
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
         queued = (
             dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
-            if success or failure_eligible
+            if success or failure_eligible or deferred
             else []
         )
         versions = {item['version'] for item in consumed}
-        touched = [s for s in queued if s.to_dict()['version'] in versions]
+        touched = [
+            s
+            for s in queued
+            if s.to_dict()['version'] in versions
+            and s.to_dict().get('collection', '') + '/' + s.to_dict().get('id', '') not in deferred
+        ]
         poisoned = [
             s
             for s in touched
@@ -296,6 +306,12 @@ def finish(
             watermark = max(watermark, frontier)
         for snapshot in acknowledged:
             tx.delete(snapshot.reference)
+        for snapshot in remaining:
+            row = snapshot.to_dict()
+            if deferred and row.get('collection', '') + '/' + row.get('id', '') in deferred:
+                # Product writes merge queue metadata: a refreshed version also
+                # waits until the shared attention allowance resets at UTC midnight.
+                tx.update(snapshot.reference, {'deferred_until': deferred_until})
         if failure_eligible:
             for snapshot in remaining:
                 if snapshot.to_dict()['version'] in versions:
