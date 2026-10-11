@@ -55,6 +55,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/messaging/links',
     '/v1/messaging/link-proofs',
     '/v1/review',
+    '/v2/review',
     '/v1/entities',
     '/v1/proactivity',
     '/memory/search',
