@@ -52,7 +52,10 @@ Production bindings are declared only for Cloud Run `backend`.
 
 The actual registered routes are `/v1/messaging/webhooks/telegram` and
 `/v1/messaging/webhooks/imessage`; setup-guide `/v1/channels/...` paths were placeholders.
-Startup/periodic recovery drains only pending jobs. Running jobs and leases remain fenced.
+Startup/periodic recovery drains only pending jobs. Failed running jobs remain fenced.
+Handled worker failures, including a finished turn's CancelledError, release the
+lease. In-flight task cancellation and process loss keep the lease for operator
+reconciliation.
 
 ## Media, tools and presentation
 
