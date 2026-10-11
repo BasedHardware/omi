@@ -13839,6 +13839,84 @@
         "title": "Edit",
         "type": "object"
       },
+      "EditReceiptBlock": {
+        "description": "Server-authored write receipt. IDs and URLs never encode item content.",
+        "properties": {
+          "action": {
+            "enum": [
+              "created",
+              "updated",
+              "deleted",
+              "completed",
+              "uncompleted",
+              "renamed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "receiptId": {
+            "title": "Receiptid",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "targetKind": {
+            "enum": [
+              "conversation",
+              "memory",
+              "task",
+              "person"
+            ],
+            "title": "Targetkind",
+            "type": "string"
+          },
+          "type": {
+            "const": "editReceipt",
+            "default": "editReceipt",
+            "title": "Type",
+            "type": "string"
+          },
+          "undoable": {
+            "default": true,
+            "title": "Undoable",
+            "type": "boolean"
+          },
+          "undoneAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undoneat"
+          }
+        },
+        "required": [
+          "id",
+          "receiptId",
+          "targetKind",
+          "action",
+          "targetId",
+          "summary"
+        ],
+        "title": "EditReceiptBlock",
+        "type": "object"
+      },
       "EntitiesResponse": {
         "properties": {
           "entities": {
@@ -33007,6 +33085,28 @@
         "title": "UnapprovedPublicAppResponse",
         "type": "object"
       },
+      "UndoChatReceiptResponse": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/EditReceiptBlock"
+          },
+          "status": {
+            "enum": [
+              "undone",
+              "already_undone",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "block"
+        ],
+        "title": "UndoChatReceiptResponse",
+        "type": "object"
+      },
       "UpdateAIUserProfileRequest": {
         "properties": {
           "data_sources_used": {
@@ -43965,6 +44065,90 @@
         "tags": [
           "chat-first"
         ]
+      }
+    },
+    "/v1/chat/receipts/{receipt_id}/undo": {
+      "post": {
+        "description": "Undo an owner-scoped chat write once and return its updated content block.",
+        "operationId": "undo_chat_receipt_v1_chat_receipts__receipt_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoChatReceiptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Undo Chat Receipt"
       }
     },
     "/v1/connectors/synthesize": {

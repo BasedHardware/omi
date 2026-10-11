@@ -10,6 +10,7 @@ from database.messaging import MessagingStore
 from utils import encryption
 from utils.messaging.projection import surface_runtime
 from utils.messaging.contracts import ActionReceipt, UndoResult
+from models.chat import EditReceiptBlock, UndoChatReceiptResponse
 
 UNDO_MINUTES = 5
 
@@ -27,10 +28,26 @@ class UndoStore:
             .document(receipt_id)
         )
 
+    def undo_for_owner(self, uid, receipt_id):
+        # The lookup lives under the authenticated owner; no collection-group scan.
+        pointer = self.store.user(uid).collection('chat_receipts').document(receipt_id).get().to_dict()
+        if not pointer:
+            raise LookupError('Receipt not found')
+        session = pointer['session_id']
+        result = self.undo(uid, session, receipt_id)
+        row = self.ref(uid, session, receipt_id).get().to_dict() or {}
+        block = json.loads(encryption.decrypt(row['presentation'], uid)).get('block')
+        if not block:
+            raise LookupError('Receipt block not found')
+        block.update(
+            undoneAt=row.get('undone_at'), undoable=result.status == 'unavailable' and row.get('state') == 'ready'
+        )
+        return UndoChatReceiptResponse(status=result.status, block=EditReceiptBlock.model_validate(block))
+
     def record(self, uid, session, kind, object_id, before, after) -> ActionReceipt:
         runtime = surface_runtime.get()
-        if runtime is None or runtime.surface == 'app':
-            raise PermissionError('Action receipts require an admitted channel turn')
+        if runtime is None or not runtime.session_id:
+            raise PermissionError('Action receipts require an admitted chat turn')
         runtime.principal.authorize(uid)
         if runtime.guard:
             runtime.guard()
@@ -44,7 +61,12 @@ class UndoStore:
                 'id': receipt_id,
                 'state': 'ready',
                 'expires_at': datetime.now(timezone.utc) + timedelta(minutes=UNDO_MINUTES),
-                'presentation': encryption.encrypt(json.dumps(dict(text=receipt.text)), uid),
+                'presentation': encryption.encrypt(
+                    json.dumps(
+                        dict(text=receipt.text, block=edit_receipt_block(receipt_id, kind, object_id, before, after))
+                    ),
+                    uid,
+                ),
                 'payload': encryption.encrypt(
                     json.dumps(
                         dict(
@@ -88,12 +110,14 @@ class UndoStore:
         @firestore.transactional
         def apply(tx):
             current = session_ref.get(transaction=tx).to_dict() or {}
-            if not current.get('channel_link_id'):
-                raise PermissionError('Channel session removed')
-            self.store.assert_session_link(tx, uid, current)
+            if not current:
+                raise PermissionError('Chat session removed')
+            if current.get('channel_link_id'):
+                self.store.assert_session_link(tx, uid, current)
             pointer_ref = self.ref(uid, session)
             pointer = (pointer_ref.get(transaction=tx).to_dict() or {}) if turn_id else {}
             tx.set(ref, payload)
+            tx.set(self.store.user(uid).collection('chat_receipts').document(receipt_id), {'session_id': session})
             if turn_id:
                 ids = list(pointer.get('receipt_ids', ())) if pointer.get('turn_id') == turn_id else []
                 ids.append(receipt_id)
@@ -157,9 +181,10 @@ class UndoStore:
             session_row = (
                 self.store.user(uid).collection('chat_sessions').document(session).get(transaction=tx).to_dict() or {}
             )
-            if not session_row.get('channel_link_id'):
-                raise PermissionError('Channel session removed')
-            self.store.assert_session_link(tx, uid, session_row)
+            if not session_row:
+                raise PermissionError('Chat session removed')
+            if session_row.get('channel_link_id'):
+                self.store.assert_session_link(tx, uid, session_row)
             tx.update(ref, {'state': 'running'})
             return row
 
@@ -181,8 +206,37 @@ class UndoStore:
         # A failure leaves this inverse running; it is never replayed. The chat
         # turn itself can finish and release its lease after the operation unwinds.
         apply_inverse(uid, payload)
-        ref.update({'state': 'done', 'payload': firestore.DELETE_FIELD})
+        ref.update({'state': 'done', 'undone_at': datetime.now(timezone.utc), 'payload': firestore.DELETE_FIELD})
         return UndoResult('undone', 'Undone.', row.get('bubble_id'), presentation['text'] + ' — Undone')
+
+
+def edit_receipt_block(receipt_id, kind, object_id, before, after):
+    target_kind = 'memory' if kind == 'memory_closed' else kind
+    action = 'created' if before is None else 'deleted' if after is None or kind == 'memory_closed' else 'updated'
+    if kind == 'task' and before is not None and after is not None:
+        if after.get('deleted'):
+            action = 'deleted'
+        elif before.get('completed') != after.get('completed'):
+            action = 'completed' if after.get('completed') else 'uncompleted'
+    if kind == 'person':
+        action = 'renamed'
+    value = after or before or {}
+    summary = (
+        value.get('description')
+        or value.get('name')
+        or value.get('content')
+        or value.get('structured', {}).get('title')
+        if isinstance(value, dict)
+        else str(value)
+    )
+    return EditReceiptBlock(
+        id=receipt_id,
+        receiptId=receipt_id,
+        targetKind=target_kind,
+        action=action,
+        targetId=object_id,
+        summary=(str(summary or target_kind)[:250]),
+    ).model_dump(mode='json')
 
 
 def action_receipt(receipt_id, kind, object_id, before, after):

@@ -6,6 +6,7 @@ from utils.chat_turn import (
     _required_chat_quota_provider,
 )
 from utils.messaging.contracts import Principal
+from utils.messaging.undo import UndoStore
 import asyncio
 import binascii
 import json
@@ -16,7 +17,15 @@ import base64
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
-from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    postprocess_executor,
+    llm_executor,
+    storage_executor,
+    sync_executor,
+    run_blocking,
+)
 
 from fastapi import (
     APIRouter,
@@ -43,6 +52,7 @@ from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
     ChatEvidenceEnvelope,
+    UndoChatReceiptResponse,
     ChatSession,
     Message,
     SendMessageRequest,
@@ -119,6 +129,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
+
+@router.post('/v1/chat/receipts/{receipt_id}/undo', response_model=UndoChatReceiptResponse)
+async def undo_chat_receipt(receipt_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Undo an owner-scoped chat write once and return its updated content block."""
+    if not re.fullmatch(r'[a-f0-9]{32}', receipt_id):
+        raise HTTPException(status_code=404, detail='Receipt not found')
+    try:
+        return await run_blocking(postprocess_executor, UndoStore().undo_for_owner, uid, receipt_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail='Receipt not found')
+    except PermissionError:
+        raise HTTPException(status_code=409, detail='Receipt can no longer be undone')
+
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
