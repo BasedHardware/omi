@@ -11,6 +11,7 @@ from google.cloud import firestore
 
 from config.sync_telemetry import SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
+from database.sync_jobs import get_sync_job
 from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
@@ -183,7 +184,9 @@ def _processing_claim_updates(
 
 
 @firestore.transactional
-def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: datetime) -> Dict[str, Any]:
+def _claim_transaction(
+    transaction: Any, ref: Any, job_id: str, lane: str, now: datetime, missing_owner: Optional[str] = None
+) -> Dict[str, Any]:
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
     if existing.get('status') == 'completed':
@@ -218,7 +221,9 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
     if isinstance(updated_at, datetime):
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
-        if (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS:
+        if (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS and not (
+            missing_owner is not None and existing.get('job_id') == missing_owner
+        ):
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
 
     transaction.set(
@@ -239,7 +244,16 @@ def claim_sync_content(
 ) -> Dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ledger_ref(client, uid, content_id)
-    return _claim_transaction(client.transaction(), ref, job_id, lane, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    claim = _claim_transaction(client.transaction(), ref, job_id, lane, now)
+    owner = claim.get('job_id')
+    if claim.get('outcome') == 'busy' and owner and get_sync_job(owner) is None:
+        # Redis expires at 24h, before the 48h ledger claim. Re-read the ledger
+        # transactionally: only replace the owner whose absence we observed.
+        # A concurrent completion/new owner wins; processing checkpoints survive
+        # and old worker run tokens are invalidated by the ordinary claim update.
+        claim = _claim_transaction(client.transaction(), ref, job_id, lane, now, missing_owner=owner)
+    return claim
 
 
 @firestore.transactional

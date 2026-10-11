@@ -9133,6 +9133,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncCardRateLimited => 'Досягнуто ліміт використання — синхронізація відновиться автоматично';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронізацію ненадовго призупинено — вона відновиться автоматично';
+
+  @override
   String get syncCardBackendBusy =>
       'Сервери Omi перевантажені — ваші записи синхронізуються, щойно з\'явиться доступна потужність';
 

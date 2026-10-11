@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -48,6 +50,8 @@ void main() {
     limiter = SyncRateLimiter.instance;
     limiter.clear();
     now = DateTime(2026, 10, 11);
+    limiter.clockForTesting = () => now;
+    SyncJobPoller.instance.resetForTesting(clock: () => now);
     dir = await Directory.systemTemp.createTemp('sync_poll_storm_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (call) async => dir.path);
@@ -55,6 +59,8 @@ void main() {
   });
   tearDown(() async {
     limiter.clear();
+    limiter.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await dir.delete(recursive: true);
@@ -148,6 +154,15 @@ void main() {
     await sync.reconcileUploadedWals();
     expect(requests, 1);
     expect(limiter.reason, RateLimitReason.edgeThrottle);
+    expect(limiter.activeRetryAfterSeconds, 60);
+    now = now.add(const Duration(seconds: 59));
+    await sync.reconcileUploadedWals();
+    expect(requests, 1);
+    expect(limiter.activeRetryAfterSeconds, 1);
+    now = now.add(const Duration(seconds: 1));
+    expect(limiter.isLimited, isFalse);
+    await sync.reconcileUploadedWals();
+    expect(requests, 2, reason: 'the real limiter expires exactly at its injected deadline');
     expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded && wal.retryCount == 0), isTrue);
   });
 
@@ -209,6 +224,142 @@ void main() {
     expect(wal.isSyncing, isFalse);
   });
 
+  test('a confirmed missing 409 owner cannot be adopted again', () async {
+    final poller = SyncJobPoller.instance;
+    final wal = pending(1);
+    await File('${dir.path}/audio_1.bin').writeAsBytes([1, 2]);
+    final gate = SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async =>
+            syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress","job_id":"job-1"}', 409))!);
+    final sync = LocalWalSyncImpl(_Listener(),
+        jobPoller: poller,
+        uploadGate: gate,
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound));
+    sync.testWals = [wal];
+    await sync.reconcileUploadedWals();
+    now = now.add(const Duration(minutes: 5));
+    await sync.reconcileUploadedWals();
+    expect(wal.status, WalStatus.miss);
+    await sync.syncAll();
+    expect(wal.status, WalStatus.miss);
+    expect(wal.jobId, isNull);
+    expect(wal.retryCount, 0);
+    expect(limiter.activeRetryAfterSeconds, 60);
+  });
+
+  test('Transcribe Later confirmed 404 keeps the file and auto-uploads again', () async {
+    const name = 'audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000001.bin';
+    await File('${dir.path}/$name').writeAsBytes([4, 0, 0, 0, 1, 2, 3, 4]);
+    SharedPreferencesUtil().uid = 'owner';
+    await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
+    await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'expired'}));
+    var uploads = 0;
+    final gate = SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads++;
+          expect(files.single.existsSync(), isTrue);
+          return UploadFilesResult.queued('replacement');
+        });
+    final provider = LocalRecordingsProvider(uploadGate: gate);
+    provider.jobStatusFetcherOverride = (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound);
+    addTearDown(provider.dispose);
+    await provider.refresh();
+    await provider.reconcileForTesting();
+    expect(uploads, 0);
+    now = now.add(const Duration(minutes: 5));
+    await provider.reconcileForTesting();
+    expect(File('${dir.path}/$name').existsSync(), isTrue);
+    expect(uploads, 1);
+    expect(jsonDecode(SharedPreferencesUtil().getString('localRecordingJobs'))[name], 'replacement');
+  });
+
+  testWidgets('Transcribe Later timer and WAL wakes share the singleton 18/min budget', (tester) async {
+    final requests = <DateTime>[];
+    var phoneRequests = 0;
+    var walRequests = 0;
+    late LocalRecordingsProvider provider;
+    late LocalWalSyncImpl sync;
+    await tester.runAsync(() async {
+      final jobs = <String, String>{};
+      for (var i = 0; i < 7; i++) {
+        final name = 'audio_omibatchphone_opus_fs320_16000_1_fs320_${1720000001 + i}.bin';
+        await File('${dir.path}/$name').writeAsBytes([4, 0, 0, 0, 1, 2, 3, 4]);
+        jobs[name] = 'phone-$i';
+      }
+      SharedPreferencesUtil().uid = 'owner';
+      await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
+      await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode(jobs));
+      // Construct on the widget zone below so its production 15s timer is virtual.
+    });
+    final timerZone = Zone.current;
+    provider = LocalRecordingsProvider(periodic: (duration, callback) {
+      expect(duration, const Duration(seconds: 15));
+      // Directory IO finishes outside the widget zone; keep the actual Timer
+      // in the virtual clock's zone without manually driving reconciliation.
+      return timerZone.run(() => Timer.periodic(duration, callback));
+    });
+    provider.jobStatusFetcherOverride = (id) async {
+      phoneRequests++;
+      requests.add(now);
+      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+    };
+    sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        jobPoller: SyncJobPoller.instance,
+        persistWals: (_) async {},
+        jobStatusFetcher: (id) async {
+          walRequests++;
+          requests.add(now);
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+        });
+    sync.testWals = List.generate(50, pending);
+    await tester.runAsync(() async {
+      await provider.refresh();
+      await provider.reconcileForTesting();
+      await sync.reconcileUploadedWals();
+    });
+    expect(phoneRequests, 7);
+    expect(walRequests, 11);
+    for (var tick = 0; tick < 8; tick++) {
+      now = now.add(const Duration(seconds: 15));
+      await tester.pump(const Duration(seconds: 15));
+      // Let the timer's asynchronous directory scan finish, flushing both IO
+      // and widget-zone microtasks. Never call reconcile to drive this owner.
+      for (var attempt = 0; attempt < 100 && provider.isReconcilingForTesting; attempt++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1)));
+        await tester.pump();
+      }
+      expect(provider.isReconcilingForTesting, isFalse);
+      await tester.runAsync(() => sync.reconcileUploadedWals());
+      expect(requests.where((time) => time.isAfter(now.subtract(const Duration(minutes: 1)))).length,
+          lessThanOrEqualTo(18));
+    }
+    expect(phoneRequests, greaterThan(7), reason: 'the production timer resumes polling after the window');
+    provider.dispose();
+  });
+
   test('server hint bounds a single job independently of the request budget', () async {
     final poller = SyncJobPoller(clock: () => now);
     var requests = 0;
@@ -238,6 +389,7 @@ void main() {
   test('409 with owner id tracks processing job and never reoffers the same bytes', () async {
     var uploads = 0;
     var polls = 0;
+    var status = 'processing';
     final gate = SyncUploadGate(
         limiter: limiter,
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -261,7 +413,7 @@ void main() {
         jobStatusFetcher: (id) async {
           polls++;
           expect(id, 'active-owner');
-          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: status));
         });
     final wal = pending(1)
       ..status = WalStatus.miss
@@ -278,6 +430,14 @@ void main() {
     await sync.reconcileUploadedWals();
     await sync.syncAll();
     expect(polls, 1);
+    expect(wal.status, WalStatus.uploaded);
+    expect(File('${dir.path}/audio_1.bin').existsSync(), isTrue);
+    status = 'completed';
+    now = now.add(const Duration(seconds: 20));
+    await sync.reconcileUploadedWals();
+    expect(wal.status, WalStatus.synced);
+    expect(wal.jobId, isNull);
+    expect(polls, 2);
     expect(uploads, 1);
     expect(wal.retryCount, 0);
   });
@@ -292,7 +452,7 @@ void main() {
 
   test('edge throttle is neutral; explicit capacity and fair-use keep distinct copy', () {
     final l = AppLocalizationsEn();
-    expect(syncCooldownTitle(RateLimitReason.edgeThrottle, l), l.paused);
+    expect(syncCooldownTitle(RateLimitReason.edgeThrottle, l), l.syncCardThrottlePaused);
     expect(syncCooldownTitle(RateLimitReason.backendBusy, l), l.syncCardBackendBusy);
     expect(syncJobFetchOutcomeForStatusCode(429), SyncJobFetchOutcome.throttled);
     expect(isSyncContentInProgressResponse(http.Response('{"code":"sync_content_in_progress"}', 409)), isTrue);

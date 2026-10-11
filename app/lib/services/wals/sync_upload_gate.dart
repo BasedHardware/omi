@@ -209,6 +209,7 @@ class SyncUploadGate {
           claimLiveCapture: claimLiveCapture,
           geolocation: geolocation,
         );
+        SyncJobPoller.instance.validateOwner(result);
         if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
         _emitTelemetry(
           RecordingUploadTelemetry.completedEvent,

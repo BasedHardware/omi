@@ -9144,6 +9144,9 @@ class AppLocalizationsHr extends AppLocalizations {
       'Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti';
 
   @override
+  String get syncCardThrottlePaused => 'Sinkronizacija je nakratko pauzirana — nastavit će se automatski';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet';
 

@@ -100,7 +100,8 @@ Oct 7 12–18Z incident onset to one shipped build with certainty.
   an old server that omits the ID, pause at least 60s without spending retries or
   emitting a processing-failure event.
 - Explicit fair use and capacity remain distinct. Unclassified edge throttles
-  use the existing localized `paused` key. No ARB/generated locale edits.
+  use `syncCardThrottlePaused`: “Syncing paused briefly — it will resume automatically”.
+  Added through `scripts/l10n.py` across all 49 locales; generated Dart refreshed.
 
 Changed implementation: `app/lib/backend/http/api/conversations.dart`,
 `app/lib/backend/schema/conversation.dart`,
@@ -118,7 +119,7 @@ Tests: `app/test/unit/{sync_poll_storm,sync_rate_limit_response}_test.dart`,
 Metadata: mobile changelog fragment and the failure-class definition
 `FC-event-wakes-bypass-request-cadence` with the regression as its guard artifact.
 
-## Verification
+## Verification of initial commit
 
 Run from `app/`:
 
@@ -167,6 +168,84 @@ flutter test --no-pub --dart-define=OMI_SYNC_UI_EVIDENCE_DIR=../.agent-artifacts
 Output: `+1: All tests passed!`. These are hermetic checks and widget-render
 acceptance, not an installed phone, agent-flutter session, live-server smoke,
 CI or production acceptance.
+
+## Independent review follow-up
+
+The review of `943f8c13b1ff` returned SHIP-WITH-FIXES. All four requested
+findings are addressed in a separate commit:
+
+- Replace recording-status `paused` copy with the localized sync-specific key.
+- On a busy ledger claim, read the owning Redis job. If absent, re-read the
+  ledger in a transaction and take over only that same missing owner. Preserve
+  completed results and concurrent new owners, clear stale run bindings, and
+  retain processing checkpoints. Redis errors propagate rather than authorize
+  takeover. The unchanged HTTP route now admits recovered claims normally;
+  live-owner 409 status/code/Retry-After and additive fields remain compatible
+  with shipped apps. Client session tombstones prevent adopting a confirmed
+  missing owner returned by older servers; this pauses without spending retries.
+- After confirmed 404, Transcribe Later saves its cleared sidecar, refreshes
+  retained files, and runs the ordinary sequential auto-upload selector. Manual
+  Transcribe Later files remain manual. Auto-fallback files are re-queued.
+- Regression coverage runs the provider's actual 15s periodic timer and WAL
+  event passes against `SyncJobPoller.instance`, checks the combined rolling
+  18/min bound, advances the actual limiter's injected clock through the 120s
+  throttle expiry, verifies retained auto files are uploaded again after 404,
+  rejects dead 409 owners, and verifies adopted WALs stay uploaded through
+  processing and become synced only on completed. Server tests cover missing
+  owner takeover before 48h, live-owner preservation, concurrent ownership and
+  completion, Redis failure, and unchanged live-owner 409 responses.
+
+Follow-up verification (from `app/`, same focused file list shown above):
+
+```sh
+bash test.sh test/unit/sync_poll_storm_test.dart test/unit/sync_rate_limit_response_test.dart test/unit/sync_upload_gate_test.dart test/unit/wal_unsupported_audio_terminal_test.dart test/unit/sync_paced_backfill_backoff_test.dart test/unit/sync_cooldown_copy_test.dart test/unit/local_recordings_owner_test.dart test/unit/local_recordings_auto_upload_test.dart test/unit/sync_job_terminal_policy_test.dart test/widgets/sync_edge_throttle_render_test.dart test/services/wals/recording_transfer_coordinator_test.dart
+bash scripts/analyze_ratchet.sh
+python3 scripts/l10n.py check
+flutter test --no-pub --dart-define=OMI_SYNC_UI_EVIDENCE_DIR=../.agent-artifacts/ui-evidence/sync-poll-storm test/widgets/sync_edge_throttle_render_test.dart --reporter expanded
+```
+
+Results: protected spine `+138: All tests passed!`; focused suite
+`+109: All tests passed!`; `Analyzer ratchet passed.`;
+`ok: 49 locales, 3825 keys`; screenshot `+1: All tests passed!` and visually
+inspected with the sync-specific two-line title. Localization was added with
+`python3 scripts/l10n.py add syncCardThrottlePaused --before syncCardBackendBusy --en 'Syncing paused briefly — it will resume automatically' --description 'Offline Sync cooldown after a temporary request throttle; syncing resumes automatically, recording is unaffected.' --translations /tmp/omi-sync-throttle-translations.json`;
+output `added syncCardThrottlePaused to 49 locales`.
+
+From repository root:
+
+```sh
+printf '%s\n' tests/unit/test_sync_two_lane.py tests/unit/test_sync_cloud_tasks.py tests/unit/test_sync_repeat_failure_cap.py tests/unit/test_sync_assignment_recovery.py tests/unit/test_sync_v2.py tests/unit/test_recover_dev_failed_sync_backfill.py > /tmp/omi-sync-followup-backend-tests.txt
+BACKEND_UNIT_TEST_FILE_LIST=/tmp/omi-sync-followup-backend-tests.txt BACKEND_PYTEST_XDIST=0 BACKEND_PYTEST_WORKERS=1 bash backend/test.sh
+backend/.venv/bin/python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils
+OMI_PR_BODY_FILE=/tmp/omi-sync-pr-body.md make preflight
+```
+
+Backend serial result: **422 passed** across six isolated files:
+`43 passed in 0.50s`, `108 passed, 52 warnings in 2.68s`,
+`20 passed, 14 warnings in 2.93s`, `59 passed, 14 warnings in 3.16s`,
+`182 passed, 60 warnings in 3.30s`, `10 passed in 0.53s`. Existing regex and
+mock coroutine warnings remain. The preceding parallel run passed all
+assertions but failed the existing CPU guard on a v2 test at 0.31s versus the
+unchanged 0.30s limit. The serial rerun passed without allowlist or limit changes.
+Async blocker scan: `Selected blocking findings: 0`.
+
+The first stricter timer fixture failed to advance the timer created after
+real directory IO; a subsequent join across virtual/IO zones stalled. The
+corrected fixture puts the actual periodic Timer in the widget clock's zone,
+flushes IO/microtasks, and never invokes the provider reconciler to drive ticks.
+Its isolated final run passed 13 tests, followed by the passing full focused
+run above. No failed or stalled attempt is counted as passing verification.
+The first committed-head preflight failed its synthetic-merge check because
+upstream had concurrently appended localization keys at the same end-of-catalog
+location. A tested `--before` option was added to the official localization tool, and
+the key was removed/re-added through `scripts/l10n.py` beside
+`syncCardBackendBusy`, regenerating Dart. No generated Dart was hand-edited.
+`bash test/shell/l10n_tool_test.sh` passed, including positioned insertion,
+English metadata placement, byte-identical repeat, and refusal without writes
+when the insertion anchor is absent.
+This keeps the feature diff independent of unrelated upstream work. The reordered-source preflight passed `42 checks in 207.67s`. Preflight is
+rerun after committing the tool/fixture follow-up; the final lane report records
+that final SHA and outcome.
 
 ## Residual risk and production acceptance
 

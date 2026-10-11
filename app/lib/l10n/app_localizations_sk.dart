@@ -9106,6 +9106,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncCardRateLimited => 'Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronizácia je na chvíľu pozastavená — automaticky sa obnoví';
+
+  @override
   String get syncCardBackendBusy =>
       'Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita';
 

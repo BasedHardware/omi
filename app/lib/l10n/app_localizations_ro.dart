@@ -9158,6 +9158,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat';
 
   @override
+  String get syncCardThrottlePaused => 'Sincronizarea este întreruptă pentru scurt timp — va fi reluată automat';
+
+  @override
   String get syncCardBackendBusy =>
       'Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate';
 

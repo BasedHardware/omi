@@ -9149,6 +9149,9 @@ class AppLocalizationsBg extends AppLocalizations {
       'Достигнат е лимитът за честно ползване — синхронизирането ще се възобнови автоматично';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронизирането е спряно за кратко — ще се възобнови автоматично';
+
+  @override
   String get syncCardBackendBusy =>
       'Сървърите на Omi са натоварени — записите ви ще се синхронизират, когато се освободи капацитет';
 

@@ -9177,6 +9177,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncCardRateLimited => 'Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα';
 
   @override
+  String get syncCardThrottlePaused => 'Ο συγχρονισμός διακόπηκε προσωρινά — θα συνεχιστεί αυτόματα';
+
+  @override
   String get syncCardBackendBusy =>
       'Οι διακομιστές της Omi είναι φορτωμένοι — οι ηχογραφήσεις σας θα συγχρονιστούν μόλις απελευθερωθεί χωρητικότητα';
 

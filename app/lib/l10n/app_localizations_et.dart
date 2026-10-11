@@ -9108,6 +9108,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
 
   @override
+  String get syncCardThrottlePaused => 'Sünkroonimine on korraks peatatud — see jätkub automaatselt';
+
+  @override
   String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
 
   @override

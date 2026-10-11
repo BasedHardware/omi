@@ -2932,6 +2932,7 @@
     },
     "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.",
     "syncCardRateLimited": "تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا",
+    "syncCardThrottlePaused": "توقفت المزامنة مؤقتًا — ستُستأنف تلقائيًا",
     "syncCardBackendBusy": "خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة",
     "unableToDetermineFirmwareVersion": "تعذر تحديد إصدار البرنامج الثابت الحالي",
     "promoCode": "رمز ترويجي",

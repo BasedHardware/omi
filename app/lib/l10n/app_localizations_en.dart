@@ -9108,6 +9108,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCardRateLimited => 'Fair-use limit reached — syncing will resume automatically';
 
   @override
+  String get syncCardThrottlePaused => 'Syncing paused briefly — it will resume automatically';
+
+  @override
   String get syncCardBackendBusy => 'Omi servers are busy — your recordings will sync once capacity returns';
 
   @override

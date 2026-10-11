@@ -315,8 +315,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
+  final SyncJobPoller? _jobPollerOverride;
   late final SyncJobPoller _jobPoller =
-      _jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller(clock: _now);
+      _jobPollerOverride ?? (_jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller(clock: _now));
   Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
       _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
   Future<SyncLocalFilesResponse>? _reconcileInFlight;
@@ -324,6 +325,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   LocalWalSyncImpl(
     this.listener, {
     SyncUploadGate? uploadGate,
+    SyncJobPoller? jobPoller,
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
@@ -334,7 +336,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<int?> Function()? freeDiskBytes,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
-  })  : _uploadGateOverride = uploadGate,
+  })  : _jobPollerOverride = jobPoller,
+        _uploadGateOverride = uploadGate,
         _nowOverride = now,
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,

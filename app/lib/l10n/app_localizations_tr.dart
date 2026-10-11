@@ -9124,6 +9124,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
 
   @override
+  String get syncCardThrottlePaused => 'Senkronizasyon kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
   String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
 
   @override

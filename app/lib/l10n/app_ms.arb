@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.",
     "syncCardRateLimited": "Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik",
+    "syncCardThrottlePaused": "Penyegerakan dijeda sebentar — ia akan disambung semula secara automatik",
     "syncCardBackendBusy": "Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula",
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi perisian tegar semasa",
     "promoCode": "Kod promo",

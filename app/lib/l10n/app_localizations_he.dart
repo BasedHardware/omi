@@ -9047,6 +9047,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncCardRateLimited => 'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
 
   @override
+  String get syncCardThrottlePaused => 'הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית';
+
+  @override
   String get syncCardBackendBusy => 'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
 
   @override

@@ -9115,6 +9115,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncCardRateLimited => 'Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronizace je krátce pozastavena — automaticky se obnoví';
+
+  @override
   String get syncCardBackendBusy =>
       'Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita';
 

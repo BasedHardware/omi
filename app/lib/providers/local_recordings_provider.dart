@@ -51,7 +51,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
   @visibleForTesting
   Future<SyncJobFetch> Function(String jobId)? jobStatusFetcherOverride;
 
-  late final SyncJobPoller _jobPoller = jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller();
+  final SyncJobPoller _jobPoller;
+  final SyncUploadGate? _uploadGate;
   Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
       _jobPoller.fetch(jobId, jobStatusFetcherOverride ?? fetchSyncJobStatus);
   Future<void>? _reconcileInFlight;
@@ -79,12 +80,17 @@ class LocalRecordingsProvider extends ChangeNotifier {
   bool _isAutoUploading = false;
   StreamSubscription<bool>? _connectivitySub;
 
+  final Timer Function(Duration, void Function(Timer)) _periodic;
   Timer? _reconcileTimer;
   bool _disposed = false;
 
   ConversationProvider? _conversationProvider;
 
-  LocalRecordingsProvider() {
+  LocalRecordingsProvider(
+      {SyncJobPoller? jobPoller, SyncUploadGate? uploadGate, Timer Function(Duration, void Function(Timer))? periodic})
+      : _jobPoller = jobPoller ?? SyncJobPoller.instance,
+        _uploadGate = uploadGate,
+        _periodic = periodic ?? Timer.periodic {
     _audio.addListener(_onAudioChanged);
     // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
     // rotated recording surfaces without waiting for a BLE disconnect.
@@ -256,7 +262,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await uploadNativeBatchRecording(rec, file: file);
+        final result = await uploadNativeBatchRecording(rec, file: file, uploadGate: _uploadGate);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -362,7 +368,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   // ───────────────────────── reconcile ─────────────────────────
 
   void _startReconcileTimer() {
-    _reconcileTimer ??= Timer.periodic(const Duration(seconds: 15), (_) => _reconcile());
+    _reconcileTimer ??= _periodic(const Duration(seconds: 15), (_) => _reconcile());
   }
 
   void _stopReconcileTimer() {
@@ -375,6 +381,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// so it reverts to a pending, retriable recording.
   @visibleForTesting
   Future<void> reconcileForTesting() => _reconcile();
+
+  @visibleForTesting
+  bool get isReconcilingForTesting => _reconcileInFlight != null;
 
   Future<void> _reconcile() {
     final active = _reconcileInFlight;
@@ -398,6 +407,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     final newIds = <String>[];
     final updIds = <String>[];
     bool changed = false;
+    bool retryAutoUpload = false;
 
     final ordered = _jobPoller.ordered(owned.values);
     final entries = owned.entries.toList()
@@ -419,6 +429,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         case SyncJobFetchOutcome.transient:
           break;
         case SyncJobFetchOutcome.notFound:
+          retryAutoUpload = true;
           _jobs.remove(name);
           changed = true;
           break;
@@ -445,6 +456,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     if (newIds.isNotEmpty || updIds.isNotEmpty) await _surface(newIds, updIds);
     await refresh();
     if (_ownedJobs().isEmpty) _stopReconcileTimer();
+    if (retryAutoUpload) await _maybeAutoUpload();
   }
 
   Future<void> _surface(List<String> newIds, List<String> updatedIds) async {

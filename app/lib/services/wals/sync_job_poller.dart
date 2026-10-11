@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 
@@ -12,12 +14,33 @@ class SyncJobPoller {
   static const maxRequestsPerMinute = 18;
   static const minimumInterval = Duration(seconds: 20);
   static const missingConfirmationInterval = Duration(minutes: 5);
-  final DateTime Function() _clock;
+  DateTime Function() _clock;
   final SyncRateLimiter _limiter;
   final List<DateTime> _requests = [];
   final Map<String, DateTime> _nextPoll = {};
   final Set<String> _inFlight = {};
   final Set<String> _missing = {};
+  final Set<String> _confirmedMissing = {};
+
+  /// Job ids are immutable. Never adopt an owner already proven expired in this
+  /// session, even when an older server returns it again with a 409.
+  void validateOwner(UploadFilesResult result) {
+    if (_confirmedMissing.contains(result.jobId)) {
+      throw SyncRateLimitedException(
+          kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 60, reasonCode: 'sync_content_in_progress');
+    }
+  }
+
+  @visibleForTesting
+  void resetForTesting({DateTime Function()? clock}) {
+    assert(_inFlight.isEmpty && !_passRunning);
+    _clock = clock ?? DateTime.now;
+    _requests.clear();
+    _nextPoll.clear();
+    _missing.clear();
+    _confirmedMissing.clear();
+  }
+
   bool _passRunning = false;
 
   bool beginPass() {
@@ -72,6 +95,7 @@ class SyncJobPoller {
             return const SyncJobFetch(SyncJobFetchOutcome.transient);
           }
           _missing.remove(jobId);
+          _confirmedMissing.add(jobId);
           break;
         case SyncJobFetchOutcome.transient:
           defer(jobId, const Duration(minutes: 1).inMilliseconds);

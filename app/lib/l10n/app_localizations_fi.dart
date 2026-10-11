@@ -9115,6 +9115,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardRateLimited => 'Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti';
 
   @override
+  String get syncCardThrottlePaused => 'Synkronointi on keskeytetty hetkeksi — se jatkuu automaattisesti';
+
+  @override
   String get syncCardBackendBusy =>
       'Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu';
 

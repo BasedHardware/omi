@@ -9184,6 +9184,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncCardRateLimited => 'நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்';
 
   @override
+  String get syncCardThrottlePaused => 'ஒத்திசைவு சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளது — அது தானாக மீண்டும் தொடங்கும்';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்';
 

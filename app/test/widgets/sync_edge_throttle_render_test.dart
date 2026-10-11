@@ -116,7 +116,7 @@ void main() {
           )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Paused'), findsOneWidget);
+    expect(find.text('Syncing paused briefly — it will resume automatically'), findsOneWidget);
     expect(find.textContaining('Omi servers are busy'), findsNothing);
     expect(tester.takeException(), isNull);
     if (evidence.isNotEmpty) {

@@ -9126,6 +9126,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncCardRateLimited => 'Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai';
 
   @override
+  String get syncCardThrottlePaused => 'Sinchronizavimas trumpam pristabdytas — jis bus tęsiamas automatiškai';
+
+  @override
   String get syncCardBackendBusy => 'Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai';
 
   @override

@@ -9113,6 +9113,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
 
   @override
+  String get syncCardThrottlePaused => 'همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
   String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
 
   @override

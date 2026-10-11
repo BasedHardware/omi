@@ -9142,6 +9142,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncCardRateLimited => 'Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна';
 
   @override
+  String get syncCardThrottlePaused => 'Сінхранізацыя ненадоўга прыпынена — яна адновіцца аўтаматычна';
+
+  @override
   String get syncCardBackendBusy => 'Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з\'явіцца магчымасць';
 
   @override

@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Pokračuje to na pozadí — túto obrazovku môžete opustiť.",
     "syncCardRateLimited": "Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať",
+    "syncCardThrottlePaused": "Synchronizácia je na chvíľu pozastavená — automaticky sa obnoví",
     "syncCardBackendBusy": "Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita",
     "unableToDetermineFirmwareVersion": "Nedá sa určiť aktuálna verzia firmvéru",
     "promoCode": "Promo kód",
