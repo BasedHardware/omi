@@ -106,9 +106,11 @@ def test_spelling_question_retains_fenced_actionable_source(monkeypatch):
     monkeypatch.setattr(dream_tools, 'revalidate_proposal', lambda *a: records())
     monkeypatch.setattr(dream_tools, 'validate_canonical_proposal', lambda *a: None)
     monkeypatch.setattr(
-        dream_tools.review_store, 'enqueue_review_proposal', lambda uid, item, **kwargs: seen.append(kwargs)
+        dream_tools.review_store,
+        'enqueue_review_proposal',
+        lambda uid, item, **kwargs: seen.append(kwargs) or 'suggested',
     )
-    assert dream_tools.suggest_spelling('synthetic', correction(), records()) == 'suggested'
+    assert dream_tools.suggest_spelling('synthetic', correction(), records(), 'fixture-run') == 'suggested'
     source = seen[0]['source']
     applied = []
     monkeypatch.setattr(
@@ -146,6 +148,67 @@ def test_review_answer_dispatches_dream_spelling_source(monkeypatch):
     result = review.answer_item('synthetic', item.item_id, ReviewAnswer(spelling=SpellingAnswer(value='Zuvrah')))
     assert result['applied']
     assert seen == [(source, 'Zuvrah')]
+
+
+def test_spelling_enqueue_counts_only_new_cards_atomically(monkeypatch):
+    from database import review_store
+    from tests.support.dream_firestore import DreamFirestore
+    from datetime import datetime, timezone
+
+    db = DreamFirestore()
+    uid, run_id = 'synthetic', 'fixture-run'
+    state_path = ('dream_users', uid)
+    db.rows[state_path] = {'lease': {'run_id': run_id}}
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    monkeypatch.setattr(review_store, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(review_store, 'encode_doc', lambda uid, doc: doc)
+    monkeypatch.setattr(review_store, 'decode_doc', lambda uid, doc: doc)
+    monkeypatch.setattr(review_store.firestore, 'transactional', lambda fn: fn)
+    item = dream_grounding.spelling_question(correction())
+    kwargs = {'evidence_version': 'fixture', 'dream_run_id': run_id}
+    assert review_store.enqueue_review_proposal(uid, item, **kwargs) == 'suggested'
+    assert db.rows[state_path]['questions'] == 1
+    assert review_store.enqueue_review_proposal(uid, item, **kwargs) == 'already_suggested'
+    proposal = ('users', uid, 'review_proposals', review_store.safe_id(item.item_id))
+    db.rows[proposal]['status'] = 'resolved'
+    assert (
+        review_store.enqueue_review_proposal(uid, item, evidence_version='new', dream_run_id=run_id)
+        == 'already_suggested'
+    )
+    assert db.rows[state_path]['questions'] == 1
+    day = datetime.now(timezone.utc).date().isoformat()
+    db.rows[('users', uid, 'review_attention', day)] = {'dream_suggestions': 2}
+    new_item = item.model_copy(update={'item_id': 'spelling:new-fixture'})
+    assert review_store.enqueue_review_proposal(uid, new_item, **kwargs) == 'suggestion_cap'
+    assert db.rows[state_path]['questions'] == 1
+
+
+def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
+    rows = {**records(), 'conversations/empty': {'transcript_segments': [{'text': 'solar boat ' * 20}]}}
+    lease = {'run_id': 'fixture-run', 'mode': 'on'}
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
+    monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
+    monkeypatch.setattr(dream_store, 'assert_lease', lambda *a: None)
+    monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: None)
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (rows, []))
+    summary = Edit(
+        kind='title',
+        target='conversations/empty',
+        after='Solar boat discussion',
+        reason='Synthetic',
+        evidence=['conversations/empty'],
+    )
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=[correction(), summary]), 100)))
+    monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
+    monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
+    monkeypatch.setattr(dream_tools, 'suggest_spelling', lambda *a: 'suggestion_cap')
+    applied = []
+    monkeypatch.setattr(dream_tools, 'apply_edit', lambda uid, edit, records: applied.append(edit.target) or 'applied')
+    result = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps(edits=1)))
+    assert result['status'] == 'complete'
+    assert applied == ['conversations/empty']
 
 
 def test_read_only_eval_shows_zero_ungrounded_auto_applies_and_question():
@@ -186,7 +249,9 @@ def test_real_pass_routes_ungrounded_to_spelling_question_with_shared_cap(monkey
     monkeypatch.setattr(
         dream_tools,
         'suggest_spelling',
-        lambda uid, edit, records: questions.append(dream_grounding.spelling_question(edit)) or 'suggested',
+        lambda uid, edit, records, run_id: (
+            (questions.append(dream_grounding.spelling_question(edit)) or 'suggested') if budget else 'suggestion_cap'
+        ),
     )
     report = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps()))
     assert report['status'] == 'complete'

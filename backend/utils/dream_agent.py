@@ -271,14 +271,13 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                                 report['proposed']['questions'].append(
                                     spelling_question(edit).model_dump(mode='python')
                                 )
-                            admitted = True
-                            if is_question and lease['mode'] == 'on' and mode() == 'on':
-                                admitted = bool(
-                                    await run_blocking(
-                                        db_executor, dream_store.reserve_questions, uid, lease['run_id'], 1
-                                    )
-                                )
-                            status = await effect(tool, edit, records) if admitted else 'suggestion_cap'
+                            status = (
+                                await effect(tool, edit, records, lease['run_id'])
+                                if is_question
+                                else await effect(tool, edit, records)
+                            )
+                            if is_question and status in {'suggestion_cap', 'already_suggested', 'suppressed'}:
+                                remaining += 1
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})

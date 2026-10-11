@@ -325,7 +325,7 @@ def apply_grounded_edit(uid, edit, records):
     return apply_edit(uid, edit, sources, expected_records=fences)
 
 
-def suggest_spelling(uid, edit, records):
+def suggest_spelling(uid, edit, records, run_id):
     validate_edit(edit, records)
     source: dict[str, Any] = {
         'records': {ref: records[ref] for ref in {edit.target, *edit.evidence}},
@@ -335,14 +335,14 @@ def suggest_spelling(uid, edit, records):
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
     validate_canonical_proposal(uid, edit)
-    review_store.enqueue_review_proposal(
+    return review_store.enqueue_review_proposal(
         uid,
         spelling_question(edit),
         edit_key=edit_key(edit, records),
         source=source,
+        dream_run_id=run_id,
         evidence_version=review_store.fingerprint(source),
     )
-    return 'suggested'
 
 
 def answer_spelling(uid, source, value):
