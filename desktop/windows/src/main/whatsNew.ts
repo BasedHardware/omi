@@ -24,7 +24,7 @@ function changesFromFragment(fragment: unknown): string[] {
 const CHANGES: string[] = [
   ...changesFromFragment(phase8Fragment),
   ...changesFromFragment(chatRefreshFragment),
-  ...changesFromFragment(mobileParityFragment),
+  ...changesFromFragment(mobileParityFragment)
 ]
 
 /** Decide whether to show the what's-new toast this launch, advancing the stored
