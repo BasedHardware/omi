@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/components/omi_spinner.dart';
+import 'package:omi/ui/components/omi_settings.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// What a button does, which decides how loud it is.
@@ -71,10 +72,12 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
     this.colors,
     this.width,
     this.height,
     this.labelStyle,
+    this.pill = false,
   });
 
   const OmiButton.secondary({
@@ -86,6 +89,8 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
@@ -101,11 +106,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   const OmiButton.tertiary({
     super.key,
@@ -116,11 +123,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -132,11 +141,13 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   final String label;
 
@@ -160,6 +171,10 @@ class OmiButton extends StatefulWidget {
   /// Fill the available width.
   final bool expand;
 
+  /// Wrap a label that does not fit instead of ellipsizing it; the button grows taller. For an
+  /// action whose localized label must read in full at large text scales.
+  final bool wrapLabel;
+
   /// Legacy colour override; see [OmiButtonColors]. Wins over [variant].
   final OmiButtonColors? colors;
 
@@ -171,6 +186,9 @@ class OmiButton extends StatefulWidget {
 
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
+
+  /// A capsule instead of the 12 pt corners: for a button inside a pill-shaped dock.
+  final bool pill;
 
   @override
   State<OmiButton> createState() => _OmiButtonState();
@@ -219,12 +237,20 @@ class _OmiButtonState extends State<OmiButton> {
         _ => (background: OmiColors.surface2, foreground: OmiColors.textDisabled),
       };
     }
+    // On a page inside Settings the quiet fills take the warm tile colour of the header circles.
+    final grouped = OmiGroupedScope.of(context);
     return switch (widget.variant) {
       OmiButtonVariant.primary => (background: OmiColors.accent, foreground: OmiColors.onAccent),
-      OmiButtonVariant.secondary => (background: OmiColors.surface2, foreground: OmiColors.textPrimary),
+      OmiButtonVariant.secondary => (
+          background: grouped ? OmiColors.iconTile : OmiColors.surface2,
+          foreground: OmiColors.textPrimary
+        ),
       OmiButtonVariant.destructive => (background: OmiColors.dangerSurface, foreground: OmiColors.danger),
       OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textPrimary),
-      OmiButtonVariant.toolbar => (background: OmiColors.surface1, foreground: OmiColors.textPrimary),
+      OmiButtonVariant.toolbar => (
+          background: grouped ? OmiColors.iconTile : OmiColors.surface1,
+          foreground: OmiColors.textPrimary
+        ),
     };
   }
 
@@ -239,7 +265,9 @@ class _OmiButtonState extends State<OmiButton> {
       color: colors.foreground,
     );
 
-    Widget label = Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    Widget label = widget.wrapLabel
+        ? Text(widget.label, style: textStyle, textAlign: TextAlign.center)
+        : Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
     if (widget.leading != null || widget.icon != null) {
       final iconSize = compact ? 16.0 : 18.0;
       label = Row(
@@ -274,10 +302,16 @@ class _OmiButtonState extends State<OmiButton> {
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
         overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
         elevation: const WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
+        // A wrapped label keeps a little air above and below; one line still sits in the minimum height.
+        padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: widget.wrapLabel ? OmiSpacing.xs : 0)),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: OmiRadius.mdAll)),
+        // A toolbar button in a Settings page's bar is a capsule beside the round icon buttons.
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+            borderRadius: widget.pill || (widget.variant == OmiButtonVariant.toolbar && OmiGroupedScope.of(context))
+                ? OmiRadius.pillAll
+                : OmiRadius.mdAll)),
         // A visual under 44pt gets padded out to a 48pt target; a 48pt button needs no padding.
         tapTargetSize: visualHeight < 44 ? MaterialTapTargetSize.padded : MaterialTapTargetSize.shrinkWrap,
         textStyle: WidgetStatePropertyAll(textStyle),

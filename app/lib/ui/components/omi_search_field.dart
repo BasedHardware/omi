@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The one search field: a 48pt [OmiColors.surface1] capsule with a magnifier, the placeholder,
-/// and a clear X that appears once there is text.
+/// The one search field: a 48pt capsule in the card colour ([OmiCanvas.cardOf]) with a magnifier,
+/// the placeholder, and a clear X that appears once there is text.
 ///
 /// The placeholder says what it searches ("Search conversations", "Search memories"), sentence
 /// case, with no trailing ellipsis.
@@ -98,7 +99,7 @@ class _OmiSearchFieldState extends State<OmiSearchField> {
           hintText: widget.placeholder,
           hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
           filled: true,
-          fillColor: OmiColors.surface1,
+          fillColor: OmiCanvas.cardOf(context),
           border: border,
           enabledBorder: border,
           focusedBorder: border,

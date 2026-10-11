@@ -26,6 +26,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
@@ -90,6 +91,26 @@ class _QuietCapture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
   @override
   bool get pendantCaptureVerified => false;
+}
+
+/// A pendant Omi has heard from, recording for 8:31.
+class _VerifiedPendantCapture extends CaptureProvider {
+  _VerifiedPendantCapture()
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+              initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
+  final DateTime _startedAt = DateTime.now().subtract(const Duration(minutes: 8, seconds: 31));
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  DateTime? get liveCaptureStartedAt => _startedAt;
 }
 
 CaptureProvider _hermeticCapture() {
@@ -263,5 +284,56 @@ void main() {
 
     expect(find.textContaining('a transcript will appear here'), findsOneWidget);
     expect(find.textContaining('recording continues on device'), findsNothing);
+  });
+
+  testWidgets('the live page names each speaker above their words, under a Live Transcript title', (tester) async {
+    final capture = _VerifiedPendantCapture();
+    addTearDown(capture.dispose);
+    capture.updateRecordingState(RecordingState.record);
+    capture.segments = [
+      TranscriptSegment(
+          id: 'l1',
+          text: 'So the plan is to ship on Friday.',
+          speaker: 'SPEAKER_0',
+          isUser: true,
+          personId: null,
+          start: 0,
+          end: 4,
+          translations: []),
+      TranscriptSegment(
+          id: 'l2',
+          text: 'And keep the pendant flow as it is.',
+          speaker: 'SPEAKER_1',
+          isUser: false,
+          personId: null,
+          start: 4,
+          end: 9,
+          translations: []),
+    ];
+
+    await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
+
+    Finder line(String words) =>
+        find.byWidgetPredicate((w) => w is Text && (w.textSpan?.toPlainText().contains(words) ?? false));
+    expect(find.text('Live Transcript'), findsOneWidget);
+    // The state line under the title, then the session clock (8:31 into the recording).
+    expect(find.text('Listening · Pendant'), findsOneWidget);
+    expect(find.textContaining('8:3'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
+    expect(find.text('Speaker 1'), findsOneWidget);
+    expect(line('ship on Friday'), findsOneWidget);
+    expect(line('pendant flow'), findsOneWidget);
+    // The name sits above its words; the newest line is full ink, the earlier one secondary.
+    expect(
+        tester.getBottomLeft(find.text('Speaker 1')).dy, lessThanOrEqualTo(tester.getTopLeft(line('pendant flow')).dy));
+    expect(tester.widget<Text>(line('ship on Friday')).style?.color, OmiColors.textSecondary);
+    expect(tester.widget<Text>(line('pendant flow')).style?.color, OmiColors.textPrimary);
+    // Pause and Finish side by side, in that order.
+    final pause = find.byKey(const Key('capture_pause_button'));
+    final finish = find.byKey(const Key('process_now_button'));
+    expect(pause, findsOneWidget);
+    expect(finish, findsOneWidget);
+    expect(tester.getCenter(finish).dx, greaterThan(tester.getCenter(pause).dx));
+    expect(tester.getCenter(finish).dy, moreOrLessEquals(tester.getCenter(pause).dy, epsilon: 1));
   });
 }

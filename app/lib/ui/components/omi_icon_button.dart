@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_glass.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/components/omi_settings.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
 /// controls use the smaller of the two so a row of them still fits a phone-width app bar.
@@ -65,7 +68,8 @@ class OmiIconButton extends StatelessWidget {
   /// Whether a circle is painted behind the glyph.
   final bool filled;
 
-  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1].
+  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1]; on an [OmiCanvas]
+  /// screen the circle is [OmiGlass] and this tints it.
   final Color? fillColor;
 
   /// Diameter of the painted circle. The touch target stays [kOmiMinTapTarget].
@@ -74,6 +78,10 @@ class OmiIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    // On a page in the Settings look ([OmiGroupedScope]) the circle defaults to the icon-tile colour,
+    // unless it is glass on a canvas header, which keeps the glass's own fill.
+    final fillColor =
+        this.fillColor ?? (OmiGroupedScope.of(context) && !OmiCanvas.isOn(context) ? OmiColors.iconTile : null);
     var glyphColor = color ?? (isDestructive ? OmiColors.danger : OmiColors.textPrimary);
     if (!enabled) glyphColor = glyphColor.withValues(alpha: 0.38);
 
@@ -82,11 +90,15 @@ class OmiIconButton extends StatelessWidget {
       child: ExcludeSemantics(child: icon),
     );
     if (filled) {
+      final glass = OmiCanvas.isOn(context);
       glyph = Container(
         width: diameter,
         height: diameter,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: fillColor ?? OmiColors.surface1, shape: BoxShape.circle),
+        decoration: glass
+            ? OmiGlass.fill(const CircleBorder(), tint: fillColor)
+            : BoxDecoration(color: fillColor ?? OmiColors.surface1, shape: BoxShape.circle),
+        foregroundDecoration: glass ? OmiGlass.rim(const CircleBorder()) : null,
         child: glyph,
       );
     }

@@ -13,7 +13,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -61,6 +60,10 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
+  /// Room under the transcript card for the floating dock: the Scaffold's margin above the bottom
+  /// inset, the dock (a regular button in its padding) and a gap to the card.
+  static const double _dockClearance = kFloatingActionButtonMargin + 48 + OmiSpacing.xs * 2 + OmiSpacing.md;
+
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -151,12 +154,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
+        final state = _displayState(provider, capturingPhotos: provider.photos.isNotEmpty);
+        final live = state == CaptureDisplayState.listening ||
+            state == CaptureDisplayState.capturing ||
+            state == CaptureDisplayState.recording;
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
           appBar: ConversationStateAppBar(
+            title: context.l10n.liveTranscript,
+            startedAt: provider.liveCaptureStartedAt,
             showStatus: effectivelyMuted || provider.pendantCaptureVerified,
-            state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
+            state: state,
             bufferingFor: provider.customSttBufferingDuration,
             sourceLabel: switch (provider.liveCaptureSource) {
               null => null,
@@ -170,71 +179,66 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               _buildUnsyncedWalIndicator(provider),
               ..._buildCarriedSpeakerBanner(provider),
               Expanded(
-                child: provider.segments.isEmpty && provider.photos.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
-                          child: Text(
-                            textAlign: TextAlign.center,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                            _liveCaptureEmptyStateText(
-                              provider,
-                              connectivity: connectivity,
-                              usage: usage,
-                              photoChannelActive: photoChannelActive,
-                              transcriptionInterrupted: transcriptionInterrupted,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    OmiSpacing.sm,
+                    OmiSpacing.xs,
+                    OmiSpacing.sm,
+                    MediaQuery.paddingOf(context).bottom + _dockClearance,
+                  ),
+                  child: _TranscriptCard(
+                    child: provider.segments.isEmpty && provider.photos.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                              child: Text(
+                                textAlign: TextAlign.center,
+                                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                                _liveCaptureEmptyStateText(
+                                  provider,
+                                  connectivity: connectivity,
+                                  usage: usage,
+                                  photoChannelActive: photoChannelActive,
+                                  transcriptionInterrupted: transcriptionInterrupted,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      )
-                    : provider.photos.isNotEmpty
-                        ? _buildChronologicalTimeline(
+                          )
+                        : _buildTranscript(
                             provider,
                             transcriptSessionId,
                             transcriptScrollState,
                             widget.topConversationId ?? provider.topConversationId,
-                          )
-                        : getTranscriptWidget(
-                            false,
-                            provider.segments,
-                            provider.photos,
-                            deviceProvider.connectedDevice,
-                            bottomMargin: 0,
-                            taggingSegmentIds: provider.taggingSegmentIds,
-                            transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                            followLatest: true,
-                            scrollState: transcriptScrollState,
-                            jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
-                            contentVersion: provider.segmentsPhotosVersion,
-                            editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                            live: live,
                           ),
+                  ),
+                ),
               ),
             ],
           ),
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
+          // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop, side by
+          // side in a dock.
           floatingActionButton:
               (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  ? _Dock(
                       children: [
                         if (provider.liveCaptureSource != null &&
                             LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
-                          OmiIconButton.filled(
+                          OmiButton(
                             key: const Key('capture_pause_button'),
-                            icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
                             label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                            diameter: 52,
-                            fillColor: OmiColors.surface3,
+                            leading: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                            pill: true,
                             onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
                           ),
-                          const SizedBox(width: OmiSpacing.sm),
+                          const SizedBox(width: OmiSpacing.xs),
                         ],
-                        OmiButton(
+                        OmiButton.secondary(
                           key: const Key('process_now_button'),
                           label: context.l10n.finish,
                           leading: const Icon(Icons.check_rounded),
+                          pill: true,
                           onPressed: () => _stopConversation(provider),
                         ),
                       ],
@@ -245,13 +249,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     );
   }
 
-  /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(
+  /// The transcript list: a camera-capable device's photo groups first, in time order, then every
+  /// line, each built by [_buildTranscriptLine]. [live] marks the newest line with a caret.
+  Widget _buildTranscript(
     CaptureProvider provider,
     String sessionId,
     TranscriptScrollState scrollState,
-    String? conversationId,
-  ) {
+    String? conversationId, {
+    required bool live,
+  }) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
@@ -284,18 +290,20 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       key: ValueKey('live-transcript-$sessionId'),
       segments: segments,
       horizontalMargin: false,
-      topMargin: false,
       separator: false,
       canDisplaySeconds: false,
-      bottomMargin: 0,
+      // The list keeps 120 pt of slack under its last line for a page's floating controls. Here
+      // they sit below the card, so only the card's own padding is left.
+      bottomMargin: OmiSpacing.lg - 120,
       followLatest: true,
       scrollState: scrollState,
-      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+      jumpToLatestButtonBottom: OmiSpacing.md,
       contentVersion: provider.segmentsPhotosVersion,
-      layoutIdentity: 'photo-timeline',
+      layoutIdentity: photoGroups.isEmpty ? 'live-transcript' : 'photo-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people, names),
+      segmentBuilder: (context, segment, index) =>
+          _buildTranscriptLine(segment, index, provider, people, names, live: live),
     );
   }
 
@@ -564,73 +572,134 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
   }
 
-  Widget _buildTranscriptTimelineItem(
+  /// One line of the live transcript: the speaker's name in small type above the words (You, the
+  /// person once named, otherwise Speaker N), then the words. Tapping the line names the speaker.
+  /// The newest line is full ink and carries a caret while [live]; earlier lines step back to
+  /// secondary. A named speaker's label badge, the tagging spinner, the likely-speaker chip and
+  /// translations keep their places from the saved transcript.
+  Widget _buildTranscriptLine(
     TranscriptSegment segment,
+    int index,
     CaptureProvider provider,
     List<Person> people,
-    SpeakerNames names,
-  ) {
-    final bool isUser = segment.isUser;
-    final name = names.forSegment(segment, person: personById(people, segment.personId));
-    Widget avatar() => Semantics(
-          button: true,
-          label: context.l10n.identifySpeaker,
-          excludeSemantics: true,
-          onTap: () => _editSegmentSpeaker(segment, provider),
-          child: GestureDetector(
-            onTap: () => _editSegmentSpeaker(segment, provider),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: OmiColors.surface2,
-                  child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
-                ),
-                const SizedBox(height: 2),
-              ],
-            ),
-          ),
-        );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!isUser) ...[avatar(), const SizedBox(width: 8)],
-          Flexible(
-            child: GestureDetector(
-              onTap: () => _editSegmentSpeaker(segment, provider),
-              child: Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isUser ? OmiColors.surface3 : OmiColors.surface2,
-                  borderRadius: const BorderRadius.all(Radius.circular(18)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4, offset: const Offset(0, 1)),
+    SpeakerNames names, {
+    required bool live,
+  }) {
+    final person = personById(people, segment.personId);
+    final name = names.forSegment(segment, person: person);
+    final isTagging = provider.taggingSegmentIds.contains(segment.id);
+    final previous = index > 0 ? provider.segments[index - 1] : null;
+    // The badge marks the start of a speaker's turn, not every line of it.
+    final startsTurn = previous == null ||
+        previous.isUser != segment.isUser ||
+        previous.speakerId != segment.speakerId ||
+        previous.personId != segment.personId ||
+        previous.speakerLabelSource != segment.speakerLabelSource;
+    final latest = index == provider.segments.length - 1;
+    final words = OmiType.title3.copyWith(
+      fontWeight: FontWeight.w400,
+      height: 1.4,
+      color: latest ? OmiColors.textPrimary : OmiColors.textSecondary,
+    );
+    final suggested = _pinnedSuggestion(segment, provider, people);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: () => _editSegmentSpeaker(segment, provider),
+      child: Padding(
+        padding: EdgeInsets.only(top: index == 0 ? 0 : OmiSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              button: true,
+              label: name,
+              hint: context.l10n.identifySpeaker,
+              excludeSemantics: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
+                  ),
+                  if (startsTurn && person != null && !isTagging) ...[
+                    const SizedBox(width: OmiSpacing.xxs),
+                    SpeakerLabelBadge(source: segment.speakerLabelSource),
                   ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
-                    if (_pinnedSuggestion(segment, provider, people) case final suggested?)
-                      SpeakerSuggestionChip(
-                        key: ValueKey('suggestion_${segment.id}'),
-                        person: suggested,
-                        onYes: () => _acceptSuggestion(segment, suggested, provider),
-                        onSomeoneElse: () => _rejectSuggestion(segment, suggested, provider),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(segment.text, style: OmiType.subhead.copyWith(height: 1.4)),
+                  if (isTagging) ...[
+                    const SizedBox(width: OmiSpacing.xs),
+                    const OmiSpinner(size: OmiSpinnerSize.small),
                   ],
-                ),
+                ],
               ),
             ),
-          ),
-          if (isUser) ...[const SizedBox(width: 8), avatar()],
-        ],
+            if (suggested != null)
+              SpeakerSuggestionChip(
+                key: ValueKey('suggestion_${segment.id}'),
+                person: suggested,
+                onYes: () => _acceptSuggestion(segment, suggested, provider),
+                onSomeoneElse: () => _rejectSuggestion(segment, suggested, provider),
+              ),
+            const SizedBox(height: OmiSpacing.xxs),
+            Text.rich(
+              TextSpan(
+                text: tryDecodingText(segment.text),
+                children: [
+                  if (live && latest)
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.only(start: OmiSpacing.xxs),
+                        child: ExcludeSemantics(
+                          child: Container(width: 2, height: words.fontSize, color: OmiColors.textPrimary),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              style: words,
+            ),
+            if (segment.translations.isNotEmpty) ...[
+              for (final translation in segment.translations)
+                Padding(
+                  padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                  child: Text(
+                    tryDecodingText(translation.text),
+                    style: OmiType.footnote.copyWith(
+                      color: OmiColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                child: Semantics(
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () => showOmiAlert(
+                      context,
+                      title: context.l10n.translationNotice,
+                      message: context.l10n.translationNoticeMessage,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 12, color: OmiColors.textTertiary),
+                        const SizedBox(width: OmiSpacing.xxs),
+                        Text(
+                          context.l10n.translatedByOmi,
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary, fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -775,4 +844,72 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.outsideRecoveryWindow ||
       state == WalSyncDisplayState.unsupportedAudio ||
       state == WalSyncDisplayState.uploadRejected;
+}
+
+/// The transcript's card on the grouped page: surface1, a hairline and a little lift. The list
+/// inside is clipped to the corners, and a fade at the top lets the oldest lines slip under the
+/// edge instead of being cut.
+class _TranscriptCard extends StatelessWidget {
+  const _TranscriptCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = OmiColors.surface1;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.border, width: 0.5),
+        boxShadow: OmiGlass.shadows,
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Padding(padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg), child: child),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: OmiSpacing.xxl,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [fill, fill.withValues(alpha: 0)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The live page's controls in one floating dock: Pause/Resume and Finish as labelled capsules on
+/// a surface1 pill with the float shadow.
+class _Dock extends StatelessWidget {
+  const _Dock({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(OmiSpacing.xs),
+      decoration: BoxDecoration(
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.pillAll,
+        boxShadow: OmiGlass.floatShadows,
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+    );
+  }
 }

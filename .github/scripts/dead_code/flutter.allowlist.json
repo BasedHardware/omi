@@ -51,6 +51,10 @@
     {
       "path": "app/lib/pages/apps/page.dart",
       "reason": "AppsPage left the shell (the catalog is Settings > Integrations), but protected spine oracles (app/test/spine/b1_surface_contract.dart) import it; remove with the B1 contract revision"
+    },
+    {
+      "path": "app/lib/widgets/device_tile.dart",
+      "reason": "v2 cleaner UX foundation (#20342): the device tile that #20328, #20717 and #20718 put on Home, conversation and recap rows; reachable once the first of them lands, then remove this entry"
     }
   ]
 }

@@ -117,6 +117,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   List<String> get taggingSegmentIds => const [];
   @override
+  Map<String, SpeakerLabelSuggestionEvent> get suggestionsBySegmentId => const {};
+  @override
   int get segmentsPhotosVersion => 1;
   @override
   String? get topConversationId => null;
