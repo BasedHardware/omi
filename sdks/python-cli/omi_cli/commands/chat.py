@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 import typer
 
 from omi_cli import config as cfg
+from omi_cli.auth import oauth as oauth_auth
 from omi_cli.client import OmiClient, path_segment
 from omi_cli.errors import CliError, UsageError
 
@@ -42,8 +43,10 @@ def run(
 
     # /v2/messages uses the signed-in user's Firebase identity. Developer API
     # keys have their own scoped endpoints and cannot authenticate this route.
+    # Browser sign-in keeps that identity (the Firebase session) on the profile
+    # beside the developer key it mints, so it is the one way in.
     profile = ctx.get_profile()
-    if profile.auth_method != "oauth" or os.environ.get(cfg.ENV_API_KEY):
+    if os.environ.get(cfg.ENV_API_KEY) or not oauth_auth.has_firebase_session(profile):
         raise UsageError(
             message="Chat requires browser sign-in",
             detail="Run `omi auth login --browser`, then try `omi chat` again. Developer API keys cannot access chat.",
@@ -108,7 +111,7 @@ def _ask(ctx: "AppContext", prompt: str) -> None:
         sys.stdout.write(chunk)
         sys.stdout.flush()
 
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         try:
             result = _send_stream(client, prompt, show_chunk)
         except CliError:
@@ -188,7 +191,7 @@ def _friendly_stream_error(code: Any) -> str:
 
 
 def _show_history(ctx: "AppContext", limit: int) -> None:
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         messages = client.get(_CHAT_PATH, params={"limit": limit})
     if not isinstance(messages, list):
         raise CliError(message="Invalid chat history", detail="Expected a list of messages from Omi.")
@@ -217,7 +220,7 @@ def _clear(ctx: "AppContext", *, confirmed: bool) -> None:
         else:
             typer.echo("Kept chat history.")
         return
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         client.delete(_CHAT_PATH)
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"cleared": True})
@@ -226,7 +229,7 @@ def _clear(ctx: "AppContext", *, confirmed: bool) -> None:
 
 
 def _show_tasks(ctx: "AppContext") -> None:
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         payload = client.get("/v1/action-items", params={"completed": False, "limit": 20})
     if not isinstance(payload, Mapping) or not isinstance(payload.get("action_items"), list):
         raise CliError(message="Invalid task list")
@@ -244,7 +247,7 @@ def _show_tasks(ctx: "AppContext") -> None:
 def _add_task(ctx: "AppContext", description: str) -> None:
     if not description:
         raise UsageError(message="Usage: /task add DESCRIPTION")
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         item = client.post("/v1/action-items", json_body={"description": description})
     if not isinstance(item, Mapping):
         raise CliError(message="Invalid task response")
@@ -254,7 +257,7 @@ def _add_task(ctx: "AppContext", description: str) -> None:
 def _complete_task(ctx: "AppContext", task_id: str) -> None:
     if not task_id:
         raise UsageError(message="Usage: /task done ID")
-    with ctx.make_client() as client:
+    with ctx.make_client(firebase_session=True) as client:
         item = client.patch(f"/v1/action-items/{path_segment(task_id)}/completed", params={"completed": True})
     if not isinstance(item, Mapping):
         raise CliError(message="Invalid task response")

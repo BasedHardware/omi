@@ -37,7 +37,7 @@ from typing import Any, Optional
 import httpx
 
 from omi_cli import config as cfg
-from omi_cli.auth.store import store_api_key, store_oauth_tokens, update_oauth_id_token
+from omi_cli.auth.store import store_api_key, update_firebase_session
 from omi_cli.config import Profile
 from omi_cli.errors import AuthError, UsageError
 
@@ -178,7 +178,7 @@ def login_with_browser(
         )
 
     custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri, code_verifier)
-    id_token, _refresh_token, _expires_in = _firebase_signin_with_custom_token(custom_token)
+    id_token, refresh_token, expires_in = _firebase_signin_with_custom_token(custom_token)
 
     # Every /v1/dev/* endpoint the CLI actually uses authenticates with a
     # *developer API key*, not a Firebase ID token — so storing the Firebase
@@ -186,8 +186,14 @@ def login_with_browser(
     # The Firebase session DOES authenticate POST /v1/dev/keys, so use it once
     # to mint a long-lived dev key and store that. Browser OAuth is, in effect,
     # just a friendlier way to obtain a key without visiting the dashboard.
+    # The session itself is kept on the profile: the user-identity routes
+    # (``omi chat`` on /v2/messages) accept only the Firebase ID token, which
+    # ``refresh_id_token`` renews from the refresh token when it expires.
     raw_key = _exchange_firebase_token_for_dev_key(api_base, id_token)
-    return store_api_key(profile_name, raw_key, api_base=api_base)
+    expires_at = time.time() + expires_in - _REFRESH_MARGIN_SECONDS
+    return store_api_key(
+        profile_name, raw_key, api_base=api_base, firebase_session=(id_token, refresh_token, expires_at)
+    )
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -202,11 +208,11 @@ def refresh_id_token(profile_name: str) -> str:
     config = cfg.load()
     profile = config.get_profile(profile_name)
 
-    if profile.auth_method != "oauth" or not profile.refresh_token:
+    if not profile.refresh_token:
         raise UsageError(
             message="Nothing to refresh",
             detail=(
-                f"Profile '{profile_name}' is not configured for OAuth. "
+                f"Profile '{profile_name}' has no browser sign-in session. "
                 "API keys are long-lived and don't need refreshing."
             ),
         )
@@ -236,28 +242,32 @@ def refresh_id_token(profile_name: str) -> str:
     expires_at = time.time() + expires_in - _REFRESH_MARGIN_SECONDS
 
     # If Firebase rotated the refresh token, persist the new one too. Otherwise
-    # we just bump the ID token + expiry in place.
-    if new_refresh_token and new_refresh_token != profile.refresh_token:
-        store_oauth_tokens(
-            profile_name,
-            id_token=new_id_token,
-            refresh_token=new_refresh_token,
-            expires_at=expires_at,
-            api_base=profile.api_base,
-        )
-    else:
-        update_oauth_id_token(
-            profile_name,
-            id_token=new_id_token,
-            expires_at=expires_at,
-        )
+    # we just bump the ID token + expiry in place. The profile's auth method
+    # and API key are untouched either way.
+    update_firebase_session(
+        profile_name,
+        id_token=new_id_token,
+        expires_at=expires_at,
+        refresh_token=new_refresh_token if new_refresh_token != profile.refresh_token else None,
+    )
 
     return str(new_id_token)
 
 
+def has_firebase_session(profile: Profile) -> bool:
+    """Whether the profile holds the signed-in user's Firebase session.
+
+    True for an ``oauth`` profile and for an ``api_key`` profile written by browser
+    sign-in, which keeps the session beside the minted key.
+    """
+    if profile.auth_method == "oauth":
+        return bool(profile.id_token) or bool(profile.refresh_token)
+    return bool(profile.refresh_token)
+
+
 def needs_refresh(profile: Profile, now: Optional[float] = None) -> bool:
-    """Return True if the stored OAuth ID token is past (or near) its expiry."""
-    if profile.auth_method != "oauth":
+    """Return True if the stored Firebase ID token is past (or near) its expiry."""
+    if not has_firebase_session(profile):
         return False
     if not profile.id_token_expires_at:
         # Token of unknown age — be safe and refresh.

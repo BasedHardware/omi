@@ -84,7 +84,7 @@ class AppContext:
             profile.api_base = env_base
         return profile
 
-    def make_client(self) -> OmiClient:
+    def make_client(self, *, firebase_session: bool = False) -> OmiClient:
         profile = self.get_profile()
         # Apply the per-command key only to cloud API requests. Local Desktop
         # commands and saved-profile management use their own credentials.
@@ -92,7 +92,7 @@ class AppContext:
         if env_key:
             profile.api_key = validate_api_key_format(env_key)
             profile.auth_method = "api_key"
-        return OmiClient(profile, verbose=self.verbose)
+        return OmiClient(profile, verbose=self.verbose, firebase_session=firebase_session)
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
