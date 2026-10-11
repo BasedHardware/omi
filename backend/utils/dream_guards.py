@@ -1,6 +1,9 @@
 """Deterministic quality policy shared by shadow planning and effect validation."""
 
 from collections import Counter
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
 import re
 import unicodedata
 
@@ -9,6 +12,71 @@ from models.dream_agent import Plan
 # Code-configurable threshold; no rollout/environment switch changes admission.
 MIN_SUMMARY_TRANSCRIPT_WORDS = 40
 FEEDBACK_PER_PASS = 1
+MIN_RETIRE_TASK_DAYS = 7
+SPELLING_COLLECTIONS = {'conversations', 'people', 'memories', 'memory_items'}
+
+
+def timestamp(value):
+    """Storage datetimes and ISO strings share UTC semantics; unknown times cannot authorize edits."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def task_rejection(edit, row, records, *, now=None):
+    if edit.kind not in {'close_task', 'retire_task'}:
+        return None
+    times = [timestamp(row.get(field)) for field in ('created_at', 'updated_at') if row.get(field) is not None]
+    if not times or any(time is None for time in times):
+        return 'stale_task_evidence'
+    latest = max(time for time in times if time is not None)
+    sources = {edit.target}
+    if row.get('conversation_id'):
+        sources.add('conversations/' + row['conversation_id'].removeprefix('conversations/'))
+    for source in row.get('provenance') or []:
+        if source.get('kind') == 'conversation':
+            sources.add('conversations/' + source['id'])
+    for ref in edit.evidence:
+        if ref in sources or ref not in records:
+            continue
+        evidence = records[ref]
+        # Creation/capture time, not a later metadata refresh of an old conversation.
+        time = timestamp(evidence.get('created_at') or evidence.get('timestamp') or evidence.get('updated_at'))
+        if time is not None and time > latest:
+            break
+    else:
+        return 'stale_task_evidence'
+    if edit.kind == 'retire_task':
+        created = timestamp(row.get('created_at'))
+        if created is None or (now or datetime.now(timezone.utc)) - created <= timedelta(days=MIN_RETIRE_TASK_DAYS):
+            return 'task_too_recent'
+    return None
+
+
+def spelling_rejection(edit):
+    if edit.kind != 'spelling':
+        return None
+    collection, separator, key = edit.target.partition('/')
+    if collection not in SPELLING_COLLECTIONS or not separator or not key or '/' in key:
+        return 'bad_target'
+    return None
+
+
+@lru_cache(maxsize=1)
+def common_words():
+    return frozenset((Path(__file__).parent / 'data' / 'common_english_words.txt').read_text(encoding='utf-8').split())
+
+
+def vocabulary_rejection(term):
+    word = term.spelling.strip().lower()
+    if term.kind == 'jargon' and re.fullmatch(r'[a-z]+', word) and word in common_words():
+        return 'common_word'
+    return None
 
 
 def normalized(text):
@@ -103,7 +171,13 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
     rejected = Counter()
     edits = []
     for edit in plan.edits:
-        reason = None
+        reason = spelling_rejection(edit)
+        if edit.kind in {'close_task', 'retire_task'}:
+            reason = (
+                'invalid_evidence'
+                if edit.target not in records or any(ref not in records for ref in edit.evidence)
+                else task_rejection(edit, records[edit.target], records)
+            )
         if edit.kind in {'title', 'overview'}:
             reason = (
                 'invalid_evidence'
@@ -114,6 +188,13 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
             rejected[reason] += 1
         else:
             edits.append(edit)
+    vocabulary = []
+    for term in plan.vocabulary:
+        reason = vocabulary_rejection(term)
+        if reason:
+            rejected[reason] += 1
+        else:
+            vocabulary.append(term)
     feedback = []
     for item in plan.feedback:
         reason = feedback_rejection(item)
@@ -125,7 +206,7 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
         counts = Counter(usage_sink.get('rejected', {}))
         counts.update(rejected)
         usage_sink['rejected'] = dict(counts)
-    return plan.model_copy(update={'edits': edits, 'feedback': feedback})
+    return plan.model_copy(update={'edits': edits, 'vocabulary': vocabulary, 'feedback': feedback})
 
 
 def cap_feedback(feedback, *, usage_sink):

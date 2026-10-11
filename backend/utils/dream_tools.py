@@ -16,7 +16,7 @@ from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import ChangeRef, ReviewChange
 from utils.entity_pages import write_entity_summary
-from utils.dream_guards import summary_rejection
+from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection
 
 
 def edit_key(edit, records=None):
@@ -104,8 +104,14 @@ def validate_summary_edit(edit, row):
 
 
 def apply_edit(uid, edit, records):
+    reason = spelling_rejection(edit)
+    if reason:
+        raise ValueError('dream_' + reason)
     if edit.target not in records or any(ref not in records for ref in edit.evidence):
         raise ValueError('dream_unknown_evidence')
+    reason = task_rejection(edit, records[edit.target], records)
+    if reason:
+        raise ValueError('dream_' + reason)
     key = edit_key(edit, records)
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
@@ -160,6 +166,9 @@ def apply_edit(uid, edit, records):
             raise review_store.ReviewConflict('Dream task generation changed')
         if raw.get('updated_at') != row.get('updated_at') or raw.get('status', 'active') != row.get('status', 'active'):
             raise review_store.ReviewConflict('Dream task changed')
+        reason = task_rejection(edit, raw, records)
+        if reason:
+            raise ValueError('dream_' + reason)
         patch = {
             'status': 'completed' if edit.kind == 'close_task' else 'cancelled',
             'completed': edit.kind == 'close_task',
