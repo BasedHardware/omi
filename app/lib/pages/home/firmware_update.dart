@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -88,12 +90,13 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     killMcuUpdateManager();
     final provider = _deviceProvider;
     final installed = isInstalled;
+    final hasReconnected = _hasTriggeredReconnect;
     if (provider != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      scheduleMicrotask(() {
         provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
-        if (installed) {
-          _reconnectUpdatedDevice(provider, 'FirmwareUpdateExit');
+        if (installed && !hasReconnected) {
+          provider.initiateConnection('FirmwareUpdateExit', boundDeviceOnly: true);
         }
       });
     }
@@ -229,14 +232,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           key: const Key('firmware_update_done'),
           label: context.l10n.done,
           expand: true,
-          onPressed: () {
-            final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-            deviceProvider.resetFirmwareUpdateState();
-            // Reconnect the updated device so Home resumes capture automatically (#20778).
-            _reconnectUpdatedDevice(deviceProvider, 'FirmwareUpdateDone');
-            // Back to the Home underneath, not a second Home on top of the stack.
-            HomeNavigation.returnHome(context);
-          },
+          onPressed: _hasTriggeredReconnect
+              ? null
+              : () {
+                  final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                  deviceProvider.resetFirmwareUpdateState();
+                  // Reconnect the updated device so Home resumes capture automatically (#20778).
+                  _reconnectUpdatedDevice(deviceProvider, 'FirmwareUpdateDone');
+                  // Back to the Home underneath, not a second Home on top of the stack.
+                  HomeNavigation.returnHome(context);
+                },
         ),
       ],
     );

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/device_provider.dart';
 
 class _FakeHttpOverrides extends HttpOverrides {
@@ -55,7 +56,7 @@ class _FakeHttpResponse implements HttpClientResponse {
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   int initiateConnectionCalls = 0;
   final List<String> callers = [];
-  final List<bool> boundOnlyList = [];
+  final List<bool> boundDeviceOnlyHistory = [];
   int resetFirmwareUpdateStateCalls = 0;
   bool onFirmwareUpdatePage = false;
 
@@ -63,7 +64,7 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     initiateConnectionCalls++;
     callers.add(caller);
-    boundOnlyList.add(boundDeviceOnly);
+    boundDeviceOnlyHistory.add(boundDeviceOnly);
   }
 
   @override
@@ -100,7 +101,7 @@ void main() {
     HttpOverrides.global = null;
   });
 
-  group('Firmware update reconnect on Done (#20778)', () {
+  group('Omi Pendant FirmwareUpdate reconnect on Done (#20778)', () {
     testWidgets('tapping Done calls initiateConnection with boundDeviceOnly and resets state', (tester) async {
       final provider = _StubDeviceProvider();
       final device = BtDevice(
@@ -133,7 +134,7 @@ void main() {
       expect(provider.resetFirmwareUpdateStateCalls, greaterThanOrEqualTo(1));
       expect(provider.initiateConnectionCalls, equals(1));
       expect(provider.callers.first, equals('FirmwareUpdateDone'));
-      expect(provider.boundOnlyList.first, isTrue);
+      expect(provider.boundDeviceOnlyHistory.first, isTrue);
 
       // Tearing down the widget tree (dispose) must not duplicate the reconnect call.
       await tester.pumpWidget(const SizedBox.shrink());
@@ -170,7 +171,7 @@ void main() {
 
       expect(provider.initiateConnectionCalls, equals(1));
       expect(provider.callers.first, equals('FirmwareUpdateExit'));
-      expect(provider.boundOnlyList.first, isTrue);
+      expect(provider.boundDeviceOnlyHistory.first, isTrue);
     });
 
     testWidgets('disposing page without successful install never triggers reconnect', (tester) async {
@@ -189,6 +190,100 @@ void main() {
       await tester.pump();
 
       // Page is still in initial/loading/not installed state
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(provider.initiateConnectionCalls, equals(0));
+    });
+  });
+
+  group('OmiGlass OTA Update reconnect on Done (#20778)', () {
+    testWidgets('tapping Done calls initiateConnection with boundDeviceOnly and resets state', (tester) async {
+      final provider = _StubDeviceProvider();
+      final device = BtDevice(
+        id: 'test-glass-uuid',
+        name: 'OmiGlass Test',
+        type: DeviceType.openglass,
+        modelNumber: 'Glass1',
+        firmwareRevision: '1.0.0',
+        hardwareRevision: '1.0.0',
+        manufacturerName: 'BasedHardware',
+      );
+
+      await tester.pumpWidget(_wrap(provider, OmiGlassOtaUpdate(device: device)));
+      await tester.pump();
+
+      final dynamic state = tester.state(find.byType(OmiGlassOtaUpdate));
+      state.isSuccess = true;
+      state.isLoading = false;
+      state.isUpdating = false;
+      (state as State).setState(() {});
+      await tester.pump();
+
+      final doneFinder = find.widgetWithText(OmiButton, 'Done');
+      expect(doneFinder, findsOneWidget);
+
+      await tester.tap(doneFinder);
+      await tester.pump();
+
+      expect(provider.resetFirmwareUpdateStateCalls, greaterThanOrEqualTo(1));
+      expect(provider.initiateConnectionCalls, equals(1));
+      expect(provider.callers.first, equals('OmiGlassOtaDone'));
+      expect(provider.boundDeviceOnlyHistory.first, isTrue);
+
+      // Tearing down the widget tree must not duplicate the reconnect call.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(provider.initiateConnectionCalls, equals(1));
+    });
+
+    testWidgets('disposing OmiGlass page after successful install triggers fallback reconnect if Done not tapped',
+        (tester) async {
+      final provider = _StubDeviceProvider();
+      final device = BtDevice(
+        id: 'test-glass-uuid',
+        name: 'OmiGlass Test',
+        type: DeviceType.openglass,
+        modelNumber: 'Glass1',
+        firmwareRevision: '1.0.0',
+        hardwareRevision: '1.0.0',
+        manufacturerName: 'BasedHardware',
+      );
+
+      await tester.pumpWidget(_wrap(provider, OmiGlassOtaUpdate(device: device)));
+      await tester.pump();
+
+      final dynamic state = tester.state(find.byType(OmiGlassOtaUpdate));
+      state.isSuccess = true;
+      state.isLoading = false;
+      state.isUpdating = false;
+      (state as State).setState(() {});
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      expect(provider.initiateConnectionCalls, equals(1));
+      expect(provider.callers.first, equals('OmiGlassOtaExit'));
+      expect(provider.boundDeviceOnlyHistory.first, isTrue);
+    });
+
+    testWidgets('disposing OmiGlass page without successful install never triggers reconnect', (tester) async {
+      final provider = _StubDeviceProvider();
+      final device = BtDevice(
+        id: 'test-glass-uuid',
+        name: 'OmiGlass Test',
+        type: DeviceType.openglass,
+        modelNumber: 'Glass1',
+        firmwareRevision: '1.0.0',
+        hardwareRevision: '1.0.0',
+        manufacturerName: 'BasedHardware',
+      );
+
+      await tester.pumpWidget(_wrap(provider, OmiGlassOtaUpdate(device: device)));
+      await tester.pump();
+
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
 
