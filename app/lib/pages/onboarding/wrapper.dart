@@ -20,6 +20,8 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/guided_voice_controller.dart';
+import 'package:omi/pages/onboarding/guided_voice_io.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -82,6 +84,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<bool>? _setupPageEnabled;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  GuidedVoiceController? _voiceController;
+
+  GuidedVoiceController _getVoiceController() {
+    return _voiceController ??= GuidedVoiceController(
+      DeviceGuidedVoiceIO(),
+      flowSource: 'first_run',
+      accountUid: SharedPreferencesUtil().uid,
+    );
+  }
 
   @override
   void initState() {
@@ -153,6 +164,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void dispose() {
     _onboardingAttempt?.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
+    _voiceController?.dispose();
     _controller?.dispose();
     _backgroundAnimationController.dispose();
     super.dispose();
@@ -215,8 +227,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// Per-account key so a different account signing in on this phone starts at the Name step.
   String get _resumeKey => 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
 
+  bool _isResumableStep(int index) => index >= kNamePage && index <= kCompletePage;
+
   void _rememberStep(int index) {
-    if (widget.forceAuthPage || !kProgressSteps.contains(index)) return;
+    if (widget.forceAuthPage || !_isResumableStep(index)) return;
     SharedPreferencesUtil().saveInt(_resumeKey, index);
   }
 
@@ -224,13 +238,29 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// or Name.
   int _resumeStep() {
     final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
-    return kProgressSteps.contains(saved) ? saved : kNamePage;
+    if (!_isResumableStep(saved)) return kNamePage;
+    if (!kKnowledgeGraphStepEnabled && saved == kKnowledgeGraphPage) {
+      return stepAfterKnowledgeGraph(setupPageEnabled: false);
+    }
+    return saved;
   }
 
   /// The step before the current one, or null when there is nothing to go back to (Auth, consent,
-  /// Name, completion).
+  /// Name).
   int? get _previousStep {
-    final position = kProgressSteps.indexOf(_controller!.index);
+    final current = _controller!.index;
+    if (current == kCompletePage) {
+      return _setupPageEnabled == true
+          ? kSetupPage
+          : (kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
+    }
+    if (current == kSetupPage) {
+      return kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage;
+    }
+    if (current == kKnowledgeGraphPage) {
+      return kSpeechProfilePage;
+    }
+    final position = kProgressSteps.indexOf(current);
     if (position <= 0) return null;
     return kProgressSteps[position - 1];
   }
@@ -429,6 +459,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // reviews statements before explicitly saving them as memories.
           : SpeechProfileWidget(
               flowSource: 'first_run',
+              controller: _getVoiceController(),
               onBusyChanged: (busy) => _speechStepBusy = busy,
               goNext: () {
                 // All Done is not enroll success (#12765). Upload/embedding
