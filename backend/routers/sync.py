@@ -95,10 +95,13 @@ from utils.observability.fallback import record_fallback
 from utils.multipart import MultipartMaxPartSizeRoute, SYNC_AUDIO_MAX_PART_SIZE, max_part_size
 from utils.metrics import (
     OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL,
+    OMI_SYNC_JOB_POLL_REQUESTS_TOTAL,
+    OMI_SYNC_JOB_POLL_THROTTLED_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
@@ -1570,6 +1573,14 @@ def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
+    OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
+    if not admit_sync_job_poll(uid):
+        OMI_SYNC_JOB_POLL_THROTTLED_TOTAL.inc()
+        raise HTTPException(
+            status_code=429,
+            detail='Sync job polling too frequent; retry later',
+            headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
+        )
     job = get_sync_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
