@@ -121,6 +121,39 @@ const _spellingItem = ReviewItem(
   spelling: SpellingItem(termId: 'term-1', options: ['Paraform', 'Pairform']),
 );
 
+const _closeTaskSuggestion = ReviewItem(
+  itemId: 'agent_proposal:close',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'close_task',
+    targetLabel: 'Send Béla the signed SOW',
+    reason: 'In Thursday’s Paraform check-in you said the signed SOW went out that morning.',
+  ),
+);
+
+const _mergeSuggestion = ReviewItem(
+  itemId: 'agent_proposal:merge',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'merge_people',
+    targetLabel: 'Bela K',
+    otherLabel: 'Béla',
+    reason: 'Same company and phone number, and both appear in the Paraform pilot conversations.',
+  ),
+);
+
+const _memorySuggestion = ReviewItem(
+  itemId: 'agent_proposal:memory',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'memory',
+    targetLabel: 'Runs the Paraform pilot',
+    before: 'Runs the Paraform pilot for six weeks',
+    after: 'Runs the Paraform pilot, extended to eight weeks',
+    reason: 'In Monday’s sync Béla agreed to extend the pilot by two weeks.',
+  ),
+);
+
 /// A short silent WAV; the scenarios never play audio.
 Uint8List _clip() => Uint8List.fromList(List<int>.filled(44 + 3200, 0));
 
@@ -576,6 +609,29 @@ final reviewScenarios = <AuditScenario>[
       await _openSheet(a, _spellingItem);
       await a.tap(find.text('Paraform'));
       await a.shot('Choose a spelling');
+    },
+  ),
+  AuditScenario(
+    id: 'review-suggestions',
+    title: 'Review: Dream suggestions next to questions',
+    page: _reviewPage,
+    state: 'Dream suggests closing a task and merging two people; one regular question',
+    run: (a) async {
+      final review = await _loadedReview(a, items: const [_closeTaskSuggestion, _mergeSuggestion, _spellingItem]);
+      await a.pump(const ReviewPage(), scaffold: false, providers: [
+        ChangeNotifierProvider<ReviewProvider>.value(value: review),
+      ]);
+      await a.shot('Open Review after Dream ran');
+    },
+  ),
+  AuditScenario(
+    id: 'review-sheet-suggestion',
+    title: 'Detail sheet: a Dream suggestion',
+    page: _sheet,
+    state: 'Dream suggests rewriting a memory; current and suggested text with the reason',
+    run: (a) async {
+      await _openSheet(a, _memorySuggestion);
+      await a.shot('Tap the suggestion card');
     },
   ),
   AuditScenario(

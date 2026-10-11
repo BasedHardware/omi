@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "Nije se otvorilo? Pošalji ovo na {address}",
     "chatAppsLinkExpired": "Ta je poveznica istekla. Dodirni Otvori Telegram za novu.",
     "chatAppsIMessageTo": "Za: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Označiti „{task}” kao dovršeno?",
+    "reviewProposalRetireTask": "Ukloniti zadatak „{task}”?",
+    "reviewProposalMergePeople": "Je li „{name}” ista osoba kao „{other}”?",
+    "reviewProposalMergeMemories": "Spojiti dva duplicirana sjećanja?",
+    "reviewProposalMemory": "Ažurirati ovo sjećanje?",
+    "reviewProposalEntitySummary": "Ažurirati sažetak za „{name}”?",
+    "reviewProposalGeneric": "Primijeniti ovaj predloženi ispravak?",
+    "reviewProposalApply": "Primijeni",
+    "reviewProposalSuggested": "Predloženo",
+    "reviewProposalConflict": "Ovo se promijenilo otkako je Dream to predložio, pa ništa nije primijenjeno."
 }

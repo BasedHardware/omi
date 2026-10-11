@@ -12953,4 +12953,42 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Markér “$task” som udført?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Fjern opgaven “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Er “$name” den samme person som “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Flet to dublerede minder?';
+
+  @override
+  String get reviewProposalMemory => 'Opdater dette minde?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Opdater resuméet for “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Anvend denne foreslåede rettelse?';
+
+  @override
+  String get reviewProposalApply => 'Anvend';
+
+  @override
+  String get reviewProposalSuggested => 'Foreslået';
+
+  @override
+  String get reviewProposalConflict => 'Dette er ændret, siden Dream foreslog det, så intet blev anvendt.';
 }

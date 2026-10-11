@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Đến: Omi · {address}",
     "chatAppsInsightsSubtitle": "Cho phép Omi gửi bản tóm tắt hoặc thông tin chi tiết cho bạn tại đây.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…"
+    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…",
+    "reviewProposalCloseTask": "Đánh dấu “{task}” là đã xong?",
+    "reviewProposalRetireTask": "Xóa việc “{task}”?",
+    "reviewProposalMergePeople": "“{name}” có phải là cùng người với “{other}” không?",
+    "reviewProposalMergeMemories": "Gộp hai ký ức trùng lặp?",
+    "reviewProposalMemory": "Cập nhật ký ức này?",
+    "reviewProposalEntitySummary": "Cập nhật bản tóm tắt cho “{name}”?",
+    "reviewProposalGeneric": "Áp dụng bản sửa được đề xuất này?",
+    "reviewProposalApply": "Áp dụng",
+    "reviewProposalSuggested": "Đề xuất",
+    "reviewProposalConflict": "Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng."
 }

@@ -23132,6 +23132,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OMI PRO'**
   String get chatAppsOmiPro;
+
+  /// Dream suggestion card: mark an open task as done
+  ///
+  /// In en, this message translates to:
+  /// **'Mark “{task}” as done?'**
+  String reviewProposalCloseTask(String task);
+
+  /// Dream suggestion card: remove (cancel) an open task
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the task “{task}”?'**
+  String reviewProposalRetireTask(String task);
+
+  /// Dream suggestion card: merge two people who are the same person
+  ///
+  /// In en, this message translates to:
+  /// **'Is “{name}” the same person as “{other}”?'**
+  String reviewProposalMergePeople(String name, String other);
+
+  /// Dream suggestion card: merge two duplicate memories
+  ///
+  /// In en, this message translates to:
+  /// **'Merge two duplicate memories?'**
+  String get reviewProposalMergeMemories;
+
+  /// Dream suggestion card: rewrite one memory
+  ///
+  /// In en, this message translates to:
+  /// **'Update this memory?'**
+  String get reviewProposalMemory;
+
+  /// Dream suggestion card: update a person, organization or project summary
+  ///
+  /// In en, this message translates to:
+  /// **'Update the summary for “{name}”?'**
+  String reviewProposalEntitySummary(String name);
+
+  /// Dream suggestion card fallback when the change has no specific wording
+  ///
+  /// In en, this message translates to:
+  /// **'Apply this suggested fix?'**
+  String get reviewProposalGeneric;
+
+  /// Button: apply a change Dream suggested
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get reviewProposalApply;
+
+  /// Label above the value Dream suggests, shown under the current value
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get reviewProposalSuggested;
+
+  /// Error after Apply: the item changed after Dream suggested the change, so nothing was applied
+  ///
+  /// In en, this message translates to:
+  /// **'This changed since Dream suggested it, so nothing was applied.'**
+  String get reviewProposalConflict;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4025,5 +4025,15 @@
     "chatAppsIMessageTo": "Кому: Omi · {address}",
     "chatAppsInsightsSubtitle": "Разрешите Omi присылать вам здесь сводки и полезные наблюдения.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ждём, пока вы нажмёте «Запустить» в Telegram…"
+    "chatAppsTelegramWaiting": "Ждём, пока вы нажмёте «Запустить» в Telegram…",
+    "reviewProposalCloseTask": "Отметить «{task}» как выполненную?",
+    "reviewProposalRetireTask": "Удалить задачу «{task}»?",
+    "reviewProposalMergePeople": "«{name}» и «{other}» — один и тот же человек?",
+    "reviewProposalMergeMemories": "Объединить два повторяющихся воспоминания?",
+    "reviewProposalMemory": "Обновить это воспоминание?",
+    "reviewProposalEntitySummary": "Обновить сводку для «{name}»?",
+    "reviewProposalGeneric": "Применить это предложенное исправление?",
+    "reviewProposalApply": "Применить",
+    "reviewProposalSuggested": "Предложено",
+    "reviewProposalConflict": "Это изменилось после предложения Dream, поэтому ничего не применено."
 }

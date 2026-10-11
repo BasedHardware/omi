@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "宛先: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omiからここにまとめやインサイトを送ってもらえます。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…"
+    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…",
+    "reviewProposalCloseTask": "「{task}」を完了にしますか？",
+    "reviewProposalRetireTask": "タスク「{task}」を削除しますか？",
+    "reviewProposalMergePeople": "「{name}」と「{other}」は同じ人ですか？",
+    "reviewProposalMergeMemories": "重複した2つの記憶を統合しますか？",
+    "reviewProposalMemory": "この記憶を更新しますか？",
+    "reviewProposalEntitySummary": "「{name}」の概要を更新しますか？",
+    "reviewProposalGeneric": "この修正案を適用しますか？",
+    "reviewProposalApply": "適用",
+    "reviewProposalSuggested": "提案",
+    "reviewProposalConflict": "Dreamが提案した後に内容が変わったため、何も適用されませんでした。"
 }

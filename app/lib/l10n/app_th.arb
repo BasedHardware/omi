@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "ถึง: Omi · {address}",
     "chatAppsInsightsSubtitle": "ให้ Omi ส่งสรุปหรือข้อมูลเชิงลึกมาให้คุณที่นี่",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…"
+    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…",
+    "reviewProposalCloseTask": "ทำเครื่องหมาย “{task}” ว่าเสร็จแล้วไหม",
+    "reviewProposalRetireTask": "ลบงาน “{task}” ไหม",
+    "reviewProposalMergePeople": "“{name}” กับ “{other}” เป็นคนเดียวกันไหม",
+    "reviewProposalMergeMemories": "รวมความทรงจำที่ซ้ำกันสองรายการไหม",
+    "reviewProposalMemory": "อัปเดตความทรงจำนี้ไหม",
+    "reviewProposalEntitySummary": "อัปเดตสรุปของ “{name}” ไหม",
+    "reviewProposalGeneric": "ใช้การแก้ไขที่แนะนำนี้ไหม",
+    "reviewProposalApply": "ใช้",
+    "reviewProposalSuggested": "ที่แนะนำ",
+    "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ"
 }

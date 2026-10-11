@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "Не адкрылася? Адпраў гэта на {address}",
     "chatAppsLinkExpired": "Тэрмін дзеяння спасылкі скончыўся. Націсні «Адкрыць Telegram», каб атрымаць новую.",
     "chatAppsIMessageTo": "Каму: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Пазначыць «{task}» як выкананае?",
+    "reviewProposalRetireTask": "Выдаліць задачу «{task}»?",
+    "reviewProposalMergePeople": "«{name}» і «{other}» — адзін і той жа чалавек?",
+    "reviewProposalMergeMemories": "Аб’яднаць два дубліраваныя ўспаміны?",
+    "reviewProposalMemory": "Абнавіць гэты ўспамін?",
+    "reviewProposalEntitySummary": "Абнавіць зводку для «{name}»?",
+    "reviewProposalGeneric": "Ужыць гэта прапанаванае выпраўленне?",
+    "reviewProposalApply": "Ужыць",
+    "reviewProposalSuggested": "Прапанавана",
+    "reviewProposalConflict": "Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта."
 }

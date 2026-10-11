@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "A: Omi · {address}",
     "chatAppsInsightsSubtitle": "Lascia che Omi ti invii qui un riepilogo o uno spunto.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "In attesa che tu tocchi Avvia in Telegram…"
+    "chatAppsTelegramWaiting": "In attesa che tu tocchi Avvia in Telegram…",
+    "reviewProposalCloseTask": "Segnare «{task}» come fatta?",
+    "reviewProposalRetireTask": "Rimuovere l'attività «{task}»?",
+    "reviewProposalMergePeople": "«{name}» è la stessa persona di «{other}»?",
+    "reviewProposalMergeMemories": "Unire due ricordi duplicati?",
+    "reviewProposalMemory": "Aggiornare questo ricordo?",
+    "reviewProposalEntitySummary": "Aggiornare il riepilogo di «{name}»?",
+    "reviewProposalGeneric": "Applicare questa correzione suggerita?",
+    "reviewProposalApply": "Applica",
+    "reviewProposalSuggested": "Suggerito",
+    "reviewProposalConflict": "È cambiato da quando Dream lo ha suggerito, quindi non è stato applicato nulla."
 }

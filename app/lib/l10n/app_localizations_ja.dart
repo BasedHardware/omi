@@ -12780,4 +12780,42 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '「$task」を完了にしますか？';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'タスク「$task」を削除しますか？';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '「$name」と「$other」は同じ人ですか？';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => '重複した2つの記憶を統合しますか？';
+
+  @override
+  String get reviewProposalMemory => 'この記憶を更新しますか？';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '「$name」の概要を更新しますか？';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'この修正案を適用しますか？';
+
+  @override
+  String get reviewProposalApply => '適用';
+
+  @override
+  String get reviewProposalSuggested => '提案';
+
+  @override
+  String get reviewProposalConflict => 'Dreamが提案した後に内容が変わったため、何も適用されませんでした。';
 }

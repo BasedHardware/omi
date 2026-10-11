@@ -17,13 +17,14 @@ List<Map<String, dynamic>> _maps(Object? v) =>
 List<String> _strings(Object? v) => v is List ? v.whereType<String>().toList(growable: false) : const [];
 Map<String, dynamic>? _map(Object? v) => v is Map<String, dynamic> ? v : null;
 
-enum ReviewItemKind { speaker, task, samePerson, spelling }
+enum ReviewItemKind { speaker, task, samePerson, spelling, agentProposal }
 
 ReviewItemKind? _kind(Object? v) => switch (v) {
       'speaker' => ReviewItemKind.speaker,
       'task' => ReviewItemKind.task,
       'same_person' => ReviewItemKind.samePerson,
       'spelling' => ReviewItemKind.spelling,
+      'agent_proposal' => ReviewItemKind.agentProposal,
       _ => null,
     };
 
@@ -235,6 +236,50 @@ class SpellingItem {
   }
 }
 
+/// A change Dream proposes but does not apply on its own (closing a task, merging people or
+/// memories, editing a memory or an entity summary). Accepting applies it through the undoable
+/// journal; dismissing stops it from being proposed again.
+class AgentProposalItem {
+  const AgentProposalItem({
+    required this.editKind,
+    required this.targetLabel,
+    this.otherLabel,
+    this.before = '',
+    this.after = '',
+    this.reason,
+  });
+
+  /// The backend edit kind (`close_task`, `merge_people`, ...), or `vocabulary` for a new term.
+  final String editKind;
+  final String targetLabel;
+  final String? otherLabel;
+  final String before;
+  final String after;
+  final String? reason;
+
+  static AgentProposalItem? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final edit = _map(json['edit']);
+    final vocabulary = _map(json['vocabulary']);
+    final targetLabel = _str(json['target_label']) ?? '';
+    if (edit != null) {
+      final kind = _str(edit['kind']);
+      if (kind == null) return null;
+      return AgentProposalItem(
+        editKind: kind,
+        targetLabel: targetLabel,
+        otherLabel: _str(json['other_label']),
+        before: _str(edit['before']) ?? '',
+        after: _str(edit['after']) ?? '',
+        reason: _str(edit['reason']),
+      );
+    }
+    final term = _str(vocabulary?['spelling']);
+    if (term == null) return null;
+    return AgentProposalItem(editKind: 'vocabulary', targetLabel: targetLabel, after: term);
+  }
+}
+
 class ReviewItem {
   const ReviewItem({
     required this.itemId,
@@ -245,6 +290,7 @@ class ReviewItem {
     this.task,
     this.samePerson,
     this.spelling,
+    this.agentProposal,
   });
   final String itemId;
   final ReviewItemKind kind;
@@ -256,6 +302,7 @@ class ReviewItem {
   final TaskItem? task;
   final SamePersonItem? samePerson;
   final SpellingItem? spelling;
+  final AgentProposalItem? agentProposal;
 
   /// An item whose kind-specific payload is missing cannot be answered, so it is not shown.
   static ReviewItem? fromJson(Map<String, dynamic> json) {
@@ -271,12 +318,14 @@ class ReviewItem {
       task: TaskItem.fromJson(_map(json['task'])),
       samePerson: SamePersonItem.fromJson(_map(json['same_person'])),
       spelling: SpellingItem.fromJson(_map(json['spelling'])),
+      agentProposal: AgentProposalItem.fromJson(_map(json['agent_proposal'])),
     );
     final complete = switch (kind) {
       ReviewItemKind.speaker => item.speaker != null,
       ReviewItemKind.task => item.task != null,
       ReviewItemKind.samePerson => item.samePerson != null,
       ReviewItemKind.spelling => item.spelling != null,
+      ReviewItemKind.agentProposal => item.agentProposal != null,
     };
     return complete ? item : null;
   }
@@ -284,6 +333,11 @@ class ReviewItem {
 
 class ReviewItemsResponse {
   factory ReviewItemsResponse.fromGenerated(wire.GeneratedReviewItemsResponse generated) {
+    return fromJson(generated.toJson());
+  }
+
+  /// The v2 queue, which also carries Dream's suggestions.
+  factory ReviewItemsResponse.fromGeneratedV2(wire.GeneratedReviewItemsResponseV2 generated) {
     return fromJson(generated.toJson());
   }
 
@@ -312,6 +366,7 @@ class ReviewAnswer {
     this.taskWorkstreamId,
     this.samePerson,
     this.spelling,
+    this.proposalAccept,
     this.notSure = false,
   });
 
@@ -322,6 +377,8 @@ class ReviewAnswer {
   const ReviewAnswer.dismissTask([TaskDismissReason? reason]) : this._(taskAccept: false, taskDismissReason: reason);
   const ReviewAnswer.samePerson(bool same) : this._(samePerson: same);
   const ReviewAnswer.spelling(String value) : this._(spelling: value);
+  const ReviewAnswer.acceptProposal() : this._(proposalAccept: true);
+  const ReviewAnswer.dismissProposal() : this._(proposalAccept: false);
   const ReviewAnswer.notSure() : this._(notSure: true);
 
   final String? speakerPersonId;
@@ -334,6 +391,7 @@ class ReviewAnswer {
   final String? taskWorkstreamId;
   final bool? samePerson;
   final String? spelling;
+  final bool? proposalAccept;
   final bool notSure;
 
   Map<String, dynamic> toJson(ReviewItemKind kind) {
@@ -364,6 +422,10 @@ class ReviewAnswer {
         },
       ReviewItemKind.spelling => {
           'spelling': {'value': spelling},
+          'not_sure': false,
+        },
+      ReviewItemKind.agentProposal => {
+          'agent_proposal': {'decision': proposalAccept == true ? 'accept' : 'dismiss'},
           'not_sure': false,
         },
     };

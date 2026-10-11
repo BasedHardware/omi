@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "Hindi nagbukas? I-text ito sa {address}",
     "chatAppsLinkExpired": "Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.",
     "chatAppsIMessageTo": "Para kay: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Markahan ang “{task}” bilang tapos na?",
+    "reviewProposalRetireTask": "Alisin ang gawaing “{task}”?",
+    "reviewProposalMergePeople": "Iisang tao ba sina “{name}” at “{other}”?",
+    "reviewProposalMergeMemories": "Pagsamahin ang dalawang dobleng alaala?",
+    "reviewProposalMemory": "I-update ang alaalang ito?",
+    "reviewProposalEntitySummary": "I-update ang buod para kay “{name}”?",
+    "reviewProposalGeneric": "Ilapat ang iminungkahing ayos na ito?",
+    "reviewProposalApply": "Ilapat",
+    "reviewProposalSuggested": "Iminungkahi",
+    "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat."
 }

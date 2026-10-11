@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Kellele: Omi · {address}",
     "chatAppsInsightsSubtitle": "Luba Omil saata sulle siia kokkuvõte või ülevaade.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…"
+    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…",
+    "reviewProposalCloseTask": "Kas märkida „{task}“ tehtuks?",
+    "reviewProposalRetireTask": "Kas eemaldada ülesanne „{task}“?",
+    "reviewProposalMergePeople": "Kas „{name}“ on sama inimene kui „{other}“?",
+    "reviewProposalMergeMemories": "Kas liita kaks topeltmälestust?",
+    "reviewProposalMemory": "Kas uuendada seda mälestust?",
+    "reviewProposalEntitySummary": "Kas uuendada „{name}“ kokkuvõtet?",
+    "reviewProposalGeneric": "Kas rakendada see soovitatud parandus?",
+    "reviewProposalApply": "Rakenda",
+    "reviewProposalSuggested": "Soovitatud",
+    "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud."
 }

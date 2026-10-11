@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "받는 사람: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi가 요약이나 인사이트를 여기로 보내도록 허용하세요.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…"
+    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…",
+    "reviewProposalCloseTask": "“{task}”을(를) 완료로 표시할까요?",
+    "reviewProposalRetireTask": "“{task}” 작업을 삭제할까요?",
+    "reviewProposalMergePeople": "“{name}”와(과) “{other}”은(는) 같은 사람인가요?",
+    "reviewProposalMergeMemories": "중복된 기억 두 개를 합칠까요?",
+    "reviewProposalMemory": "이 기억을 업데이트할까요?",
+    "reviewProposalEntitySummary": "“{name}”의 요약을 업데이트할까요?",
+    "reviewProposalGeneric": "이 수정 제안을 적용할까요?",
+    "reviewProposalApply": "적용",
+    "reviewProposalSuggested": "제안",
+    "reviewProposalConflict": "Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다."
 }

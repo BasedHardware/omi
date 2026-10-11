@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Ļaujiet Omi šeit nosūtīt kopsavilkumu vai ieskatu.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…"
+    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…",
+    "reviewProposalCloseTask": "Atzīmēt “{task}” kā paveiktu?",
+    "reviewProposalRetireTask": "Noņemt uzdevumu “{task}”?",
+    "reviewProposalMergePeople": "Vai “{name}” ir tā pati persona, kas “{other}”?",
+    "reviewProposalMergeMemories": "Apvienot divas dublētas atmiņas?",
+    "reviewProposalMemory": "Atjaunināt šo atmiņu?",
+    "reviewProposalEntitySummary": "Atjaunināt “{name}” kopsavilkumu?",
+    "reviewProposalGeneric": "Lietot šo ieteikto labojumu?",
+    "reviewProposalApply": "Lietot",
+    "reviewProposalSuggested": "Ieteikts",
+    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots."
 }

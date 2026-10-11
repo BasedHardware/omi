@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Komu: Omi · {address}",
     "chatAppsInsightsSubtitle": "Nech Omi, ať ti tady pošle shrnutí nebo postřeh.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Čekáme, až v Telegramu klepneš na Spustit…"
+    "chatAppsTelegramWaiting": "Čekáme, až v Telegramu klepneš na Spustit…",
+    "reviewProposalCloseTask": "Označit „{task}“ jako hotové?",
+    "reviewProposalRetireTask": "Odstranit úkol „{task}“?",
+    "reviewProposalMergePeople": "Je „{name}“ stejná osoba jako „{other}“?",
+    "reviewProposalMergeMemories": "Sloučit dvě duplicitní vzpomínky?",
+    "reviewProposalMemory": "Aktualizovat tuto vzpomínku?",
+    "reviewProposalEntitySummary": "Aktualizovat shrnutí pro „{name}“?",
+    "reviewProposalGeneric": "Použít tuto navrženou opravu?",
+    "reviewProposalApply": "Použít",
+    "reviewProposalSuggested": "Navrženo",
+    "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo."
 }

@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "باز نشد؟ این را به {address} پیامک کنید",
     "chatAppsLinkExpired": "آن پیوند منقضی شد. برای دریافت پیوند جدید روی باز کردن Telegram ضربه بزنید.",
     "chatAppsIMessageTo": "به: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "«{task}» به‌عنوان انجام‌شده علامت بخورد؟",
+    "reviewProposalRetireTask": "وظیفهٔ «{task}» حذف شود؟",
+    "reviewProposalMergePeople": "آیا «{name}» همان «{other}» است؟",
+    "reviewProposalMergeMemories": "دو خاطرهٔ تکراری ادغام شوند؟",
+    "reviewProposalMemory": "این خاطره به‌روزرسانی شود؟",
+    "reviewProposalEntitySummary": "خلاصهٔ «{name}» به‌روزرسانی شود؟",
+    "reviewProposalGeneric": "این اصلاح پیشنهادی اعمال شود؟",
+    "reviewProposalApply": "اعمال",
+    "reviewProposalSuggested": "پیشنهادی",
+    "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد."
 }

@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Per a: Omi · {address}",
     "chatAppsInsightsSubtitle": "Deixa que l'Omi t'enviï aquí un resum o una idea.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Esperant que toquis Comença a Telegram…"
+    "chatAppsTelegramWaiting": "Esperant que toquis Comença a Telegram…",
+    "reviewProposalCloseTask": "Vols marcar «{task}» com a feta?",
+    "reviewProposalRetireTask": "Vols eliminar la tasca «{task}»?",
+    "reviewProposalMergePeople": "«{name}» és la mateixa persona que «{other}»?",
+    "reviewProposalMergeMemories": "Vols combinar dos records duplicats?",
+    "reviewProposalMemory": "Vols actualitzar aquest record?",
+    "reviewProposalEntitySummary": "Vols actualitzar el resum de «{name}»?",
+    "reviewProposalGeneric": "Vols aplicar aquesta correcció suggerida?",
+    "reviewProposalApply": "Aplica",
+    "reviewProposalSuggested": "Suggerit",
+    "reviewProposalConflict": "Això ha canviat des que Dream ho va suggerir, així que no s'ha aplicat res."
 }

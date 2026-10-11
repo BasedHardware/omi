@@ -12964,4 +12964,42 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Đánh dấu “$task” là đã xong?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Xóa việc “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name” có phải là cùng người với “$other” không?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Gộp hai ký ức trùng lặp?';
+
+  @override
+  String get reviewProposalMemory => 'Cập nhật ký ức này?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Cập nhật bản tóm tắt cho “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Áp dụng bản sửa được đề xuất này?';
+
+  @override
+  String get reviewProposalApply => 'Áp dụng';
+
+  @override
+  String get reviewProposalSuggested => 'Đề xuất';
+
+  @override
+  String get reviewProposalConflict => 'Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.';
 }
