@@ -67,6 +67,11 @@ class Gateway:
     async def process(self, path):
         try:
             return await self._process(path)
+        except asyncio.CancelledError:
+            logging.getLogger(__name__).warning(
+                'Messaging job stopped provider=%s reason=worker_cancelled', self.adapter.provider
+            )
+            raise
         except Exception as error:
             logging.getLogger(__name__).error(
                 'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',

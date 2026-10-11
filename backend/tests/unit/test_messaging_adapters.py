@@ -185,6 +185,7 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
     typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
     if failure == 'cancelled':
         assert typing == ['POST', 'DELETE']
+        assert 'reason=worker_cancelled' in caplog.text
         return
     assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
     if failure:
