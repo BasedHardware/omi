@@ -28,6 +28,7 @@ REJECTION_REASONS = {
     'task_too_recent',
     'bad_target',
     'common_word',
+    'context_target',
 }
 
 logger = logging.getLogger(__name__)

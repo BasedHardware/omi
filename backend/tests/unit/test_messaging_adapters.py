@@ -517,7 +517,7 @@ def test_renderers_escape_split_and_citations(adapter):
     assert all(len(p.encode('utf-16-le')) // 2 <= adapter.capabilities.max_text_len for p in parts)
     assert '[1]' not in ''.join(parts)
     assert not any(p.endswith('\\') for p in parts)
-    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See (from Weekly review)'
+    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See '
     assert ''.join(split_text('a b\n😀' * 10, 8)) == 'a b\n😀' * 10
 
 
@@ -640,7 +640,7 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         await ChannelReplySink(adapter, message).finish_payload(
             {
                 'text': 'Found [1].',
-                'conversations': [{'title': 'Daily standup'}],
+                'conversations': [{'id': 'conv-1', 'title': 'Daily standup'}],
                 'follow_up_suggestions': ['Explain more', 'x' * 80],
             }
         )
@@ -648,11 +648,41 @@ def test_followups_buttons_and_citation_source_prose(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:Explain more'
-        assert 'Daily standup' in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0] == {
+            'text': 'Daily standup',
+            'url': 'https://h.omi.me/conversation/conv-1',
+        }
+        assert '[1]' not in payload['text']
     else:
-        assert 'Daily standup' in payload['message']['parts'][0]['value']
+        assert 'Open in Omi: https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
+
+
+def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+    conversations = [{'id': f'id {index}', 'kind': 'task', 'title': f'Task {index}'} for index in range(6)]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {'text': 'Tasks [#1][#2].', 'conversations': conversations}
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    if adapter.channel == 'telegram':
+        rows = payload['reply_markup']['inline_keyboard']
+        assert len(rows) == 6
+        assert rows[-1] == [{'text': 'Open in Omi', 'url': 'https://h.omi.me'}]
+        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows[:-1])
+        assert '[#1]' not in payload['text']
+        assert payload['text'].count('https://') == 0
+    else:
+        body = payload['message']['parts'][0]['value']
+        assert body.count('https://') == 1
+        assert 'Open in Omi: https://h.omi.me' in body
+        assert '/task/' not in body
+        assert '[#1]' not in body
 
 
 def test_media_fetch_bounds_and_ssrf(monkeypatch):
@@ -676,7 +706,7 @@ def test_real_followup_wire_block_and_source_title(adapter):
         await ChannelReplySink(adapter, message).finish_payload(
             {
                 'text': 'See [1].',
-                'memories': [{'structured': {'title': 'Team meeting'}}],
+                'memories': [{'id': 'conv-1', 'structured': {'title': 'Team meeting'}}],
                 'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
             }
         )
@@ -684,11 +714,12 @@ def test_real_followup_wire_block_and_source_title(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:What changed?'
-        assert 'Team meeting' in payload['text']
+        assert '[1]' not in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0]['text'] == 'Team meeting'
+        assert payload['reply_markup']['inline_keyboard'][0][0]['url'] == 'https://h.omi.me/conversation/conv-1'
     else:
         assert 'What changed?' not in str(payload)
-        assert 'Team meeting' in payload['message']['parts'][0]['value']
+        assert 'Open in Omi: https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):
@@ -903,3 +934,22 @@ def test_provider_http_logs_filter_credential_urls():
     )
     assert not filter_.filter(record)
     assert filter_.filter(logging.LogRecord('httpx', logging.INFO, '', 0, 'unrelated request', (), None))
+
+
+def test_telegram_definite_html_rejection_falls_back_once():
+    transport = FixtureTransport([(400, {'ok': False, 'description': "Bad Request: can't parse entities"}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A &amp; B</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 2
+    first, second = [call[2]['json'] for call in transport.calls]
+    assert first['parse_mode'] == 'HTML'
+    assert second == {'chat_id': 'fixture', 'text': 'A & B'}
+
+
+@pytest.mark.parametrize('status', [400, 500])
+def test_telegram_other_failure_never_replays_send_as_plain(status):
+    transport = FixtureTransport([(status, {'ok': False, 'description': 'unrelated rejection'}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    with pytest.raises(ProviderError):
+        asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 1
