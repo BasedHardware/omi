@@ -517,3 +517,73 @@ def test_ledger_history_route_answers_empty_without_scan_outside_rollout():
 
     assert result == []
     service.read_ledger_history_page.assert_not_called()
+
+
+@pytest.mark.parametrize('asynchronous', [False, True])
+def test_memories_router_503_structured_fields_and_no_sensitive_details(asynchronous, caplog):
+    import hashlib
+    from fastapi import APIRouter, FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+
+    mem_mod = _load_memories_router()
+
+    def fail(uid: str):
+        raise HTTPException(503, 'sensitive details') from ValueError('sensitive memory content')
+
+    async def fail_async(uid: str):
+        fail(uid)
+
+    app = FastAPI()
+    router = APIRouter(route_class=mem_mod.MemoriesRoute)
+    router.add_api_route('/v3/memories', fail_async if asynchronous else fail)
+    parent = APIRouter()
+    parent.include_router(router)
+    app.include_router(parent)
+    with TestClient(app) as client:
+        result = client.get('/v3/memories', params={'uid': 'private-uid'})
+    assert result.status_code == 503
+    records = [r for r in caplog.records if getattr(r, 'event', None) == 'memories_503']
+    assert len(records) == 1
+    record = records[0]
+    assert record.endpoint == '/v3/memories'
+    assert record.uid_hashed == hashlib.sha256(b'private-uid').hexdigest()[:16]
+    assert record.exception_class == 'ValueError'
+    assert record.elapsed_ms >= 0
+    assert 'private-uid' not in record.getMessage()
+    assert 'sensitive' not in record.getMessage()
+
+
+@pytest.mark.parametrize('params', [{'cursor': 'opaque'}, {'offset': 10}, {}])
+def test_get_memories_http_503_logs_cursor_offset_and_first_page_failure(params, caplog):
+    from fastapi import FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(503, 'memory unavailable')
+    service.read.side_effect = HTTPException(503, 'memory unavailable')
+
+    class BackingStoreUnavailable(HTTPException):
+        pass
+
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    app = FastAPI()
+    app.include_router(mem_mod.router)
+    route = next(r for r in app.routes if getattr(r, 'path', None) == '/v3/memories' and 'GET' in r.methods)
+    for dependency in route.dependant.dependencies:
+        app.dependency_overrides[dependency.call] = lambda: 'private-uid'
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod, 'MemoryBackingStoreUnavailable', BackingStoreUnavailable),
+        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'list_read_budget_for_request', return_value=MagicMock(truncated=False)),
+        TestClient(app) as client,
+    ):
+        result = client.get('/v3/memories', params=params)
+    assert result.status_code == 503
+    records = [r for r in caplog.records if getattr(r, 'event', None) == 'memories_503']
+    assert len(records) == 1
+    assert records[0].endpoint == '/v3/memories'
+    assert records[0].uid_hashed != 'unknown'

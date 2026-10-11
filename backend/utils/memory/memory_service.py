@@ -101,6 +101,7 @@ from utils.memory.knowledge_ledger import (
     save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
+from utils.memory.read_resilience import resilient_memory_read
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -2572,6 +2573,7 @@ class MemoryService:
         grown = max(current + max(1, int(step)), current * 2)
         return min(HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW, grown)
 
+    @resilient_memory_read
     def read(
         self,
         uid: str,
@@ -2876,6 +2878,7 @@ class MemoryService:
             return "canonical_state"
         return None
 
+    @resilient_memory_read
     def read_page(
         self,
         uid: str,
@@ -3186,6 +3189,7 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found")
         return record.memory
 
+    @resilient_memory_read
     def search(
         self,
         uid: str,

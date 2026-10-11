@@ -298,3 +298,35 @@ def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
         assert backend.write("uid-test", {"id": "mem-1", "content": "x"}) == "mem-1"
         backend.delete("uid-test", "mem-1")
         backend.delete_all("uid-test")
+
+
+def test_memory_service_search_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.search = MagicMock(return_value=[])
+    assert service.search('uid-test', 'query') == []
+    assert service._canonical.search.call_count == 2
+
+
+def test_memory_service_search_permanent_provider_still_503(service_mod):
+    from fastapi import HTTPException
+    from google.api_core.exceptions import FailedPrecondition
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=FailedPrecondition('missing index'))
+    with pytest.raises(HTTPException) as exc:
+        service.search('uid-test', 'query')
+    assert exc.value.status_code == 503
+    assert service._canonical.search.call_count == 1
+
+
+def test_memory_service_list_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.read = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.read = MagicMock(return_value=[])
+    assert service.read('uid-test') == []
+    assert service._canonical.read.call_count == 2
