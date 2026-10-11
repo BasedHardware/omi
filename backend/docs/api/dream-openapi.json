@@ -58,9 +58,21 @@
               "suppressed",
               "suggest_only",
               "edit_cap",
-              "invalid_evidence"
+              "invalid_evidence",
+              "suggested",
+              "already_suggested",
+              "suggestion_cap"
             ],
             "title": "Outcome",
+            "type": "string"
+          },
+          "policy": {
+            "default": "suggest",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "reason": {
@@ -154,6 +166,15 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "policy": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "spelling": {

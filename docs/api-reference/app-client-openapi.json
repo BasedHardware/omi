@@ -1445,6 +1445,66 @@
         "title": "AdviceResponse",
         "type": "object"
       },
+      "AgentProposalAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AgentProposalAnswer",
+        "type": "object"
+      },
+      "AgentProposalItem": {
+        "properties": {
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Edit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "other_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Label"
+          },
+          "target_label": {
+            "default": "",
+            "title": "Target Label",
+            "type": "string"
+          },
+          "vocabulary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AgentProposalItem",
+        "type": "object"
+      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -13417,9 +13477,21 @@
               "suppressed",
               "suggest_only",
               "edit_cap",
-              "invalid_evidence"
+              "invalid_evidence",
+              "suggested",
+              "already_suggested",
+              "suggestion_cap"
             ],
             "title": "Outcome",
+            "type": "string"
+          },
+          "policy": {
+            "default": "suggest",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "reason": {
@@ -13513,6 +13585,15 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "policy": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "spelling": {
@@ -13697,6 +13778,68 @@
           "runs"
         ],
         "title": "DreamRunsResponse",
+        "type": "object"
+      },
+      "Edit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "retire_task",
+              "merge_memories"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "Edit",
         "type": "object"
       },
       "EntitiesResponse": {
@@ -25414,6 +25557,16 @@
       "ReviewAnswer": {
         "additionalProperties": false,
         "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "not_sure": {
             "default": false,
             "title": "Not Sure",
@@ -25691,6 +25844,16 @@
       },
       "ReviewItem": {
         "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -25705,7 +25868,8 @@
               "speaker",
               "task",
               "same_person",
-              "spelling"
+              "spelling",
+              "agent_proposal"
             ],
             "title": "Kind",
             "type": "string"
@@ -31646,6 +31810,51 @@
         ],
         "title": "TaskWorkflowMode",
         "type": "string"
+      },
+      "Term": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "organization",
+              "project",
+              "jargon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "spelling": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Spelling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "spelling",
+          "evidence"
+        ],
+        "title": "Term",
+        "type": "object"
       },
       "TestDailySummaryRequest": {
         "properties": {

@@ -14,9 +14,9 @@ from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
 from models.candidate import CandidateCreate, TaskCreateCandidate
-from models.review import ChangeRef, ReviewChange
-from utils.entity_pages import write_entity_summary
-from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection
+from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem
+from utils.entity_pages import resolve_entity
+from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
 
 
 def edit_key(edit, records=None):
@@ -103,7 +103,7 @@ def validate_summary_edit(edit, row):
         raise ValueError('dream_summary_' + reason)
 
 
-def apply_edit(uid, edit, records):
+def validate_edit(edit, records):
     reason = spelling_rejection(edit)
     if reason:
         raise ValueError('dream_' + reason)
@@ -112,13 +112,59 @@ def apply_edit(uid, edit, records):
     reason = task_rejection(edit, records[edit.target], records)
     if reason:
         raise ValueError('dream_' + reason)
-    key = edit_key(edit, records)
-    if not review_changes.agent_change_allowed(uid, key):
-        return 'suppressed'
     row = records[edit.target]
     validate_summary_edit(edit, row)
     if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
         raise ValueError('dream_invalid_spelling')
+    collection, separator, key_id = edit.target.partition('/')
+    if not separator or not key_id or '/' in key_id:
+        raise ValueError('dream_invalid_target')
+    if row.get('is_locked') or row.get('deleted') or row.get('discarded') or row.get('is_dismissed'):
+        raise review_store.ReviewConflict('Dream target unavailable')
+    if edit.kind in {'close_task', 'retire_task'}:
+        if collection != 'action_items' or row.get('status', 'active') != 'active':
+            raise ValueError('dream_invalid_task')
+    elif edit.kind in {'memory', 'merge_memories'}:
+        if collection not in {'memories', 'memory_items'}:
+            raise ValueError('dream_invalid_memory')
+        MemoryEdit(memory_id=key_id, content=edit.after)
+        if edit.kind == 'memory' and edit.before and edit.before != row.get('content'):
+            raise review_store.ReviewConflict('Dream memory changed')
+        if edit.kind == 'merge_memories':
+            other = records.get(edit.other)
+            if (
+                not other
+                or edit.other == edit.target
+                or edit.other.partition('/')[0] not in {'memories', 'memory_items'}
+            ):
+                raise ValueError('dream_missing_duplicate')
+            if any(
+                row.get(field) != other.get(field)
+                for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+            ):
+                raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
+    elif edit.kind in {'merge_people', 'entity_summary'}:
+        if collection not in {'entity', 'knowledge_nodes', 'people', 'workstreams'} or not row.get('entity_id'):
+            raise ValueError('dream_invalid_entity')
+        if edit.kind == 'entity_summary' and (not edit.after.strip() or len(edit.after) > 16000):
+            raise ValueError('dream_invalid_entity_summary')
+        if edit.kind == 'merge_people':
+            other = records.get(edit.other)
+            if (
+                not other
+                or row.get('type') != 'person'
+                or other.get('type') != 'person'
+                or row['entity_id'] == other.get('entity_id')
+            ):
+                raise ValueError('dream_invalid_person_merge')
+
+
+def apply_edit(uid, edit, records, *, expected_records=None):
+    validate_edit(edit, records)
+    key = edit_key(edit, records)
+    if not review_changes.agent_change_allowed(uid, key):
+        return 'suppressed'
+    row = records[edit.target]
     change = ReviewChange(
         change_id=str(uuid5(NAMESPACE_URL, uid + ":" + key)),
         kind='other',
@@ -130,13 +176,28 @@ def apply_edit(uid, edit, records):
         entity_id = row.get('entity_id')
         if not entity_id:
             raise ValueError('dream_invalid_entity')
-        write_entity_summary(uid, entity_id, edit.after)
+        cache_ref = review_store.user(uid).collection('entity_pages').document(entity_id)
+        raw = cache_ref.get().to_dict()
+        current = review_store.decode_doc(uid, raw) or {}
+        if edit.before != current.get('summary', ''):
+            raise review_store.ReviewConflict('Dream entity summary changed')
+        patch = review_store.encode_doc(uid, {'summary': edit.after, 'updated_at': change.created_at})
+        review_changes.record_agent_change(
+            uid,
+            change,
+            [AgentEdit(collection='entity_pages', document_id=entity_id, patch=patch)],
+            edit_key=key,
+            expected_documents={entity_id: raw},
+            expected_records=expected_records,
+        )
         return 'applied'
     if edit.kind == 'merge_people':
         other = records.get(edit.other)
         if not other or row.get('type') != 'person' or other.get('type') != 'person':
             raise ValueError('dream_invalid_person_merge')
-        review_changes.merge_review_entities(uid, change, row['entity_id'], other['entity_id'], edit_key=key)
+        review_changes.merge_review_entities(
+            uid, change, row['entity_id'], other['entity_id'], edit_key=key, expected_records=expected_records
+        )
         return 'applied'
     if edit.kind in {'memory', 'merge_memories'} or (
         edit.kind == 'spelling' and edit.target.split('/')[0] in {'memories', 'memory_items'}
@@ -150,6 +211,7 @@ def apply_edit(uid, edit, records):
             change,
             [],
             edit_key=key,
+            expected_records=expected_records,
             memory_edit=MemoryEdit(
                 memory_id=edit.target.split('/')[-1], content=content, duplicate_memory_id=duplicate
             ),
@@ -238,8 +300,255 @@ def apply_edit(uid, edit, records):
         [AgentEdit(collection=collection, document_id=key_id, patch=patch)],
         edit_key=key,
         expected_documents={key_id: raw},
+        expected_records=expected_records,
     )
     return 'applied'
+
+
+def proposal_record(uid, ref, snapshot):
+    from utils import dream_reads
+
+    if ref.startswith('entity/'):
+        row = resolve_entity(uid, ref.removeprefix('entity/'))
+        if 'facts' in snapshot or 'decisions' in snapshot:
+            from utils.entity_pages import _facts
+
+            facts, decisions, _ = _facts(uid, [row['entity_id']], {})
+            row.update(
+                facts=[f.model_dump(mode='python') for f in facts],
+                decisions=[f.model_dump(mode='python') for f in decisions],
+            )
+        return row
+    if ref.startswith('screen/'):
+        # Screen evidence is local-retention scoped; missing/revoked evidence conflicts.
+        from database import screen_activity
+
+        return next(
+            (
+                r
+                for r in screen_activity.get_screen_activity(
+                    uid, start_date=snapshot.get('timestamp'), end_date=snapshot.get('timestamp'), limit=100
+                )
+                if r['id'] == ref.split('/', 1)[1]
+            ),
+            None,
+        )
+    return dream_reads.read_record(uid, ref)
+
+
+def revalidate_proposal(uid, source):
+    from fastapi import HTTPException
+
+    records = source['records']
+    for ref, snapshot in records.items():
+        try:
+            current = proposal_record(uid, ref, snapshot)
+        except (review_store.ReviewNotFound, LookupError, ValueError) as exc:
+            raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
+        except HTTPException as exc:
+            if exc.status_code not in {402, 404}:
+                raise
+            raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
+        if review_store.fingerprint(current) != review_store.fingerprint(snapshot):
+            raise review_store.ReviewConflict('Dream proposal evidence changed')
+    for path, snapshot in source.get('auxiliary', {}).items():
+        collection, key = path.split('/', 1)
+        if review_store.user(uid).collection(collection).document(key).get().to_dict() != snapshot:
+            raise review_store.ReviewConflict('Dream proposal target changed')
+    return records
+
+
+def proposal_fences(uid, source):
+    paths = set(source.get('auxiliary', {}))
+    for ref, row in source['records'].items():
+        collection, key = ref.split('/', 1)
+        if collection in {'action_items', 'candidates', 'workstreams'} or row.get('type') == 'project':
+            paths.add('task_intelligence_control/state')
+        if collection in {'entity', 'knowledge_nodes', 'workstreams'}:
+            entity_id = row['entity_id']
+            paths.add('knowledge_nodes/' + entity_id)
+            if row['type'] == 'person':
+                paths.add('people/' + entity_id.removeprefix('person:'))
+            elif row['type'] == 'project':
+                paths.add('workstreams/' + entity_id)
+        elif collection in {'memories', 'memory_items'}:
+            paths.add('memory_items/' + key)
+        elif collection == 'screen':
+            paths.add('screen_activity/' + key)
+        else:
+            paths.add(ref)
+    return {
+        path: review_store.user(uid).collection(path.split('/', 1)[0]).document(path.split('/', 1)[1]).get().to_dict()
+        for path in sorted(paths)
+    }
+
+
+def validate_canonical_proposal(uid, edit):
+    if edit.kind not in {'memory', 'merge_memories'} and not (
+        edit.kind == 'spelling' and edit.target.partition('/')[0] in {'memories', 'memory_items'}
+    ):
+        return
+    from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+
+    refs = [edit.target, *([edit.other] if edit.kind == 'merge_memories' else [])]
+    sources = [read_canonical_memory_item(uid, ref.split('/', 1)[1], db_client=review_store.client()) for ref in refs]
+    if any(
+        row is None
+        or row.status.value != 'active'
+        or row.kind.value != 'fact'
+        or row.ledger_schema_version != 'knowledge_ledger.v1'
+        for row in sources
+    ):
+        raise review_store.ReviewConflict('Only active canonical facts may be proposed')
+    if len(sources) == 2 and any(
+        getattr(sources[0], field) != getattr(sources[1], field)
+        for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+    ):
+        raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
+
+
+def proposal_label(row):
+    label = (
+        row.get('description')
+        or row.get('content')
+        or row.get('name')
+        or row.get('label')
+        or (row.get('structured') or {}).get('title')
+    )
+    return ' '.join(str(label or 'Item').split())[:180]
+
+
+def suggest_edit(uid, edit, records):
+    validate_edit(edit, records)
+    key = edit_key(edit, records)
+    if not review_changes.agent_change_allowed(uid, key):
+        return 'suppressed'
+    refs = set([edit.target, *edit.evidence, *([edit.other] if edit.other else [])])
+    source = {'records': {ref: records[ref] for ref in refs}, 'edit_key': key, 'auxiliary': {}}
+    if edit.kind == 'entity_summary':
+        entity_id = records[edit.target]['entity_id']
+        raw = review_store.user(uid).collection('entity_pages').document(entity_id).get().to_dict()
+        if edit.before != (review_store.decode_doc(uid, raw) or {}).get('summary', ''):
+            raise review_store.ReviewConflict('Dream entity summary changed')
+        source['auxiliary']['entity_pages/' + entity_id] = raw
+    source['fences'] = proposal_fences(uid, source)
+    revalidate_proposal(uid, source)
+    validate_canonical_proposal(uid, edit)
+    if (
+        edit.kind in {'close_task', 'retire_task'}
+        and records[edit.target].get('account_generation', 0) != get_task_workflow_control(uid).account_generation
+    ):
+        raise review_store.ReviewConflict('Dream task generation changed')
+    item = ReviewItem(
+        item_id='agent_proposal:' + review_store.safe_id(key),
+        kind='agent_proposal',
+        title=edit.reason,
+        created_at=datetime.now(timezone.utc),
+        agent_proposal=AgentProposalItem(
+            edit=edit,
+            target_label=proposal_label(records[edit.target]),
+            other_label=proposal_label(records[edit.other]) if edit.other else None,
+        ),
+    )
+    return review_store.enqueue_review_proposal(
+        uid, item, source=source, edit_key=key, evidence_version=review_store.fingerprint(source)
+    )
+
+
+def vocabulary_key(term):
+    return 'dream:vocabulary:' + review_store.fingerprint(
+        [term.kind, term.spelling.casefold(), sorted(a.casefold() for a in term.aliases)]
+    )
+
+
+def apply_vocabulary(uid, terms, *, expected_records=None):
+    status = 'unchanged'
+    for term in terms:
+        if vocabulary_rejection(term):
+            raise ValueError('dream_common_word')
+        key = vocabulary_key(term)
+        if not review_changes.agent_change_allowed(uid, key):
+            status = 'suppressed'
+            continue
+        ref = review_store.user(uid).collection('dream_vocabulary').document('current')
+        raw = ref.get().to_dict()
+        existing = (review_store.decode_doc(uid, raw) or {}).get('source', [])
+        merged = {row['spelling'].casefold(): row for row in existing}
+        # This policy owns additions; never overwrite an existing user term.
+        if term.spelling.casefold() in merged:
+            continue
+        merged[term.spelling.casefold()] = term.model_dump()
+        change = ReviewChange(
+            change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
+            kind='other',
+            title='Add vocabulary: ' + term.spelling,
+            created_at=datetime.now(timezone.utc),
+        )
+        review_changes.record_agent_change(
+            uid,
+            change,
+            [
+                AgentEdit(
+                    collection='dream_vocabulary',
+                    document_id='current',
+                    patch=review_store.encode_doc(uid, {'source': list(merged.values())[-500:]}),
+                )
+            ],
+            edit_key=key,
+            expected_documents={'current': raw},
+            expected_records=expected_records,
+        )
+        status = 'applied'
+    return status
+
+
+def suggest_vocabulary(uid, term, records):
+    if vocabulary_rejection(term) or any(ref not in records for ref in term.evidence):
+        raise ValueError('dream_invalid_vocabulary')
+    key = vocabulary_key(term)
+    if not review_changes.agent_change_allowed(uid, key):
+        return 'suppressed'
+    source = {
+        'records': {ref: records[ref] for ref in term.evidence},
+        'edit_key': key,
+        'auxiliary': {
+            'dream_vocabulary/current': review_store.user(uid)
+            .collection('dream_vocabulary')
+            .document('current')
+            .get()
+            .to_dict()
+        },
+    }
+    source['fences'] = proposal_fences(uid, source)
+    revalidate_proposal(uid, source)
+    item = ReviewItem(
+        item_id='agent_proposal:' + review_store.safe_id(key),
+        kind='agent_proposal',
+        title='Add vocabulary: ' + term.spelling,
+        created_at=datetime.now(timezone.utc),
+        agent_proposal=AgentProposalItem(vocabulary=term, target_label=term.spelling),
+    )
+    return review_store.enqueue_review_proposal(
+        uid, item, source=source, edit_key=key, evidence_version=review_store.fingerprint(source)
+    )
+
+
+def answer_proposal(uid, proposal, source, decision):
+    if decision == 'dismiss':
+        review_changes.suppress_agent_change(uid, source['edit_key'])
+        return False
+    records = revalidate_proposal(uid, source)
+    try:
+        status = (
+            apply_edit(uid, proposal.edit, records, expected_records=source.get('fences'))
+            if proposal.edit
+            else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'))
+        )
+    except ValueError as exc:
+        raise review_store.ReviewConflict('Dream proposal no longer valid') from exc
+    if status == 'suppressed':
+        raise review_store.ReviewConflict('Dream proposal was suppressed')
+    return status == 'applied'
 
 
 def ask(uid, item, records):

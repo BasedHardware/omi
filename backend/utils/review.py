@@ -157,7 +157,9 @@ def _sources(uid: str) -> list[tuple[ReviewItem, dict, str]]:
             result.append((_task_item(uid, candidate), source, store.fingerprint(source)))
     for proposal in store.list_proposals(uid):
         item = ReviewItem.model_validate(proposal['item'])
-        result.append((item, {}, proposal['evidence_version']))
+        if item.agent_proposal and not review_changes.agent_change_allowed(uid, proposal['source']['edit_key']):
+            continue
+        result.append((item, proposal.get('source', {}), proposal['evidence_version']))
     return result
 
 
@@ -189,6 +191,12 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
             # Do not call speaker skip: it permanently marks that source answered.
             # Review stores an evidence version, permitting a new-evidence question.
             pass
+        elif item.agent_proposal:
+            from utils.dream_tools import answer_proposal
+
+            if answer.agent_proposal is None:
+                raise store.ReviewConflict('Agent proposal answer required')
+            applied = answer_proposal(uid, item.agent_proposal, state['source'], answer.agent_proposal.decision)
         elif item.speaker:
             prompt = SpeakerTagPrompt.model_validate(state['source'])
             payload = answer.speaker

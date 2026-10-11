@@ -68,3 +68,28 @@ def test_correction_trim_and_item_payload_match():
     payload['kind'] = 'task'
     with pytest.raises(ValidationError):
         ReviewItem.model_validate(payload)
+
+
+def test_agent_proposal_and_answer_contract():
+    from models.dream_agent import Edit
+    from models.review import AgentProposalItem, AgentProposalAnswer
+
+    edit = Edit(kind='close_task', target='action_items/toy-task', reason='Done', evidence=['conversations/toy'])
+    item = ReviewItem(
+        item_id='agent_proposal:toy',
+        kind='agent_proposal',
+        title='Close toy task?',
+        created_at=NOW,
+        agent_proposal=AgentProposalItem(edit=edit),
+    )
+    assert ReviewItem.model_validate(item.model_dump()).agent_proposal.edit == edit
+    assert ReviewAnswer(agent_proposal=AgentProposalAnswer(decision='accept')).agent_proposal.decision == 'accept'
+    for body in [
+        {'agent_proposal': {'decision': 'yes'}},
+        {'agent_proposal': {'decision': 'accept', 'edit': edit.model_dump()}},
+        {'not_sure': True, 'agent_proposal': {'decision': 'accept'}},
+    ]:
+        with pytest.raises(ValidationError):
+            ReviewAnswer.model_validate(body)
+    with pytest.raises(ValidationError):
+        AgentProposalItem()

@@ -9,7 +9,7 @@ A person keeps `person:{people id}` and a project keeps its workstream id.
 ## Producer contract
 
 - `database.review_store.enqueue_review_proposal(uid, ReviewItem(...), evidence_version=...)`
-  owns only `same_person` and `spelling`. Use `<kind>:<stable source id>` as the
+  owns `same_person`, `spelling` and `agent_proposal`. Use `<kind>:<stable source id>` as the
   item id. Replays of the same evidence version do nothing. An uncertain answer
   becomes eligible again only after the producer supplies a new evidence
   version; a resolved proposal stays terminal.
@@ -18,7 +18,7 @@ A person keeps `person:{people id}` and a project keeps its workstream id.
   values atomically with a ledger commit. `edits` is a list of `AgentEdit` from
   that module. Supported storage targets are graph node labels/aliases, person
   name/profile fields, conversation titles or authorized speaker projections,
-  and task completion. Supply storage-encoded transcript and assignment values
+  task completion, entity-summary and vocabulary caches. Supply storage-encoded transcript and assignment values
   produced by the speaker teaching owner. Wire clients never author `AgentEdit`.
 - Canonical fact replacements use the same writer with
   `memory_edit=database.review_memory_changes.MemoryEdit(memory_id=..., content=...)`.
@@ -30,8 +30,8 @@ A person keeps `person:{people id}` and a project keeps its workstream id.
   whether the user has undone a semantic operation. Use a stable operation key
   derived from identifiers, independently of the run and change id. The writer
   enforces this too. Explicit user redo does not remove the suppression marker.
-- `utils.entity_pages.write_entity_summary(uid, entity_id, summary, updated_at=...)`
-  owns the derived `entity_pages` cache. The existing facts remain authoritative.
+- Dream entity summaries write the derived `entity_pages` cache through the
+  same journal. The existing facts remain authoritative.
 
 Identity answers use the existing ledger entity merge/split mutation builders.
 The secondary node remains a redirect so legacy subject ids and graph citations
@@ -88,5 +88,25 @@ Dream conversation polish uses the same journal for `structured.title` and
 kind; overview changes use `other`. Both include a conversation reference and the
 new text as the snippet. Overview writes clear stale `structured.sections` and
 `structured.note_claims` in that entry, so undo restores all three fields together.
-These are internal edits; Review question kinds are unchanged. Dream self-report
-edit kinds are strings, so OpenAPI and regenerated Dart require no enum change.
+Dream risky edits use the existing proposal queue with `kind=agent_proposal` and
+short owner-visible `target_label`/`other_label` fields and exactly one payload: `agent_proposal.edit` (target, other, before, after, reason,
+evidence refs) or `agent_proposal.vocabulary` (typed term and evidence refs).
+Answers use `{"agent_proposal":{"decision":"accept"}}` or `dismiss`. Generic
+`not_sure` retains the existing evidence-version suppression behavior. Accept
+rechecks owner-visible records and fences their storage snapshots in the journal
+transaction; conflicts return 409 and refund the answer slot. Dismiss stores the
+same permanent operation fence as undo and makes the proposal terminal.
+
+Agent suggestions and Dream's existing questions share a three-new-proposals
+UTC daily cap; answer headroom remains the existing three answers per day. An
+idempotent enqueue costs nothing; a changed pending evidence version uses another
+proposal slot. Viewing a card remains free. Entity-summary and vocabulary cache
+changes are encrypted, journaled and undoable; creating an absent cache is allowed,
+but undo never recreates a deleted record.
+
+Mobile must add `agent_proposal` to the handwritten Review item-kind adapter,
+render the proposed target/change, reason and evidence in the existing card/detail
+sheet, and send the accept/dismiss answer above through the existing provider/API.
+The generated Review DTOs include both payload arms. Older clients drop this
+unknown kind; coordinate mobile delivery before a rollout. Dream report DTOs also
+carry `policy=auto|suggest` for edits and vocabulary plus suggestion/cap outcomes.
