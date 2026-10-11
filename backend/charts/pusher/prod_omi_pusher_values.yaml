@@ -116,7 +116,7 @@ runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: DREAM_AGENT_MODE
-    value: 'shadow'
+    value: 'on'
   - name: DREAM_AGENT_UID_ALLOWLIST
     value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.

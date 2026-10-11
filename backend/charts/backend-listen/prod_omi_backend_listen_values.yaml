@@ -208,7 +208,7 @@ env:
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
   - name: DREAM_AGENT_MODE
-    value: 'shadow'
+    value: 'on'
   - name: DREAM_AGENT_UID_ALLOWLIST
     value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: REVIEW_SURFACE_MODE
