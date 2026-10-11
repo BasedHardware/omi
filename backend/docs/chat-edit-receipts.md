@@ -1,8 +1,14 @@
 # Shared chat edit receipts
 
-Backend-managed app chat and channels use the same CORE_TOOLS edit catalog.
-The legacy desktop proxy advertises client-owned tools; the UI lane must bind
-its edit tools to this shared authority (or use the shared app-chat route). A write is allowed only after the
+Backend-managed app chat and channels use the same CORE_TOOLS edit catalog,
+projected by `project_runtime_tools`. The legacy desktop proxy
+(`backend/routers/desktop_chat.py` `_request` / `_anthropic_client_tools`)
+forwards only tools the macOS client supplied and executes on device. It does
+not use that projection. Putting the shared edit tools on the proxy request
+would advertise calls the client cannot run. The remaining work is to route
+desktop chat through `execute_chat_stream`, or to execute those tool calls
+inside the proxy and teach the macOS client to render `editReceipt` and call
+the undo endpoint. UI PR #21234 does not own that client. A write is allowed only after the
 user asks for it or confirms an agent-proposed correction. Whole-conversation
 deletion is excluded and transcripts are never rewritten by these tools.
 
@@ -42,10 +48,20 @@ metadata through canonical apply. Memory corrections and their undo retain the
 immutable ledger history and advance canonical revisions; they never restore old
 ledger sequence/commit identifiers. Non-ledger content undo currently restores
 content through the existing correction service and reapplies its reprocessing
-semantics; promotion/tier metadata is not yet an exact rollback. This is a
-remaining integration requirement before claiming exact memory-edit undo. Permanent app/MCP privacy-purge deletion is
-unchanged. Clients must describe this distinction when permanent erasure is asked
-for. New chat tools never call the privacy-purge deletion method.
+semantics; promotion/tier metadata is not an exact rollback. `update_canonical_memory_content`
+demotes the item to short-term and writes a new pending promotion. Restoring the
+previous long-term tier is a short-term to long-term transition, which
+`apply_long_term_patch_transaction` admits only for a current synthesis receipt.
+The pre-edit receipt is bound to the old revision, and direct user patches cannot
+write `tier` or the graph identity cleared by `clear_graph_assertion`. Exact
+restore needs a canonical undo mutation that copies the before product snapshot
+forward as a new revision without promotion re-admission and without rewinding
+ledger sequence or commit ids. That is an INV-MEM-4 change, not a contained
+patch. Ledger edits still use `revert_superseded_ledger_fact`. Removal undo
+still restores `promotion_audit` because it does not change tier. Permanent
+app/MCP privacy-purge deletion is unchanged. Clients must describe this
+distinction when permanent erasure is asked for. New chat tools never call
+the privacy-purge deletion method.
 
 Conversation corrections are owner-confirmed durable notes, compressed (and
 protected for enhanced users) alongside the conversation. Regeneration preserves

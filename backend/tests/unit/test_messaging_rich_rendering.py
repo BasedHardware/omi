@@ -9,7 +9,25 @@ from utils.messaging.adapters import rendering
 
 
 @pytest.mark.parametrize(
-    'marker', ['[9]', '[#9]', '[ #9 ]', '[ 9 ]', '[# 9]', '[9, 10]', '[#9; #10]', '[9-10]', '[#9–#10]']
+    'marker',
+    [
+        '[9]',
+        '[#9]',
+        '[ #9 ]',
+        '[ 9 ]',
+        '[# 9]',
+        '[9, 10]',
+        '[#9; #10]',
+        '[9-10]',
+        '[#9–#10]',
+        '[1][2]',
+        '【1】',
+        '【#1】',
+        '【1】【2】',
+        '【1, 2】',
+        '[^1]',
+        '[^1][^2]',
+    ],
 )
 def test_every_raw_citation_is_removed(marker):
     assert rendering.source_phrases('See ' + marker + '.') == 'See .'
@@ -121,6 +139,35 @@ def test_spoilers_support_nested_markdown():
 
 def test_plain_markdown_links_keep_the_destination():
     assert rendering.plain('[documentation](https://example.com/help)') == 'documentation (https://example.com/help)'
+
+
+def test_non_https_links_are_dropped_and_hrefs_escape_markup():
+    rendered = ''.join(
+        rendering.telegram(
+            '[ok](https://example.com/?q=<tag>&x="y") [js](javascript:alert(1)) '
+            '[web](http://example.com) [scheme](https:alert(1)) <javascript:alert(2)>'
+        )
+    )
+    assert 'href="https://example.com/?q=%3Ctag%3E&amp;x=%22y%22"' in rendered
+    assert 'javascript:' not in rendered.lower()
+    assert 'http://example.com' not in rendered
+    assert 'https:alert' not in rendered
+    assert '<a>' not in rendered
+    assert rendered.count('<a ') == rendered.count('</a>') == 1
+    plain = rendering.plain('[js](javascript:alert(1)) and [web](http://example.com) and [ok](https://example.com/a)')
+    assert 'javascript:' not in plain.lower()
+    assert 'http://' not in plain
+    assert 'https://example.com/a' in plain
+
+
+def test_button_labels_do_not_split_joiners_or_leak_into_urls():
+    title = ('x' * 30) + '👨\u200d👩'
+    rows = rendering.item_buttons([dict(title=title, url=rendering.item_link('memory', 'id'))])['inline_keyboard']
+    label = rows[0][0]['text']
+    assert len(label) <= 32
+    assert not label.endswith('\u200d')
+    assert title not in rows[0][0]['url']
+    assert rows[0][0]['url'] == 'https://h.omi.me/memory/id'
 
 
 def test_adversarial_unclosed_citation_does_not_backtrack():

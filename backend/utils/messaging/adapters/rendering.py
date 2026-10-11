@@ -2,14 +2,23 @@
 
 import html
 import re
+import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import quote, urlparse
 
 from markdown_it import MarkdownIt
 from utils.observability.fallback import record_fallback
 
-CITATION_PATTERN = r'\[\s*+#?\s*+(\d++)(?:\s*+[,;–-]\s*+#?\s*+\d++)*+\s*+\](?!\()'
+_CITATION_LIST = r'#?\s*+\d++(?:\s*+[,;–-]\s*+#?\s*+\d++)*+'
+# ASCII [1]/[#1]/[1][2], fullwidth 【1】, and markdown footnotes [^1].
+# Possessive quantifiers keep an unclosed marker from backtracking.
+CITATION_PATTERN = (
+    rf'(?:\[\s*+{_CITATION_LIST}\s*+\](?!\()|【\s*+{_CITATION_LIST}\s*+】|\[\^\s*+{_CITATION_LIST}\s*+\])'
+)
 CITATIONS = re.compile(CITATION_PATTERN)
+_MARKDOWN_LINK = re.compile(r'\[([^\]\n]*)\]\(([^)\n]*)\)')
+_UNSAFE_SCHEME = re.compile(r'(?i)(?:javascript|data|vbscript|file)\s*:[^\s<>()]*|\bhttp(?!s)\s*:[^\s<>()]*')
+_BUTTON_LABEL_LIMIT = 32
 
 
 def item_link(kind, item_id):
@@ -18,9 +27,29 @@ def item_link(kind, item_id):
     return 'https://h.omi.me/' + kind + '/' + quote(item_id, safe='')
 
 
+def _https_url(url):
+    """https URLs with a host only. javascript:, http, and scheme-relative links are not links."""
+    if not isinstance(url, str) or not url or any(ord(char) < 33 for char in url):
+        return None
+    parsed = urlparse(url.strip().strip('<>'))
+    if parsed.scheme != 'https' or not parsed.hostname:
+        return None
+    return url.strip().strip('<>')
+
+
+def _drop_unsafe_links(text):
+    def replace(match):
+        destination = match.group(2).strip().strip('<>')
+        if _https_url(destination):
+            return match.group(0)
+        return match.group(1)
+
+    return _UNSAFE_SCHEME.sub('', _MARKDOWN_LINK.sub(replace, text))
+
+
 def source_phrases(text, sources=()):
     # Citations are UI chrome; even unknown or malformed indices cannot leak.
-    return CITATIONS.sub('', text)
+    return _drop_unsafe_links(CITATIONS.sub('', text or ''))
 
 
 def linked_items(response):
@@ -74,8 +103,18 @@ def linked_items(response):
     return items
 
 
+def button_label(title):
+    """Truncate on code points without leaving a dangling joiner or combining mark."""
+    text = ' '.join(str(title or '').split())
+    if len(text) > _BUTTON_LABEL_LIMIT:
+        text = text[:_BUTTON_LABEL_LIMIT]
+        while text and (unicodedata.combining(text[-1]) or text[-1] in {'\u200d', '\ufe0f'}):
+            text = text[:-1]
+    return text or 'Item'
+
+
 def item_buttons(items):
-    rows = [[{'text': item['title'].replace('\n', ' ')[:32], 'url': item['url']}] for item in items[:5]]
+    rows = [[{'text': button_label(item['title']), 'url': item['url']}] for item in items[:5]]
     if len(items) > 5:
         rows.append([{'text': 'Open in Omi', 'url': 'https://h.omi.me'}])
     return {'inline_keyboard': rows} if rows else None
@@ -103,7 +142,7 @@ def _tokens(text):
 
 def _inline(tokens, rich):
     out = []
-    plain_links = []
+    link_urls = []
     for token in tokens or ():
         if token.type == 'text':
             value = html.escape(token.content, quote=False) if rich else token.content
@@ -122,21 +161,17 @@ def _inline(tokens, rich):
         elif token.type in {'strong_open', 'strong_close', 'em_open', 'em_close'} and rich:
             tag = 'b' if token.type.startswith('strong') else 'i'
             out.append('<' + ('/' if token.nesting == -1 else '') + tag + '>')
-        elif token.type == 'link_open' and not rich:
-            plain_links.append(token.attrGet('href') or '')
-        elif token.type == 'link_close' and not rich:
-            url = plain_links.pop() if plain_links else ''
-            if urlparse(url).scheme in {'https', 'http'}:
-                out.append(' (' + url + ')')
-        elif token.type == 'link_open' and rich:
-            url = token.attrGet('href') or ''
-            if urlparse(url).scheme in {'https', 'http'}:
+        elif token.type == 'link_open':
+            link_urls.append(_https_url(token.attrGet('href') or ''))
+            if rich and link_urls[-1]:
                 # Attribute quotes are encoded too, unlike text-node escaping.
-                out.append('<a href="' + html.escape(url, quote=True) + '">')
-            else:
-                out.append('<a>')
-        elif token.type == 'link_close' and rich:
-            out.append('</a>')
+                out.append('<a href="' + html.escape(link_urls[-1], quote=True) + '">')
+        elif token.type == 'link_close':
+            url = link_urls.pop() if link_urls else None
+            if url and rich:
+                out.append('</a>')
+            elif url:
+                out.append(' (' + url + ')')
         elif token.type == 'image':
             out.append(html.escape(token.content, quote=False) if rich else token.content)
     return ''.join(out)

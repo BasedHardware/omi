@@ -658,6 +658,33 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         assert 'Explain more' not in str(payload)
 
 
+def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+    conversations = [{'id': f'id {index}', 'kind': 'task', 'title': f'Task {index}'} for index in range(6)]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {'text': 'Tasks [#1][#2].', 'conversations': conversations}
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    if adapter.channel == 'telegram':
+        rows = payload['reply_markup']['inline_keyboard']
+        assert len(rows) == 6
+        assert rows[-1] == [{'text': 'Open in Omi', 'url': 'https://h.omi.me'}]
+        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows[:-1])
+        assert '[#1]' not in payload['text']
+        assert payload['text'].count('https://') == 0
+    else:
+        body = payload['message']['parts'][0]['value']
+        assert body.count('https://') == 1
+        assert 'Open in Omi: https://h.omi.me' in body
+        assert '/task/' not in body
+        assert '[#1]' not in body
+
+
 def test_media_fetch_bounds_and_ssrf(monkeypatch):
     # No network occurs: validation happens before the shared client is requested.
     transport = Transport()
