@@ -165,6 +165,36 @@ def test_invisible_neighbours_are_excluded():
     assert list(records) == ['people/target']
 
 
+def test_semantic_embedding_calls_use_llm_pool(monkeypatch):
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+
+    submitted = []
+
+    def submit(pool, fn, *args, **kwargs):
+        submitted.append(pool)
+        future = Future()
+        future.set_result(fn(*args, **kwargs))
+        return future
+
+    monkeypatch.setattr(dream_context, 'submit_with_context', submit)
+    monkeypatch.setattr(
+        dream_context, 'MemoryService', lambda: SimpleNamespace(read=lambda *a, **k: [], search=lambda *a, **k: [])
+    )
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **k: [])
+    monkeypatch.setattr(dream_context.vector_db, 'query_vectors', lambda *a, **k: [])
+    list(
+        dream_context.context_candidates(
+            'synthetic',
+            {'people/a': {'name': 'Zuvrah'}},
+            [],
+            read_record=lambda *a: None,
+            read_entity_record=lambda *a: None,
+        )
+    )
+    assert submitted == [dream_context.llm_executor, dream_context.llm_executor]
+
+
 def test_decomposed_accents_do_not_multiply_summary_words():
     import unicodedata
 

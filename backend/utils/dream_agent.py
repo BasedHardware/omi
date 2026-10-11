@@ -188,7 +188,10 @@ async def _run_admitted_pass(
     try:
         async with asyncio.timeout(timeout_seconds):
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
-            records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
+            # Retrieval coordinates storage and embedding providers; leave CRUD workers free.
+            records, consumed = await run_blocking(
+                postprocess_executor, dream_reads.read_changes, uid, lease, caps, vocabulary
+            )
             reviewed = target_refs(records)
             cleanup_cursor = getattr(records, 'cleanup_cursor', None)
             report['target_source_counts'] = dict(
