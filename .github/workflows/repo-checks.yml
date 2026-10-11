@@ -4,7 +4,9 @@ on:
   push:
     branches: main
   pull_request:
-    branches: main
+    # Dream's linear stack needs the same source and metadata verdicts before
+    # each predecessor merges; waiting for a main retarget hides failed checks.
+    branches: [main, 'lane/dream-*']
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
