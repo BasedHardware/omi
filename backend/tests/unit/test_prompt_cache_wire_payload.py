@@ -80,19 +80,18 @@ def test_get_llm_forwards_explicit_cache_options_and_production_cache_key(monkey
 
     Guards utils.llm.clients.get_llm: it must keep forwarding
     prompt_cache_options/prompt_cache_key via .bind so the production
-    TRANSCRIPT_STRUCTURE_CACHE_KEY lands on the wire payload.
+    CONVERSATION_NOTES_CACHE_KEY lands on the wire payload.
     """
     from utils.llm import clients
-    from utils.llm.conversation_processing import TRANSCRIPT_STRUCTURE_CACHE_KEY
+    from utils.llm.conversation_processing import CONVERSATION_NOTES_CACHE_KEY
 
     monkeypatch.setenv('OPENAI_API_KEY', 'test')
     monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
     monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **_kwargs: _kwargs['legacy_model'])
 
     llm = clients.get_llm(
         'conv_structure',
-        cache_key=TRANSCRIPT_STRUCTURE_CACHE_KEY,
+        cache_key=CONVERSATION_NOTES_CACHE_KEY,
         prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
     )
 
@@ -100,7 +99,7 @@ def test_get_llm_forwards_explicit_cache_options_and_production_cache_key(monkey
     payload = bound._get_request_payload([_message_with_breakpoint()], **llm.kwargs)
 
     assert payload['extra_body'] == {'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'}}
-    assert payload['prompt_cache_key'] == TRANSCRIPT_STRUCTURE_CACHE_KEY
+    assert payload['prompt_cache_key'] == CONVERSATION_NOTES_CACHE_KEY
 
 
 def test_get_llm_sends_explicit_options_without_cache_key_for_unique_prompts(monkeypatch) -> None:
@@ -114,7 +113,6 @@ def test_get_llm_sends_explicit_options_without_cache_key_for_unique_prompts(mon
     monkeypatch.setenv('OPENAI_API_KEY', 'test')
     monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
     monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **_kwargs: _kwargs['legacy_model'])
 
     llm = clients.get_llm(
         'conv_structure',

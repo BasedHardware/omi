@@ -330,8 +330,9 @@ def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
             return next(reads)
         if function is finalizer.get_cached_user_geolocation:
             return None
-        if function is finalizer.process_conversation:
-            processed.append(args[2])
+        if function is finalizer.process_with_episode_budget:
+            assert args[0] is finalizer.process_conversation
+            processed.append(args[3])
             raise _Stop()
         raise AssertionError(f'unexpected blocking call: {function!r}')
 

@@ -19,6 +19,7 @@ import firebase_admin
 
 from services.frame_request_retention import run_frame_request_retention_maintenance
 from utils.env_loader import firebase_admin_options
+from utils.dream_agent import drain
 from utils.memory.canonical_short_term_maintenance_cron import (
     run_canonical_short_term_maintenance_cron,
 )
@@ -81,6 +82,7 @@ def main() -> None:
             len(summary.errors),
             summary.errors,
         )
+    asyncio.run(drain())
     if fatal_errors:
         raise RuntimeError(f"memory-maintenance-job completed with {len(fatal_errors)} error(s)")
 

@@ -168,7 +168,7 @@ _target_circuit_admission_refused = _TargetCircuitAdmissionRefused(failure_thres
 
 
 def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None = None) -> ProviderCircuitBreaker:
-    if target is None or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None):
+    if target is None or target.endpoint is None:
         if default is None:
             raise ValueError('Default live target requires its family circuit')
         return default

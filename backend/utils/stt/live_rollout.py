@@ -9,11 +9,11 @@ from config.stt_provider_policy import STTServingSurface, normalized_stt_languag
 
 
 def configured_chain_enabled() -> bool:
-    return os.getenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false').lower() == 'true'
+    return True
 
 
 def window_allocation(uid: str | None) -> bool:
-    if not configured_chain_enabled() or not uid:
+    if not uid:
         return False
     percent = min(100.0, max(0.0, float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(('parakeet-window:' + uid).encode()).digest()[:8], 'big')
@@ -29,8 +29,7 @@ def managed_chain_enabled(host: object) -> bool:
     from utils.byok import get_byok_keys
 
     return (
-        configured_chain_enabled()
-        and not getattr(host, 'is_multi_channel', False)
+        not getattr(host, 'is_multi_channel', False)
         and not getattr(host, 'use_custom_stt', False)
         and not get_byok_keys()
     )

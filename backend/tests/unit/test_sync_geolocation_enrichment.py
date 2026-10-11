@@ -70,6 +70,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.byok',
         'utils.cloud_tasks',
         'utils.conversations.factory',
+        'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
         'utils.sync.bridge',
@@ -115,7 +116,9 @@ def _prepare(pipeline, wav_paths):
 
     pipeline.run_blocking = _passthrough_run_blocking
     pipeline.decode_files_to_wav = MagicMock(return_value=list(wav_paths))
-    pipeline.retrieve_vad_segments = MagicMock(side_effect=lambda path, segmented, errors: segmented.add(path))
+    pipeline.retrieve_vad_segments = MagicMock(
+        side_effect=lambda path, segmented, errors, **_kwargs: segmented.add(path)
+    )
     pipeline._cleanup_files = MagicMock()
     pipeline.get_timestamp_from_path = MagicMock(return_value=123)
     pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))

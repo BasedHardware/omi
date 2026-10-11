@@ -631,7 +631,7 @@ static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
     }
 
     const char *name = bt_get_name();
-    LOG_INF("Reading device name: %s", name);
+    LOG_DBG("Reading device name");
     return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
 }
 

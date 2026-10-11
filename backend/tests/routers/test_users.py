@@ -78,6 +78,10 @@ def test_location_context_consent_requires_disclosure_before_enabling():
 def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     calls = []
 
+    async def run_wipe(*args):
+        calls.append((users_router.run_deletion_wipe_with_lease, args))
+        return False
+
     async def run_blocking(_executor, fn, *args):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -86,13 +90,12 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 3)
 
     response = asyncio.run(
@@ -105,13 +108,17 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1', 0, False)),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token')),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
     background_args = []
+
+    async def run_wipe(*args):
+        background_args.append(args)
+        return False
 
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -120,14 +127,12 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            background_args.append(args)
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 2)
 
     response = asyncio.run(
@@ -138,7 +143,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
-    assert background_args == [('uid1', 1, True)]
+    assert background_args == [('uid1', 1, True, 'lock-token')]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
@@ -256,6 +261,11 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     assert reconcile() == {'requeued': 1, 'skipped': 0}
     assert state['enqueue_attempts'] == 2
 
+    async def run_wipe(*args):
+        state['wipe_runs'] += 1
+        state['status'] = 'completed'
+        return True
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             if state['status'] == 'completed':
@@ -265,15 +275,12 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            state['wipe_runs'] += 1
-            state['status'] = 'completed'
-            return True
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     first = asyncio.run(
         users_router.run_account_deletion_wipe(_FakeRequest({'job_id': 'job-1'}), task_authentication=_task_auth())
@@ -314,6 +321,9 @@ def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
 def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     released = []
 
+    async def run_wipe(*args):
+        raise asyncio.CancelledError()
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -321,14 +331,13 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            raise asyncio.CancelledError()
         if fn is users_router.release_job_run_lock:
             released.append(args)
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     try:
         asyncio.run(
@@ -936,3 +945,44 @@ def test_get_memory_summary_rating_without_score():
         result = users_router.get_memory_summary_rating(memory_id='mem-1')
 
     assert result == {'has_rating': False}
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'completed': True},
+        {'acquisition_source': 'Friend'},
+        {'device_onboarding_completed': True},
+        {'completed': False, 'acquisition_source': ''},
+        {},
+    ],
+)
+def test_onboarding_patch_writes_only_submitted_fields(payload):
+    with patch.object(users_router, 'get_user_onboarding_state') as read, patch.object(
+        users_router, 'set_user_onboarding_state'
+    ) as write:
+        result = users_router.update_onboarding_state(users_router.OnboardingStateUpdate(**payload), uid='owner')
+    assert result == {'status': 'ok'}
+    read.assert_not_called()
+    write.assert_called_once_with('owner', payload)
+
+
+def test_onboarding_patch_http_preserves_previous_completion(monkeypatch):
+    state = {'completed': False, 'acquisition_source': '', 'future_field': 'keep'}
+    monkeypatch.setattr(users_router, 'get_user_onboarding_state', lambda uid: dict(state))
+    monkeypatch.setattr(users_router, 'set_user_onboarding_state', lambda uid, updates: state.update(updates))
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'fixture-owner'
+    with TestClient(app) as client:
+        completed = client.patch('/v1/users/onboarding', json={'completed': True})
+        source = client.patch('/v1/users/onboarding', json={'acquisition_source': 'Friend'})
+        tutorial = client.patch('/v1/users/onboarding', json={'device_onboarding_completed': True})
+    assert completed.status_code == source.status_code == tutorial.status_code == 200
+    assert completed.json() == {'status': 'ok', 'message': None}
+    assert state == {
+        'completed': True,
+        'acquisition_source': 'Friend',
+        'device_onboarding_completed': True,
+        'future_field': 'keep',
+    }

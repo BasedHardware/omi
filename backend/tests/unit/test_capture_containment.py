@@ -7,6 +7,7 @@ coverage stays at 0.8125 >= 0.8.
 
 import logging
 import time
+from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -119,6 +120,13 @@ def test_dict_and_model_rows_agree():
     by_model = cc.measure_capture_containment(pendant, model)
     by_dict = cc.measure_capture_containment(pendant, laptop)
     assert by_model == by_dict
+
+
+def test_non_dict_mapping_rows_and_segments_agree():
+    pendant, laptop = complementary_pair()
+    mapping = UserDict(laptop)
+    mapping['transcript_segments'] = [UserDict(item) for item in laptop['transcript_segments']]
+    assert cc.measure_capture_containment(pendant, mapping) == cc.measure_capture_containment(pendant, laptop)
 
 
 def test_unrelated_meetings_with_user_speech_do_not_join():
@@ -1029,6 +1037,15 @@ def test_whole_pair_bundle_check_budget_at_exact_limit_accepts(monkeypatch):
     assert not decision.would_join and decision.reason == 'bounds_bundle_checks'
 
 
+# CPU ceiling for one decision batch. These run at 0.03-0.18 s on an idle machine,
+# but process_time still grows on a shared CI runner whose cores and caches other
+# test processes are using, and 0.30 s failed there for unchanged code. The call,
+# token and cell budgets asserted below bound the work exactly; this ceiling,
+# the fast-unit guard's fail limit, only has to catch an order-of-magnitude
+# regression.
+CPU_CEILING_SECONDS = 1.0
+
+
 @pytest.mark.parametrize('layout', ['maximum', 'exhaustion', 'adversarial'])
 def test_whole_pair_decision_cpu_stays_bounded(layout):
     if layout == 'maximum':
@@ -1041,7 +1058,7 @@ def test_whole_pair_decision_cpu_stays_bounded(layout):
     for _ in range(6):
         cc.measure_capture_containment(first, second)
     elapsed = time.process_time() - start
-    assert elapsed < 0.30, elapsed
+    assert elapsed < CPU_CEILING_SECONDS, elapsed
 
 
 def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
@@ -1063,7 +1080,7 @@ def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
         elapsed = time.process_time() - start
         assert decision.would_join and decision.reason == 'contained' and decision.basis == 'sampled'
         assert decision.coverage >= cc.MIN_COVERAGE and decision.support_seconds >= cc.MIN_SUPPORT_SECONDS
-        assert elapsed < 0.30, elapsed
+        assert elapsed < CPU_CEILING_SECONDS, elapsed
         assert 0 < len(matched_inputs) <= cc.MAX_MATCHER_CALLS
         assert sum(tokens for _, tokens, _ in matched_inputs) <= cc.MAX_COMPARED_TOKENS
         assert sum(cells for _, _, cells in matched_inputs) <= cc.MAX_TOKEN_COMPARISONS
@@ -1080,7 +1097,7 @@ def test_full_population_two_hour_pair_abstains_on_matcher_budget(monkeypatch):
         decision = cc.measure_capture_containment(first, second, mode='on')
         elapsed = time.process_time() - start
         assert not decision.would_join and decision.reason == 'bounds_matcher_calls' and decision.basis == 'full'
-        assert len(calls) == cc.MAX_MATCHER_CALLS == 128 and elapsed < 0.30
+        assert len(calls) == cc.MAX_MATCHER_CALLS == 128 and elapsed < CPU_CEILING_SECONDS
 
 
 def test_two_hour_unrelated_pendant_never_joins():

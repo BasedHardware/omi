@@ -25,10 +25,12 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -64,7 +66,14 @@ class HomeDeepLink {
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
         'action-items' || 'task' => HomeProvider.tasksTab,
-        'memories' || 'facts' || 'memory' || 'search' || 'conversations' || 'conversation' => HomeProvider.homeTab,
+        'capture' ||
+        'memories' ||
+        'facts' ||
+        'memory' ||
+        'search' ||
+        'conversations' ||
+        'conversation' =>
+          HomeProvider.homeTab,
         _ => null,
       };
 }
@@ -89,6 +98,12 @@ Future<bool> openHomeDeepLink(
   if (canOpen != null && !canOpen()) return false;
   final id = link.id;
   switch (link.alias) {
+    case 'capture':
+      final capture = context.read<CaptureProvider>();
+      context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
+      // A card for a recording that has since ended leaves Home on screen.
+      if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) return false;
+      unawaited(routeToPage(context, const ConversationCapturingPage()));
     case 'conversations':
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
     case 'action-items':

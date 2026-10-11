@@ -658,7 +658,11 @@ enum GeneratedRealtimeTools {
             "notifications",
             "accessibility",
             "automation",
-            "full_disk_access"
+            "full_disk_access",
+            "contacts",
+            "calendars",
+            "reminders",
+            "photos"
           ],
           "description": "Optional permission type. Omit to return all supported permissions."
         }
@@ -681,9 +685,13 @@ enum GeneratedRealtimeTools {
             "notifications",
             "accessibility",
             "automation",
-            "full_disk_access"
+            "full_disk_access",
+            "contacts",
+            "calendars",
+            "reminders",
+            "photos"
           ],
-          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
+          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, full_disk_access, contacts, calendars, reminders, or photos"
         }
       },
       "required": [

@@ -43,6 +43,13 @@ enum AgentErrorClassifier {
     "Omi's local AI runtime is not installed correctly, so chat can't start. "
     + "Reinstall or update Omi to repair it."
 
+  /// A transport status identifies a billing rejection, not whose account
+  /// paid for the request. BYOK and managed requests can share the same proxy.
+  static let billingFailureMessage =
+    "The AI service declined this request for billing reasons. "
+    + "Check your provider and API key in Settings → AI & Automation. "
+    + "If they look correct, contact Omi Support. Resending the same message won't help."
+
   /// Worker recycle rewrites `userMessage` to "send again" while leaving the
   /// provider's 402 on `technicalMessage`. Classify both or the billing rule
   /// never fires and the transcript falls through to the unclassified marker.
@@ -67,6 +74,15 @@ enum AgentErrorClassifier {
       return ClassifiedAgentError(
         code: .userInterrupted,
         userMessage: "Response stopped.",
+        retryable: false)
+    }
+    // Surfaces classify displayed copy again. Recognize both the current
+    // sentence and the old managed-lane wording before its "Plan and Usage"
+    // advice can turn a billing rejection into a plan-limit diagnosis.
+    if lower.contains("declined this request for billing reasons") {
+      return ClassifiedAgentError(
+        code: .providerBillingExhausted,
+        userMessage: billingFailureMessage,
         retryable: false)
     }
     // Plan/usage cap — retrying just re-hits the cap (measured retry storms in
@@ -143,7 +159,7 @@ enum AgentErrorClassifier {
         retryable: true)
     }
 
-    // The Omi-account proxy answers an exhausted billing lane with a bare 402
+    // The desktop proxy answers an exhausted billing lane with a bare 402
     // and no body, so the raw transport string ("HTTP 402 status code (no
     // body)") fell through to `unknown` and was shown verbatim — and, worse,
     // marked retryable, which is the retry storm this classifier exists to
@@ -158,19 +174,13 @@ enum AgentErrorClassifier {
     {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,
-        userMessage:
-          "Omi's managed AI service declined this request for billing reasons. "
-          + "This request ran on the managed lane — your own provider key is used only "
-          + "when the request goes to a provider you hold a key for. Check Settings → "
-          + "Plan and Usage, or add a key for the provider this path uses. "
-          + "Resending the same message won't help.",
+        userMessage: billingFailureMessage,
         retryable: false)
     }
     if lower.contains("credit balance is too low") {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,
-        userMessage:
-          "Your Anthropic credit balance is too low. Add credits in your Anthropic account (Plans & Billing), then send your message again.",
+        userMessage: billingFailureMessage,
         retryable: false)
     }
     if lower.contains("oauth callback timed out") {

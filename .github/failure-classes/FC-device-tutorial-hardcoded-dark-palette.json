@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-device-tutorial-hardcoded-dark-palette",
+  "violated_contract": "Pendant tutorial step titles, subtitles, cards and the Continue button must stay readable on the tutorial's surface gradient in both light and dark appearance.",
+  "canonical_prevention": "Resolve every tutorial text, card and button color from the active OmiColors palette instead of literal white or black, and assert the rendered step scaffold colors against both palettes.",
+  "canonical_prevention_artifact": ["app/test/widgets/device_onboarding_step_contrast_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/pages/onboarding/interactive_device_onboarding/"],
+  "status": "open"
+}

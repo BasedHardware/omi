@@ -160,25 +160,21 @@ def _span_covers_uniform(
     return next_boundary is None or next_boundary >= hi_index
 
 
-def validated_committed_ranges(
+def validated_committed_runs(
     claim: Mapping,
     envelopes: Sequence[Mapping],
-    *,
-    wal_start_seconds: object,
-    frame_samples: Sequence[int] | None,
-) -> tuple[tuple[int, int], ...] | None:
-    """Committed-transcript source-frame intervals for one WAL file claim.
+) -> tuple[Mapping, ...] | None:
+    """Validated committed runs for one claim, independent of observed WAL context.
 
-    Returns () when no committed proof applies (caller keeps all audio), None
-    when relevant evidence or observed WAL context is malformed or conflicting
-    (caller abstains the whole batch). Receipt-only envelopes and foreign
-    roots/epochs contribute nothing; only validated committed runs clipped to
-    the observed WAL domain yield ranges.
+    Returns the runs whose proof, envelope and lifetime evidence hold under the
+    committed-transcript contract: receipt-only envelopes and foreign
+    roots/epochs contribute nothing, while malformed or conflicting matching
+    evidence returns None (the caller abstains). The runs carry their source
+    frame geometry and receipt-wall anchors; whether they cover the caller's
+    coordinates is the consumer's own decision.
     """
     if not _validate_claim(claim):
         return None
-    if wal_start_seconds is None or frame_samples is None:
-        return ()
     raw_envelopes: Any = envelopes
     if raw_envelopes is None:
         return None
@@ -188,25 +184,10 @@ def validated_committed_ranges(
         return None
     if envelope_count > MAX_ENVELOPES:
         return None
-    if not _is_finite_seconds(wal_start_seconds) or wal_start_seconds <= 0:
-        return None
-    spans = _uniform_spans(frame_samples)
-    if spans is None:
-        return None
-    span_starts = [start for start, _ in spans]
-    frame_count = len(frame_samples)
-    if frame_count > claim['frame_count']:
-        return None
-    offsets = [0]
-    for index in range(frame_count):
-        offsets.append(offsets[-1] + frame_samples[index])
-
     root = claim['capture_root']
     epoch = claim['clock_epoch']
     rate = claim['rate_hz']
     channel = claim['channel']
-    domain_start = claim['source_frame_start']
-    domain_end = domain_start + frame_count
 
     committed_runs: list[Mapping] = []
     lifetimes: list[Mapping] = []
@@ -293,6 +274,48 @@ def validated_committed_ranges(
                 or second['receipt_wall_end'] < first['receipt_wall_start'] - MAX_CAPTURE_LIFETIME_SKEW_SECONDS
             ):
                 return None
+    return tuple(committed_runs)
+
+
+def validated_committed_ranges(
+    claim: Mapping,
+    envelopes: Sequence[Mapping],
+    *,
+    wal_start_seconds: object,
+    frame_samples: Sequence[int] | None,
+) -> tuple[tuple[int, int], ...] | None:
+    """Committed-transcript source-frame intervals for one WAL file claim.
+
+    Returns () when no committed proof applies (caller keeps all audio), None
+    when relevant evidence or observed WAL context is malformed or conflicting
+    (caller abstains the whole batch). Receipt-only envelopes and foreign
+    roots/epochs contribute nothing; only validated committed runs clipped to
+    the observed WAL domain yield ranges.
+    """
+    if not _validate_claim(claim):
+        return None
+    if wal_start_seconds is None or frame_samples is None:
+        return ()
+    if not _is_finite_seconds(wal_start_seconds) or wal_start_seconds <= 0:
+        return None
+    spans = _uniform_spans(frame_samples)
+    if spans is None:
+        return None
+    span_starts = [start for start, _ in spans]
+    frame_count = len(frame_samples)
+    if frame_count > claim['frame_count']:
+        return None
+    offsets = [0]
+    for index in range(frame_count):
+        offsets.append(offsets[-1] + frame_samples[index])
+
+    rate = claim['rate_hz']
+    domain_start = claim['source_frame_start']
+    domain_end = domain_start + frame_count
+
+    committed_runs = validated_committed_runs(claim, envelopes)
+    if committed_runs is None:
+        return None
 
     proven: list[tuple[int, int]] = []
     for run in committed_runs:

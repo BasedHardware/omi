@@ -49,6 +49,7 @@ from utils.stt.live_failure import (
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome, bounded_provider
 from utils.stt.recovery_state import LiveRecoveryController
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.stt.soniox import (
     SONIOX_DEATH_IDLE_TIMEOUT,
     SONIOX_DEATH_ROTATION,
@@ -491,7 +492,10 @@ async def test_failover_on_a_typed_402_death_opens_the_selection_circuit():
     ), patch('utils.stt.streaming.open_provider_selection_circuit', side_effect=opener):
         assert await receiver._failover_stt_socket() is True
 
-    assert receiver.stt_socket is healthy
+    # Replacement legs always adopt the bounded paced tail now (empty prefix
+    # included) so receive/disconnect observation never stalls behind it.
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert calls == [('soniox', 'provider_budget_exhausted')]
 
 

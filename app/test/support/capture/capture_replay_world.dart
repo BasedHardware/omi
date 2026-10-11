@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -303,6 +304,8 @@ class CaptureReplayWorld {
 
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
+  CalendarCaptureGapMonitor? calendarGapMonitor;
+
   bool _disposed = false;
   bool _controllerDisposed = false;
 
@@ -314,6 +317,7 @@ class CaptureReplayWorld {
     bool initiallyConnected = true,
     bool supportsBatch = true,
     BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
+    CalendarCaptureGapMonitor? calendarGapMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -323,6 +327,7 @@ class CaptureReplayWorld {
       uploads: ScriptedUploads(VirtualClock(start)),
       pendantCodec: pendantCodec,
     );
+    world.calendarGapMonitor = calendarGapMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -377,6 +382,7 @@ class CaptureReplayWorld {
     connectivityStream = StreamController<bool>.broadcast();
     _controller = _ReplayCaptureController(
       world: this,
+      calendarGapMonitor: calendarGapMonitor,
       walService: wal,
       phoneMicRecorder: mic,
       phoneMicBatchSupported: supportsBatch,
@@ -592,6 +598,7 @@ class _ReplayCaptureController extends CaptureController {
     super.deviceConnectionLoader,
     super.processInProgressConversation,
     super.omiCallState,
+    super.calendarGapMonitor,
   });
 
   @override

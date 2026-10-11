@@ -213,6 +213,8 @@ class PureSocket implements IPureSocket {
         return 'auth_token_refresh_required';
       case 4004:
         return 'auth_relogin_required';
+      case 4005:
+        return 'account_deletion_in_progress';
       default:
         return 'unknown';
     }

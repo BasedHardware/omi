@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,10 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
-import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 
 const _darkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
 
@@ -290,6 +292,180 @@ void main() {
       final parsed = jsonDecode(claim!);
       expect(parsed['version'], 1);
       expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
+    });
+
+    test('a mid-buffer root rotation stores and uploads one claim per run', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      SharedPreferencesUtil().uid = 'account-a';
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final first = evidenceRecords();
+      final rootA = singleRoot(first);
+
+      SharedPreferencesUtil().uid = 'account-b';
+      await captureSeconds(1, frameCursor: 10000);
+      final rootB = singleRoot(evidenceRecords().sublist(first.length));
+      expect(rootB, isNot(rootA));
+
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 20000);
+
+      await world.wal.syncs.phone.finalizeCurrentSession();
+
+      final wals = await world.wal.syncs.phone.getAllWals();
+      final byRoot = {for (final wal in wals) wal.captureRoot: wal};
+      expect(byRoot.keys.toSet(), {rootA, rootB}, reason: 'each contiguous run keeps its own claim');
+      expect((byRoot[rootA]!.sourceFrameStart, byRoot[rootA]!.totalFrames), (0, 100));
+      expect((byRoot[rootB]!.sourceFrameStart, byRoot[rootB]!.totalFrames), (0, 200));
+      expect(byRoot[rootA]!.channel, 1);
+      expect(byRoot[rootA]!.sampleRate, greaterThan(0));
+
+      world.setConnected(true);
+      await world.wal.syncs.phone.syncAll();
+      final claim = world.uploads.attempts.last.captureEvidence;
+      expect(claim, isNotNull);
+      final parsed = jsonDecode(claim!);
+      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {rootB});
+    });
+
+    test('a pendant opus_fs320 stream claims with the normalized opus codec', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await world.dispose();
+      world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opusFS320);
+      final link = ScriptedDeviceConnection();
+      world.deviceConnection = link;
+      final pendant = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+
+      for (var i = 0; i < 60; i++) {
+        link.emitAudio();
+      }
+      await world.settle();
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await world.wal.syncs.phone.finalizeCurrentSession();
+
+      final wals = await world.wal.syncs.phone.getAllWals();
+      final rooted = wals.where((wal) => wal.captureRoot != null).toList();
+      expect(rooted, isNotEmpty, reason: 'the pendant live stream carries rooted frames');
+      final wal = rooted.single;
+      expect(wal.codec, BleAudioCodec.opusFS320);
+      expect(wal.channel, 1);
+      expect(wal.totalFrames, greaterThan(0));
+
+      world.setConnected(true);
+      await world.wal.syncs.phone.syncAll();
+      final claim = world.uploads.attempts.last.captureEvidence;
+      expect(claim, isNotNull);
+      final parsed = jsonDecode(claim!);
+      final file = (parsed['files'] as List).single;
+      expect(file['codec'], 'opus', reason: 'the wire token stays opus for every supported Opus variant');
+      expect(file['frame_count'], wal.totalFrames);
+      expect(file['capture_root'], wal.captureRoot);
+    });
+
+    test('a native interruption and recovery keeps one root with contiguous ordinals', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final root = singleRoot(evidenceRecords());
+      final sessionId = world.hostApi.lastStartSessionId!;
+
+      world.emitNativeState(PhoneMicCaptureState.interrupted, sessionId: sessionId);
+      await world.settle();
+      world.emitNativeState(PhoneMicCaptureState.running, sessionId: sessionId);
+      await world.settle();
+      await captureSeconds(1, frameCursor: 10000);
+
+      final records = evidenceRecords();
+      expect(records, hasLength(200));
+      expect(singleRoot(records), root);
+      expect([for (final r in records) r['source_frame']], List.generate(200, (i) => i));
+
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 20000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
+
+      final rooted = (await world.wal.syncs.phone.getAllWals()).where((w) => w.captureRoot != null).toList();
+      expect(rooted, isNotEmpty);
+      expect(rooted.map((w) => w.captureRoot).toSet(), {root});
+    });
+
+    test('a padded phone-mic flush tail keeps the session root and frame count', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await startRunning();
+      final sessionId = world.hostApi.lastStartSessionId!;
+
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      world.mic.onAudioFrame(Uint8List.fromList(List.filled(700, 0xAB)), sessionId);
+      await world.settle();
+      await world.stopLiveCapture();
+      await world.wal.syncs.phone.finalizeCurrentSession();
+
+      final rooted = (await world.wal.syncs.phone.getAllWals()).where((w) => w.captureRoot != null).toList();
+      expect(rooted, isNotEmpty, reason: 'the padded tail lands in a rooted WAL');
+      final wal = rooted.last;
+      final root = wal.captureRoot;
+      expect(wal.sourceFrameStart, 0);
+      expect(wal.totalFrames, 3, reason: 'two full frames plus one zero-padded tail');
+      final walPath = await Wal.getFilePath(wal.filePath);
+      final bytes = await File(walPath!).readAsBytes();
+      var offset = 0;
+      var frames = 0;
+      var lastLength = 0;
+      while (offset + 4 <= bytes.length) {
+        lastLength = ByteData.sublistView(bytes, offset).getUint32(0, Endian.little);
+        offset += 4 + lastLength;
+        frames++;
+      }
+      expect(frames, 3);
+      expect(lastLength, 320);
+
+      world.setConnected(true);
+      await world.wal.syncs.phone.syncAll();
+      final claim = world.uploads.attempts.last.captureEvidence;
+      expect(claim, isNotNull);
+      final parsed = jsonDecode(claim!);
+      expect((parsed['files'] as List).map((f) => f['frame_count']).toSet(), {3});
+      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
+    });
+
+    test('a reconnect keeps the claim namespace and uploads the recovered WAL claims', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final root = singleRoot(evidenceRecords());
+
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 10000);
+
+      world.setConnected(true);
+      await world.settle();
+      await captureSeconds(1, frameCursor: 20000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
+
+      final wals = await world.wal.syncs.phone.getAllWals();
+      final rooted = wals.where((w) => w.captureRoot != null).toList();
+      expect(rooted, isNotEmpty);
+      expect(rooted.map((w) => w.captureRoot).toSet(), {root});
+
+      await world.wal.syncs.phone.syncAll();
+      final claimed = world.uploads.attempts.where((a) => a.captureEvidence != null).toList();
+      expect(claimed, isNotEmpty);
+      for (final attempt in claimed) {
+        final parsed = jsonDecode(attempt.captureEvidence!);
+        expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
+      }
     });
   });
 

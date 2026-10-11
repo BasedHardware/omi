@@ -36,7 +36,7 @@ from typing import Any
 import database.users as users_db
 from config.plan_catalog import PAID_PLAN_TYPES, PlanType, WIRE_PLAN_ALIASES
 from utils.byok import get_byok_key, has_validated_byok_keys
-from utils.llm.model_config import get_all_configured_features, get_provider
+from utils.llm.model_config import get_all_configured_features, get_byok_provider, get_provider
 from utils.subscription import request_has_llm_byok_key
 
 logger = logging.getLogger(__name__)
@@ -151,15 +151,16 @@ def _decision(
 
 
 def request_carries_validated_byok_key(feature: str) -> bool:
-    """True when this request carries a validated key for the feature's provider.
+    """True when this request carries a validated key for the feature's selected provider.
 
     Reuses the existing helpers; does not re-implement fingerprint checks.
-    The provider key must actually be on the request so a validated OpenAI
-    header cannot fund a different provider's feature.
+    A feature can have a company-paid Luna route and retain a different
+    provider in its BYOK profile. Either exact feature provider may fund the
+    request; a key for an unrelated provider cannot.
     """
     if not has_validated_byok_keys():
         return False
-    if not get_byok_key(get_provider(feature)):
+    if not any(get_byok_key(provider) for provider in {get_provider(feature), get_byok_provider(feature)}):
         return False
     return request_has_llm_byok_key()
 

@@ -26,6 +26,7 @@ def commit_manual_assignment(
     segment_index: Optional[int] = None,
     use_for_speech_training: bool = True,
     rejection: Optional[dict] = None,
+    time_range: Optional[tuple[float, float]] = None,
     background_tasks: Any = None,
 ):
     """The assignment transaction plus the background work it earned, one call."""
@@ -39,6 +40,7 @@ def commit_manual_assignment(
         segment_index=segment_index,
         use_for_speech_training=use_for_speech_training,
         rejection=rejection,
+        time_range=time_range,
     )
     if background_tasks is not None:
         schedule_assignment_teaching(

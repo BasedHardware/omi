@@ -1,0 +1,58 @@
+name: Firestore read ledger reconcile
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: Closed UTC day to reconcile (YYYY-MM-DD; blank uses the D-2 settled day)
+        required: false
+        type: string
+  schedule:
+    - cron: '30 16 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    # The prod WIF provider attribute condition requires a GitHub environment
+    # assertion. Scheduled runs without one die at google-github-actions/auth@v3
+    # with unauthorized_client. `cron` is a new no-approval environment — do NOT
+    # reuse `prod`, whose required human reviewers would gate this daily schedule.
+    environment: cron
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate for read-only reconciliation
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+          project_id: based-hardware
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # google-auth (for the in-process BigQuery token) is a runtime backend
+      # dependency but the runner's system python3 is bare, matching the
+      # established per-workflow pip pattern.
+      - name: Install google-auth for the reconcile script
+        run: python3 -m pip install -q google-auth
+
+      - name: Reconcile closed UTC day
+        env:
+          REQUESTED_DAY: ${{ inputs.day }}
+        run: |
+          set -euo pipefail
+          day="$REQUESTED_DAY"
+          if [[ -z "$day" ]]; then
+            # Score D-2, not D-1: Firestore billing-export rows keep monetizing
+            # into later _PARTITIONTIME partitions for 10-30+ hours, so a D-1 run
+            # under-counts the bill and can flip the residual sign (measured on
+            # Oct 6: 32% of usage landed in the next day's partition).
+            day="$(date -u -d '2 days ago' +%F)"
+          fi
+          python3 backend/scripts/firestore_read_reconcile.py --day "$day"

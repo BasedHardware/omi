@@ -336,6 +336,23 @@ struct KernelJournalRemoteTurn: Sendable {
 
 @MainActor
 extension KernelJournalTurn {
+  var isAutomaticChatEntry: Bool {
+    let metadata = Self.metadataObject(metadataJSON)
+    return producerId.hasPrefix("chat-first-intent:")
+      || producerId.hasPrefix("cold-start-sequence:")
+      || metadata["chatFirstIntentId"] != nil
+      || metadata["chatFirstIntentSource"] != nil
+      || metadata["messageType"] as? String == "day_summary"
+      || (ChatContentBlockCodec.decode(contentBlocksJSON) ?? []).contains { block in
+        if case .questionCard(_, _, _, let subjectKind, _, _, _) = block { return subjectKind == "cold_start" }
+        return false
+      }
+      || origin == "proactive_notification"
+      || metadata["origin"] as? String == "proactive_notification"
+      || metadata["messageSource"] as? String == "proactive_notification"
+      || (role == "assistant" && (metadata["continuityKey"] as? String)?.hasPrefix("notification:") == true)
+  }
+
   func chatMessage() -> ChatMessage {
     let metadata = Self.metadataObject(metadataJSON)
     let continuityKey =

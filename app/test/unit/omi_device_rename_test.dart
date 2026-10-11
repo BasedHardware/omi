@@ -27,6 +27,8 @@ class _FakeOmiTransport extends DeviceTransport {
   /// that acknowledged the write but did not apply it).
   String? readbackOverride;
 
+  List<int>? chargingValue;
+
   final List<(String, String, List<int>)> writes = [];
 
   static const _settings = OmiDeviceConnection.settingsServiceUuid;
@@ -52,6 +54,11 @@ class _FakeOmiTransport extends DeviceTransport {
 
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
+    if (serviceUuid == _settings &&
+        characteristicUuid == OmiDeviceConnection.settingsChargingStatusCharacteristicUuid) {
+      if (chargingValue == null) throw StateError('charging status unavailable');
+      return chargingValue!;
+    }
     if (serviceUuid == _settings && characteristicUuid == _name) {
       if (!supportsDeviceName) throw StateError('characteristic not found');
       return utf8.encode(readbackOverride ?? storedName);
@@ -84,6 +91,19 @@ OmiDeviceConnection _connection(_FakeOmiTransport transport, {String name = 'Omi
     OmiDeviceConnection(BtDevice(id: transport.deviceId, name: name, type: DeviceType.omi, rssi: -40), transport);
 
 void main() {
+  test('rename connector preserves unknown charging reads without a false charge edge', () async {
+    final transport = _FakeOmiTransport();
+    final connection = _connection(transport);
+
+    expect(await connection.readChargingStatus(), isNull);
+    transport.chargingValue = [];
+    expect(await connection.readChargingStatus(), isNull);
+    transport.chargingValue = [0];
+    expect(await connection.readChargingStatus(), isFalse);
+    transport.chargingValue = [1];
+    expect(await connection.readChargingStatus(), isTrue);
+  });
+
   group('performSetDeviceName', () {
     test('writes UTF-8 to 19B10014, confirms by readback and updates the local record', () async {
       final transport = _FakeOmiTransport();

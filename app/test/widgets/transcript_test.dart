@@ -91,6 +91,58 @@ void main() {
   });
 
   group('Speaker label display', () {
+    for (final source in ['auto', 'manual']) {
+      testWidgets('Omi speaker with $source label stays inert', (tester) async {
+        await setupSharedPreferences();
+        var edits = 0;
+        final segment = segmentFor('omi', omiSpeakerId)..speakerLabelSource = source;
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment], editSegment: (_, __) => edits++)),
+        ));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('edit_speaker_label_omi')), findsNothing);
+        expect(find.text('Omi'), findsOneWidget);
+        await tester.tap(find.text('Omi'));
+        await tester.pump();
+        expect(edits, 0);
+      });
+    }
+
+    for (final source in ['auto', 'manual', 'carried']) {
+      testWidgets('$source live labels have an edit button only at turn starts', (tester) async {
+        await setupSharedPreferences(cachedPeople: [
+          {'id': 'maya', 'name': 'Maya', 'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z'},
+        ]);
+        TranscriptSegment named(String id) => segmentFor(id, 1)
+          ..personId = 'maya'
+          ..speakerLabelSource = source;
+        final edited = <String>[];
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+              body: TranscriptWidget(
+            segments: [named('first'), named('mid'), segmentFor('other', 2), named('next-turn')],
+            editSegment: (id, _) => edited.add(id),
+          )),
+        ));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('edit_speaker_label_first')), findsOneWidget);
+        expect(find.byKey(const ValueKey('edit_speaker_label_mid')), findsNothing);
+        expect(find.byKey(const ValueKey('edit_speaker_label_next-turn')), findsOneWidget);
+        expect(
+            find.byKey(Key(source == 'auto' ? 'speaker_label_likely' : 'speaker_label_confirmed')), findsNWidgets(2));
+        // The middle line retains the existing plain-name correction entry point.
+        final names = find.text('Maya');
+        expect(names, findsNWidgets(3));
+        await tester.tap(names.at(1));
+        await tester.pump();
+        expect(edited, ['mid']);
+      });
+    }
+
     testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();
       await setupSharedPreferences(

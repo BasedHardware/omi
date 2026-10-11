@@ -181,7 +181,9 @@ void main() {
       expect(find.text(l10n.reconnecting), findsOneWidget);
       expect(find.textContaining(l10n.captureStillRecording), findsOneWidget);
       expect(find.text(l10n.paused), findsNothing);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      // The one-line pill has no warning glyph: the dot and the status turn amber instead
+      // (capture_home_ui_test asserts the same for a transcription outage).
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
     });
 
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {

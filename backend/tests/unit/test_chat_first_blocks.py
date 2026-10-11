@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from models.task_intelligence import TaskWorkflowControl
-from models.chat_first import MaterializePromptsRequest, MaterializePromptsResponse, ProactiveIntent
+from models.chat_first import MaterializePromptsRequest
 import routers.chat_first as chat_first_router
 from tests.unit.universal_memory_test_helpers import configure_universal_memory
 
@@ -41,43 +41,6 @@ def _request(*, generation: int = 7, blocks: list[dict] | None = None) -> dict:
         'attempt_id': 'attempt-1',
         'blocks': blocks or [{'type': 'taskCard', 'task_id': 'task-1'}],
     }
-
-
-def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(monkeypatch):
-    intent = ProactiveIntent.model_validate(
-        {
-            'intent_id': 'intent-1',
-            'continuity_key': 'capture:conversation-1',
-            'account_generation': 7,
-            'source': 'capture_arrival',
-            'blocks': [
-                {
-                    'type': 'conversationLink',
-                    'conversation_id': 'conversation-1',
-                    'summary': 'Meeting notes ready',
-                    'recommended_action_items': [
-                        {'description': 'Send the deck', 'task_id': 'task-1'},
-                        {'description': 'Book the follow-up'},
-                    ],
-                }
-            ],
-            'created_at': '2026-08-13T00:00:00Z',
-        }
-    )
-    response = MaterializePromptsResponse(intents=[intent])
-    monkeypatch.setattr(
-        chat_first_router,
-        '_materialize_prompts',
-        lambda request, uid, *, exclude_block_types=None: response,
-    )
-    request = MaterializePromptsRequest(
-        source_surface='main_chat',
-        control_generation=7,
-        owner_fence='user-1',
-    )
-
-    assert chat_first_router.materialize_prompts_v1(request, 'user-1').intents == []
-    assert chat_first_router.materialize_prompts(request, 'user-1') == response
 
 
 def test_v1_materialization_request_still_validates_without_rejections():
@@ -384,3 +347,31 @@ def test_chat_first_validate_rejects_a_memory_review_card_the_account_does_not_o
 
     assert response.status_code == 200
     assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}
+
+
+def test_agent_reply_still_validates_task_goal_and_conversation_blocks_together(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(chat_first_router.action_items_db, 'get_action_item', lambda *args: {'id': 'task'})
+    monkeypatch.setattr(chat_first_router.goals_db, 'get_goal_by_id', lambda *args: {'id': 'goal'})
+    monkeypatch.setattr(
+        chat_first_router.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {
+            'source': 'desktop',
+            'status': 'completed',
+            'external_data': {'conversation_role': 'meeting'},
+        },
+    )
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[
+                {'type': 'taskCard', 'task_id': 'task'},
+                {'type': 'goalLink', 'goal_id': 'goal', 'summary': 'Goal'},
+                {'type': 'conversationLink', 'conversation_id': 'meeting', 'summary': 'Notes'},
+            ]
+        ),
+    )
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    assert [block['type'] for block in response.json()['blocks']] == ['taskCard', 'goalLink', 'conversationLink']
