@@ -4584,11 +4584,11 @@ class MemoryService:
         def build_patch(item, now):
             if item.uid != uid or item.status != MemoryItemStatus.active:
                 raise HTTPException(status_code=404, detail='Memory not found')
-            promotion = dict(item.promotion or {})
+            metadata = dict(item.promotion or {})
             if memory_item_to_memorydb(item).is_locked:
                 raise HTTPException(status_code=402, detail='A paid plan is required to access this memory')
-            promotion['chat_deleted'] = True
-            return {}, {'promotion_audit': promotion}
+            metadata['chat_deleted'] = True
+            return {}, {'promotion_audit': metadata}
 
         _, updated = apply_canonical_user_mutation(
             uid, memory_id, mutation_kind='chat_remove', build_patch=build_patch, db_client=self.db_client
