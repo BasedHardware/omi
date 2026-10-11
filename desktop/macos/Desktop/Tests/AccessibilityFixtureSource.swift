@@ -15,6 +15,9 @@ struct FixtureAXNode {
   var isSelected = false
   /// Every read of this element times out, as a hung app does.
   var timesOut = false
+  /// Every read of this element times out until the fixture clock reaches
+  /// this time, as WebKit does while it builds a background window's tree.
+  var timesOutUntil: TimeInterval?
   /// Hidden until an assistive-tree flag is switched on and a moment has
   /// passed, as Electron and Chromium do.
   var assistiveOnly = false
@@ -112,6 +115,7 @@ struct FixtureAccessibilitySource: AccessibilityElementSource {
     clock?.advance(secondsPerRead)
     guard let node = nodes[element] else { throw .invalidElement }
     if node.timesOut { throw .timedOut }
+    if let until = node.timesOutUntil, (clock?.now ?? .infinity) < until { throw .timedOut }
     recorder.visitedElements.insert(element)
     return node
   }

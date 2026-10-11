@@ -151,6 +151,37 @@ struct WindowSnapshotWalker<Source: AccessibilityElementSource> {
       }
     }
 
+    var result = read(
+      request, start: start, deadline: deadline, isExpired: isExpired, assistiveTreeEnabled: assistiveTreeEnabled)
+    // WebKit (Safari, Mail) builds a background window's Accessibility tree
+    // lazily, and an app just reopened (WhatsApp) answers nothing for a
+    // moment, so the first read can fail before anything is read. Read again
+    // after a short pause, at most twice; the whole read keeps its one deadline.
+    for wait in Self.notRespondingRetryPauses {
+      guard case .failure(let failure) = result, failure.reason == "app_not_responding",
+        now() + wait < deadline, !isCancelled()
+      else { break }
+      pause(wait)
+      result = read(
+        request, start: start, deadline: deadline, isExpired: isExpired, assistiveTreeEnabled: assistiveTreeEnabled)
+    }
+    return result
+  }
+
+  /// How long to wait before each read again after the whole read failed because the app did not answer.
+  static var notRespondingRetryPauses: [TimeInterval] { [0.5, 1.0] }
+  /// How long to wait before walking a window once more after the app stopped answering mid-walk.
+  static var notRespondingRetryPause: TimeInterval { 0.5 }
+  /// A walk the app stopped answering with fewer elements than this is read once more.
+  static var notRespondingRetryNodeLimit: Int { 5 }
+
+  /// One read of the chosen window: the window list, the pane guard, the walk,
+  /// and at most one more walk when the first was sparse after turning an
+  /// assistive tree on, or stopped answering with almost nothing read.
+  private func read(
+    _ request: WindowSnapshotRequest, start: TimeInterval, deadline: TimeInterval, isExpired: @escaping () -> Bool,
+    assistiveTreeEnabled: Bool
+  ) -> Result<WindowSnapshot, WindowSnapshotFailure> {
     do {
       let windows = try listWindows(isExpired: isExpired, limits: request.limits)
       let chosen = try chooseWindow(request, windows: windows, limits: request.limits)
@@ -175,6 +206,16 @@ struct WindowSnapshotWalker<Source: AccessibilityElementSource> {
         let retry = walkWindow(chosen.element, bounds: bounds, request: request, deadline: deadline)
         if let fatal = retry.fatal { return .failure(fatal) }
         if retry.nodes.count >= walk.nodes.count { walk = retry }
+      }
+      if walk.stopReason == .appNotResponding, walk.nodes.count < Self.notRespondingRetryNodeLimit,
+        now() + Self.notRespondingRetryPause < deadline, !isCancelled()
+      {
+        // The app stopped answering with almost nothing read: WebKit may still be building the tree.
+        pause(Self.notRespondingRetryPause)
+        let retry = walkWindow(chosen.element, bounds: bounds, request: request, deadline: deadline)
+        if retry.fatal == nil, retry.nodes.count > walk.nodes.count || retry.stopReason != .appNotResponding {
+          walk = retry
+        }
       }
       let others = windows.filter { $0.element != chosen.element }.prefix(10).map(\.summary)
       let ordered = WindowSnapshotOrdering.contentFirst(Self.assigningReferences(walk.nodes, limits: request.limits))
