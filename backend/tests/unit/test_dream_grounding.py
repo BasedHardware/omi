@@ -9,7 +9,7 @@ import pytest
 from config.dream_agent import Caps
 from database import dream_store
 from models.dream_agent import Edit, Plan, Cluster, Triage
-from utils import dream_agent, dream_grounding, dream_tools
+from utils import dream_agent, dream_grounding, dream_tools, review
 from utils.llm.shaped_agent import Turn
 
 
@@ -73,6 +73,79 @@ def test_existing_vocabulary_support_is_exact_and_accent_sensitive():
         == 'ungrounded_spelling'
     )
     assert not dream_grounding.contains_spelling('Zuvráh', 'Zuvrah')
+
+
+def test_all_canonical_conversation_sources_prevent_false_independence():
+    rows = {
+        **records(),
+        'memory_items/multi': {
+            'content': 'Zuvrah',
+            'conversation_id': 'later',
+            'evidence': [
+                {'source_type': 'conversation', 'source_id': 'film'},
+                {'source_type': 'conversation', 'source_id': 'later'},
+            ],
+        },
+    }
+    assert dream_grounding.spelling_grounding_rejection(correction(evidence=list(rows)), rows) == 'ungrounded_spelling'
+
+
+@pytest.mark.parametrize('before,after', [('Zuvra', 'Zuvra'), (' ', 'Zuvrah'), ('Zuvra', ' '), (' Zuvra', 'Zuvra ')])
+def test_invalid_spelling_never_reaches_review(before, after):
+    from utils.dream_guards import filter_plan
+
+    edit = correction().model_copy(update={'before': before, 'after': after})
+    sink = {}
+    assert not filter_plan(Plan(edits=[edit]), records(), usage_sink=sink).edits
+    assert sink['rejected'] == {'invalid_spelling': 1}
+
+
+def test_spelling_question_retains_fenced_actionable_source(monkeypatch):
+    seen = []
+    monkeypatch.setattr(dream_tools, 'proposal_fences', lambda *a: {'conversations/film': {'raw': 'original'}})
+    monkeypatch.setattr(dream_tools, 'revalidate_proposal', lambda *a: records())
+    monkeypatch.setattr(dream_tools, 'validate_canonical_proposal', lambda *a: None)
+    monkeypatch.setattr(
+        dream_tools.review_store, 'enqueue_review_proposal', lambda uid, item, **kwargs: seen.append(kwargs)
+    )
+    assert dream_tools.suggest_spelling('synthetic', correction(), records()) == 'suggested'
+    source = seen[0]['source']
+    applied = []
+    monkeypatch.setattr(
+        dream_tools, 'apply_edit', lambda uid, edit, rows, **kwargs: applied.append((edit, kwargs)) or 'applied'
+    )
+    assert dream_tools.answer_spelling('synthetic', source, 'Custom synthetic name')
+    assert applied[0][0].target == 'conversations/film'
+    assert applied[0][0].after == 'Custom synthetic name'
+    assert applied[0][1]['expected_records'] == source['fences']
+    assert not dream_tools.answer_spelling('synthetic', source, 'Zuvra')
+    monkeypatch.setattr(
+        dream_tools,
+        'revalidate_proposal',
+        lambda *a: (_ for _ in ()).throw(dream_tools.review_store.ReviewConflict('changed')),
+    )
+    with pytest.raises(dream_tools.review_store.ReviewConflict, match='changed'):
+        dream_tools.answer_spelling('synthetic', source, 'Zuvrah')
+
+
+def test_review_answer_dispatches_dream_spelling_source(monkeypatch):
+    from models.review import ReviewAnswer, SpellingAnswer
+
+    item = dream_grounding.spelling_question(correction())
+    source = {'spelling_edit': correction().model_dump(mode='python')}
+    monkeypatch.setattr(
+        review.store,
+        'begin_answer',
+        lambda *a: {'retry': False, 'item': item.model_dump(mode='python'), 'source': source, 'version': 'fixture'},
+    )
+    monkeypatch.setattr(review.store, 'finish_answer', lambda uid, item_id, **kwargs: kwargs)
+    seen = []
+    monkeypatch.setattr(
+        dream_tools, 'answer_spelling', lambda uid, snapshot, value: seen.append((snapshot, value)) or True
+    )
+    result = review.answer_item('synthetic', item.item_id, ReviewAnswer(spelling=SpellingAnswer(value='Zuvrah')))
+    assert result['applied']
+    assert seen == [(source, 'Zuvrah')]
 
 
 def test_read_only_eval_shows_zero_ungrounded_auto_applies_and_question():
