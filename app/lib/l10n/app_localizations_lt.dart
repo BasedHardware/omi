@@ -10993,11 +10993,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Laukiančios transkripcijos $count';
-  }
-
-  @override
   String get captureSourceCall => 'Skambutis';
 
   @override
@@ -12042,8 +12037,6 @@ class AppLocalizationsLt extends AppLocalizations {
         'likely': 'Tikėtina',
         'soundsLike': 'Skamba kaip $name',
         'notPerson': 'Ne $name',
-        'carried': 'Vis dar $name. Perkelta iš paskutinio pokalbio.',
-        'change': 'Keisti',
         'alsoTitle': 'Ar tai taip pat $name?',
         'alsoBody': 'Omi rado tą patį balsą ankstesniuose pokalbiuose.',
         'confirmed': 'Patvirtinote šią žymą',

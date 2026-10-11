@@ -11053,11 +11053,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
-  }
-
-  @override
   String get captureSourceCall => 'அழைப்பு';
 
   @override
@@ -12104,8 +12099,6 @@ class AppLocalizationsTa extends AppLocalizations {
         'likely': 'சாத்தியம்',
         'soundsLike': '$name போல ஒலிக்கிறது',
         'notPerson': '$name இல்லை',
-        'carried': 'இன்னும் $name. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.',
-        'change': 'மாற்று',
         'alsoTitle': 'இதுவும் $name தானா?',
         'alsoBody': 'முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.',
         'confirmed': 'இந்த லேபிளை உறுதிப்படுத்தினீர்கள்',

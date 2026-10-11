@@ -10806,11 +10806,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '文字起こし待ち $count';
-  }
-
-  @override
   String get captureSourceCall => '通話';
 
   @override
@@ -11843,8 +11838,6 @@ class AppLocalizationsJa extends AppLocalizations {
         'likely': '候補',
         'soundsLike': '$nameさんの声に似ています',
         'notPerson': '$nameさんではない',
-        'carried': '引き続き$nameさんです。前回の会話から引き継ぎました。',
-        'change': '変更',
         'alsoTitle': 'これも$nameさんですか？',
         'alsoBody': 'Omi は過去の会話で同じ声を見つけました。',
         'confirmed': 'このラベルを確認済みです',

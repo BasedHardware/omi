@@ -11003,11 +11003,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripcije v čakanju $count';
-  }
-
-  @override
   String get captureSourceCall => 'Klic';
 
   @override
@@ -12050,8 +12045,6 @@ class AppLocalizationsSl extends AppLocalizations {
         'likely': 'Verjetno',
         'soundsLike': 'Zveni kot $name',
         'notPerson': 'Ni $name',
-        'carried': 'Še vedno $name. Preneseno iz vašega zadnjega pogovora.',
-        'change': 'Spremeni',
         'alsoTitle': 'Je to tudi $name?',
         'alsoBody': 'Omi je našel isti glas v prejšnjih pogovorih.',
         'confirmed': 'Potrdili ste to oznako',

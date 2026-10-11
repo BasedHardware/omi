@@ -11033,11 +11033,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcripcions pendents $count';
-  }
-
-  @override
   String get captureSourceCall => 'Trucada';
 
   @override
@@ -12085,8 +12080,6 @@ class AppLocalizationsCa extends AppLocalizations {
         'likely': 'Probable',
         'soundsLike': 'Sona com $name',
         'notPerson': 'No és $name',
-        'carried': 'Continua sent $name. Heretat de la teva última conversa.',
-        'change': 'Canvia',
         'alsoTitle': 'Aquesta veu també és $name?',
         'alsoBody': 'Omi ha trobat la mateixa veu en converses anteriors.',
         'confirmed': 'Has confirmat aquesta etiqueta',

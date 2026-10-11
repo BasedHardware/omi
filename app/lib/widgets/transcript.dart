@@ -1025,29 +1025,49 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          GestureDetector(
-                            // The avatar carries the "Identify speaker" semantics; the name is a
-                            // larger visual target for the same action.
-                            excludeFromSemantics: true,
-                            onTap: data.speakerId == omiSpeakerId
-                                ? null
-                                : () {
-                                    widget.editSegment?.call(data.id, data.speakerId);
-                                    PlatformManager.instance.analytics.tagSheetOpened();
-                                  },
-                            child: Text(
-                              names.forSegment(data, person: person),
-                              style: OmiType.footnote.copyWith(
-                                color: data.speakerId == omiSpeakerId || person != null
-                                    ? OmiColors.textPrimary
-                                    : OmiColors.textSecondary,
-                                fontWeight: FontWeight.w500,
+                          if (!widget.isConversationDetail &&
+                              startsTurn &&
+                              data.speakerId != omiSpeakerId &&
+                              widget.editSegment != null &&
+                              (SpeakerLabelSource.isConfirmed(data.speakerLabelSource) ||
+                                  data.speakerLabelSource == SpeakerLabelSource.auto))
+                            OmiButton.tertiary(
+                              key: ValueKey('edit_speaker_label_${data.id}'),
+                              label: names.forSegment(data, person: person),
+                              leading: startsTurn && person != null && !isTagging
+                                  ? SpeakerLabelBadge(source: data.speakerLabelSource)
+                                  : null,
+                              size: OmiButtonSize.compact,
+                              onPressed: () {
+                                widget.editSegment!(data.id, data.speakerId);
+                                PlatformManager.instance.analytics.tagSheetOpened();
+                              },
+                            )
+                          else ...[
+                            GestureDetector(
+                              // The avatar carries the "Identify speaker" semantics; the name is a
+                              // larger visual target for the same action.
+                              excludeFromSemantics: true,
+                              onTap: data.speakerId == omiSpeakerId
+                                  ? null
+                                  : () {
+                                      widget.editSegment?.call(data.id, data.speakerId);
+                                      PlatformManager.instance.analytics.tagSheetOpened();
+                                    },
+                              child: Text(
+                                names.forSegment(data, person: person),
+                                style: OmiType.footnote.copyWith(
+                                  color: data.speakerId == omiSpeakerId || person != null
+                                      ? OmiColors.textPrimary
+                                      : OmiColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                          ),
-                          if (startsTurn && person != null && !isTagging) ...[
-                            const SizedBox(width: 4),
-                            SpeakerLabelBadge(source: data.speakerLabelSource),
+                            if (startsTurn && person != null && !isTagging) ...[
+                              const SizedBox(width: 4),
+                              SpeakerLabelBadge(source: data.speakerLabelSource),
+                            ],
                           ],
                           if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],

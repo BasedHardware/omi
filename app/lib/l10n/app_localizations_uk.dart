@@ -10997,11 +10997,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипцій у черзі $count';
-  }
-
-  @override
   String get captureSourceCall => 'Дзвінок';
 
   @override
@@ -12047,8 +12042,6 @@ class AppLocalizationsUk extends AppLocalizations {
         'likely': 'Імовірно',
         'soundsLike': 'Схоже на $name',
         'notPerson': 'Не $name',
-        'carried': 'Досі $name. Перенесено з вашої останньої розмови.',
-        'change': 'Змінити',
         'alsoTitle': 'Це теж $name?',
         'alsoBody': 'Omi знайшов такий самий голос у попередніх розмовах.',
         'confirmed': 'Ви підтвердили цю мітку',

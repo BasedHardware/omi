@@ -10790,11 +10790,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '待处理转录 $count';
-  }
-
-  @override
   String get captureSourceCall => '通话';
 
   @override
@@ -11825,8 +11820,6 @@ class AppLocalizationsZh extends AppLocalizations {
         'likely': '可能',
         'soundsLike': '听起来像 $name',
         'notPerson': '不是 $name',
-        'carried': '仍是 $name。沿用自你的上一段对话。',
-        'change': '更改',
         'alsoTitle': '这也是 $name 吗？',
         'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
         'confirmed': '你已确认此标签',

@@ -10973,11 +10973,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Bản chép âm đang chờ $count';
-  }
-
-  @override
   String get captureSourceCall => 'Cuộc gọi';
 
   @override
@@ -12019,8 +12014,6 @@ class AppLocalizationsVi extends AppLocalizations {
         'likely': 'Có thể',
         'soundsLike': 'Nghe giống $name',
         'notPerson': 'Không phải $name',
-        'carried': 'Vẫn là $name. Được giữ từ cuộc trò chuyện gần nhất của bạn.',
-        'change': 'Đổi',
         'alsoTitle': 'Đây cũng là $name?',
         'alsoBody': 'Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.',
         'confirmed': 'Bạn đã xác nhận nhãn này',

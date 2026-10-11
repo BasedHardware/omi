@@ -10995,11 +10995,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripsi tertunggak $count';
-  }
-
-  @override
   String get captureSourceCall => 'Panggilan';
 
   @override
@@ -12046,8 +12041,6 @@ class AppLocalizationsMs extends AppLocalizations {
         'likely': 'Mungkin',
         'soundsLike': 'Kedengaran seperti $name',
         'notPerson': 'Bukan $name',
-        'carried': 'Masih $name. Dibawa daripada perbualan terakhir anda.',
-        'change': 'Tukar',
         'alsoTitle': 'Adakah ini juga $name?',
         'alsoBody': 'Omi menemui suara yang sama dalam perbualan terdahulu.',
         'confirmed': 'Anda telah mengesahkan label ini',
