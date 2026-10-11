@@ -1,6 +1,8 @@
 # Shared chat edit receipts
 
-Every chat agent uses the same edit tools. A write is allowed only after the
+Backend-managed app chat and channels use the same CORE_TOOLS edit catalog.
+The legacy desktop proxy advertises client-owned tools; the UI lane must bind
+its edit tools to this shared authority (or use the shared app-chat route). A write is allowed only after the
 user asks for it or confirms an agent-proposed correction. Whole-conversation
 deletion is excluded and transcripts are never rewritten by these tools.
 
@@ -38,7 +40,10 @@ privacy erasure. It preserves content/history under the canonical MemoryService
 and denies normal reads through the common access policy. Undo restores product
 metadata through canonical apply. Memory corrections and their undo retain the
 immutable ledger history and advance canonical revisions; they never restore old
-ledger sequence/commit identifiers. Permanent app/MCP privacy-purge deletion is
+ledger sequence/commit identifiers. Non-ledger content undo currently restores
+content through the existing correction service and reapplies its reprocessing
+semantics; promotion/tier metadata is not yet an exact rollback. This is a
+remaining integration requirement before claiming exact memory-edit undo. Permanent app/MCP privacy-purge deletion is
 unchanged. Clients must describe this distinction when permanent erasure is asked
 for. New chat tools never call the privacy-purge deletion method.
 
