@@ -217,6 +217,7 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     assert result['status'] == 'complete'
     assert applied == ['conversations/empty']
     assert finished[0]['consumed'] == []
+    assert 'conversations/film' not in finished[0]['reviewed']
 
 
 def test_read_only_eval_shows_zero_ungrounded_auto_applies_and_question():

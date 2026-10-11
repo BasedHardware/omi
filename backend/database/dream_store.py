@@ -6,6 +6,7 @@ spend is reserved before inference; ambiguous failures retain their reservation.
 """
 
 import os
+import random
 from hashlib import sha256
 
 from datetime import datetime, timedelta, timezone
@@ -140,7 +141,7 @@ class AdmissionDenied(Exception):
         super().__init__(reason)
 
 
-def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, firestore_client=None):
+def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=None, firestore_client=None):
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     day = now.date().isoformat()
@@ -148,6 +149,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
     spend = database.collection('dream_spend').document(day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
+    draw = (rng or random.SystemRandom()).random()
 
     @firestore.transactional
     def claim(tx):
@@ -164,7 +166,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
         # Old drained states predate last_pass_at; their watermark seeds cleanup.
-        last_pass = data.get('last_pass_at') or data.get('watermark') or EPOCH
+        last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or data.get('watermark') or EPOCH
         cleanup_due = (
             not canary
             and trigger == 'schedule'
@@ -188,6 +190,16 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
             return None
+        has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
+        cleanup_selected = not canary and trigger == 'schedule' and draw < backfill_share()
+        if not has_dirty:
+            if not cleanup_due:
+                return None
+            # One attempt per hour even when the backfill coin declines. No lease,
+            # spend reservation or run-history document for this idle no-op.
+            tx.update(state, {'last_attempt_at': now})
+            if not cleanup_selected:
+                return None
         lease = {
             'run_id': run_id,
             'day': day,
@@ -197,6 +209,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             'reservation_usd': caps.reservation_usd,
             'score': data.get('score', 0),
             'cleanup_cursor': data.get('cleanup_cursor', {}),
+            'cleanup_selected': cleanup_selected,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'trigger': trigger,
@@ -207,6 +220,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             {
                 **data,
                 'lease': lease,
+                'last_attempt_at': now,
                 'day': day,
                 'passes': passes + int(trigger != 'manual'),
                 'manual_runs': manual_runs + int(trigger == 'manual'),
@@ -288,22 +302,23 @@ def finish(
                     tx.update(
                         snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1}
                     )
-        tx.set(
-            run,
-            {
-                **encoded,
-                'created_at': lease['started_at'],
-                'expires_at': lease['started_at'] + timedelta(days=30),
-                'mode': lease['mode'],
-                'success': success,
-                'trigger': lease.get('trigger', 'schedule'),
-                'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
-                'records_queued_after': queued_after,
-                'tokens': int(report.get('tokens', 0)),
-                'cost_usd': float(report.get('cost_usd', 0)),
-                'poisoned': len(poisoned),
-            },
-        )
+        if report.get('reason') != 'idle':
+            tx.set(
+                run,
+                {
+                    **encoded,
+                    'created_at': lease['started_at'],
+                    'expires_at': lease['started_at'] + timedelta(days=30),
+                    'mode': lease['mode'],
+                    'success': success,
+                    'trigger': lease.get('trigger', 'schedule'),
+                    'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
+                    'records_queued_after': queued_after,
+                    'tokens': int(report.get('tokens', 0)),
+                    'cost_usd': float(report.get('cost_usd', 0)),
+                    'poisoned': len(poisoned),
+                },
+            )
         patch = {
             'lease': None if release else lease,
             # The dirty set is authoritative; never filter reads by this diagnostic

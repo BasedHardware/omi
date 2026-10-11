@@ -28,11 +28,13 @@ def history_count(uid, collection, *, firestore_client=None):
     )
 
 
-def history_at_rank(uid, collection, rank, *, firestore_client=None):
-    if rank < 0:
-        raise ValueError('dream_history_rank')
-    query = history_collection(uid, collection, firestore_client=firestore_client).order_by('__name__').select(['id'])
-    return next((snapshot.id for snapshot in query.offset(rank).limit(1).stream(timeout=3)), None)
+def history_from_key(uid, collection, key, *, firestore_client=None):
+    if not key or '/' in key:
+        raise ValueError('dream_history_key')
+    source = history_collection(uid, collection, firestore_client=firestore_client)
+    query = source.order_by('__name__').select(['id'])
+    found = next((s.id for s in query.start_at({'__name__': source.document(key)}).limit(1).stream(timeout=3)), None)
+    return found or next((s.id for s in query.limit(1).stream(timeout=3)), None)
 
 
 def review_id(ref):

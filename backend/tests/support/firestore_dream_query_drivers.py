@@ -57,9 +57,12 @@ def entries():
             domains={'collection': ['conversations', 'action_items', 'people', 'memory_items']},
         ),
         DriverEntry(
-            'database.dream_history.history_at_rank',
+            'database.dream_history.history_from_key',
             base={'uid': UID},
-            domains={'collection': ['conversations', 'action_items', 'people', 'memory_items'], 'rank': [0, 17]},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'key': ['00000000', 'ffffffff'],
+            },
         ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
@@ -69,6 +72,7 @@ def entries():
             domains={'trigger': ['schedule', 'manual']},
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
+                'rng': (None, 'coin does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
             },

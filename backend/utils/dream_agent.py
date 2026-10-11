@@ -169,6 +169,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             report['target_source_counts'] = dict(
                 Counter(getattr(records, 'target_sources', {ref: 'dirty' for ref in reviewed}).values())
             )
+            report['seed_errors'] = getattr(records, 'seed_errors', 0)
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
             report['role_counts'] = {

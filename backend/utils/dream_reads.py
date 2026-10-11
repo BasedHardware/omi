@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from database import review_store
 from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
-from utils.dream_cleanup import add_seed
+from utils.dream_cleanup import add_seed_safely
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -113,7 +113,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
             records.targets.add(ref)
             records.target_sources[ref] = 'dirty'
         consumed.append(item)
-    records = add_seed(uid, records, lease, caps, vocabulary, read_record=read_record)
+    records = add_seed_safely(uid, records, lease, caps, vocabulary, read_record=read)
     records = add_context(
         records,
         context_candidates(uid, records, vocabulary or [], read_record=read, read_entity_record=read_entity_record),
