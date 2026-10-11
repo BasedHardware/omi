@@ -24,6 +24,14 @@ BUDGET_SOCKETS = _counter(
 EMBEDDING_ATTEMPTS = _counter(
     'omi_speaker_id_embedding_attempts_total', 'Live query reservations and extraction completions', 'outcome'
 )
+RECOVERY_GRANTS = _counter(
+    'omi_speaker_id_recovery_tranches_total', 'Fresh PCM recovery allowance grants per voice generation', 'tranche'
+)
+RECOVERY_ACCEPTANCES = _counter(
+    'omi_speaker_id_recovery_acceptances_total',
+    'First automatic acceptance per voice generation after successful recovery extraction',
+    'target',
+)
 
 for _cap in ('voice', 'socket', 'both'):
     BUDGET_EXITS.labels(cap=_cap)
@@ -31,3 +39,7 @@ for _cap in ('voice', 'socket', 'both'):
     BUDGET_SOCKETS.labels(cap=_cap)
 for _outcome in ('reserved', 'succeeded', 'failed'):
     EMBEDDING_ATTEMPTS.labels(outcome=_outcome)
+for _tranche in ('first', 'second'):
+    RECOVERY_GRANTS.labels(tranche=_tranche)
+for _target in ('owner', 'person'):
+    RECOVERY_ACCEPTANCES.labels(target=_target)

@@ -3129,7 +3129,7 @@ Live query admission additionally records the following closed-label counters:
 
 | Counter | Meaning and reading |
 | --- | --- |
-| `omi_speaker_id_budget_exits_total{cap="voice\|socket\|both"}` | One increment per denied reservation, classified exclusively at the same refill snapshot. Sum the three caps to recover `omi_speaker_id_match_exits_total{reason="embedding_budget"}`. `voice` means only the 12-attempt cap blocked; `socket` means only the shared bucket blocked; `both` means both blocked. |
+| `omi_speaker_id_budget_exits_total{cap="voice\|socket\|both"}` | One increment per denied reservation, classified exclusively at the same refill snapshot. Sum the three caps to recover `omi_speaker_id_match_exits_total{reason="embedding_budget"}`. `voice` means only the current voice allowance (12 initially, up to 18 after bounded recovery) blocked; `socket` means only the shared bucket blocked; `both` means both blocked. |
 | `omi_speaker_id_embedding_attempts_total{outcome="reserved\|succeeded\|failed"}` | `reserved` counts synchronously spent voice attempts/socket tokens. `succeeded` means query extraction returned, even if matching subsequently rejects, loses authority, or becomes stale. `failed` means encoding/extraction raised or the caller was cancelled; a cancelled executor request may still finish remotely. Neither completion refunds budget. Completions can lag reservations. |
 | `omi_speaker_id_budget_voices_total{cap="voice\|socket\|both"}` | First denial per admitted numeric voice per matcher generation, classified by its first cap. Provider scope changes of the same numeric voice do not reset the admission cap or incidence marker. Rollovers reset this marker, including for carried voices whose attempts remain spent. |
 | `omi_speaker_id_budget_sockets_total{cap="voice\|socket\|both"}` | First denial per socket lifetime, classified by the first cap, including a voice-only denial. It counts sockets experiencing any budget denial, not exclusively sockets exhausting tokens; rollovers do not reset it. |
@@ -3162,14 +3162,15 @@ normal scheduling after completion, with a new age for the served work quantum.
 Already-pending updates retain their age and latest ID. If the queue is full,
 those intervals remain in matcher metadata for the next ordinary update.
 Failures and denials introduce no retry, and every subsequent query reserves
-through the unchanged caps.
+through the shared socket bucket and current voice allowance.
 Before five seconds of queue age, untried voices precede previously attempted
 voices, followed by existing acoustic near-owner preference and longer pooled
 clips. Once aged, ready work wins oldest-first, so at most 99 older pending slots
 can precede it and continued updates cannot renew its age. This is a selection
 bound, not a five-second execution deadline: task capacity and active voice locks
-can still delay work. All queries retain the 10-second audio bound, 12-attempt
-voice cap, shared 16-token burst/refill of 240 per hour, and 16-task ceiling.
+can still delay work. All queries retain the 10-second audio bound, shared
+16-token burst/refill of 240 per hour, and 16-task ceiling. The initial voice
+allowance is 12, with the bounded fresh-PCM recovery described below.
 Scheduling introduces no retry timer or reserved/exempt quota. Better utilization
 can change actual call counts within the same ceiling, but cannot enlarge that
 ceiling. Acceptance thresholds, margins, manual veto, contention, and generation
@@ -3832,10 +3833,10 @@ acceptance lift from wider thresholds; the pending band must not be interpreted
 as a measured recall improvement.
 
 Each conversation admits at most 128 voice ids, with at most 128 pending intervals
-per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
-uncarried voices' attempts; validated automatic owner carry and copied manual
-mappings retain their attempts. Same-conversation profile refresh does not reset
-them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
+per voice, 16 in-flight tasks and an initial 12 embedding attempts per voice.
+Rollover resets uncarried voices' attempts and recovery state; validated automatic
+owner carry and copied manual mappings retain both. Same-conversation profile
+refresh and provider scope changes do not reset them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
 opportunities within both budgets, regardless of their initial distance: noisy
 early clips may be evicted by later clean audio. A recovered owner re-arbitrates
 all evidenced voices and withdraws competing automatic owner mappings.
@@ -3843,6 +3844,50 @@ Near-threshold misses, print-margin ambiguity, owner contention and missing prin
 stay retryable. No new exit reason is added.
 Retained evidence can still be re-arbitrated or rechecked against a recovered owner
 without another embedding request.
+
+An exhausted voice may receive at most two recovery tranches of three attempts,
+for a hard maximum of 18 attempts per voice-generation. The first checkpoint is
+made when the twelfth reservation spends quota. A grant requires at least ten
+seconds of distinct, proven PCM after that checkpoint (or the prior grant), and
+30 monotonic seconds after exhaustion/prior grant. Each tranche is granted only
+when the current allowance is exhausted and a socket token can be reserved;
+there is no timer, automatic failed-request retry, refund, or socket exemption.
+Freshness uses the ring's absolute append byte positions AND a capture-axis
+high-watermark, with sample-aligned, non-overlapping span proof. Segment duration,
+client/provider timestamps, arrival gaps, repeated pending windows, and overlapping
+PCM spans cannot mint fresh seconds. Old prebuffered audio is excluded; a replaced
+ring starts a new proof checkpoint without renewing granted attempts. Reordered
+windows can conservatively lose credit. State is bounded by the existing 128-voice
+inventory, contains scalar metadata, and holds only a weak reference to the ring.
+Unproven buffers fail closed. Grant consumption discards excess pre-grant credit;
+a second grant needs another ten new seconds and another cooldown.
+
+Recovery queries prefer longer intervals (capped at ten seconds), breaking ties
+with newer end times and using the newest end of long turns. The physical PCM
+sample count is also capped at ten seconds even if malformed timestamp spans
+overlap. Existing centroid eviction, thresholds/margins, manual authority,
+owner contention and stale-generation fences still decide acceptance.
+
+`omi_speaker_id_recovery_tranches_total{tranche="first|second"}` counts each
+allowance grant exactly once, synchronously with its first admitted reservation.
+`omi_speaker_id_recovery_acceptances_total{target="owner|person"}` counts the first
+automatic acceptance per voice-generation after a successful recovery extraction;
+it excludes manual labels, failed/stale extraction and contended/rejected results.
+Later re-arbitration may accept that evidenced voice; repeated/reinstated acceptance
+does not count twice. Carried state is not counted as a new recovery cohort.
+These add four counter series per target plus four `_created` series; no IDs are
+labels or new log payloads. Compare summed grants, first/second usage and owner
+recovery acceptance rates with voice-cap incidence and finalized outcomes on the
+same instrumented pods. Acceptance/grants is descriptive, not a causal success
+rate: a voice can use two grants, and acceptance can lag a grant. Lower exit counts
+alone do not prove better recognition. Use a matched control and monitor false
+acceptance/contention, latency and extraction request rates.
+
+Worst-case additional GPU requests are six per qualifying voice-generation
+(+50% versus its initial allowance), each at most ten seconds of PCM. Failed or
+cancelled reservations spend this allowance too. All voices still share the
+unchanged socket envelope below, so the socket's maximum request rate cannot rise;
+actual utilization can rise within it.
 
 The socket token bucket starts with 16 attempts, has capacity 16, and refills
 at 240/3600 attempts per monotonic wall second (one every 15 seconds). Over `t`

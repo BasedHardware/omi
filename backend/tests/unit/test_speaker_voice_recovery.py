@@ -1,0 +1,379 @@
+"""Real PCM provenance, live matching, authority and bounded recovery cost."""
+
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import numpy as np
+import pytest
+
+from routers.listen import speakers
+from routers.listen.speaker_audio import select_query_audio
+from tests.unit.test_speaker_match import _live_matcher, _segment
+from tests.unit.test_owner_recognition_embedding_budget import _clock
+from utils.audio import AudioRingBuffer
+from utils.observability.speaker_embedding_budget import RECOVERY_GRANTS, RECOVERY_ACCEPTANCES
+from utils.stt.speaker_recovery import VoiceRecovery, RECOVERY_COOLDOWN_SECONDS
+
+
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
+
+def _pcm(seconds, value=0):
+    return np.full(round(seconds * 16000), value, dtype=np.int16).tobytes()
+
+
+def _metric(counter, **labels):
+    return counter.labels(**labels)._value.get()
+
+
+def _setup(monkeypatch, *, failed=False):
+    clock = _clock(monkeypatch)
+    matcher, host, emitted = _live_matcher(monkeypatch, [])
+    host.state.audio_ring_buffer = AudioRingBuffer(120, 16000)
+    calls = []
+
+    def extract(*args):
+        calls.append(1)
+        if failed:
+            raise RuntimeError('injected failure')
+        return np.array([[-1.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
+    return matcher, host, clock, calls, emitted
+
+
+async def _exhaust(matcher, host, clock):
+    for i in range(12):
+        clock.now = i * 2
+        host.state.audio_ring_buffer.write_positioned(_pcm(2), i * 2)
+        await matcher.match(1, _segment(f'noisy-{i}', i * 2, 2))
+    assert matcher._embedding_attempts[1] == 12
+    assert not matcher.speaker_to_person
+
+
+@pytest.mark.anyio
+async def test_twelve_noisy_attempts_then_new_clean_owner_speech_recovers(monkeypatch):
+    matcher, host, clock, calls, emitted = _setup(monkeypatch)
+    first = _metric(RECOVERY_GRANTS, tranche='first')
+    accepted = _metric(RECOVERY_ACCEPTANCES, target='owner')
+    await _exhaust(matcher, host, clock)
+    clock.now += RECOVERY_COOLDOWN_SECONDS
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: calls.append(1) or owner)
+    host.state.audio_ring_buffer.write_positioned(_pcm(10, 20), 24)
+    await matcher.match(1, _segment('clean-long', 24, 10))
+    assert matcher._embedding_attempts[1] == 13
+    assert not matcher.speaker_to_person  # old noisy centroid still participates
+    host.state.audio_ring_buffer.write_positioned(_pcm(2, 20), 34)
+    await matcher.match(1, _segment('clean-next', 34, 2))
+    assert len(calls) == 14
+    assert matcher.speaker_to_person[1][0] == 'user'
+    assert emitted[-1] == (1, 'user', 'User', 'clean-next')
+    assert _metric(RECOVERY_GRANTS, tranche='first') == first + 1
+    assert _metric(RECOVERY_ACCEPTANCES, target='owner') == accepted + 1
+    matcher._publish_decisions(matcher._voice_decisions)
+    await matcher.match(1, _segment('mapped-repeat', 34, 2))
+    assert _metric(RECOVERY_ACCEPTANCES, target='owner') == accepted + 1
+    assert len(calls) == 14
+
+
+@pytest.mark.anyio
+async def test_failures_spend_both_tranches_and_never_exceed_eighteen(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    before = {x: _metric(RECOVERY_GRANTS, tranche=x) for x in ('first', 'second')}
+    await _exhaust(matcher, host, clock)
+    for tranche in range(2):
+        clock.now += RECOVERY_COOLDOWN_SECONDS
+        start = 24 + tranche * 10
+        host.state.audio_ring_buffer.write_positioned(_pcm(10), start)
+        for _ in range(5):
+            await matcher.match(1, _segment('failed-replay', start, 10))
+        assert matcher._embedding_attempts[1] == 15 + tranche * 3
+    clock.now += 300
+    host.state.audio_ring_buffer.write_positioned(_pcm(20), 44)
+    for _ in range(10):
+        await matcher.match(1, _segment('third-forbidden', 44, 20))
+    assert len(calls) == 18
+    assert matcher._embedding_attempts[1] == 18
+    assert matcher._voice_recovery[1].tranches == 2
+    assert not matcher._covered_audio[1]
+    assert {x: _metric(RECOVERY_GRANTS, tranche=x) for x in before} == {x: v + 1 for x, v in before.items()}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('replay', ['duplicate', 'overlap', 'forged', 'rewritten_pcm'])
+async def test_repeated_and_forged_audio_cannot_unlock_a_tranche(monkeypatch, replay):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    await _exhaust(matcher, host, clock)
+    clock.now += 300
+    ring = host.state.audio_ring_buffer
+    ring.write_positioned(_pcm(5), 24)
+    for i in range(20):
+        if replay == 'duplicate':
+            segment = _segment('duplicate', 24, 5)
+        elif replay == 'overlap':
+            segment = _segment('overlap', 24 + i % 2, 5)
+        elif replay == 'forged':
+            segment = _segment('forged', -1e9, 2e9)
+        else:
+            ring.write_positioned(_pcm(5), 24)
+            segment = _segment('same-capture', 24, 5)
+        await matcher.match(1, segment)
+    assert len(calls) == 12
+    assert matcher._voice_recovery[1].tranches == 0
+    assert matcher._voice_recovery[1].fresh_bytes <= 5 * ring.bytes_per_second
+
+
+def test_checkpoint_excludes_prebuffered_audio_and_timestamp_gaps():
+    ring = AudioRingBuffer(120, 16000)
+    ring.write_positioned(_pcm(20), 0)
+    recovery = VoiceRecovery.checkpoint(ring, 0)
+    recovery.observe(ring, [(0, 20)])
+    assert not recovery.grant(100)
+    ring.write_positioned(_pcm(2), 1e9)
+    recovery.observe(ring, [(0, 2e9)])
+    assert recovery.fresh_bytes == 2 * ring.bytes_per_second
+    assert not recovery.grant(100)
+
+
+def test_one_observation_deduplicates_overlapping_physical_spans():
+    ring = AudioRingBuffer(120, 16000)
+    recovery = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(5), 0)
+    ring.write_positioned(_pcm(5), 0)
+    recovery.observe(ring, [(0, 5), (0, 5), (1, 5)])
+    assert recovery.fresh_bytes == 5 * ring.bytes_per_second
+    assert not recovery.grant(100)
+
+
+def test_distinct_fragments_reach_ten_seconds_without_counting_their_gap():
+    ring = AudioRingBuffer(120, 16000)
+    recovery = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(6), 10)
+    recovery.observe(ring, [(10, 16), (11, 16)])
+    assert recovery.fresh_bytes == 6 * ring.bytes_per_second
+    assert not recovery.grant(30)
+    ring.write_positioned(_pcm(4), 100)
+    recovery.observe(ring, [(10, 104)])
+    assert recovery.fresh_bytes == 10 * ring.bytes_per_second
+    assert recovery.grant(30)
+
+
+def test_grant_checkpoints_all_current_pcm_not_just_the_observed_window():
+    ring = AudioRingBuffer(120, 16000)
+    recovery = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(20), 0)
+    recovery.observe(ring, [(0, 10)])
+    assert recovery.grant(30)
+    recovery.observe(ring, [(10, 20)])
+    assert not recovery.grant(60)
+    ring.write_positioned(_pcm(10), 20)
+    recovery.observe(ring, [(20, 30)])
+    assert recovery.grant(60)
+
+
+def test_ring_wrap_and_replacement_cannot_reuse_old_proof():
+    ring = AudioRingBuffer(10, 16000)
+    ring.write_positioned(_pcm(10), 0)
+    recovery = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(10), 10)
+    recovery.observe(ring, [(0, 20)])
+    assert recovery.grant(30)
+    recovery.observe(ring, [(0, 20)])
+    assert not recovery.grant(60)
+    replacement = AudioRingBuffer(10, 16000)
+    replacement.write_positioned(_pcm(10), 0)
+    recovery.observe(replacement, [(0, 10)])
+    assert not recovery.grant(60)
+    assert recovery.tranches == 1
+    replacement.write_positioned(_pcm(10), 10)
+    recovery.observe(replacement, [(10, 20)])
+    assert recovery.grant(60)
+    assert recovery.tranches == 2
+
+
+@pytest.mark.anyio
+async def test_cooldown_is_monotonic_and_socket_denial_does_not_grant(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    await _exhaust(matcher, host, clock)
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    next_grant = matcher._voice_recovery[1].next_grant_at
+    for now in (next_grant - 1, -100, next_grant - 1):
+        clock.now = now
+        await matcher.match(1, _segment('waiting', 24, 10))
+        assert len(calls) == 12
+    clock.now = next_grant
+    matcher._socket_embedding_tokens = 0
+    matcher._socket_embedding_refilled_at = clock.now
+    await matcher.match(1, _segment('socket-blocked', 24, 10))
+    assert matcher._voice_recovery[1].tranches == 0
+    assert len(calls) == 12
+    clock.now += 15
+    await matcher.match(1, _segment('one-token', 24, 10))
+    assert len(calls) == 13
+    assert matcher._socket_embedding_tokens == pytest.approx(0)
+
+
+@pytest.mark.anyio
+async def test_cancelled_recovery_spends_allowance_without_acceptance(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    await _exhaust(matcher, host, clock)
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    clock.now += 30
+
+    async def cancel(*args, **kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(speakers, 'run_blocking', cancel)
+    for _ in range(3):
+        with pytest.raises(asyncio.CancelledError):
+            await matcher.match(1, _segment('cancelled-recovery', 24, 10))
+    await matcher.match(1, _segment('spent-tranche', 24, 10))
+    assert matcher._embedding_attempts[1] == 15
+    assert matcher._voice_recovery[1].tranches == 1
+    assert not matcher._voice_recovery[1].has_evidence
+    assert len(calls) == 12
+
+
+@pytest.mark.anyio
+async def test_hard_max_is_independent_of_grant_history(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    matcher._admit_voice(1)
+    matcher._embedding_attempts[1] = 18
+    matcher._voice_recovery[1] = VoiceRecovery.checkpoint(host.state.audio_ring_buffer, 0)
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 0)
+    clock.now = 30
+    await matcher.match(1, _segment('hard-cap', 0, 10))
+    assert not calls
+    assert matcher._embedding_attempts[1] == 18
+    assert matcher._voice_recovery[1].tranches == 0
+
+
+@pytest.mark.anyio
+async def test_named_person_recovery_is_counted_separately(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    await _exhaust(matcher, host, clock)
+    matcher.speaker_evidence[1].clear()
+    clock.now += 30
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    before = _metric(RECOVERY_ACCEPTANCES, target='person')
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: np.array([[0.0, 1.0]], dtype=np.float32))
+    await matcher.match(1, _segment('person-recovery', 24, 10))
+    assert matcher.speaker_to_person[1][0] == 'p1'
+    assert _metric(RECOVERY_ACCEPTANCES, target='person') == before + 1
+
+
+def test_recovery_prefers_long_recent_clips_and_caps_physical_pcm():
+    ring = AudioRingBuffer(120, 16000)
+    ring.write_positioned(_pcm(4, 1), 0)
+    ring.write_positioned(_pcm(10, 2), 10)
+    ring.write_positioned(_pcm(10, 3), 30)
+    pcm, selected = select_query_audio(ring, [(0, 4), (10, 20), (30, 40)], prefer_recent=True, sample_rate=16000)
+    assert selected == [(30, 40)]
+    assert np.frombuffer(pcm, dtype=np.int16).tolist() == [3] * 160000
+    ring.write_positioned(_pcm(10, 4), 30)
+    pcm, _ = select_query_audio(ring, [(30, 40)], prefer_recent=True, sample_rate=16000)
+    assert len(pcm) == 10 * 16000 * 2
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('veto', ['manual_rejected', 'manual_positive', 'owner_reserved', 'contended', 'stale'])
+async def test_recovery_cannot_bypass_identity_authority_or_stale_generation(monkeypatch, veto):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    await _exhaust(matcher, host, clock)
+    clock.now += 30
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    matcher.speaker_evidence[1].clear()  # isolate the authority gate from old centroid noise
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher._profile_conversation_id = 'c'
+    host.request.uid = 'u'
+    receipt = {}
+    if veto == 'manual_rejected':
+        receipt = {'speakers': {'1': {'rejection': True}}}
+    elif veto == 'manual_positive':
+        receipt = {'speakers': {'1': {'is_user': True, 'generation': 1}}}
+    elif veto == 'owner_reserved':
+        receipt = {'speakers': {'2': {'is_user': True}}}
+    host.persistence = SimpleNamespace(call=AsyncMock(return_value=receipt))
+    if veto == 'contended':
+        matcher._voice_centroids[2] = owner
+        matcher.speaker_evidence[2] = type(matcher.speaker_evidence[1])([(owner, 10)], maxlen=3)
+        matcher._voice_scopes[2] = ''
+        matcher._voice_segments[2] = 'competitor'
+
+    def extract(*args):
+        calls.append(1)
+        if veto == 'stale':
+            matcher.clear()
+        return owner
+
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
+    accepted = _metric(RECOVERY_ACCEPTANCES, target='owner')
+    await matcher.match(1, _segment('proof-veto', 24, 10))
+    assert len(calls) == 13
+    if veto == 'manual_positive':
+        assert matcher.speaker_to_person[1][0] == 'user'
+        assert matcher._mapping_origin[1] == 'manual'
+    else:
+        assert 1 not in matcher.speaker_to_person
+    assert _metric(RECOVERY_ACCEPTANCES, target='owner') == accepted
+
+
+@pytest.mark.anyio
+async def test_scope_refresh_and_carried_rollover_do_not_renew_tranches(monkeypatch):
+    matcher, host, clock, _, _ = _setup(monkeypatch, failed=True)
+    await _exhaust(matcher, host, clock)
+    clock.now += 30
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    await matcher.match(1, dict(_segment('scope-next', 24, 10), speaker_id_scope='next'))
+    recovery = matcher._voice_recovery[1]
+    assert recovery.tranches == 1
+    matcher._profile_conversation_id = 'first'
+    host.state.speaker_id_enabled = False
+    await matcher.refresh_for_conversation('first')
+    assert matcher._voice_recovery[1] is recovery
+    matcher._mapping_origin[1] = 'manual'
+    matcher.speaker_to_person[1] = ('user', 'User')
+    matcher.note_rollover_carry({1})
+    await matcher.refresh_for_conversation('second')
+    assert matcher._embedding_attempts[1] == 13
+    assert matcher._voice_recovery[1] is recovery
+    matcher.note_rollover_carry(set())
+    await matcher.refresh_for_conversation('third')
+    assert not matcher._voice_recovery
+    assert not matcher._embedding_attempts
+
+
+@pytest.mark.anyio
+async def test_concurrent_recovery_and_churn_cannot_escape_socket_bucket(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    ring = host.state.audio_ring_buffer
+    for voice in range(32):
+        matcher._admit_voice(voice)
+        matcher._embedding_attempts[voice] = 12
+        matcher._voice_recovery[voice] = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(10), 0)
+    clock.now = 30
+    await asyncio.gather(*(matcher.match(v, _segment(f'voice-{v}', 0, 10)) for v in range(32)))
+    assert len(calls) == 16
+    assert sum(r.tranches for r in matcher._voice_recovery.values()) == 16
+    tokens = matcher._socket_embedding_tokens
+    for _ in range(5):
+        matcher.clear()
+        await matcher.match(1, _segment('churn', 0, 10))
+    assert len(calls) == 16
+    assert matcher._socket_embedding_tokens == tokens == 0
+
+
+def test_recovery_metrics_have_closed_labels_only():
+    for counter, label, values in (
+        (RECOVERY_GRANTS, 'tranche', {'first', 'second'}),
+        (RECOVERY_ACCEPTANCES, 'target', {'owner', 'person'}),
+    ):
+        samples = [s for family in counter.collect() for s in family.samples if s.name.endswith('_total')]
+        assert len(samples) == 2
+        assert all(set(s.labels) == {label} for s in samples)
+        assert {s.labels[label] for s in samples} == values
