@@ -8,6 +8,19 @@ from utils.stt.live_rollout import window_selection_kwargs
 from utils.stt.live_failure import MAX_STT_FAILOVERS, live_stt_terminal_reason, note_typed_provider_death
 from utils.stt.live_router import note_failed_route
 from utils.stt.recovery_state import RecoveryState
+from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
+from config.live_stt_registry import routing_on
+
+
+def _router_active(managed: bool, receiver: Any) -> bool:
+    """Router-on eligibility for the rebuild cap; malformed rollout percent
+    must not abort legacy failover — it degrades to the router-off cap."""
+    if not managed:
+        return False
+    try:
+        return routing_on(receiver.host.request.uid)
+    except ValueError:
+        return False
 
 
 def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
@@ -40,7 +53,9 @@ def _select_live_replacement_legacy(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
-    if max(failures, receiver._stt_rebuild_attempts) > (3 if managed else MAX_STT_FAILOVERS):
+    router_active = _router_active(managed, receiver)
+    cap = MAX_RECOVERY_TARGETS if router_active else (3 if managed else MAX_STT_FAILOVERS)
+    if max(failures, receiver._stt_rebuild_attempts) > cap:
         receiver._settle_pending_live_failover_failure()
         return None, None, None
     note_typed_provider_death(receiver.stt_socket, dead_provider)
@@ -72,6 +87,25 @@ def select_live_replacement(
     if recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving) or recovery.client_has_left():
         receiver._settle_pending_live_failover_failure()
         return None, None, None
+    session = getattr(receiver, '_managed_live_chain', None)
+    rescue = getattr(session, 'no_text_rescue', None)
+    reason = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
+    if rescue is not None and rescue.enabled:
+        if rescue.deadline is None and reason in {'first_text_deadline', 'empty_streak'}:
+            interval = receiver._window_ring().capture_bounds
+            pending = receiver.stt_socket.window_replay_pending_sample()
+            if pending is not None:
+                interval = (max(interval[0], pending), interval[1])
+            rescue.start(reason, capture_interval=interval)
+        if reason == 'no_text_rescue_complete' and rescue.active:
+            rescue.complete()
+            receiver._stt_failed_providers.discard('parakeet')
+            receiver._stt_failed_targets.discard('parakeet-window')
+            if not recovery.grant_cheap_reentry('parakeet-window'):
+                receiver._settle_pending_live_failover_failure()
+                return None, None, None
+            # Policy retirement is not a paid-provider failure/exclusion.
+            return st.STTService.parakeet, receiver.host.stt_language, 'parakeet-window'
     note_failed_route(receiver, dead_provider)
     receiver._stt_rebuild_attempts += 1
     if dead_provider:

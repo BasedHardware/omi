@@ -19,6 +19,7 @@ class HomeProvider extends ChangeNotifier {
   static const int tabCount = 2;
 
   int _sessionGeneration = 0;
+  bool _languageDialogOffered = false;
   int selectedIndex = homeTab;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
@@ -161,6 +162,7 @@ class HomeProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _languageDialogOffered = false;
     selectedIndex = homeTab;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
@@ -294,10 +296,13 @@ class HomeProvider extends ChangeNotifier {
     return;
   }
 
+  /// Opens the language picker once per session when no language is saved.
+  /// The sheet is closable; closing it keeps the default language and this
+  /// does not reopen it on the next Home rebuild.
   void showLanguageDialogIfNeeded(BuildContext context) {
-    if (!hasSetPrimaryLanguage) {
-      LanguageSelectionDialog.show(context, isRequired: true);
-    }
+    if (hasSetPrimaryLanguage || _languageDialogOffered) return;
+    _languageDialogOffered = true;
+    LanguageSelectionDialog.show(context);
   }
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {

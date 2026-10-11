@@ -757,6 +757,7 @@ _STUB_MODULES = [
     'utils.speaker_identification',
     'utils.speaker_learning_jobs',
     'utils.stt.speaker_embedding',
+    'utils.stt.owner_profile',
     'utils.fair_use',
     'utils.subscription',
     'utils.cloud_tasks',
@@ -814,6 +815,9 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        # Segment error handling is isolated from enrollment/voiceprint loading.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
         # The pipeline classifies persistence errors with these predicates; no
         # test here raises a Firestore error, so the stub answers "not one".
         sys.modules['database._client'].is_document_size_limit_error = lambda error: False

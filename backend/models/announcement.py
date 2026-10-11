@@ -2,7 +2,25 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, List, Mapping, Optional, TypeVar, cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
+
+
+def _ensure_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _coerce_utc_datetime(value: Any, fallback: Optional[datetime] = None) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return _ensure_utc(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            return _ensure_utc(parsed)
+        except ValueError:
+            return fallback
+    return fallback
 
 
 class AnnouncementType(str, Enum):
@@ -50,6 +68,11 @@ class Display(BaseModel):
     expires_at: Optional[datetime] = None  # Don't show after this time
     dismissible: bool = True  # Can user skip?
     show_once: bool = True  # Only show once per user
+
+    @field_validator("start_at", "expires_at", mode="after")
+    @classmethod
+    def _normalize_display_datetimes(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _ensure_utc(v)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -143,6 +166,16 @@ class Announcement(BaseModel):
     # Content - will be one of ChangelogContent, FeatureContent, or AnnouncementContent
     content: dict[str, Any]
 
+    @field_validator("created_at", mode="after")
+    @classmethod
+    def _normalize_created_at(cls, v: datetime) -> datetime:
+        return v if v.tzinfo is not None else v.replace(tzinfo=timezone.utc)
+
+    @field_validator("expires_at", mode="after")
+    @classmethod
+    def _normalize_expires_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _ensure_utc(v)
+
     def get_changelog_content(self) -> ChangelogContent:
         return ChangelogContent(**self.content)
 
@@ -191,20 +224,29 @@ class Announcement(BaseModel):
         # Tolerate a legacy doc missing id or created_at the same way a missing type is tolerated above,
         # so a single malformed announcement cannot 500 the whole list. A missing created_at sorts as
         # the epoch.
-        announcement_id = cast(str, data.get("id")) or ""
-        created_at = cast(datetime, data.get("created_at")) or datetime.fromtimestamp(0, tz=timezone.utc)
+        announcement_id = str(data.get("id") or "")
+        created_at = _coerce_utc_datetime(
+            data.get("created_at"),
+            fallback=datetime.fromtimestamp(0, tz=timezone.utc),
+        ) or datetime.fromtimestamp(0, tz=timezone.utc)
+        expires_at = _coerce_utc_datetime(data.get("expires_at"), fallback=None)
+        raw_active = data.get("active")
+        active = raw_active if isinstance(raw_active, bool) else True
+        content = _nested_dict(data.get("content")) or {}
+        raw_devices = data.get("device_models")
+        device_models = [str(d) for d in raw_devices if d is not None] if isinstance(raw_devices, list) else None
         return Announcement(
             id=announcement_id,
             type=announcement_type,
             created_at=created_at,
-            active=data.get("active", True),
-            app_version=data.get("app_version"),
-            firmware_version=data.get("firmware_version"),
-            device_models=data.get("device_models"),
-            expires_at=data.get("expires_at"),
+            active=active,
+            app_version=str(data["app_version"]) if data.get("app_version") is not None else None,
+            firmware_version=str(data["firmware_version"]) if data.get("firmware_version") is not None else None,
+            device_models=device_models,
+            expires_at=expires_at,
             targeting=_optional_submodel(Targeting, targeting_data),
             display=_optional_submodel(Display, display_data),
-            content=data.get("content", {}),
+            content=content,
         )
 
     def to_dict(self) -> dict[str, Any]:

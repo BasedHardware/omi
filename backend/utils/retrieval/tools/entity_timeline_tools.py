@@ -31,6 +31,7 @@ from database.entity_timeline_sources import (
 )
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.messaging.memory_privacy import channel_private_filter_active, is_channel_private_memory
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.ledger_history_policy import is_ledger_history_item
 
@@ -358,6 +359,8 @@ def _ledger_entries(
     for item in items:
         if item.kind != MemoryKind.fact or not _item_matches_entity(item, entity):
             continue
+        if channel_private_filter_active() and is_channel_private_memory(item):
+            continue
         occurred_at = _timeline_time(item)
         if not _in_range(occurred_at, start, end):
             continue
@@ -525,6 +528,8 @@ def build_entity_timeline(
         # A canonical row can outlive its source.  Do not surface a fact whose
         # evidence/source has been explicitly tombstoned or purged.
         if item.source_state.value != "active":
+            continue
+        if channel_private_filter_active() and is_channel_private_memory(item):
             continue
         if not _item_matches_entity(item, reference):
             continue

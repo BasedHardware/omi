@@ -3043,6 +3043,11 @@ class FloatingControlBarManager {
     let createdAt: Date
     let title: String
     let suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+    let body: String
+
+    var contextMessage: ChatMessage {
+      ChatMessage(id: messageClientTurnId, text: body, createdAt: createdAt, sender: .ai)
+    }
   }
 
   private struct OwnerNotificationKey: Hashable {
@@ -3776,7 +3781,7 @@ class FloatingControlBarManager {
     notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
 
     if !window.state.showingAIConversation {
-      persistNotificationMessageIfNeeded(notification)
+      cacheNotificationContextIfNeeded(notification)
     }
 
     if let current = window.state.currentNotification,
@@ -4583,7 +4588,7 @@ class FloatingControlBarManager {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       return false
     }
-    persistNotificationMessageIfNeeded(notification)
+    cacheNotificationContextIfNeeded(notification)
 
     if let existing = window.state.currentNotification, existing.id != notification.id {
       cancelNotificationDismissTimer()
@@ -4714,79 +4719,25 @@ class FloatingControlBarManager {
     notificationWasTemporarilyShown = false
   }
 
-  private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
+  private func cacheNotificationContextIfNeeded(_ notification: FloatingBarNotification) {
     let ownerID = notification.ownerID
-    guard !ownerID.isEmpty,
-      RuntimeOwnerIdentity.currentOwnerId() == ownerID,
-      // A proactive card is journaled because it is something Omi observed and
-      // the user may want to follow up on in chat. An integration offer is
-      // neither — it is product copy about a connector, and writing "Omi can
-      // read your inbox…" into the user's conversation history as though it
-      // were an observation is noise they cannot act on there.
-      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
-      // Trial and onboarding cards are product copy — billing state and
-      // permission help — not something Omi observed. Writing them into the
-      // transcript is the same noise the integration offer above is excluded for.
+    guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID,
       notification.kind.isJournaled,
-      // The meeting summary share card must not journal either: the durable
-      // Chat surface for a finished meeting is the conversation-link card the
-      // backend already materializes, and journaling here would produce a
-      // second Chat row for the same meeting.
+      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
       notification.assistantId != MeetingActionItemBannerPolicy.assistantID,
-      let provider = historyChatProvider
+      let snapshot = notificationAuthorizationSnapshots[notification.id],
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
     else { return }
-    let surface = provider.mainChatSurfaceReference()
+    // TTL-bounded notification context can inform an explicit tap/voice follow-up.
+    // Presenting a notification never creates a Chat journal entry.
     let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notification.id)
-    guard storedNotificationMessages[key] == nil,
-      !pendingNotificationJournalWrites.contains(key)
-    else { return }
-
-    // Notifications become chat-visible only after canonical journal
-    // admission. The notification card itself remains an independent
-    // presentation surface while this async write is pending.
-    let messageText = Self.notificationJournalText(
-      title: notification.title, body: notification.message, kind: notification.kind)
-    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
-      id: notification.id,
-      kind: notification.kind)
-    guard let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id] else { return }
-    pendingNotificationJournalWrites.insert(key)
-    Task { @MainActor [weak self, weak provider] in
-      guard let self else { return }
-      guard let provider else {
-        self.pendingNotificationJournalWrites.remove(key)
-        return
-      }
-      let storedMessage = await Self.performOwnerBoundNotificationAdmission(
-        ownerID: ownerID,
-        authorizationSnapshot: authorizationSnapshot
-      ) {
-        let recorded = await provider.recordJournalExchange(
-          surface: surface,
-          ownerID: ownerID,
-          continuityKey: continuityKey,
-          userText: "",
-          assistantText: messageText,
-          origin: "proactive_notification"
-        )
-        return recorded.assistant
-      }
-      self.pendingNotificationJournalWrites.remove(key)
-      guard storedMessage != nil else {
-        log("FloatingControlBarManager: notification journal admission rejected")
-        return
-      }
-      self.storedNotificationMessages[key] = StoredNotificationMessage(
-        ownerID: ownerID,
-        notificationID: notification.id,
-        context: notification.context,
-        messageClientTurnId: continuityKey,
-        createdAt: Date(),
-        title: notification.title,
-        suggestionIdentity: notification.feedbackIdentity
-      )
-      self.mostRecentNotificationKey = key
-    }
+    storedNotificationMessages[key] = StoredNotificationMessage(
+      ownerID: ownerID, notificationID: notification.id, context: notification.context,
+      messageClientTurnId: "notification:\(notification.id.uuidString)", createdAt: Date(),
+      title: notification.title, suggestionIdentity: notification.feedbackIdentity,
+      body: Self.notificationJournalText(title: notification.title, body: notification.message, kind: notification.kind)
+    )
+    mostRecentNotificationKey = key
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {
@@ -5003,11 +4954,10 @@ class FloatingControlBarManager {
       let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
       Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
-      let provider = historyChatProvider,
-      let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
+      historyChatProvider != nil
     else { return nil }
 
-    let block = notificationContextSuffix(message: message, context: stored.context)
+    let block = notificationContextSuffix(message: stored.contextMessage, context: stored.context)
     return block
   }
 
@@ -5020,10 +4970,7 @@ class FloatingControlBarManager {
     guard let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
       Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
-      let provider = historyChatProvider,
-      let notificationMessage = provider.messages.last(where: {
-        $0.clientTurnId == stored.messageClientTurnId
-      })
+      historyChatProvider != nil
     else {
       return false
     }
@@ -5048,14 +4995,13 @@ class FloatingControlBarManager {
     if !shouldRestoreVisibleConversation {
       window.state.clearViewport()
     }
-    window.state.bindAnswerMessage(notificationMessage)
     window.state.markConversationActivity()
     window.resizeToResponseHeightPublic(animated: true)
     window.orderFrontRegardless()
     window.focusInputField()
 
     pendingNotificationContext = PendingNotificationContext(
-      message: notificationMessage,
+      message: stored.contextMessage,
       context: stored.context
     )
     Task {

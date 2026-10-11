@@ -12,6 +12,8 @@ semantics. It must fail on main before the scan-budget fix and pass after.
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import database.chat as chat_db
 
 
@@ -31,6 +33,9 @@ class _FakeQuery:
         self.requested_limit = requested_limit
 
     def where(self, **_kwargs):
+        return self
+
+    def select(self, _fields):
         return self
 
     def order_by(self, *_args, **_kwargs):
@@ -69,7 +74,7 @@ class _FakeCollection:
         return _FakeQuery(self)
 
 
-def _message(document_id, *, reported=False):
+def _message(document_id, *, reported=False, **fields):
     return _FakeDocument(
         document_id,
         {
@@ -83,6 +88,7 @@ def _message(document_id, *, reported=False):
             'reported': reported,
             'memories_id': [],
             'files_id': [],
+            **fields,
         },
     )
 
@@ -201,3 +207,43 @@ def test_scan_continues_across_batches_through_a_dense_block_of_reported_rows():
 
     assert [row['id'] for row in page] == ['visible-a', 'visible-b']
     assert collection.streamed > 2, 'the page must have required more than its own rows'
+
+
+def test_automatic_entries_do_not_consume_visible_history_slots_or_offsets():
+    collection = _FakeCollection(
+        [
+            _message('user'),
+            _message('opener', metadata='{"chatFirstIntentSource":"daily_opener"}'),
+            _message('meeting', metadata='{"chatFirstIntentId":"old-meeting"}'),
+            _message('reply', content_blocks=[{'type': 'taskCard', 'taskId': 'task'}]),
+            _message('older-user'),
+        ]
+    )
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=2)
+        older = chat_db.get_messages('uid', limit=1, offset=2)
+    assert [row['id'] for row in page] == ['user', 'reply']
+    assert page[1]['content_blocks'] == [{'type': 'taskCard', 'taskId': 'task'}]
+    assert [row['id'] for row in older] == ['older-user']
+
+
+@pytest.mark.parametrize('reader', ['get_messages', 'get_app_messages', 'get_cache_aligned_messages'])
+def test_dense_automatic_prefix_never_hides_older_user_history(reader):
+    limit = 100
+    automatic_count = limit + chat_db.CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK + 101
+    rows = [
+        _message(f'automatic-{i}', sender='ai', reported=True, metadata='{"chatFirstIntentSource":"capture_arrival"}')
+        for i in range(automatic_count)
+    ]
+    rows += [_message('real-user'), _message('real-reply', sender='ai')]
+    collection = _FakeCollection(rows)
+    with _patch_db(collection):
+        if reader == 'get_app_messages':
+            page = chat_db.get_app_messages('uid', app_id='app', limit=limit)
+        elif reader == 'get_cache_aligned_messages':
+            page = chat_db.get_cache_aligned_messages('uid', app_id='app')
+        else:
+            page = chat_db.get_messages('uid', limit=limit)
+            older = chat_db.get_messages('uid', limit=1, offset=1)
+            assert [row['id'] for row in older] == ['real-reply']
+    assert [row['id'] for row in page] == ['real-user', 'real-reply']

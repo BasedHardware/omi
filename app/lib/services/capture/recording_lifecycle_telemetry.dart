@@ -101,10 +101,16 @@ class RecordingLifecycleTelemetry {
     return _recordingId!;
   }
 
-  void subscriptionFailed() => _emit('Recording Subscription Failed', {
+  void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
+        'reason': reason,
+        'phase': phase,
+        'recovery': 'wal_boundary',
       });
+
+  void subscriptionFailed() =>
+      _emit('Recording Subscription Failed', {'recording_id': _recordingId, 'recording_source': _source});
 
   void markStarted({String? evidence}) {
     if (_recordingId == null || _source == null || _startedEmitted) return;

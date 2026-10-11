@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import observe_sync_call, sync_phase_timer
 import logging
 import os
 import time
@@ -824,11 +825,13 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
-            response = client.post(url, files=files, data=data if data else None)
+            response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
-                response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
+                response = observe_sync_call(
+                    'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                )
                 use_v2 = False
         response.raise_for_status()
         payload: Any = response.json()
@@ -904,7 +907,7 @@ def parakeet_prerecorded(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'parakeet_prerecorded url_len={len(audio_url)} {speakers_count} {attempts}')
     try:
-        with httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
+        with sync_phase_timer('gcs'), httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
             with client.stream('GET', audio_url) as resp:
                 resp.raise_for_status()
                 content_length = resp.headers.get('content-length')

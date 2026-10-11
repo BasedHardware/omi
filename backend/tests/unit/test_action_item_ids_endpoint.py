@@ -287,7 +287,6 @@ def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
     )
     monkeypatch.setattr(ai_mod, 'delete_action_item_vectors_batch', lambda *a, **kw: None)
     monkeypatch.setattr(ai_mod, 'send_action_items_batch_deletion_message', lambda *a, **kw: None)
-    monkeypatch.setattr(ai_mod, '_wake_task_changes', lambda *a, **kw: None)
 
     # 1,200 IDs should be split into 3 chunks: 500 + 500 + 200
     big_ids = [f'task-{i}' for i in range(1200)]

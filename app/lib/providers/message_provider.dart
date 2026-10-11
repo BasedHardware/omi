@@ -584,6 +584,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   void addMessage(ServerMessage message) {
+    if (message.isAutomaticChatEntry) return;
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }

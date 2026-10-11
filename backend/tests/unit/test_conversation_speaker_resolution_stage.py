@@ -102,6 +102,11 @@ class FakeDiarizer:
 
 @pytest.fixture
 def env(monkeypatch):
+    from utils.stt.owner_profile import recovery_db
+
+    # This fixture supplies no enrolled owner audio. Keep the repair-state
+    # dependency hermetic instead of invoking the real SDK client factory.
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: None)
     monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda uid: True)
     store = {}
     monkeypatch.setattr(stage, 'speaker_embedding_configured', lambda: True)
@@ -192,14 +197,30 @@ def round3_stage(monkeypatch, env):
     return old_stage, old_placement
 
 
-def _admit_any_inventory(uid, conversation, *args, **kwargs):
-    return AudioChunkReadSession(uid, conversation.id, SR)
+def _admit_any_inventory(uid, conversation, *args, audio, **kwargs):
+    """Admit only fixture PCM, with no lazy listing or storage decode left over."""
+    session = AudioChunkReadSession(uid, conversation.id, SR)
+    session._chunks = []
+    for source in audio:
+        for start, pcm in source.chunks:
+            path = f'fixture-{len(session._chunks)}'
+            session._chunks.append(
+                dict(
+                    path=path,
+                    generation=1,
+                    timestamp=start,
+                    span=dict(start=start, samples=len(pcm) // 2, sample_rate=SR),
+                )
+            )
+            session.cache[path] = (pcm, 'none')
+            source.downloads += 1
+    return session
 
 
 def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
     audio = FakeAudio(plan, seconds=seconds, offset=offset)
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', audio)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(stage, '_verified_read_session', lambda *a, **kw: _admit_any_inventory(*a, audio=[audio], **kw))
     return audio
 
 
@@ -594,7 +615,11 @@ def test_span_resolution_mixed_sync_and_capture_scopes_resolve(env, stage_overri
         yield from live_audio(uid, conversation_id, wanted, sample_rate=sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', combined)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(
+        stage,
+        '_verified_read_session',
+        lambda *a, **kw: _admit_any_inventory(*a, audio=[sync_audio, live_audio], **kw),
+    )
     conversation = _capture_shifted_conversation(plan, manifest=False)
     origin = STARTED.timestamp()
     for segment in conversation.transcript_segments[:4]:
@@ -633,7 +658,7 @@ def test_span_resolution_mixed_sync_and_capture_scopes_resolve(env, stage_overri
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
 
 
-def test_span_resolution_refuses_before_any_embedding_when_a_required_segment_is_unplaceable(env, monkeypatch):
+def test_span_resolution_abstains_for_unplaceable_segment_and_embeds_verified_subset(env, monkeypatch):
     _span_flags(monkeypatch)
     _, diarizer = env
     plan = [0, 1] * 4
@@ -644,8 +669,9 @@ def test_span_resolution_refuses_before_any_embedding_when_a_required_segment_is
 
     stage.resolve_speakers_for_processing('u1', conversation)
 
-    assert diarizer.calls == 0
+    assert diarizer.calls == len(plan) - 1
     assert conversation.speaker_resolution.status == 'unavailable'
+    assert conversation.transcript_segments[3].speaker_id == 3
 
 
 def test_span_resolution_refuses_when_the_manifest_has_an_uncovered_hole(env, monkeypatch):
@@ -996,7 +1022,7 @@ def test_span_on_resolved_own_scope_with_lost_endpoint_or_cache_is_unavailable(e
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert conversation.speaker_resolution.status == 'unavailable'
-    assert diarizer.calls == calls_after_on
+    assert diarizer.calls == calls_after_on + (len(plan) - 1 if lost == 'endpoint_and_cache' else 0)
 
 
 def _span_manifest(origin, spans, *, file_id='af1'):
@@ -1133,7 +1159,11 @@ def test_rebased_donor_segments_resolve_exact_pcm_windows(env, monkeypatch, roun
         yield from donor_audio(uid, cid, wanted, sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', all_audio)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(
+        stage,
+        '_verified_read_session',
+        lambda *a, **kw: _admit_any_inventory(*a, audio=[survivor_audio, donor_audio], **kw),
+    )
     store.clear()
     _span_flags(monkeypatch)
     stage.resolve_speakers_for_processing('u1', merged)
@@ -1340,3 +1370,55 @@ def test_on_saved_sync_source_in_ambiguous_manifest_still_refuses(env, monkeypat
 
     assert conversation.speaker_resolution.status == 'unavailable'
     assert diarizer.calls == len(plan)
+
+
+def test_grouping_shadow_reuses_cache_no_new_model_calls_and_manual_overlay(monkeypatch, env, caplog):
+    store, diarizer = env
+    plan = [0, 1, 0, 1]
+    audio = FakeAudio(plan, seconds=8)
+    monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', audio)
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'off')
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    c = _conversation(plan, seconds=8)
+    stage.resolve_speakers_for_processing('owner', c)
+    calls, downloads = diarizer.calls, audio.downloads
+    original_keys = [s.provider_speaker.copy() for s in c.transcript_segments]
+    # Deserialize the persisted transcript before reprocessing: all public ids
+    # and scopes now describe acoustic groups, but provider priors remain intact.
+    c = Conversation(**c.model_dump())
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'owner')
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST', 'owner')
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *_: {
+            'segments': {'s0': {'is_user': False, 'person_id': 'manual-person', 'use_for_speech_training': False}}
+        },
+    )
+    with caplog.at_level('INFO'):
+        stage.resolve_speakers_for_processing('owner', c)
+    assert diarizer.calls == calls
+    assert audio.downloads == downloads
+    assert [s.provider_speaker for s in c.transcript_segments] == original_keys
+    assert c.transcript_segments[0].person_id == 'manual-person'
+    assert all(token == 'person:manual-person' for token in c.transcript_segments[0].speaker_grouping_shadow.values())
+    assert caplog.text.count('event=speaker_grouping_shadow uid=') == 3
+    assert caplog.text.count('surface=sync') == 3
+
+
+def test_shadow_failure_does_not_withdraw_incumbent_resolution(monkeypatch, env):
+    from utils.conversations import speaker_grouping_shadow as shadow
+
+    plan = [0, 0]
+    monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', FakeAudio(plan, seconds=8))
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'cohort')
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(shadow, 'count', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('metric down')))
+    c = _conversation(plan, seconds=8)
+    stage.resolve_speakers_for_processing('owner', c)
+    assert c.speaker_resolution.status == 'resolved'
+    assert all(s.is_user for s in c.transcript_segments)
+    assert all(s.speaker_grouping_shadow is None for s in c.transcript_segments)

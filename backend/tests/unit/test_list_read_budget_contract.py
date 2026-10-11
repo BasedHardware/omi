@@ -962,7 +962,12 @@ def _real_index_helpers(service_mod, monkeypatch, client):
 
 def test_offset_read_charges_dual_windows_and_emitted_rows(service_mod, monkeypatch):
     client = _suppressed_read_client(rows=200)
-    monkeypatch.setattr(service_mod, "read_canonical_memories", lambda *a, **k: [])
+
+    def _forbid_full_fetch(*_args, **_kwargs):
+        raise AssertionError("offset read must not full-fetch canonical memories")
+
+    monkeypatch.setattr(service_mod, "read_canonical_scan_page", lambda *a, **k: ([], True))
+    monkeypatch.setattr(service_mod, "read_canonical_memories", _forbid_full_fetch)
     _real_index_helpers(service_mod, monkeypatch, client)
     service = service_mod.MemoryService(db_client=client)
     service.canonical_statuses = MagicMock(return_value={})
@@ -980,7 +985,12 @@ def test_offset_read_charges_dual_windows_and_emitted_rows(service_mod, monkeypa
 
 def test_offset_read_parent_exhaustion_returns_partial_and_stops_scanning(service_mod, monkeypatch):
     client = _suppressed_read_client(rows=5_000)
-    monkeypatch.setattr(service_mod, "read_canonical_memories", lambda *a, **k: [])
+
+    def _forbid_full_fetch(*_args, **_kwargs):
+        raise AssertionError("offset read must not full-fetch canonical memories")
+
+    monkeypatch.setattr(service_mod, "read_canonical_scan_page", lambda *a, **k: ([], True))
+    monkeypatch.setattr(service_mod, "read_canonical_memories", _forbid_full_fetch)
     _real_index_helpers(service_mod, monkeypatch, client)
     service = service_mod.MemoryService(db_client=client)
     service.canonical_statuses = MagicMock(return_value={})
@@ -1072,13 +1082,13 @@ def test_memories_route_complete_page_keeps_cursor_header():
     assert 'x-omi-list-truncated' not in headers
 
 
-def test_memories_route_scan_budget_fallback_shares_the_request_budget():
-    """Scan-budget 503 still falls back to the offset read — on the same budget."""
+def test_memories_route_scan_budget_returns_truncated_without_offset_read():
+    """Scan-budget exhaustion must not start the offset reader."""
     service = MagicMock()
     service.read_page.side_effect = mem_mod.MemoryBackingStoreUnavailable(
         'Memory scan budget exceeded', stream='historical'
     )
-    service.read.return_value = []
+    service.read.side_effect = AssertionError('offset read must not run after keyset budget exhaustion')
     scope_request = SimpleNamespace(device_scope='all', client_device_id=None)
     budget = _budget(FakeClock())
     with (
@@ -1100,8 +1110,9 @@ def test_memories_route_scan_budget_fallback_shares_the_request_budget():
             x_app_platform=None,
             x_device_id_hash=None,
         )
-    # The fallback read ran, and it carried the SAME budget object — never a
-    # fresh unbudgeted window.
-    assert service.read.call_args.kwargs['budget'] is budget
+    service.read.assert_not_called()
+    body = json.loads(result.body)
+    assert body == []
     headers = {k.lower(): v for k, v in result.headers.items()}
-    assert 'x-omi-list-truncated' not in headers
+    assert headers['x-omi-list-truncated'] == 'true'
+    assert 'x-omi-memory-next-cursor' not in headers

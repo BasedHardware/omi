@@ -317,6 +317,13 @@ extension SettingsContentView {
               .foregroundColor(Ink.secondary)
           }
 
+          if let userSubscription {
+            GlassSeparator()
+            Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+
           if let error = subscriptionError {
             Text(error)
               .scaledFont(size: OmiType.caption)

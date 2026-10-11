@@ -231,6 +231,8 @@ async def execute_chat_stream(
     platform: Optional[str] = None,
     client_kind: Optional[ClientKind] = None,
     client_tz: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
+    shaped_invocation: bool = False,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the agentic chat handler.
 
@@ -274,6 +276,8 @@ async def execute_chat_stream(
         current_datetime_block=current_datetime_block,
         tz=tz,
         setup_deadline_at=setup_deadline_at,
+        device_tool_names=device_tool_names,
+        shaped_invocation=shaped_invocation,
     ):
         yield chunk
 

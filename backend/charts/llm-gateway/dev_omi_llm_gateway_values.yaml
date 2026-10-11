@@ -54,6 +54,11 @@ ingress:
   tls: []
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
   # Optional shared evidence. Missing bindings use strict process-local state.
   - name: REDIS_DB_HOST
     valueFrom:

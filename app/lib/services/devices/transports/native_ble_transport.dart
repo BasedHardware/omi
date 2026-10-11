@@ -18,6 +18,10 @@ const _captureAudioSilenceResubscribeLimit = 1;
 /// Native owns the connection lifecycle (retry, reconnect, bonding).
 /// This transport is long-lived
 class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionErrors {
+  /// Installed by capture. Counts audio notifications as they arrive so a
+  /// silent GATT link is distinct from a socket that sent nothing.
+  static void Function(String deviceId, int byteCount)? ingressByteObserver;
+
   final String _peripheralUuid;
   final bool requiresBond;
   final BleHostApi _hostApi;
@@ -86,6 +90,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _updateState(DeviceTransportState.connecting);
 
     _deviceReadyCompleter = Completer<List<BleService>>();
+    final deviceReady = _deviceReadyCompleter!.future;
+    // A disconnect can arrive while the platform's manageDevice reply is pending.
+    // Observe that error immediately; the await below still delivers it to connect's caller.
+    deviceReady.ignore();
 
     try {
       await _hostApi.manageDevice(_peripheralUuid, requiresBond);
@@ -97,7 +105,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     }
 
     try {
-      _services = await _deviceReadyCompleter!.future.timeout(
+      _services = await deviceReady.timeout(
         const Duration(seconds: 60),
         onTimeout: () => throw TimeoutException('Device ready timeout after 60s'),
       );
@@ -418,6 +426,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     if (isBleAudioCharacteristicUuid(characteristicUuid) && value.isNotEmpty) {
       _audioSilenceResubscribes = 0;
       _audioLivenessTimer?.cancel();
+      ingressByteObserver?.call(deviceId, value.length);
     }
     _addToStream(serviceUuid, characteristicUuid, value);
   }

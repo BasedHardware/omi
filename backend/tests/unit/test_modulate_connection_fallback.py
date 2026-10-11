@@ -25,6 +25,13 @@ from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
@@ -244,6 +251,7 @@ async def test_a_modulate_primary_never_falls_back_to_itself():
         patch.object(streaming, 'record_fallback'),
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=connect_modulate,
@@ -264,6 +272,7 @@ async def test_a_modulate_primary_walks_deepgram_then_parakeet_in_policy_order()
         patch.object(streaming, 'record_fallback') as record,
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=_RejectedSocket()),
             connect_modulate=AsyncMock(),
@@ -294,6 +303,7 @@ async def test_repeated_modulate_rejections_open_its_own_circuit():
         patch.object(streaming, 'record_fallback'),
     ):
         _, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=AsyncMock(),
@@ -315,6 +325,7 @@ async def test_the_modulate_circuit_stays_independent_of_the_other_providers():
         patch.object(streaming, 'record_fallback'),
     ):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=AsyncMock(),

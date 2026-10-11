@@ -47,6 +47,7 @@ class AuthenticationProvider extends BaseProvider {
   String? authToken;
   bool _loading = false;
   bool _requiresReauthentication = false;
+  AuthSessionExpirationReason? _sessionExpirationReason;
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
@@ -55,6 +56,9 @@ class AuthenticationProvider extends BaseProvider {
   @override
   bool get loading => _loading;
   bool get requiresReauthentication => _requiresReauthentication;
+
+  /// Why the current session expired, while [requiresReauthentication] is true.
+  AuthSessionExpirationReason? get sessionExpirationReason => _sessionExpirationReason;
   int get sessionExpirationGeneration => _sessionExpirationGeneration;
 
   AuthenticationProvider({bool initializeListeners = true}) {
@@ -122,6 +126,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
+        _sessionExpirationReason = event.reason;
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;

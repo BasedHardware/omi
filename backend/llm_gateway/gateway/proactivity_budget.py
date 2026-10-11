@@ -21,7 +21,7 @@ from llm_gateway.gateway.accounting import (
     build_accounting_event,
     rate_card_for,
 )
-from llm_gateway.gateway.errors import GatewayInvalidRequestError
+from llm_gateway.gateway.errors import GatewayInvalidRequestError, PROACTIVITY_ADMISSION_REASONS
 from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -60,23 +60,25 @@ def context_from_request(request: Any, caller: Any, accounting: AccountingContex
         return None
     item, producer, call, step = values
     if not all(values) or caller.name != 'backend' or not caller.user_uid or accounting.payer != 'omi':
-        raise GatewayInvalidRequestError('invalid proactivity identity')
+        raise GatewayInvalidRequestError('invalid proactivity identity', rejection_reason='proactivity_identity')
     if len(item) != 32 or any(c not in '0123456789abcdef' for c in item):
-        raise GatewayInvalidRequestError('invalid proactivity item')
+        raise GatewayInvalidRequestError('invalid proactivity item', rejection_reason='proactivity_item')
     try:
         producer_for(producer)
         if str(UUID(call)) != call:
             raise ValueError('noncanonical call id')
     except (ValueError, ProactivityDenied) as exc:
-        raise GatewayInvalidRequestError('invalid proactivity identity') from exc
+        raise GatewayInvalidRequestError(
+            'invalid proactivity identity', rejection_reason='proactivity_identity'
+        ) from exc
     if (
         step not in {'gate', 'generate', 'critic', 'prefilter', 'dedupe', 'usefulness', 'phrase'}
         or accounting.request_id != call
         or accounting.feature != f'proactivity_v2_{producer}'
     ):
-        raise GatewayInvalidRequestError('invalid proactivity attribution')
+        raise GatewayInvalidRequestError('invalid proactivity attribution', rejection_reason='proactivity_attribution')
     if producer == 'commitment_followup' and step != 'phrase':
-        raise GatewayInvalidRequestError('invalid proactivity step')
+        raise GatewayInvalidRequestError('invalid proactivity step', rejection_reason='proactivity_step')
     return ProactivityAttemptContext(caller.user_uid, item, producer, call, step, accounting)
 
 
@@ -152,7 +154,9 @@ async def execute_budgeted_provider(
 ) -> Any:
     context = current_attempt()
     if context is None:
-        raise GatewayInvalidRequestError('missing proactivity authority')
+        raise GatewayInvalidRequestError(
+            'missing proactivity authority', rejection_reason='proactivity_authority_missing'
+        )
     try:
         if os.getenv('LLM_GATEWAY_ACCOUNTING_ENABLED', '').lower() not in {'true', '1', 'yes'}:
             raise ProactivityDenied('accounting_disabled')
@@ -175,13 +179,16 @@ async def execute_budgeted_provider(
         )
     except Exception as exc:
         reason = exc.reason if isinstance(exc, ProactivityDenied) else 'unavailable'
+        reason = reason if reason in PROACTIVITY_ADMISSION_REASONS else 'unknown'
         logger.info('proactivity_v2_admission producer=%s result=denied reason=%s', context.producer, reason)
         raise GatewayInvalidRequestError(
-            f'proactivity admission denied: {reason}', param='proactivity_admission'
+            f'proactivity admission denied: {reason}',
+            param='proactivity_admission',
+            rejection_reason=f'proactivity_admission.{reason}',
         ) from exc
     if timeout_ms <= 0:
         await run_blocking(db_executor, authority.release_unsent, reservation=reservation)
-        raise GatewayInvalidRequestError('proactivity deadline elapsed')
+        raise GatewayInvalidRequestError('proactivity deadline elapsed', rejection_reason='proactivity_deadline')
     try:
         response = await asyncio.wait_for(
             provider_call(request, provider_ref=provider_ref, credentials=credentials, timeout_ms=timeout_ms),
@@ -205,7 +212,9 @@ async def execute_budgeted_provider(
             logger.warning('proactivity_v2_budget_settled producer=%s result=held', context.producer)
         if isinstance(exc, asyncio.CancelledError):
             raise
-        raise GatewayInvalidRequestError('proactivity provider failed; reservation retained') from exc
+        raise GatewayInvalidRequestError(
+            'proactivity provider failed; reservation retained', rejection_reason='proactivity_provider_failed'
+        ) from exc
     attempt = attempt_trace.record(
         provider=provider_ref.provider,
         configured_model=provider_ref.model,
@@ -225,10 +234,14 @@ async def execute_budgeted_provider(
     try:
         settled = await run_blocking(db_executor, authority.settle, reservation=reservation, event=event)
     except Exception as exc:
-        raise GatewayInvalidRequestError('proactivity settlement unavailable') from exc
+        raise GatewayInvalidRequestError(
+            'proactivity settlement unavailable', rejection_reason='proactivity_settlement_unavailable'
+        ) from exc
     if not settled:
         logger.error(
             'proactivity_v2_budget_invariant_failed producer=%s result=held_or_over_reserved', context.producer
         )
-        raise GatewayInvalidRequestError('proactivity settlement rejected')
+        raise GatewayInvalidRequestError(
+            'proactivity settlement rejected', rejection_reason='proactivity_settlement_rejected'
+        )
     return response

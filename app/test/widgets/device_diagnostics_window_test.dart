@@ -152,6 +152,39 @@ void main() {
     expect(find.text('12'), findsNothing);
   });
 
+  for (final hasRecentEvents in [false, true]) {
+    testWidgets('seven-day cards expire retained events without another native write ($hasRecentEvents)', (
+      tester,
+    ) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const dayMs = 24 * 3600 * 1000;
+      mockBleHostApi(
+        'getDeviceDiagnostics',
+        BleDeviceDiagnostics(
+          disconnectHistory: [
+            _event(now - 8 * dayMs, timeToReconnectMs: 5000),
+            _event(now - 8 * dayMs, eventType: 'fail_to_connect'),
+            if (hasRecentEvents) _event(now - dayMs, timeToReconnectMs: 6000),
+            if (hasRecentEvents) _event(now - dayMs, eventType: 'fail_to_connect'),
+          ],
+          reconnectionCount: 10048,
+          connectedAt: 0,
+          failToConnectCount: 12,
+          nativeBackgroundBytesConsumed: 0,
+          nativeBackgroundPacketsConsumed: 0,
+        ),
+      );
+      mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({'counters_since': now - 14 * dayMs}));
+
+      await pumpPage(tester);
+
+      expect(find.text('Drops'), findsOneWidget);
+      expect(find.text('Failed connections'), findsOneWidget);
+      expect(find.text(hasRecentEvents ? '1' : '0'), findsNWidgets(2));
+      expect(find.text('Since pairing: 10048 drops, 12 failed connections.'), findsOneWidget);
+    });
+  }
+
   testWidgets('missing window anchor falls back to lifetime counts, labelled since pairing', (tester) async {
     mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));
     // No counters_since: extended diagnostics came back empty.

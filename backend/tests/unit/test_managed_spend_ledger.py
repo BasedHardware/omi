@@ -1,11 +1,4 @@
-"""Spend attribution for the two surfaces that bypass the LLM gateway.
-
-Shard S0 of the local-models free tier: a synthetic direct desktop-proxy call
-and a synthetic realtime relay turn must land in the gateway's own
-``llm_gateway_attempts`` ledger and be answerable per uid, per feature. Each
-test here pins one link of that chain; the two end-to-end tests are the
-shard's proof run hermetically against a fake Firestore.
-"""
+"""Spend attribution for desktop gateway calls and realtime relay turns."""
 
 from __future__ import annotations
 
@@ -433,127 +426,34 @@ def test_streaming_usage_observer_stops_at_a_bounded_buffer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_synthetic_direct_proxy_call_lands_in_the_per_uid_per_feature_query(monkeypatch, ledger_client) -> None:
-    """S0 proof, proxy half: one company-paid Vertex call → one queryable ledger row."""
+async def test_company_paid_proxy_uses_gateway_without_direct_provider_fallback(monkeypatch) -> None:
+    """The gateway owns managed Gemini routing, reservation retries, and attempt accounting."""
+    from fastapi.responses import Response
 
-    class VertexClient:
-        async def post(self, url, *, params, content, headers):
-            return httpx.Response(
-                200,
-                request=httpx.Request('POST', url),
-                json={
-                    'candidates': [{'content': {'parts': [{'text': 'hi'}]}, 'finishReason': 'STOP'}],
-                    'usageMetadata': {
-                        'promptTokenCount': 120,
-                        'cachedContentTokenCount': 80,
-                        'candidatesTokenCount': 14,
-                    },
-                    'modelVersion': 'gemini-2.5-flash-001',
-                    'trafficType': 'PROVISIONED_THROUGHPUT',
-                },
-            )
-
-    async def route(path, _model, _action, _query):
-        return desktop_proxy.UpstreamRoute('https://provider.invalid', {}, {}, 'vertex_ai', 'adc', 'us-central1')
+    captured = {}
 
     async def meter(_uid, path, _model, _action):
         return path
 
-    monkeypatch.setattr(desktop_proxy.sys, 'stdout', io.StringIO())
-    monkeypatch.setattr(desktop_proxy, '_wait_for_disconnect', _never_disconnects)
-    monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_proxy, '_meter_server_request', meter)
-    monkeypatch.setattr(desktop_proxy, '_upstream', route)
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_client', lambda: VertexClient())
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
-    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: False)
-
-    response = await desktop_proxy._proxy(_request(), 'models/gemini-2.5-flash:generateContent', False, UID)
-    await ledger.drain_pending_writes()
-
-    assert response.status_code == 200
-    rows = ledger_client.spend_rows(uid=UID, feature='desktop_proactivity')
-    assert len(rows) == 1
-    row = rows[0]
-    assert row['caller'] == 'desktop_proxy'
-    assert row['payer'] == 'omi'
-    assert row['provider'] == 'gemini'
-    assert row['actual_model_version'] == 'gemini-2.5-flash-001'
-    assert row['traffic_type'] == 'PROVISIONED_THROUGHPUT'
-    assert (row['prompt_tokens'], row['cached_input_tokens'], row['output_tokens']) == (120, 80, 14)
-    assert row['cost_status'] == 'estimated'
-    assert row['estimated_cost_micro_usd'] > 0
-    assert row['cost_attribution_status'] == 'complete'
-    assert row['subscription_tier'] == 'basic'
-    assert ledger_client.spend_rows(uid='someone-else', feature='desktop_proactivity') == []
-
-
-@pytest.mark.asyncio
-async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, ledger_client) -> None:
-    """Attempt 1 (PT reservation) comes back full, attempt 2 (shared capacity) succeeds: two rows, one invocation."""
-    statuses = iter([429, 200])
-    routed = []
-
-    class Client:
-        async def post(self, url, *, params, content, headers):
-            status = next(statuses)
-            if status == 429:
-                return httpx.Response(
-                    429,
-                    request=httpx.Request('POST', url),
-                    json={
-                        'error': {
-                            'code': 429,
-                            'status': 'RESOURCE_EXHAUSTED',
-                            'message': 'Provisioned throughput exhausted',
-                        }
-                    },
-                )
-            return httpx.Response(
-                200,
-                request=httpx.Request('POST', url),
-                json={
-                    'candidates': [{'finishReason': 'STOP'}],
-                    'usageMetadata': {'promptTokenCount': 9, 'candidatesTokenCount': 3},
-                },
-            )
-
-    async def route(path, model, _action, _query, request_type=None):
-        capacity = request_type or 'dedicated'
-        routed.append((model, capacity))
-        return desktop_proxy.UpstreamRoute(
-            'https://provider.invalid',
-            {desktop_proxy.ptr.REQUEST_TYPE_HEADER: capacity},
-            {},
-            'vertex_ai',
-            'adc',
-            'us-central1',
-        )
-
-    async def meter(_uid, path, _model, _action):
-        return path
+    async def gateway(request, body, *, model, action, streaming, uid, telemetry):
+        captured.update(model=model, action=action, streaming=streaming, uid=uid, body=body)
+        telemetry.provider = 'llm_gateway'
+        telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'{"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}', media_type='application/json')
 
     monkeypatch.setattr(desktop_proxy.sys, 'stdout', io.StringIO())
-    monkeypatch.setattr(desktop_proxy, '_wait_for_disconnect', _never_disconnects)
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_proxy, '_meter_server_request', meter)
-    monkeypatch.setattr(desktop_proxy, '_upstream', route)
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_client', lambda: Client())
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
-    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', gateway)
+    monkeypatch.setattr(desktop_proxy, '_upstream', lambda *_args, **_kwargs: pytest.fail('direct provider path used'))
 
     response = await desktop_proxy._proxy(_request(), 'models/gemini-2.5-flash:generateContent', False, UID)
-    await ledger.drain_pending_writes()
 
     assert response.status_code == 200
-    assert routed == [('gemini-2.5-flash', 'dedicated'), ('gemini-3.1-flash-lite', 'shared')]
-    rows = sorted(ledger_client.spend_rows(uid=UID, feature='desktop_proactivity'), key=lambda r: r['retry_ordinal'])
-    assert [(r['retry_ordinal'], r['outcome'], r['error_class'], r['fallback_reason']) for r in rows] == [
-        (1, 'error', 'provider_capacity', None),
-        (2, 'success', 'none', 'overflow_recovery'),
-    ]
-    assert {r['invocation_id'] for r in rows} == {rows[0]['invocation_id']}
-    assert rows[0]['usage_status'] == 'not_reported' and rows[1]['prompt_tokens'] == 9
+    assert captured['model'] == 'gemini-2.5-flash'
+    assert captured['action'] == 'generateContent'
+    assert captured['streaming'] is False
+    assert captured['uid'] == UID
 
 
 # --- omni relay: one row per observed provider turn ---------------------------------------

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -104,6 +105,31 @@ class IOSChecks(unittest.TestCase):
         self.assertEqual(args[args.index("--whats-new") + 1], "- New line")
         self.assertNotIn("publish", args)
 
+    def test_locale_aware_submission_writes_whats_new_for_every_locale(self):
+        captured = {}
+
+        def fake_run(command, **kwargs):
+            path = next(a for a in command if a.startswith("@file:"))[len("@file:") :]
+            captured["command"] = command
+            captured["payload"] = json.loads(Path(path).read_text(encoding="utf-8"))
+            captured["path"] = Path(path)
+            return Mock(returncode=0)
+
+        with patch.object(promote.subprocess, "run", side_effect=fake_run):
+            promote.submit_ios(promote.IOSBuild("selected-id", "1.2.3", "23"), "- New line", locales=["fr-FR", "en-US"])
+        args = captured["command"]
+        self.assertNotIn("--whats-new", args)
+        self.assertIn("--no-phased-release", args)
+        self.assertEqual(args[args.index("--release-type") + 1], "MANUAL")
+        self.assertEqual(args[-1], "selected-id")
+        self.assertEqual(
+            captured["payload"],
+            [{"locale": "en-US", "whats_new": "- New line"}, {"locale": "fr-FR", "whats_new": "- New line"}],
+        )
+        self.assertFalse(captured["path"].exists())
+        with self.assertRaises(promote.PromotionError):
+            promote.ios_localizations([], "- New line")
+
 
 class AndroidChecks(unittest.TestCase):
     def setUp(self):
@@ -115,6 +141,17 @@ class AndroidChecks(unittest.TestCase):
 
     def test_only_alpha_exact_version_and_code_are_eligible(self):
         promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
+        # Play Console names a release "X.Y.Z (code)"; the version inside must still match exactly.
+        promote.select_play_release(
+            {"track": "alpha", "releases": [{"name": "1.2.3 (23)", "versionCodes": ["23"], "status": "completed"}]},
+            self.production,
+            "1.2.3",
+            "23",
+        )
+        internal = {"track": "internal", "releases": self.alpha["releases"]}
+        promote.select_play_release(internal, self.production, "1.2.3", "23", source_track="internal")
+        with self.assertRaisesRegex(promote.PromotionError, "internal track lookup failed"):
+            promote.select_play_release(self.alpha, self.production, "1.2.3", "23", source_track="internal")
         for release in (
             {"name": "1.2.4", "versionCodes": ["23"], "status": "completed"},
             {"name": "1.2.3", "versionCodes": ["23", "24"], "status": "completed"},
@@ -165,6 +202,16 @@ class AndroidChecks(unittest.TestCase):
         )
         client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
         self.assertFalse(client.edits().bundles.upload.called)
+
+    def test_draft_status_is_the_only_alternative_to_completed(self):
+        client = Mock()
+        promote.submit_android(client, "edit-id", "1.2.3", "23", "New line", status="draft")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["status"], "draft")
+        self.assertEqual(body["releases"][0]["versionCodes"], ["23"])
+        client.edits().commit.assert_called_once()
+        with self.assertRaises(promote.PromotionError):
+            promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress")
 
 
 if __name__ == "__main__":

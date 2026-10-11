@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-automatic-capture-pause-without-retention",
+  "status": "open",
+  "violated_contract": "INV-CAP-1: an automatic phone power policy must not stop consuming pendant audio while connected firmware discards rather than retains unconsumed frames. Transcript silence is not user mute intent or device retention evidence.",
+  "canonical_prevention": "Keep live consumption enabled until a shipped and tested retention-and-drain capability authorizes pausing. Fence queued timeout effects, recover historical automatic mute markers through the capture owner, and test continued delivery beyond silence plus explicit mute precedence.",
+  "canonical_prevention_artifact": [
+    "app/test/services/capture/tiered_capture_test.dart",
+    "app/test/services/capture/resume_sync_fence_test.dart"
+  ],
+  "evidence_prs": [20837],
+  "scope_hints": ["app/lib/services/capture/**"]
+}

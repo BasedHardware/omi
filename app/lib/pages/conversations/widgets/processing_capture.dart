@@ -48,10 +48,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// remembered here: set while a realtime pendant capture is live, cleared when the pendant
   /// reconnects, is unpaired, or another source (the phone) takes over.
   String? _droppedSource;
-  DateTime? _droppedStartedAt;
-
-  /// When the drop was first seen: the card's time stops there, since nothing records meanwhile.
-  DateTime? _droppedAt;
 
   @override
   void initState() {
@@ -130,8 +126,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
         final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
         if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting),
-              padding: _liveCardPadding);
+          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
         }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
@@ -171,7 +166,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider), padding: _liveCardPadding),
+            child: _cardShell(_buildUnifiedRecordingUI(provider),
+                padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
           ),
         );
       },
@@ -182,11 +178,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
   static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
-  Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
+  Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         width: double.maxFinite,
-        padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
+        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
+        decoration:
+            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
         child: child,
       );
 
@@ -196,30 +193,26 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final source = provider.liveCaptureSource;
     if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
       _droppedSource = source;
-      _droppedStartedAt = provider.liveCaptureStartedAt ?? _droppedStartedAt;
-      _droppedAt = null;
       return false;
     }
     if (source != null || connected || !paired) {
       _droppedSource = null;
-      _droppedStartedAt = null;
-      _droppedAt = null;
       return false;
     }
     if (_droppedSource == null) return false;
-    _droppedAt ??= DateTime.now();
     return true;
   }
 
   Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
     final l10n = context.l10n;
-    final startedAt = _droppedStartedAt;
     return LiveCaptureCard(
       source: _droppedSource!,
       status: l10n.disconnected,
-      detail: reconnecting ? l10n.reconnecting : null,
+      // Reconnecting is its own state; a drop that is not reconnecting yet still says what
+      // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
+      detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
       explanation: l10n.capturePendantDisconnectedDetail,
-      elapsed: startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt),
+      compact: true,
       lastLine: provider.segments.lastOrNull?.text,
     );
   }
@@ -315,7 +308,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
-      final startedAt = provider.liveCaptureStartedAt;
       final card = LiveCaptureCard(
         source: isDeviceRecording ? liveSource : 'phone',
         status: copy.status,
@@ -324,7 +316,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
         paused: isPaused,
-        elapsed: unverified || startedAt == null ? null : DateTime.now().difference(startedAt),
+        // The session clock (how long the pendant has been connected) is not the conversation.
+        compact: true,
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,

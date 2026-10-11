@@ -122,6 +122,19 @@ void main() {
   final omi = _device('omi-1');
   final glass = _device('glass-1', type: DeviceType.openglass, name: 'OmiGlass');
 
+  test('queued role reconciliation cannot publish into a replacement account session', () async {
+    final (device, capture) = await providers();
+    final retired = device.registerConnectedDevice(omi);
+    device.clearUserData();
+    await retired;
+    expect(capture.recordingDevice, isNull);
+    expect(device.isConnected, isFalse);
+
+    await device.registerConnectedDevice(omi);
+    expect(capture.recordingDevice?.id, omi.id);
+    expect(device.isConnected, isTrue);
+  });
+
   test('pendant carries audio, glasses join as the photo companion', () async {
     final (device, capture) = await providers();
 

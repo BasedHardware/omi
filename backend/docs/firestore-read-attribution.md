@@ -5,7 +5,31 @@ for every process that imports `database/_client.py`. The patch is on the SDK
 classes, so a later `firestore.Client()` in that process is covered. Recording
 does no network I/O, adds no Firestore reads, and never raises into the caller.
 
-The coverage numerator is `omi_firestore_billed_reads_total`. Do not add
+The daily bill-reconcile coverage numerator is the cumulative JSON read ledger
+emitted when `FIRESTORE_READ_LEDGER=1`. The service label is
+`FIRESTORE_READ_LEDGER_SERVICE` when that is set, otherwise Cloud Run
+`K_SERVICE` or `CLOUD_RUN_JOB`, otherwise `DD_SERVICE`. GKE listen and pusher
+use `DD_SERVICE` (`backend-listen` and `pusher`). `memory-maintenance-job`
+uses `CLOUD_RUN_JOB` so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
+`amount` and `kind`, scoped to clients in `based-hardware`; unknown client
+projects are counted and mark the day incomplete. It is sampled at p=1, so
+sampling error is zero. `backend` and `backend-listen` must show a snapshot
+in the last 15 minutes of the UTC day; other required services must appear
+at least once. `pusher` stays in the shipped set and its rows still count,
+but prod pusher is still the pre-ledger image, so a missing pusher snapshot
+is a recorded exclusion and does not make the day incomplete. Clear
+`COMPLETENESS_EXCLUDED` in `backend/scripts/firestore_read_reconcile.py`
+once a normal promotion is serving pusher on a ledger SHA. That puts the
+loud missing-snapshot exit back. A cron job that exits earlier does not fail the
+day. Crash loss after the last snapshot stays unquantified. Index-entry and other
+billing-model bias is not quantified. The ±2% band is an operational allowance,
+not proof that bias is under 2%.
+
+Daily outcomes are `healthy`, `audit_required`, `accounting_failure`, and
+`incomplete`. The reconcile workflow only reads billing and ledger logs; it
+does not turn on Firestore `DATA_READ` audit logging.
+
+The separate Prometheus counter is `omi_firestore_billed_reads_total`. Do not add
 `omi_firestore_document_reads_total`, `omi_firestore_query_operations_total`,
 `omi_firestore_documents_per_operation`, or
 `omi_firestore_document_reads_by_site_total` to it. Those answer different
@@ -38,14 +62,15 @@ the probe (`users/*/memory_items` becomes `users/memory_items`).
 sum(rate(omi_firestore_caller_label_overflow_total[30m]))
 ```
 
-## Coverage PromQL
+## PromQL dashboard guidance (not the bill reconcile)
 
 The stackdriver exporter publishes
 `firestore.googleapis.com/document/read_count` as the gauge
 `stackdriver_firestore_instance_firestore_googleapis_com_document_read_count`.
 The gauge value is the count for a 60-second window. Use `avg()` across
 exporter replicas and `avg_over_time(...) / 60` for reads per second. `rate()`
-on that gauge is not a read rate.
+on that gauge is not a read rate. This dashboard comparison is not a 60-second
+read-count error bar and is not the daily bill reconciliation.
 
 Use a window of at least 30 minutes, and only after every replica of every
 instrumented service is running this probe.
@@ -88,10 +113,12 @@ topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_
 
 ## Acceptance
 
-After deploy, each of the three type ratios and the overall ratio should be
-**≥ 95%**. A short window while old replicas are still serving will sit below
-that. A ratio that stays below 95% after the fleet is on this commit is a
-reader this probe does not see, or the index-entry residual below.
+For dashboard investigation only, after deploy each of the three type ratios
+and the overall ratio should be **≥ 95%**. A short window while old replicas
+are still serving will sit below that. A ratio that stays below 95% after the
+fleet is on this commit is a reader this probe does not see, or the
+index-entry residual below. These ratios do not determine the daily bill
+reconcile outcome.
 
 ## What stays outside the numerator
 
@@ -113,6 +140,7 @@ entrypoints do that before they read:
 | Process | Entrypoint | Covered because |
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
+| backend-integration | `backend/main.py` | imports the same database-backed router process and is included in the required ledger service set |
 | llm_gateway | `backend/llm_gateway/main.py` | Legacy JIT proactivity reservation reads retired; the gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
@@ -138,10 +166,11 @@ patch. Scripts that do not, including
 
 ## Readers this Python probe cannot see
 
-Measure these as the residual: billed reads minus `omi_firestore_billed_reads_total`,
-after the Python fleet is on this commit. Server SDK traffic is
-`module="__unknown__"` in Firestore audit logs, so a module filter does not
-name them. Do not turn DATA_READ audit back on for this.
+Measure these as the residual: billed reads minus the ledger sum, after the
+Python fleet is on this commit. Server SDK traffic is `module="__unknown__"`
+in Firestore audit logs, so a module filter does not name them. The daily
+workflow does not enable DATA_READ. Turning that audit log on requires
+`resourcemanager.projects.setIamPolicy`, which this measurement job does not hold.
 
 | Reader | Path | What it reads | How to measure |
 |---|---|---|---|

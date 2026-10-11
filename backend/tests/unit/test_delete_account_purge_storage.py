@@ -32,6 +32,7 @@ def users_service():
     """Load a fresh services.users.account_deletion against stubbed database/utils namespaces."""
     fakes = {
         "database": _pkg("database"),
+        "database.sync_jobs": AutoMockModule("database.sync_jobs"),
         "database.users": AutoMockModule("database.users"),
         "database.action_items": AutoMockModule("database.action_items"),
         "database.conversations": AutoMockModule("database.conversations"),
@@ -43,6 +44,7 @@ def users_service():
         "database.dev_api_key": AutoMockModule("database.dev_api_key"),
         "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
         "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
+        "database.messaging": AutoMockModule("database.messaging"),
         "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),

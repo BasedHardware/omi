@@ -54,7 +54,7 @@ async def _audio_chunks():
 async def _run_blocking(_executor, function, *_args, **_kwargs):
     if function is router.is_desktop_trial_paywalled:
         return False
-    if function is router.redis_db.check_tts_rate_limit:
+    if function is router.redis_db.check_tts_rate_limit_for_user:
         return 0, None
     raise AssertionError(function)
 
@@ -143,7 +143,7 @@ async def test_desktop_gemini_does_not_treat_openai_byok_as_funding(monkeypatch)
 
     paywall_call = next(call for call in calls if call[0] is router.is_desktop_trial_paywalled)
     assert paywall_call[1] == {'required_byok_provider': None, 'byok_exempt': False}
-    assert any(function is router.redis_db.check_tts_rate_limit for function, _kwargs in calls)
+    assert any(function is router.redis_db.check_tts_rate_limit_for_user for function, _kwargs in calls)
 
 
 @pytest.mark.asyncio

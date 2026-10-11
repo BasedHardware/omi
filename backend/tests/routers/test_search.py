@@ -230,9 +230,16 @@ def test_count_people_uses_server_side_aggregation():
     client = MagicMock()
     people_ref = client.collection.return_value.document.return_value.collection.return_value
     people_ref.count.return_value.get.return_value = _aggregation(3)
+    people_ref.where.return_value.count.return_value.get.return_value = _aggregation(1)
 
-    assert users_db.count_people('uid1', firestore_client=client) == 3
+    assert users_db.count_people('uid1', firestore_client=client) == 2
     client.collection.return_value.document.return_value.collection.assert_called_once_with('people')
+    dismissed_filter = people_ref.where.call_args.kwargs['filter']
+    assert (dismissed_filter.field_path, dismissed_filter.op_string, dismissed_filter.value) == (
+        'is_dismissed',
+        '==',
+        True,
+    )
     people_ref.stream.assert_not_called()
 
 

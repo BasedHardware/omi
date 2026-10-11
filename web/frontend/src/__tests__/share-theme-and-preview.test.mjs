@@ -124,13 +124,17 @@ describe('link preview image', () => {
     assert.deepEqual(previewBullets(undefined), []);
   });
 
-  it('is wired into the page metadata and never cached for a year', () => {
+  it('is wired into the page metadata and is not cached after revocation', () => {
     assert.match(pageSource, /new URL\(`\$\{ogUrl\}\/og`\)/);
     assert.match(pageSource, /url: ogImageUrl\.toString\(\)/);
     assert.match(pageSource, /ogImageUrl\.searchParams\.set\('sid'/);
     assert.match(pageSource, /twitter:/);
+    assert.match(pageSource, /getSharedMemory\(params\.id\)/);
+    assert.doesNotMatch(pageSource, /revalidate\s*:/);
     assert.match(ogSource, /ImageResponse/);
-    assert.match(ogSource, /'Cache-Control'/);
-    assert.doesNotMatch(ogSource, /max-age=31536000/);
+    assert.match(ogSource, /cache:\s*'no-store'/);
+    assert.match(ogSource, /private, no-store/);
+    assert.doesNotMatch(ogSource, /revalidate\s*:/);
+    assert.doesNotMatch(ogSource, /max-age=/);
   });
 });

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -13,6 +16,7 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -61,18 +65,24 @@ class _FakeRingDevice implements DeviceConnection {
   _FakeRingDevice({required this.ringInfo, this.caps = 0});
 
   RingInfo ringInfo;
+  Object? ringInfoError;
   final int caps;
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
+  final _firstAdvance = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
   RingInfo? postAckInfo;
   int custodyEpochValue = 7;
 
   void emit(List<int> bytes) => onBytes?.call(bytes);
 
+  /// Completes when the first advance reaches the card.
+  Future<void> get firstAdvance => _firstAdvance.future;
+
   @override
   Future<RingInfo?> getRingInfo() async {
+    if (ringInfoError != null) throw ringInfoError!;
     final after = postAckInfo;
     if (after != null && advances.isNotEmpty) {
       final r = after;
@@ -96,6 +106,7 @@ class _FakeRingDevice implements DeviceConnection {
     required int? expectedRingId,
   }) async {
     advances.add(_Advance(newReadSeq, expectedEpoch, expectedRingId));
+    if (!_firstAdvance.isCompleted) _firstAdvance.complete();
     return RingCommandAck(status: ackStatus);
   }
 
@@ -169,6 +180,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
+  final custodies = <PendantRingCustody>[];
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('ring_custody_dl_test_');
@@ -182,6 +194,12 @@ void main() {
   });
 
   tearDown(() async {
+    // Checkpoint writes resolve their directory through path_provider, so they
+    // must land before the mock is removed and the directory deleted (#20500).
+    for (final custody in custodies) {
+      await custody.flush();
+    }
+    custodies.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -190,16 +208,18 @@ void main() {
   });
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
+    final custody = PendantRingCustody(
+      walValidator: (ref) async {
+        final path = await Wal.getFilePath(ref.fileName);
+        if (path == null) return false;
+        final f = File(path);
+        return f.existsSync() && await f.length() == ref.bytes;
+      },
+    );
+    custodies.add(custody);
     final sync = RingStorageSyncImpl(_Listener())
       ..testConnection = card
-      ..testCustody = PendantRingCustody(
-        walValidator: (ref) async {
-          final path = await Wal.getFilePath(ref.fileName);
-          if (path == null) return false;
-          final f = File(path);
-          return f.existsSync() && await f.length() == ref.bytes;
-        },
-      )
+      ..testCustody = custody
       ..testWals = [wal];
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
@@ -215,6 +235,44 @@ void main() {
         device: 'devkit-1',
         storageTotalBytes: records * 444,
       );
+
+  test('syncAll persists the failure cause, original stack and phase while returning a response', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() => DebugLogManager.setEnabled(false));
+    final error = StateError('ring INFO read failed');
+    final card = _FakeRingDevice(ringInfo: _info())..ringInfoError = error;
+    addTearDown(card.controller.close);
+    final wal = ringWal()..deviceDownloadFraction = 0.5;
+    final sync = syncWith(_FakeLocalSync(), card, wal);
+
+    final response = await sync.syncAll();
+
+    // Logging is fire-and-forget in production; wait for the actual persisted record.
+    Map<String, dynamic>? failure;
+    for (var attempt = 0; attempt < 100 && failure == null; attempt++) {
+      final logFiles = await DebugLogManager.listLogFiles();
+      final lines = logFiles.isEmpty ? <String>[] : await logFiles.first.readAsLines();
+      for (final line in lines) {
+        final record = jsonDecode(line) as Map<String, dynamic>;
+        if (record['message'] == 'RingStorageSync failed') failure = record;
+      }
+      if (failure == null) await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!['level'], 'ERROR');
+    expect(failure['extra'], {'device': 'devkit-1', 'error': error.toString(), 'phase': 'list-read'});
+    expect(failure['stack'], contains('_FakeRingDevice.getRingInfo'));
+    expect(response, isNotNull);
+    expect(response!.newConversationIds, isEmpty);
+    expect(response.updatedConversationIds, isEmpty);
+    expect(sync.isSyncing, isFalse);
+    expect(wal.status, WalStatus.miss);
+    expect(wal.deviceDownloadFraction, isNull);
+    expect(card.advances, isEmpty);
+  });
 
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {
     final card = _FakeRingDevice(ringInfo: _info());
@@ -255,7 +313,10 @@ void main() {
       for (var i = 0; i < 61; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
       }
-      await Future.delayed(const Duration(milliseconds: 300));
+      // The first 60 records fill a chunk. Wait for its advance instead of a fixed sleep: under CI
+      // load the advance had not fired yet when a 300 ms sleep ended (#20500). The bound only keeps
+      // a missing incremental advance from hanging; the expectation below still fails the test.
+      await card.firstAdvance.timeout(const Duration(seconds: 10), onTimeout: () {});
       final incrementalCount = card.advances.length;
       for (var i = 0; i < 2; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));

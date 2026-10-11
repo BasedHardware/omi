@@ -7,7 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -262,30 +261,8 @@ async def _passthrough_run_blocking(_, function, *args, **kwargs):
     return function(*args, **kwargs)
 
 
-class _FakeProviderClient:
-    def __init__(self, response: httpx.Response) -> None:
-        self.response = response
-
-    async def post(self, *args, **kwargs) -> httpx.Response:
-        return self.response
-
-
-def _upstream_ok(path, model, action, query, **kwargs):
-    async def inner():
-        return desktop_proxy.UpstreamRoute(
-            url='https://provider.invalid/v1/models',
-            headers={},
-            params={},
-            provider='vertex_ai',
-            credential_source='server',
-            region='us-central1',
-        )
-
-    return inner()
-
-
 def _fail_if_invoked(*_args, **_kwargs):
-    raise AssertionError('provider dispatch must not run on this path')
+    raise AssertionError('company-paid generation must stay on the gateway path')
 
 
 async def _return(value):
@@ -307,16 +284,23 @@ def client_app(monkeypatch):
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda *a, **k: None)
     monkeypatch.setattr(desktop_proxy, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_proxy, '_meter_server_request', lambda uid, path, m, a: _return(path))
-    monkeypatch.setattr(desktop_proxy, '_upstream', _upstream_ok)
+    monkeypatch.setattr(desktop_proxy, '_upstream', _fail_if_invoked)
     monkeypatch.setattr(desktop_proxy, '_cancel_on_disconnect', lambda req, aw: aw)
     monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(4))
-    monkeypatch.setattr(
-        desktop_proxy,
-        'get_desktop_gemini_client',
-        lambda: _FakeProviderClient(
-            httpx.Response(200, content=b'{"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}')
-        ),
-    )
+    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_client', _fail_if_invoked)
+    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_stream_client', _fail_if_invoked)
+    monkeypatch.setattr(desktop_proxy, '_stream_provider', _fail_if_invoked)
+
+    async def gateway_chat(_body, **_kwargs):
+        return desktop_gemini_gateway.GatewayChatResult(
+            gemini_payload={'candidates': [{'content': {'parts': [{'text': 'hi'}]}}]}
+        )
+
+    async def gateway_chat_stream(_body, **_kwargs):
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":"hi"}]},"finishReason":"STOP"}]}\n\n'
+
+    monkeypatch.setattr(desktop_gemini_gateway, 'gateway_desktop_chat', gateway_chat)
+    monkeypatch.setattr(desktop_gemini_gateway, 'gateway_desktop_chat_stream', gateway_chat_stream)
     monkeypatch.setattr(desktop_gemini_telemetry, 'schedule_managed_attempt', lambda *a, **k: True)
     return app
 
@@ -369,6 +353,8 @@ def test_nonstream_success_emits_one_attributed_terminal(client_app, capsys):
     assert event['lane'] == 'focus'
     assert event['workload_class'] == 'extraction'
     assert event['client_platform'] == 'macos'
+    assert event['provider_route'] == 'llm_gateway'
+    assert event['credential_source'] == 'omi_gateway'
 
 
 def test_stub_success_emits_one_terminal(client_app, capsys, monkeypatch):
@@ -503,9 +489,9 @@ def test_rejection_emits_one_fully_attributed_terminal(no_dispatch, capsys, monk
 
 
 def test_gateway_success_reuses_one_telemetry(client_app, capsys, monkeypatch):
-    monkeypatch.setattr(desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: True)
-
     async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
+        assert model == 'gemini-2.5-flash'
+        assert action == 'generateContent'
         assert product_lane == 'focus'
         assert client_platform == 'macos'
         assert request_id
@@ -530,8 +516,6 @@ def test_gateway_success_reuses_one_telemetry(client_app, capsys, monkeypatch):
 
 
 def test_gateway_failure_reuses_one_telemetry(client_app, capsys, monkeypatch):
-    monkeypatch.setattr(desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: True)
-
     async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         raise desktop_gemini_gateway.DesktopGeminiGatewayError(
             status_code=500, code='gateway_unavailable', message='gateway is down'
@@ -652,14 +636,13 @@ def test_unknown_lane_value_is_bounded(client_app, capsys):
 
 
 def test_streaming_success_emits_one_terminal(client_app, capsys, monkeypatch):
-    def fake_stream(request, route, body, telemetry, **_kwargs):
-        async def gen():
-            yield b'data: {"candidates":[]}\n\n'
-            telemetry.complete(outcome='success', status_code=200, retryable=False, phase='body')
+    async def fake_stream(body, **kwargs):
+        assert kwargs['model'] == 'gemini-2.5-flash'
+        assert kwargs['product_lane'] == 'focus'
+        assert kwargs['client_platform'] == 'macos'
+        yield b'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"id":"1"}}}]},"finishReason":"STOP"}]}\n\n'
 
-        return gen()
-
-    monkeypatch.setattr(desktop_proxy, '_stream_provider', fake_stream)
+    monkeypatch.setattr(desktop_gemini_gateway, 'gateway_desktop_chat_stream', fake_stream)
     with TestClient(client_app) as client:
         response = client.post(
             '/v1/proxy/gemini-stream/models/gemini-2.5-flash:streamGenerateContent',
@@ -676,13 +659,10 @@ def test_streaming_success_emits_one_terminal(client_app, capsys, monkeypatch):
 
 
 def test_streaming_unfinished_iterator_reports_incomplete(client_app, capsys, monkeypatch):
-    def fake_stream(*_args, **_kwargs):
-        async def gen():
-            yield b'data: {"candidates":[]}\n\n'
+    async def fake_stream(*_args, **_kwargs):
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":"partial"}]}}]}\n\n'
 
-        return gen()
-
-    monkeypatch.setattr(desktop_proxy, '_stream_provider', fake_stream)
+    monkeypatch.setattr(desktop_gemini_gateway, 'gateway_desktop_chat_stream', fake_stream)
     with TestClient(client_app) as client:
         response = client.post(
             '/v1/proxy/gemini-stream/models/gemini-2.5-flash:streamGenerateContent',
@@ -696,86 +676,6 @@ def test_streaming_unfinished_iterator_reports_incomplete(client_app, capsys, mo
     assert events[0]['status_code'] == 502
 
 
-@pytest.mark.asyncio
-async def test_streaming_routing_failure_keeps_structured_outcome(capsys, monkeypatch):
-    """Overflow recovery resolves the next route inside the stream body
-    iterator. A RoutingFailure raised there must surface its structured
-    routing outcome while propagating the exception to the client."""
-    routed = False
-
-    async def route_refused_on_recovery(*_args, **_kwargs):
-        # First call resolves the primary route; the overflow-recovery call
-        # inside the iterator fails routing outright.
-        nonlocal routed
-        if routed:
-            raise desktop_proxy.RoutingFailure(code='no_provider_credentials', message='credentials exhausted')
-        routed = True
-        return desktop_proxy.UpstreamRoute(
-            url='https://provider.invalid/v1/models',
-            headers={},
-            params={},
-            provider='vertex_ai',
-            credential_source='server',
-            region='us-central1',
-        )
-
-    class Refused:
-        status_code = 429
-        text = 'Too many requests. Exceeded the Provisioned Throughput.'
-
-        async def aread(self):
-            return self.text.encode()
-
-        async def aiter_bytes(self):
-            yield b''
-
-    class StreamContext:
-        def __init__(self, response):
-            self._response = response
-
-        async def __aenter__(self):
-            return self._response
-
-        async def __aexit__(self, *_args):
-            return None
-
-    class Client:
-        def stream(self, *_args, **_kwargs):
-            return StreamContext(Refused())
-
-    semaphore = asyncio.Semaphore(1)
-    monkeypatch.setattr(desktop_proxy, '_upstream', route_refused_on_recovery)
-    monkeypatch.setattr(desktop_proxy, '_cancel_on_disconnect', lambda _req, aw: aw)
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_stream_client', lambda: Client())
-    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: semaphore)
-
-    telemetry = _telemetry()
-    telemetry.identify('models/gemini-2.5-flash:streamGenerateContent')
-    primary = await route_refused_on_recovery('p', 'gemini-2.5-flash', 'streamGenerateContent', {})
-    emitted = []
-    source = desktop_proxy._stream_provider(
-        _telemetry_request(),
-        primary,
-        _body(),
-        telemetry,
-        model='gemini-2.5-flash',
-        action='streamGenerateContent',
-        query={},
-    )
-    guarded = desktop_gemini_telemetry._terminal_stream_guard(source, telemetry)
-    with pytest.raises(desktop_proxy.RoutingFailure) as failure:
-        async for chunk in guarded:
-            emitted.append(chunk)
-    assert failure.value.code == 'no_provider_credentials'
-    assert emitted == []
-    events = _events(capsys)
-    assert len(events) == 1
-    assert events[0]['outcome'] == 'no_provider_credentials'
-    assert events[0]['status_code'] == 503
-    assert events[0]['phase'] == 'credential'
-    assert semaphore.locked() is False
-
-
 def _telemetry():
     request = Request(
         {
@@ -787,20 +687,6 @@ def _telemetry():
         }
     )
     return desktop_gemini_telemetry.ProxyTelemetry(request, streaming=True)
-
-
-def _telemetry_request() -> Request:
-    # The stream provider only touches the request through
-    # _cancel_on_disconnect, which the test patches to a passthrough.
-    return Request(
-        {
-            'type': 'http',
-            'method': 'POST',
-            'path': '/v1/proxy/gemini-stream/x',
-            'query_string': b'',
-            'headers': [(b'x-app-platform', b'macos')],
-        }
-    )
 
 
 @pytest.mark.asyncio

@@ -206,6 +206,9 @@ NON_FIRESTORE_IMAGE_EXCLUSIONS = {
 }
 NON_BACKEND_DOCKERFILE_EXCLUSIONS = {
     'backend/Dockerfile.jit_qa_typesense': 'JIT QA repins the upstream Typesense image',
+    'backend/modal/Dockerfile.finops_unit_cost_job': (
+        'batch unit-cost job reads Firestore as a pull input and does not serve a Firestore-backed API'
+    ),
 }
 SERVICE_IMAGE_NAMES = {
     'backend': 'backend',

@@ -162,7 +162,6 @@
         "utils/llm/clients.py",
         "utils/llm/conversation_processing.py",
         "utils/llm/external_integrations.py",
-        "utils/llm/gateway_shadow.py",
         "utils/llm/gateway_serving.py",
         "utils/llm/providers.py",
         "utils/retrieval/agentic.py",
@@ -172,7 +171,8 @@
         "utils/x_connector.py"
     ],
     "extraPaths": [
-        "."
+        ".",
+        "../plugins/omi-plugin-sdk/src"
     ],
     "pythonVersion": "3.11",
     "pythonPlatform": "Linux",

@@ -10,6 +10,31 @@ List<Map<String, dynamic>> _tier({num? monthly, num? yearly}) {
 }
 
 void main() {
+  group('planForCheckout', () {
+    final plans = <Map<String, dynamic>>[
+      {'id': 'plus-month', 'plan_id': 'plus', 'interval': 'month'},
+      {'id': 'unlimited-year', 'plan_id': 'unlimited_v2', 'interval': 'year'},
+    ];
+
+    test('never substitutes Plus when the selected Unlimited interval is missing', () {
+      expect(planForCheckout(plans, interval: 'month', selectedTierId: 'unlimited_v2'), isNull);
+      expect(planForCheckout(plans, interval: 'year', selectedTierId: 'unlimited_v2')?['id'], 'unlimited-year');
+    });
+
+    test('a multi-tier catalog without a selected tier matches nothing', () {
+      expect(planForCheckout(plans, interval: 'month'), isNull);
+    });
+
+    test('single-tier legacy catalogs can still match by interval', () {
+      final legacy = <Map<String, dynamic>>[
+        {'id': 'neo-month', 'plan_id': 'unlimited', 'interval': 'month'},
+        {'id': 'neo-year', 'plan_id': 'unlimited', 'interval': 'year'},
+      ];
+      expect(planForCheckout(legacy, interval: 'month')?['id'], 'neo-month');
+      expect(planForCheckout(legacy, interval: 'year')?['id'], 'neo-year');
+    });
+  });
+
   // Returns a count rather than a label: the English 'N Months Free' string it
   // used to build could not be translated. The rendered badge is covered in
   // test/unit/plans_sheet_l10n_test.dart.

@@ -14,6 +14,7 @@ from typing import Any
 from routers.listen import receiver as owner
 from utils.stt import legacy_replay
 from utils.stt.live_failure import MAX_STT_FAILOVERS
+from utils.stt.replay_capture_accounting import record_replay_sends
 
 
 def _finishing(socket: Any) -> bool:
@@ -116,7 +117,7 @@ async def rebuild_stt_socket_locked(self: Any) -> bool:
     self._pending_live_failover = hop
     # Replay capture positions after the last emitted segment.
     rejected_sample = legacy_replay.replay_chunks(
-        raw,
+        record_replay_sends(raw, epoch),
         replay,
         source=window_ring,
         provider=dead_provider or 'parakeet',

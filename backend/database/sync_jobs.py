@@ -277,23 +277,6 @@ def _as_redis_text(value: Any) -> str:
     return str(value)
 
 
-def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Raw job doc without the stale self-heal read-side mutation."""
-    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
-    if not data:
-        return None
-    try:
-        job = json.loads(_as_redis_text(data))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    return cast(Dict[str, Any], job) if isinstance(job, dict) else None
-
-
-def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
-    return _read_raw_sync_job(job_id)
-
-
 def sync_job_run_lock_present(job_id: str) -> bool:
     """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
     return bool(r.exists(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')))

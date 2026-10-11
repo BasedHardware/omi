@@ -30,6 +30,8 @@ from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 from utils.observability.fallback import record_fallback
 
+from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
+
 logger = logging.getLogger(__name__)
 
 R = TypeVar("R")
@@ -142,14 +144,20 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 @_account_external_data_write
-def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
     if index is None:
-        return
-    data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
-    typed_metadata: Dict[str, Any] = data['metadata']
-    typed_metadata.update(metadata)
-    res = index.upsert(vectors=[data], namespace="ns1")
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        return False
+    try:
+        data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
+        typed_metadata: Dict[str, Any] = data['metadata']
+        typed_metadata.update(metadata)
+        res = index.upsert(vectors=[data], namespace="ns1")
+    except Exception:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        raise
     logger.info(f'upsert_vector {res}')
+    return True
 
 
 @_account_external_data_write
