@@ -51,7 +51,7 @@ def update_conversation(
     if not row or row.get('is_locked') or row.get('deleted'):
         return 'Error: conversation not found or unavailable.'
     before = cast(Dict[str, Any], chat_edits.snapshot(uid, 'conversation', conversation_id))
-    observed = cast(Dict[str, Any], chat_edits.decode(before))
+    observed = conversations.prepare_conversation_for_read(cast(Dict[str, Any], chat_edits.decode(before)), uid) or {}
     structured = dict(observed.get('structured') or {})
     notes = list(observed.get('user_corrections') or [])
     notes.append({'note': correction.strip(), 'at': datetime.now(timezone.utc).isoformat()})

@@ -231,3 +231,22 @@ def test_conversation_patch_uses_the_snapshot_version(monkeypatch, receipts):
     assert writes[0][0] == fresh
     assert writes[0][1]['structured']['overview'] == 'Concurrent summary'
     assert writes[0][1]['user_corrections'][0]['note'] == 'Already confirmed'
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_repeated_correction_preserves_prior_protected_notes(monkeypatch, receipts, level):
+    notes = [{'note': 'Earlier confirmed correction', 'at': '2026-10-11T00:00:00+00:00'}]
+    raw = edit_tools.conversations.encode_conversation_for_write(
+        'owner', {'structured': {'title': 'Old'}, 'user_corrections': notes}, level
+    )
+    monkeypatch.setattr(edit_tools.conversations, 'get_conversation', lambda *args: {'structured': {'title': 'Old'}})
+    monkeypatch.setattr(chat_edits, 'snapshot', lambda *args: chat_edits.encode(raw))
+    writes = []
+    monkeypatch.setattr(
+        edit_tools.conversations,
+        'update_conversation_chat',
+        lambda uid, target, before, patch: writes.append(patch) or patch,
+    )
+    edit_tools.update_conversation.func('target', 'New confirmed correction', 'New', config=CONFIG)
+    assert writes[0]['user_corrections'][0] == notes[0]
+    assert writes[0]['user_corrections'][1]['note'] == 'New confirmed correction'
