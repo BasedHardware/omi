@@ -4,7 +4,7 @@
     "pr_linux_minutes_per_day": 13550,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day; inventory totals become 13506.2 Linux minutes/day. Set the forecast cap to 13550. The inventory's conservative matrix-multiplied dependency-path forecast becomes 49 minutes, so its cap follows that value; actual six shards execute in parallel. macOS cap is unchanged. Re-seed from terminal executions in the next weekly audit.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day. Adding the three downstream Dream PR bases to Repo Checks adds 33 forecast Linux minutes/day; inventory totals become 13539.2 Linux minutes/day. Set the forecast cap to 13550. The inventory's conservative matrix-multiplied dependency-path forecast becomes 49 minutes, so its cap follows that value; actual six shards execute in parallel. macOS cap is unchanged. Re-seed from terminal executions in the next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -2518,13 +2518,13 @@
       "budget_p50_minutes": 2,
       "display_name": "Detect Changes",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 214,
       "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up #21237 adds the three downstream Dream stack PRs to the base filter; forecast one additional execution per PR/day for each job (+3/day, +33 Linux minutes/day across the workflow), retaining existing per-job p50 limits.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2536,13 +2536,13 @@
       "budget_p50_minutes": 2,
       "display_name": "Formatting",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 127,
+      "expected_runs_per_day": 130,
       "if": "needs.changes.outputs.has_format == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up #21237 adds the three downstream Dream stack PRs to the base filter; forecast one additional execution per PR/day for each job (+3/day, +33 Linux minutes/day across the workflow), retaining existing per-job p50 limits.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2554,13 +2554,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Hygiene",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 210,
+      "expected_runs_per_day": 213,
       "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up #21237 adds the three downstream Dream stack PRs to the base filter; forecast one additional execution per PR/day for each job (+3/day, +33 Linux minutes/day across the workflow), retaining existing per-job p50 limits.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2572,13 +2572,13 @@
       "budget_p50_minutes": 2,
       "display_name": "PR Metadata Preflight",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 225,
+      "expected_runs_per_day": 228,
       "if": "github.event_name == 'pull_request' && contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up #21237 adds the three downstream Dream stack PRs to the base filter; forecast one additional execution per PR/day for each job (+3/day, +33 Linux minutes/day across the workflow), retaining existing per-job p50 limits.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5172,10 +5172,13 @@
     "repo-checks.yml": {
       "name": "Repo Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "#21237: include lane/dream-* PR bases so the three downstream Dream PRs receive source and metadata checks before retargeting to main.",
       "triggers": {
         "pull_request": {
-          "branches": "main",
+          "branches": [
+            "main",
+            "lane/dream-*"
+          ],
           "types": [
             "opened",
             "synchronize",
