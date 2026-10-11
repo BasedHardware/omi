@@ -309,16 +309,12 @@ def proposal_record(uid, ref, snapshot):
     from utils import dream_reads
 
     if ref.startswith('entity/'):
-        row = resolve_entity(uid, ref.removeprefix('entity/'))
-        if 'facts' in snapshot or 'decisions' in snapshot:
-            from utils.entity_pages import _facts
-
-            facts, decisions, _ = _facts(uid, [row['entity_id']], {})
-            row.update(
-                facts=[f.model_dump(mode='python') for f in facts],
-                decisions=[f.model_dump(mode='python') for f in decisions],
-            )
-        return row
+        entity_id = ref.removeprefix('entity/')
+        return (
+            dream_reads.read_entity_record(uid, entity_id)
+            if 'facts' in snapshot or 'decisions' in snapshot
+            else resolve_entity(uid, entity_id)
+        )
     if ref.startswith('screen/'):
         # Screen evidence is local-retention scoped; missing/revoked evidence conflicts.
         from database import screen_activity
@@ -424,7 +420,7 @@ def suggest_edit(uid, edit, records):
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
     refs = set([edit.target, *edit.evidence, *([edit.other] if edit.other else [])])
-    source = {'records': {ref: records[ref] for ref in refs}, 'edit_key': key, 'auxiliary': {}}
+    source: dict[str, Any] = {'records': {ref: records[ref] for ref in refs}, 'edit_key': key, 'auxiliary': {}}
     if edit.kind == 'entity_summary':
         entity_id = records[edit.target]['entity_id']
         raw = review_store.user(uid).collection('entity_pages').document(entity_id).get().to_dict()
@@ -508,7 +504,7 @@ def suggest_vocabulary(uid, term, records):
     key = vocabulary_key(term)
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
-    source = {
+    source: dict[str, Any] = {
         'records': {ref: records[ref] for ref in term.evidence},
         'edit_key': key,
         'auxiliary': {

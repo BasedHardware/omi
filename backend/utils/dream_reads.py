@@ -64,6 +64,16 @@ def read_record(uid, ref):
     return None
 
 
+def read_entity_record(uid, entity_id):
+    node = resolve_entity(uid, entity_id)
+    facts, decisions, _ = _facts(uid, [node['entity_id']], {})
+    return {
+        **node,
+        'facts': [f.model_dump(mode='python') for f in facts],
+        'decisions': [f.model_dump(mode='python') for f in decisions],
+    }
+
+
 def read_changes(uid, lease, caps, vocabulary=None):
     dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
     records = {}
@@ -101,17 +111,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
         if row.get('workstream_id'):
             identities.add(row['workstream_id'])
     for entity_id in sorted(identities)[:20]:
-        node = resolve_entity(uid, entity_id)
-        facts, decisions, _ = _facts(uid, [node['entity_id']], {})
-        candidate = {
-            **records,
-            'entity/'
-            + entity_id: {
-                **node,
-                'facts': [f.model_dump(mode='python') for f in facts],
-                'decisions': [f.model_dump(mode='python') for f in decisions],
-            },
-        }
+        candidate = {**records, 'entity/' + entity_id: read_entity_record(uid, entity_id)}
         if not fits_triage(candidate, caps, vocabulary):
             break
         records = candidate
