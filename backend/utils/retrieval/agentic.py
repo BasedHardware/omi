@@ -9,7 +9,7 @@ Anthropic's native streaming contract.
 
 from __future__ import annotations
 from dataclasses import replace
-from utils.retrieval.chat_mount import chat_mount
+from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface
 from utils.messaging.projection import project_runtime_tools, surface_runtime
 from utils.messaging.undo import prepare_channel_write
 
@@ -1693,25 +1693,12 @@ async def execute_agentic_chat_stream(
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
-            runtime = surface_runtime.get()
-            if runtime is not None and runtime.surface != 'app':
-                # Channels always use chat_mount; its runner ignores this legacy
-                # prompt. Avoid its redundant memory/context reads and prompt IO.
-                system_prompt = ''
-            else:
-                system_prompt = await run_blocking(
-                    db_executor,
-                    _get_agentic_qa_prompt,
-                    uid,
-                    app,
-                    messages,
-                    context=context,
-                    tz=tz,
-                    platform=platform,
-                )
-                system_prompt = append_jit_conversation_retrieval_prompt(
-                    system_prompt, enabled=jit_conversation_retrieval_enabled
-                )
+            system_prompt = await load_legacy_prompt_for_surface(
+                _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
+            )
+            system_prompt = append_jit_conversation_retrieval_prompt(
+                system_prompt, enabled=jit_conversation_retrieval_enabled
+            )
 
             # Get prompt metadata for tracing/versioning
             prompt_name, prompt_commit, prompt_source = None, None, None

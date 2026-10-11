@@ -15,6 +15,8 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
 - `projection.py`: one catalog projection for advertisement and execution; channels
   omit device charts, app retains its existing tools.
 - `history.py`, `app_awareness.py`: cross-surface append-only awareness and search.
+- `utils/retrieval/chat_mount.py`: shared shaped prompt and surface-aware legacy
+  prompt loading; channels avoid context IO for a prompt their runner discards.
 - `undo.py`: encrypted five-minute inverse receipts; reserves before supported writes,
   emits shared memoryLink/taskCard action receipts, scopes inverse claims per action,
   and delegates slow inverses to domain authorities without occupying the chat lease.
