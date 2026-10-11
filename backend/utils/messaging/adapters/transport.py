@@ -88,7 +88,7 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
             except (TypeError, ValueError):
                 delay = 1
             if not 0 <= delay <= 60 or attempt == 3:
-                raise ProviderError('Provider rate limit; retry later')
+                raise ProviderError('Provider rate limit; retry later', status_code=429)
             await sleep(max(delay, 0.1))
             continue
         if status >= 500:

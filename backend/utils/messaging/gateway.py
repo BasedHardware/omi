@@ -17,6 +17,7 @@ from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachmen
 from utils.messaging.history import append_digest, history_tool
 from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
+from utils.observability.fallback import record_fallback
 
 
 class ChannelTurnError(RuntimeError):
@@ -165,20 +166,37 @@ class Gateway:
                 else:
                     if hasattr(self.adapter, 'prepare'):
                         message = await self.adapter.prepare(message, uid, session, guard)
-                    await self._turn(uid, session, message, link, Principal(uid))
-            await run_blocking(db_executor, self.store.complete, path)
+                    await self._turn(uid, session, message, link, Principal(uid), reply_sink=sink)
         except Exception:
             # The stopped worker must not block later messages. Keep this inbox
             # row running: its effects/receipts still require reconciliation.
+            notice_needed = not sink.finished
             try:
-                await sink.finish('Sorry, I could not finish that reply. Please try again.')
+                if notice_needed:
+                    await sink.finish('Sorry, I could not finish that reply. Please try again.')
             except Exception as error:
+                record_fallback(
+                    component='other',
+                    from_mode='channel_turn',
+                    to_mode='failure_notice',
+                    reason='other',
+                    outcome='exhausted',
+                )
                 logging.getLogger(__name__).warning(
                     'Messaging failure reply failed provider=%s reason=delivery_failed error_type=%s status_code=%s',
                     self.adapter.provider,
                     type(error).__name__,
                     getattr(error, 'status_code', None),
                 )
+            else:
+                if notice_needed:
+                    record_fallback(
+                        component='other',
+                        from_mode='channel_turn',
+                        to_mode='failure_notice',
+                        reason='other',
+                        outcome='degraded',
+                    )
             finally:
                 await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
             raise
@@ -187,7 +205,12 @@ class Gateway:
             # Keep its lease fenced until the operator proves that work stopped.
             raise
         else:
-            await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+            # Delivery succeeded. A tombstone-write fault must not tell the user
+            # their accepted reply failed; leave the row for reconciliation.
+            try:
+                await run_blocking(db_executor, self.store.complete, path)
+            finally:
+                await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
         return True
 
     async def reenter(self, message, event: ReentryEvent, *, principal: Principal):
@@ -206,22 +229,21 @@ class Gateway:
         if any(e['id'] == 'reply:' + event.event_id for e in events):
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             return
-        try:
-            await self._turn(principal.uid, session, message, link, principal, event=event)
-        except Exception:
-            await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
-            raise
-        else:
-            await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+        # Deferred results have no claimed inbox row fencing their replay.
+        # Keep the lease on failure until effects/delivery are reconciled.
+        await self._turn(principal.uid, session, message, link, principal, event=event)
+        await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
 
-    async def _turn(self, uid, session, message, link, principal, *, event=None):
+    async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None):
         def guard():
             self._assert_link(message, link)
 
         async def send_guard():
             await run_blocking(db_executor, guard)
 
-        sink = ChannelReplySink(self.adapter, message, kind='deferred_reply' if event else 'reply', guard=send_guard)
+        sink = reply_sink or ChannelReplySink(
+            self.adapter, message, kind='deferred_reply' if event else 'reply', guard=send_guard
+        )
         events = await run_blocking(db_executor, self.store.events, uid, session['id'])
         await append_digest(self.store, uid, session, events)
         event_id = event.event_id if event else key(message.provider, message.provider_message_id)
@@ -261,6 +283,8 @@ class Gateway:
         typing_task = start_background_task(_refresh_typing(sink, typing_stop), name='messaging-typing')
         stream = None
         terminal = False
+        turn_error = False
+        reply_event = None
         try:
             await sink.typing()
             stream = await run_blocking(
@@ -282,29 +306,31 @@ class Gateway:
                     answer = response['text']
                     if not answer.strip():
                         raise ChannelTurnError('empty_reply')
-                    await run_blocking(
-                        db_executor,
-                        self.store.append_event,
-                        uid,
-                        session['id'],
-                        {
-                            'id': 'reply:' + event_id,
-                            'kind': 'message',
-                            'at': datetime.now(timezone.utc).isoformat(),
-                            'role': 'assistant',
-                            'content': answer,
-                        },
-                    )
+                    reply_event = {
+                        'id': 'reply:' + event_id,
+                        'kind': 'message',
+                        'at': datetime.now(timezone.utc).isoformat(),
+                        'role': 'assistant',
+                        'content': answer,
+                    }
                     if runtime.write_reports:
                         response['text'] += '\n\n' + '\n'.join(runtime.write_reports)
                     await sink.finish_payload(response)
                 elif frame.startswith('error: '):
-                    raise ChannelTurnError('turn_error_frame')
-            if not terminal:
-                raise ChannelTurnError('missing_terminal_reply')
+                    # The shared producer can follow this with a persisted
+                    # typed fallback. Drain it, including its quota cleanup.
+                    turn_error = True
+                    logging.getLogger(__name__).warning(
+                        'Messaging turn issue provider=%s reason=turn_error_frame', self.adapter.provider
+                    )
+            if not terminal or reply_event is None:
+                raise ChannelTurnError('turn_error_frame' if turn_error else 'missing_terminal_reply')
             if event:
                 for artifact in event.artifacts:
                     await sink.artifact(artifact)
+            # Generated text is not delivery evidence. Only accepted replies
+            # enter subsequent model history or suppress deferred reentry.
+            await run_blocking(db_executor, self.store.append_event, uid, session['id'], reply_event)
         finally:
             # Final delivery can raise while the generator is suspended at its
             # terminal yield. Close in this task's context, before resetting it.

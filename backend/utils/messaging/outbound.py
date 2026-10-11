@@ -26,6 +26,7 @@ class ChannelReplySink:
         self.buffer = ''
         self.sequence = 0
         self.last_draft = 0
+        self.finished = False
 
     def response(self, stream, *, media_type):
         return stream
@@ -103,6 +104,7 @@ class ChannelReplySink:
     async def finish(self, text):
         for part in self.adapter.render(text):
             await self._send(text=part)
+        self.finished = True
 
     async def finish_payload(self, response):
         from utils.messaging.adapters.rendering import source_phrases

@@ -93,7 +93,20 @@ class TestProviderContracts(AdapterContract):
     pass
 
 
-@pytest.mark.parametrize('failure', [None, 'rejected', 'error_frame', 'empty', 'cancelled'])
+@pytest.mark.parametrize(
+    'failure',
+    [
+        None,
+        'rejected',
+        'failure_rejected',
+        'error_frame',
+        'error_fallback',
+        'empty',
+        'cancelled',
+        'completion',
+        'history',
+    ],
+)
 def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, failure, caplog):
     if adapter.channel != 'imessage':
         return
@@ -103,9 +116,32 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
 
     monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
     store = MemoryStore()
+    fallback_outcomes = []
+    from utils.messaging import gateway as gateway_module
+
+    monkeypatch.setattr(gateway_module, 'record_fallback', lambda **values: fallback_outcomes.append(values['outcome']))
+    complete = store.complete
+
+    def complete_job(path):
+        if failure == 'completion' and store.jobs[path].get('payload', {}).get('provider_message_id') == 'first':
+            raise RuntimeError('Synthetic completion failure')
+        complete(path)
+
+    monkeypatch.setattr(store, 'complete', complete_job)
     code = '0123456789ABCDEF0123456789ABCDEF'
     proof = store.mint('user', 'imessage', 'linq', 'code')['proof']
     store.proofs[code] = store.proofs.pop(proof)
+    append_event = store.append_event
+    history_failed = False
+
+    def append_history(uid, session_id, event):
+        nonlocal history_failed
+        if failure == 'history' and event['role'] == 'assistant' and not history_failed:
+            history_failed = True
+            raise RuntimeError('Synthetic history persistence failure')
+        append_event(uid, session_id, event)
+
+    monkeypatch.setattr(store, 'append_event', append_history)
     cleaned = []
     usage = ContextVar('fixture_usage', default=None)
     turns = []
@@ -120,9 +156,10 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
                     raise asyncio.CancelledError
                 if failure == 'empty' and len(turns) == 1:
                     return
-                if failure == 'error_frame' and len(turns) == 1:
+                if failure in ('error_frame', 'error_fallback') and len(turns) == 1:
                     yield 'error: {}\n\n'
-                    return
+                    if failure == 'error_frame':
+                        return
                 yield 'done: ' + base64.b64encode(json.dumps({'text': 'Synthetic answer'}).encode()).decode() + '\n\n'
             finally:
                 usage.reset(token)
@@ -158,14 +195,23 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
             assert cleaned == [True]
             assert usage.get() is None
             return
-        if failure == 'rejected':
+        if failure in ('rejected', 'failure_rejected'):
             # Typing succeeds, final text is rejected, typing stops, failure reply succeeds.
             adapter.transport.responses = [(200, {}, {}), (400, {'error': 'synthetic'}, {}), (200, {}, {})]
-        if failure:
+            if failure == 'failure_rejected':
+                adapter.transport.responses.append((400, {'error': 'synthetic'}, {}))
+        if failure not in (None, 'error_fallback'):
             with pytest.raises((ProviderError, RuntimeError)):
                 await gateway.process(first)
             assert store.jobs[first]['status'] == 'running'  # no replay of ambiguous effects
-            assert 'could not finish' in adapter.sent[-1]['text']
+            if failure in ('completion', 'history'):
+                assert adapter.sent[-1]['text'] == 'Synthetic answer'
+                assert fallback_outcomes == []
+            else:
+                assert 'could not finish' in adapter.sent[-1]['text']
+                assert fallback_outcomes == ['exhausted' if failure == 'failure_rejected' else 'degraded']
+                session = next(iter(store.sessions.values()))
+                assert not any(e['role'] == 'assistant' for e in store.events('user', session['id']))
             assert not store.leases
             assert not await gateway.process(first)
         else:
@@ -188,13 +234,67 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
         assert 'reason=worker_cancelled' in caplog.text
         return
     assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
-    if failure:
-        reason = {'rejected': 'worker_error', 'error_frame': 'turn_error_frame', 'empty': 'missing_terminal_reply'}[
-            failure
-        ]
+    if failure not in (None, 'error_fallback'):
+        reason = {
+            'rejected': 'worker_error',
+            'failure_rejected': 'worker_error',
+            'completion': 'worker_error',
+            'history': 'worker_error',
+            'error_frame': 'turn_error_frame',
+            'empty': 'missing_terminal_reply',
+        }[failure]
         assert 'reason=' + reason in caplog.text
     if failure == 'rejected':
         assert 'status_code=400' in caplog.text
+
+
+def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
+    if adapter.channel != 'imessage':
+        return
+    from datetime import timedelta
+    from utils.messaging import history
+    from utils.messaging.contracts import ReentryEvent
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    message = adapter.parse(fixture('linq'))[0]
+    store.consume(store.mint('user', 'imessage', 'linq', 'code')['proof'], message)
+
+    def turn(*args, **kwargs):
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'Deferred answer'}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    principal = Principal('user', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
+    event = ReentryEvent('event', 'Synthetic result', 'task')
+
+    async def run():
+        await adapter.admitted(message)
+        adapter.transport.responses = [(200, {}, {}), (400, {}, {}), (200, {}, {})]
+        with pytest.raises(ProviderError):
+            await gateway.reenter(message, event, principal=principal)
+        assert store.leases
+        session = next(iter(store.sessions.values()))
+        assert not any(e['id'] == 'reply:event' for e in store.events('user', session['id']))
+        with pytest.raises(RuntimeError, match='Surface busy'):
+            await gateway.reenter(message, event, principal=principal)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('status,body', [(429, {}), (200, {'error_code': 429})])
+def test_terminal_rate_limit_preserves_status(status, body):
+    from utils.messaging.adapters.transport import request_json
+
+    async def run():
+        transport = FixtureTransport([(status, body, {'Retry-After': '61'})])
+        with pytest.raises(ProviderError) as error:
+            await request_json(transport, 'POST', 'https://api.linqapp.com/synthetic', sleep=no_sleep)
+        assert error.value.status_code == 429
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
