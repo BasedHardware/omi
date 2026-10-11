@@ -34,7 +34,7 @@ def task_rejection(edit, row, records, *, now=None):
     times = [timestamp(row.get(field)) for field in ('created_at', 'updated_at') if row.get(field) is not None]
     if not times or any(time is None for time in times):
         return 'stale_task_evidence'
-    latest = max(times)
+    latest = max(time for time in times if time is not None)
     sources = {edit.target}
     if row.get('conversation_id'):
         sources.add('conversations/' + row['conversation_id'].removeprefix('conversations/'))
