@@ -505,6 +505,9 @@ environment_shared:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:
             value: backend
+          OMI_VERTEX_RESERVATION_PROJECT:
+            value: '{compute_project}'
+            category: runtime_identity
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}

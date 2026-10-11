@@ -204,7 +204,7 @@ def test_runtime_backend_gateway_reservation_keys_match(monkeypatch):
 
     manifest = yaml.safe_load((Path(__file__).resolve().parents[3] / 'backend/deploy/runtime_env.yaml').read_text())
     for stage, env in manifest['environments'].items():
-        backend = env['cloud_run']['services']['backend-sync']['env']
+        hosts = [env['cloud_run']['services'][name]['env'] for name in ('backend', 'backend-sync')]
         chart = yaml.safe_load(
             (
                 Path(__file__).resolve().parents[3]
@@ -214,7 +214,7 @@ def test_runtime_backend_gateway_reservation_keys_match(monkeypatch):
         gateway = {row['name']: {'value': row['value']} for row in chart['env'] if 'value' in row}
         gateway.update(env['llm_gateway']['env'])
         keys = []
-        for values in (backend, gateway):
+        for values in (*hosts, gateway):
             config = {
                 key: str(row['value']).replace('{compute_project}', env['compute_project'])
                 for key, row in values.items()
@@ -225,4 +225,4 @@ def test_runtime_backend_gateway_reservation_keys_match(monkeypatch):
             )
             with patch.dict(os.environ, config, clear=True):
                 keys.append(ReservationState.key())
-        assert keys[0] == keys[1], stage
+        assert len(set(keys)) == 1, stage
