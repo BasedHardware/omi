@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 
 /// The event that made another recording-transfer pass worthwhile.
 ///
@@ -8,6 +9,7 @@ import 'package:omi/utils/logger.dart';
 /// without introducing a second recovery owner.
 enum WakeTrigger {
   startup,
+  periodic,
   foregrounded,
   connectivityRestored,
   deviceConnected,
@@ -57,10 +59,11 @@ typedef RecordingTransferKeepAlive = Future<void> Function();
 
 /// The single owner for recording recovery.
 ///
-/// New discovery/drain passes stay foreground-only. An already-running pass
-/// keeps its Android transfer keep-alive (FGS + partial wake lock) until that
-/// pass completes or the user cancels, so screen-off cannot kill BLE/cloud
-/// file sync (#5221). It deliberately knows no provider or transport details.
+/// Foreground, device reconnect, and periodic wakes discover and drain backlog.
+/// Background wakes run at most two serial passes, without retry timers, and
+/// backlog wakes fence live capture. A running pass keeps its Android transfer
+/// keep-alive until completion or cancellation so screen-off cannot kill
+/// BLE/cloud file sync (#5221). It knows no provider or transport details.
 class RecordingTransferCoordinator {
   RecordingTransferCoordinator({
     required RecordingTransferPass reconcile,
@@ -135,6 +138,13 @@ class RecordingTransferCoordinator {
   bool _wasConnected = true;
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
+  int _periodicGeneration = 0;
+
+  /// Retire an expired OS window before any further discovery/upload stage.
+  void cancelPeriodicWake() {
+    _periodicGeneration++;
+    if (_pendingWake == WakeTrigger.periodic) _pendingWake = null;
+  }
 
   /// Visible to tests and diagnostics; this is not persisted because timers are
   /// foreground-only and startup is always another wake.
@@ -233,8 +243,9 @@ class RecordingTransferCoordinator {
   /// during one pass therefore run at most two passes and never parallel drains,
   /// including while backgrounded.
   Future<void> wake(WakeTrigger trigger) {
-    // Background recovery is limited to recent conversation-bound phone WALs.
-    // It never enumerates device storage or starts a whole-history drain.
+    // Reconnect and periodic background wakes discover device storage and drain
+    // backlog inside a sync-only scope. Other eligible background recovery is
+    // limited to recent conversation-bound phone WALs. All are bounded in _run.
     if (!_foreground && !_isBackgroundEligible(trigger)) {
       final active = _inFlight;
       if (active != null) return active;
@@ -272,6 +283,8 @@ class RecordingTransferCoordinator {
   }
 
   bool _isBackgroundEligible(WakeTrigger trigger) =>
+      trigger == WakeTrigger.periodic ||
+      trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
       trigger == WakeTrigger.dataStalled;
@@ -283,7 +296,7 @@ class RecordingTransferCoordinator {
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
         WakeTrigger.userRetry => 3,
-        WakeTrigger.connectivityRestored => 2,
+        WakeTrigger.periodic || WakeTrigger.deviceConnected || WakeTrigger.connectivityRestored => 2,
         WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
         _ => 0,
       };
@@ -314,6 +327,17 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _runPass(WakeTrigger trigger) async {
+    if (trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected) {
+      await SyncWakeScope.run(() => _runPassBody(trigger));
+    } else {
+      await _runPassBody(trigger);
+    }
+  }
+
+  Future<void> _runPassBody(WakeTrigger trigger) async {
+    final periodicGeneration = _periodicGeneration;
+    bool expired() => trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration;
+    final backlogWake = trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected;
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -323,10 +347,13 @@ class RecordingTransferCoordinator {
       // Reconciling only resolves work already on the server, so a failure here
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
-      if (_foreground) {
+      if (expired()) return;
+      if (_foreground || backlogWake) {
         await _discover();
       }
+      if (expired()) return;
       await _refreshPending();
+      if (expired()) return;
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
       if (!mayUpload) {
@@ -334,9 +361,10 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final drain = _foreground ? _drain : _drainLiveCapture;
+      final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final result = await drain();
+      if (expired()) return;
       await _refreshPending();
 
       // Partial upload success still leaves `uploaded` WALs that need the

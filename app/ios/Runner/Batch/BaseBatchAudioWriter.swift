@@ -29,8 +29,8 @@ struct CaptureAdmissionPolicy: Equatable {
     /// Resolve the canonical policy, with a conservative compatibility path
     /// for clients that have not started writing it yet. Once the canonical
     /// key exists, every malformed or unsupported value denies new capture.
-    static func load(from defaults: UserDefaults) -> CaptureAdmissionPolicy {
-        let durable = durablePolicy(from: defaults)
+    static func load(from defaults: UserDefaults, decoder: CaptureAdmissionPolicyDecoder? = nil) -> CaptureAdmissionPolicy {
+        let durable = durablePolicy(from: defaults, decoder: decoder)
         processLock.lock()
         defer { processLock.unlock() }
         // A native mute remains authoritative until an explicit unmute command
@@ -97,16 +97,21 @@ struct CaptureAdmissionPolicy: Equatable {
         processLock.unlock()
     }
 
-    private static func durablePolicy(from defaults: UserDefaults) -> CaptureAdmissionPolicy {
-        guard defaults.object(forKey: defaultsKey) != nil else {
+    private static func durablePolicy(from defaults: UserDefaults, decoder: CaptureAdmissionPolicyDecoder? = nil) -> CaptureAdmissionPolicy {
+        let value = defaults.object(forKey: defaultsKey)
+        guard value != nil else {
             return CaptureAdmissionPolicy(
                 muted: defaults.bool(forKey: "flutter.deviceMuted") || defaults.bool(forKey: "flutter.batchMuted"),
                 revision: 0
             )
         }
 
-        guard let raw = defaults.object(forKey: defaultsKey) as? String,
-              let data = raw.data(using: .utf8),
+        guard let raw = value as? String else { return CaptureAdmissionPolicy(muted: true, revision: 0) }
+        return decoder?.decode(raw) ?? decodeCanonical(raw)
+    }
+
+    static func decodeCanonical(_ raw: String) -> CaptureAdmissionPolicy {
+        guard let data = raw.data(using: .utf8),
               !data.isEmpty,
               data.count <= 4_096,
               let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
@@ -138,6 +143,34 @@ struct CaptureAdmissionPolicy: Equatable {
     private static func strictBoolean(_ value: Any?) -> Bool? {
         guard let number = value as? NSNumber, String(cString: number.objCType) == "c" else { return nil }
         return number.boolValue
+    }
+}
+
+/// Memoizes decoding, never authorization. Queue-confined to its reader (the
+/// BLE manager's main queue). Each load still reads the current defaults value
+/// and checks the process mute latch. Exact string equality also invalidates
+/// malformed values and changes that accidentally reuse a revision.
+final class CaptureAdmissionPolicyDecoder {
+    private var raw: String?
+    private var policy: CaptureAdmissionPolicy?
+    private let parse: (String) -> CaptureAdmissionPolicy
+
+    init(parse: @escaping (String) -> CaptureAdmissionPolicy = CaptureAdmissionPolicy.decodeCanonical) {
+        self.parse = parse
+    }
+
+    func decode(_ value: String) -> CaptureAdmissionPolicy {
+        if raw == value, let policy { return policy }
+        let decoded = parse(value)
+        // Do not retain an arbitrarily large malformed preference on the hot path.
+        if value.utf8.count <= 4_096 {
+            raw = value
+            policy = decoded
+        } else {
+            raw = nil
+            policy = nil
+        }
+        return decoded
     }
 }
 

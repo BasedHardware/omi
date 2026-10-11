@@ -1,0 +1,184 @@
+name: Deploy FinOps Unit Cost Job to Cloud Run
+
+# Producer for based-hardware.omi_finops (daily true user unit cost).
+# Replaces the retired m4-air Hermes cron (omi-finops-unit-cost-daily, 30 10 * * *).
+# Rollback path: re-enable that cron job — this workflow does not touch it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment to deploy to'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
+        type: string
+      provision_scheduler:
+        description: 'Also create/update the Cloud Scheduler trigger'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      run_after_deploy:
+        description: 'Execute the job once after deploy (gap-fills missing settled days)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+env:
+  SERVICE: finops-unit-cost-job
+  SCHEDULER_JOB: finops-unit-cost-daily
+  SCHEDULER_SA: finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com
+  REGION: us-central1
+
+# Serialize writes to the selected Cloud Run job environment.
+concurrency:
+  group: deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Environment Input
+        env:
+          INPUT_ENV: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "$INPUT_ENV" != "development" && "$INPUT_ENV" != "prod" ]]; then
+            echo "Invalid environment: $INPUT_ENV. Must be 'development' or 'prod'."
+            exit 1
+          fi
+
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Google Auth (development WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'development'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-notif-dev/providers/github
+          service_account: omi-gha-notif-job-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Google Auth (prod JSON, until prod WIF slice)
+        id: auth
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute short SHA
+        id: image-tag
+        run: |
+          # Tag from the checked-out HEAD so the image matches the branch input,
+          # not the workflow-file ref.
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/modal/Dockerfile.finops_unit_cost_job
+          push: false
+          load: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Preflight the producer image before publish
+        env:
+          # Fake lease bucket + identity checks are exercised by the contract tests,
+          # not here; this smoke only proves the entrypoint imports and fails closed
+          # on a missing identity rather than crashing with a traceback.
+          FINOPS_AUTH: cloudrun
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          docker run --rm \
+            -e FINOPS_AUTH=cloudrun \
+            -e CLOUDSDK_CORE_PROJECT=${{ vars.GCP_PROJECT_ID }} \
+            "$image" --help >/dev/null 2>&1 || true
+          # identity assertion must fail closed with no ADC in the container
+          if docker run --rm -e FINOPS_AUTH=cloudrun "$image" identity 2>/tmp/ident_err; then
+            echo "identity check unexpectedly succeeded without ADC"; exit 1
+          fi
+          grep -q "identity check failed\|no Application Default Credentials" /tmp/ident_err || \
+            { echo "unexpected identity failure shape:"; cat /tmp/ident_err; exit 1; }
+          echo "preflight: entrypoint fails closed without ADC"
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
+      - name: Deploy to Cloud Run Job
+        id: deploy
+        run: |
+          gcloud run jobs deploy "${{ env.SERVICE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --service-account="finops-writer@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --set-secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest \
+            --set-env-vars=FINOPS_LOCK_BUCKET=${{ vars.GCP_PROJECT_ID }}-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com \
+            --region="${{ env.REGION }}" \
+            --max-retries=1 \
+            --task-timeout=3600s \
+            --memory=2Gi \
+            --cpu=2 \
+            --quiet
+
+      - name: Run producer once so a missed settled day is filled
+        if: github.event.inputs.run_after_deploy == 'true'
+        timeout-minutes: 45
+        run: |
+          gcloud run jobs execute "${{ env.SERVICE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --wait
+
+      - name: Validate Scheduler trigger
+        if: github.event.inputs.provision_scheduler == 'true'
+        run: |
+          python3 backend/scripts/provision_finops_unit_cost_scheduler.py \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --scheduler-job "${{ env.SCHEDULER_JOB }}" \
+            --cloud-run-job "${{ env.SERVICE }}" \
+            --scheduler-service-account "${{ env.SCHEDULER_SA }}"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          {
+            echo "### FinOps unit-cost job deploy"
+            echo "- Environment: ${{ github.event.inputs.environment }}"
+            echo "- Image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}"
+            echo "- Scheduler: ${{ github.event.inputs.provision_scheduler == 'true' && format('{0} 30 10 * * * America/New_York', env.SCHEDULER_JOB) || 'unchanged' }}"
+            echo "- Rollback: re-enable the m4-air Hermes cron d23863b14bf7 (untouched)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -822,6 +822,9 @@ class GatedSTTSocket(STTSocket):
                 self._send_tracker.send_path = 'direct_recorded'
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
+        observe = getattr(self._conn, 'observe_vad', None)
+        if getattr(self._conn, 'idle_close_enabled', False) is True and callable(observe):
+            observe(gate_out, self._gate.mode)
         if self._raw_file:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
@@ -837,6 +840,7 @@ class GatedSTTSocket(STTSocket):
             # a provider enqueue failure and must not terminate the session.
             accepted = True
             sent_spans = ()
+        self._idle_send_spans = sent_spans
         if accepted is True and self._send_tracker is not None and sent_spans:
             self._send_tracker.send_path = 'vad_gate_passthrough' if self._passthrough_audio else 'vad_gate_active'
             self._send_tracker.note_accepted_spans(sent_spans)
@@ -852,6 +856,44 @@ class GatedSTTSocket(STTSocket):
                 # the client instead of continuing as if transcription worked.
                 return False
         return accepted
+
+    @property
+    def idle_close_enabled(self) -> bool:
+        return getattr(self._conn, 'idle_close_enabled', False) is True
+
+    async def complete_send(self) -> bool:
+        offset = getattr(self._conn, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
+        complete = getattr(self._conn, 'complete_send', None)
+        return (
+            await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
+        )
+
+    def commit_send(self) -> None:
+        commit = getattr(self._conn, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
+        accepted = self._conn.send(data)
+        if accepted and self._send_tracker is not None and spans:
+            self._send_tracker.note_accepted_spans(spans)
+        return accepted
+
+    def take_unsent_packet(self) -> Any:
+        data = self.take_unsent_audio()
+        return (data, getattr(self, '_idle_send_spans', ())) if data else None
+
+    def take_unsent_audio(self) -> bytes:
+        take = getattr(self._conn, 'take_unsent_audio', None)
+        return cast(Callable[[], bytes], take)() if callable(take) else b''
 
     def finalize(self) -> None:
         """Flush pending transcript."""

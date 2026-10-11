@@ -197,19 +197,29 @@ void main() {
   group('PendantRingCustody', () {
     late Directory tmp;
     late PendantRingCustody custody;
+    // Every custody a test creates; tearDown flushes them before deleting storage (#20500).
+    final custodies = <PendantRingCustody>[];
+    PendantRingCustody tracked(PendantRingCustody c) {
+      custodies.add(c);
+      return c;
+    }
 
     RingInfo info({int readSeq = 0, int writeSeq = 50, int ringId = 42}) =>
         v1Info(readSeq: readSeq, writeSeq: writeSeq, ringId: ringId);
 
     setUp(() async {
       tmp = await Directory.systemTemp.createTemp('custody_test');
-      custody = PendantRingCustody(
+      custody = tracked(PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (_) async => true,
-      );
+      ));
     });
 
     tearDown(() async {
+      for (final c in custodies) {
+        await c.flush();
+      }
+      custodies.clear();
       for (var i = 0; i < 10; i++) {
         try {
           if (await tmp.exists()) await tmp.delete(recursive: true);
@@ -262,13 +272,13 @@ void main() {
 
     test('checkpoint survives a store reload for the same incarnation', () async {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
-      final c1 = PendantRingCustody(store: store, walValidator: (_) async => true);
+      final c1 = tracked(PendantRingCustody(store: store, walValidator: (_) async => true));
       await c1.beginConnection('dev', 1, info());
       await c1.recordDurableRingRange('dev', 1, 42, 0, 12, [
         const CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
       ]);
 
-      final c2 = PendantRingCustody(store: store, walValidator: (_) async => true);
+      final c2 = tracked(PendantRingCustody(store: store, walValidator: (_) async => true));
       final replayed = <int>[];
       await c2.beginConnection(
         'dev',
@@ -366,10 +376,10 @@ void main() {
 
     test('a deleted proof WAL blocks validatedAdvanceTarget — no release of the stale range', () async {
       final live = <String>{'r.bin', 'w.bin'};
-      final c = PendantRingCustody(
+      final c = tracked(PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (ref) async => live.contains(ref.fileName),
-      );
+      ));
       await c.beginConnection('dev', 1, info());
       c.setLivePersistEnabled('dev', 1, true);
       await c.recordDurableRingRange('dev', 1, 42, 0, 5, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
@@ -405,13 +415,13 @@ void main() {
     test('validatedAdvanceTarget never extends past the target it validated', () async {
       final gate = Completer<void>();
       final live = <String>{'r.bin'};
-      final c = PendantRingCustody(
+      final c = tracked(PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (ref) async {
           await gate.future;
           return live.contains(ref.fileName);
         },
-      );
+      ));
       await c.beginConnection('dev', 1, info());
       await c.recordDurableRingRange('dev', 1, 42, 0, 5, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
 
@@ -439,13 +449,13 @@ void main() {
 
     test('isDurableLiveRecord returns false when the incarnation changes during validation', () async {
       final gate = Completer<void>();
-      final c = PendantRingCustody(
+      final c = tracked(PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (ref) async {
           await gate.future;
           return true;
         },
-      );
+      ));
       await c.beginConnection('dev', 1, info());
       c.setLivePersistEnabled('dev', 1, true);
       for (var f = 0; f < 10; f++) {
@@ -474,6 +484,9 @@ void main() {
 
     test('marks spaced one record apart stay provable across a u16 counter wrap', () async {
       await custody.beginConnection('dev', 1, info());
+      // Ending the session drops its thousands of lazily queued mark persists, so teardown's
+      // flush does not write them one by one (even when an expectation below fails).
+      addTearDown(() => custody.endConnection('dev', 1));
       custody.setLivePersistEnabled('dev', 1, true);
       var frame = 0;
       for (var r = 1; r <= 3300; r++) {

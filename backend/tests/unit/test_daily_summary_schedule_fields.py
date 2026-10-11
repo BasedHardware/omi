@@ -92,6 +92,36 @@ def test_set_daily_summary_hour_local_rejects_out_of_range():
         notifications_module.set_daily_summary_hour_local('uid1', 24)
 
 
+def test_daily_summary_depth_round_trips_without_replacing_schedule():
+    path = ('users', 'uid1')
+    store = StrictFirestore({path: {'daily_summary_enabled': False, 'daily_summary_hour_local': 0}})
+
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+    assert notifications_module.set_daily_summary_depth('uid1', 'deep', firestore_client=store) is True
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'deep'
+    assert store.rows[path] == {
+        'daily_summary_enabled': False,
+        'daily_summary_hour_local': 0,
+        'daily_summary_depth': 'deep',
+    }
+
+
+def test_daily_summary_depth_handles_missing_and_malformed_profiles():
+    path = ('users', 'uid1')
+    store = StrictFirestore()
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+
+    store.rows[path] = {'daily_summary_depth': 'unsupported'}
+    assert notifications_module.get_daily_summary_depth('uid1', firestore_client=store) == 'brief'
+
+
+def test_daily_summary_depth_rejects_invalid_write_without_transaction():
+    store = StrictFirestore()
+    with pytest.raises(ValueError, match='Invalid daily summary depth'):
+        notifications_module.set_daily_summary_depth('uid1', 'unsupported', firestore_client=store)
+    assert not store.transactions
+
+
 @pytest.mark.parametrize('time_zone', [None, 'Asia/Kolkata'])
 def test_token_registration_delegates_defaults_instead_of_reusing_its_migration_snapshot(monkeypatch, time_zone):
     # Token migration is not a transaction fake; only its delegation is under test.

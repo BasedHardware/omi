@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/analytics/background_resource_telemetry.dart';
 
@@ -164,6 +165,200 @@ void main() {
     store.value = {'owner': 'alice', 'background_session_id': 'old', 'started_at': '2026-09-22T00:00:00Z'};
     await expectLater(telemetry.recoverInterrupted(), completes);
     expect(store.value, isNull);
+  });
+
+  test('checkpoint round-trips origin build and git sha through json', () async {
+    final store = MemoryCheckpoint();
+    final now = DateTime.utc(2026, 10, 9);
+    final telemetry = BackgroundResourceTelemetry(
+      emit: (_, __) {},
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      now: () => now,
+      sessionIdFactory: () => 'session-origin',
+      currentBuild: () => '1001',
+      currentGitSha: () => 'abc123def',
+    );
+    telemetry.onPaused(snapshot);
+    await telemetry.pendingCheckpointWrites;
+    final encoded = jsonEncode(store.value);
+    final decoded = Map<String, Object>.from(jsonDecode(encoded) as Map);
+    expect(decoded['origin_build'], '1001');
+    expect(decoded['origin_git_sha'], 'abc123def');
+    expect(decoded['background_session_id'], 'session-origin');
+  });
+
+  test('recovery emits the upgrade flag when the origin build differs', () async {
+    var build = '1001';
+    final store = MemoryCheckpoint();
+    var now = DateTime.utc(2026, 10, 9);
+    final events = <Map<String, dynamic>>[];
+    BackgroundResourceTelemetry create() => BackgroundResourceTelemetry(
+          emit: (_, props) => events.add(props),
+          checkpointStore: store,
+          ownerKey: () => 'alice',
+          now: () => now,
+          sessionIdFactory: () => 'session-origin',
+          currentBuild: () => build,
+          currentGitSha: () => 'abc123def',
+        );
+    final writer = create();
+    writer.onPaused(snapshot);
+    await writer.pendingCheckpointWrites;
+    now = now.add(const Duration(minutes: 4));
+    build = '1002';
+    await create().recoverInterrupted(launchContext: backgroundInterruptLaunchColdStart);
+    expect(events, hasLength(1));
+    expect(events.single['interrupt_origin_build'], '1001');
+    expect(events.single['interrupt_origin_git_sha'], 'abc123def');
+    expect(events.single['interrupted_after_upgrade'], isTrue);
+    expect(events.single['launch_context'], 'cold_start');
+    expect(events.single['observation_state'], 'unobserved');
+    expect(store.value, isNull);
+  });
+
+  test('same build clears the upgrade flag and a same-process launch is resume', () async {
+    final store = MemoryCheckpoint();
+    var now = DateTime.utc(2026, 10, 9);
+    final events = <Map<String, dynamic>>[];
+    final writer = BackgroundResourceTelemetry(
+      emit: (_, props) => events.add(props),
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      now: () => now,
+      currentBuild: () => '1001',
+      currentGitSha: () => 'abc123def',
+    );
+    writer.onPaused(snapshot);
+    await writer.pendingCheckpointWrites;
+    now = now.add(const Duration(minutes: 2));
+    await writer.recoverInterrupted(launchContext: backgroundInterruptLaunchResume);
+    expect(events.single['interrupt_origin_build'], '1001');
+    expect(events.single['interrupted_after_upgrade'], isFalse);
+    expect(events.single['launch_context'], 'resume');
+  });
+
+  test('legacy checkpoints omit origin fields and unknown launch context', () async {
+    final store = MemoryCheckpoint()
+      ..value = {
+        'owner': 'alice',
+        'background_session_id': 'legacy',
+        'started_at': '2026-10-09T00:00:00.000Z',
+        'recording_state': 'record',
+        'batch_mode_enabled': true,
+      };
+    final events = <Map<String, dynamic>>[];
+    final telemetry = BackgroundResourceTelemetry(
+      emit: (_, props) => events.add(props),
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      now: () => DateTime.utc(2026, 10, 9, 1),
+      currentBuild: () => '1002',
+      currentGitSha: () => 'abc123def',
+    );
+    await telemetry.recoverInterrupted(launchContext: 'force_quit');
+    expect(events, hasLength(1));
+    expect(events.single.containsKey('interrupt_origin_build'), isFalse);
+    expect(events.single.containsKey('interrupt_origin_git_sha'), isFalse);
+    expect(events.single.containsKey('interrupted_after_upgrade'), isFalse);
+    expect(events.single.containsKey('launch_context'), isFalse);
+    expect(events.single['background_session_id'], 'legacy');
+  });
+
+  test('missing or sentinel identity is not written and does not invent an upgrade', () async {
+    final store = MemoryCheckpoint();
+    final events = <Map<String, dynamic>>[];
+    var now = DateTime.utc(2026, 10, 9);
+    final writer = BackgroundResourceTelemetry(
+      emit: (_, props) => events.add(props),
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      now: () => now,
+      currentBuild: () => 'unknown',
+      currentGitSha: () => '',
+    );
+    writer.onPaused(snapshot);
+    await writer.pendingCheckpointWrites;
+    expect(store.value, isNot(contains('origin_build')));
+    expect(store.value, isNot(contains('origin_git_sha')));
+    store.value = {
+      ...?store.value,
+      'origin_build': 'unknown',
+    };
+    now = now.add(const Duration(minutes: 3));
+    await writer.recoverInterrupted();
+    expect(events.single.containsKey('interrupt_origin_build'), isFalse);
+    expect(events.single.containsKey('interrupted_after_upgrade'), isFalse);
+  });
+
+  test('a throwing build reader still persists the checkpoint', () async {
+    final store = MemoryCheckpoint();
+    final telemetry = BackgroundResourceTelemetry(
+      emit: (_, __) {},
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      currentBuild: () => throw StateError('package info unavailable'),
+      currentGitSha: () => throw StateError('sha unavailable'),
+    );
+    telemetry.onPaused(snapshot);
+    await telemetry.pendingCheckpointWrites;
+    expect(store.value?['background_session_id'], isNotNull);
+    expect(store.value, isNot(contains('origin_build')));
+    expect(store.value, isNot(contains('origin_git_sha')));
+  });
+
+  test('launch context mapping distinguishes cold start, resume, restoration, and unknown', () {
+    BackgroundInterruptProcessLaunch.resetForTesting();
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.peek()),
+      'cold_start',
+    );
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
+    BackgroundInterruptProcessLaunch.mark();
+    expect(BackgroundInterruptProcessLaunch.peek(), isTrue);
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.peek()),
+      'resume',
+    );
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: false, osStateRestored: true),
+      'restored',
+    );
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: true, osStateRestored: true),
+      'restored',
+    );
+    expect(classifyBackgroundInterruptLaunch(processAlreadyObserved: null), isNull);
+    expect(normalizeBackgroundInterruptLaunchContext(null), isNull);
+    expect(normalizeBackgroundInterruptLaunchContext('force_quit'), isNull);
+    expect(normalizeBackgroundInterruptLaunchContext('cold_start'), 'cold_start');
+    BackgroundInterruptProcessLaunch.resetForTesting();
+  });
+
+  test('origin build without a current build omits the upgrade flag', () async {
+    final store = MemoryCheckpoint()
+      ..value = {
+        'owner': 'alice',
+        'background_session_id': 'partial',
+        'started_at': '2026-10-09T00:00:00.000Z',
+        'recording_state': 'record',
+        'origin_build': '1001',
+      };
+    final events = <Map<String, dynamic>>[];
+    final telemetry = BackgroundResourceTelemetry(
+      emit: (_, props) => events.add(props),
+      checkpointStore: store,
+      ownerKey: () => 'alice',
+      now: () => DateTime.utc(2026, 10, 9, 2),
+      currentBuild: () => null,
+    );
+    await telemetry.recoverInterrupted(launchContext: backgroundInterruptLaunchRestored);
+    expect(events.single['interrupt_origin_build'], '1001');
+    expect(events.single.containsKey('interrupt_origin_git_sha'), isFalse);
+    expect(events.single.containsKey('interrupted_after_upgrade'), isFalse);
+    expect(events.single['launch_context'], 'restored');
   });
 }
 

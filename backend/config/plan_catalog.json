@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 4,
+  "catalog_revision": 5,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -680,6 +680,30 @@
     {
       "price_id": "price_1TuIap1F8wnoWYvwHWq0EvNU",
       "plan_id": "unlimited_v2",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1ULq501F8wnoWYvwwN56CHzO",
+      "plan_id": "unlimited_v2",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1ULq5e1F8wnoWYvwQT8XQ4Uw",
+      "plan_id": "unlimited_v2",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1ULq6b1F8wnoWYvwtchjjNqq",
+      "plan_id": "plus",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1ULq7H1F8wnoWYvwC1poOtd5",
+      "plan_id": "plus",
       "interval": "year",
       "environment": "prod"
     }

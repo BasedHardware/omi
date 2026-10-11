@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Protocol, cast
 
 from starlette.websockets import WebSocketState
 
@@ -571,6 +571,11 @@ async def send_live_stt_audio(
         OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     async def _recoverable_failure(reason: str) -> None:
+        if session_recovery_enabled(getattr(session, 'receiver', None)):
+            # A synchronous enqueue can latch capacity_full before returning
+            # False. Preserve that local cause rather than benching a healthy
+            # provider as send_failed; OFF retains its original vocabulary.
+            reason = live_stt_terminal_reason(stt_socket, reason)
         outcome = getattr(stt_socket, 'leg_outcome', None)
         if outcome is not None and outcome.owner_closing:
             # The final client-tail flush may still send valid audio, but its
@@ -619,10 +624,18 @@ async def send_live_stt_audio(
         await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
         return False
 
+    receiver = getattr(attempt_failover, '__self__', None)
+    retry = getattr(receiver, '_idle_onset_retry', None)
     try:
-        accepted = (
-            stt_socket.send(audio, start_sample=start_sample) if start_sample is not None else stt_socket.send(audio)
-        )
+        if retry is not None:
+            admitted = getattr(stt_socket, 'send_admitted_audio', None)
+            accepted = admitted(*retry) if callable(admitted) else stt_socket.send(retry[0])
+        else:
+            accepted = (
+                stt_socket.send(audio, start_sample=start_sample)
+                if start_sample is not None
+                else stt_socket.send(audio)
+            )
     except TypeError:
         # A socket that predates the capture-position seam: send without it.
         try:
@@ -638,12 +651,33 @@ async def send_live_stt_audio(
         await _recoverable_failure('send_failed')
         return False
 
-    # Safe socket wrappers report send failures through the death latch instead
-    # of raising so every provider must be checked after the send as well.
-    if live_stt_socket_is_dead(stt_socket):
-        await _recoverable_failure('send_failed')
+    complete = (
+        getattr(stt_socket, 'complete_send', None) if getattr(stt_socket, 'idle_close_enabled', False) is True else None
+    )
+    try:
+        completed = await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else True
+    except Exception:
+        completed = False
+    if not completed or live_stt_socket_is_dead(stt_socket):
+        take = getattr(stt_socket, 'take_unsent_packet', None)
+        if receiver is not None and callable(take):
+            packet = take()
+            if packet is not None:
+                receiver._idle_onset_retry = packet
+        await _recoverable_failure(
+            live_stt_terminal_reason(stt_socket, 'connection_lost') if not completed else 'send_failed'
+        )
         return False
 
+    # Safe socket wrappers report send failures through the death latch instead
+    # of raising so every provider must be checked after the send as well.
+    if getattr(stt_socket, 'idle_close_enabled', False) is True:
+        commit = getattr(stt_socket, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    if receiver is not None and retry is not None:
+        receiver._idle_onset_retry = None
     return True
 
 

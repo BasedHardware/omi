@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-conversation-opened.png",
+      "platform": "mobile-ios",
+      "description": "Existing user opens a conversation",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-enjoying-omi-ask-1s.png",
+      "platform": "mobile-ios",
+      "description": "About 1 s later: Are you enjoying Omi? (asked once per user)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

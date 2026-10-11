@@ -536,9 +536,10 @@ class CostHealthMixin(ABC):
                 self._cost_interests.pop(min(expendable, key=lambda key: self._cost_interests[key]))
             self._cost_preferred = {key: seen for key, seen in self._cost_preferred.items() if now - seen < 15}
             preferred = dict(self._cost_preferred)
+            interests = set(self._cost_interests)
         keys = sorted(
             {(target.id, lang) for target in targets for lang in ('all', *sorted(live_stt_state.ROUTED_LANGUAGES))}
-            | set(self._cost_interests)
+            | interests
         )
         if not keys or now < self._redis_retry_at:
             return

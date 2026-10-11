@@ -2,6 +2,7 @@ import os
 import sys
 import types
 from importlib.util import find_spec
+from importlib import import_module
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,6 +68,9 @@ def _install_optional_import_stubs(monkeypatch):
         websockets_stub = types.ModuleType('starlette.websockets')
         websockets_stub.WebSocket = MagicMock()
         monkeypatch.setitem(sys.modules, 'starlette.websockets', websockets_stub)
+
+    # Warm shared imports during setup so callback timing measures callback work.
+    import_module('utils.llm.clients')
 
 
 class _HTTPError(Exception):

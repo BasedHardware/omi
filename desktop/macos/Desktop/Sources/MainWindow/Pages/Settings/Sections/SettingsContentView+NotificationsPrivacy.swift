@@ -39,7 +39,7 @@ extension SettingsContentView {
             // whether focus nudges are generated at all.
             settingRow(
               title: "Focus Notifications",
-              subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
+              subtitle: "Short suggestions in the notch based on what you're working on",
               settingId: "notifications.livesuggestions"
             ) {
               Toggle("", isOn: $liveSuggestionsEnabled)
@@ -186,6 +186,39 @@ extension SettingsContentView {
                 updateDailySummarySettings(hour: hour)
               }
             }
+
+            GlassSeparator()
+
+            settingRow(
+              title: "Recap Depth",
+              subtitle: "Choose how much detail future daily summaries include",
+              settingId: "notifications.recapdepth"
+            ) {
+              HStack(spacing: OmiSpacing.sm) {
+                if dailySummaryDepthSaving {
+                  ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Saving recap depth")
+                }
+                SettingsMenuPicker(selection: $dailySummaryDepth) {
+                  Text("Brief").tag(DailySummaryDepth.brief)
+                  Text("Normal").tag(DailySummaryDepth.normal)
+                  Text("Deep Reflection").tag(DailySummaryDepth.deep)
+                }
+                .frame(minWidth: 155)
+                .disabled(dailySummaryDepthSaving)
+                .onChange(of: dailySummaryDepth) { _, depth in
+                  updateDailySummaryDepth(depth)
+                }
+              }
+            }
+
+            if let dailySummaryDepthError {
+              Text(dailySummaryDepthError)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.errorRed)
+                .accessibilityIdentifier("recap-depth-save-error")
+            }
           }
         }
       }
@@ -264,7 +297,7 @@ extension SettingsContentView {
           privacyToggleRow(
             icon: "cloud.fill",
             title: "Private Cloud Sync",
-            subtitle: "Sync your data securely to your private cloud storage",
+            subtitle: "Upload your recordings to your own cloud storage",
             isOn: $privateCloudSyncEnabled
           ) { newValue in
             updatePrivateCloudSync(newValue)

@@ -163,7 +163,7 @@ struct TaskDetailPanel: View {
       }
 
       if content.linkedSources.isEmpty {
-        Text("No navigable source was attached to this task.")
+        Text("This task has no source to open.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       } else {

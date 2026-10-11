@@ -195,7 +195,11 @@ def test_kill_switch_records_disabled_even_for_an_allowlisted_uid(monkeypatch, c
 @pytest.mark.parametrize('s1', [False, True])
 def test_admitted_upload_binds_per_segment_without_a_gate_decision(monkeypatch, caplog, name, s1):
     requested, outcomes, lines = _decision(monkeypatch, caplog, ACTIVE[name], s1=s1)
-    assert requested == s1 and outcomes == [] and lines == []
+    assert requested == s1
+    assert outcomes == ([] if s1 else ['s1_refused'])
+    assert len(lines) == (0 if s1 else 1)
+    if not s1:
+        assert 'outcome=s1_refused' in lines[0] and 'job_ref=none' in lines[0]
 
 
 def test_ineligible_upload_is_untouched_by_the_gate(monkeypatch, caplog):
@@ -430,7 +434,7 @@ def test_admitted_owner_defers_enrichment_of_an_open_live_row(dependencies, monk
 @pytest.mark.parametrize('name', sorted(INACTIVE))
 def test_refused_owner_reprocesses_exactly_as_the_kill_switch(dependencies, monkeypatch, name):
     off = _reprocess(dependencies, monkeypatch, OFF)
-    assert len(off) == 1
+    assert off == []
     assert _reprocess(dependencies, monkeypatch, INACTIVE[name]) == off
 
 

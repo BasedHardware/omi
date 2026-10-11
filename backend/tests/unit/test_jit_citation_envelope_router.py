@@ -95,7 +95,7 @@ def test_numbered_jit_citation_delivers_matching_stable_evidence_envelope() -> N
             )
             yield None
 
-        router_module.execute_chat_stream = cited_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = cited_stream
 
         response = client.post(
             '/v2/messages',
@@ -155,7 +155,7 @@ def test_second_jit_tool_call_index_resolves_to_second_global_conversation() -> 
             )
             yield None
 
-        router_module.execute_chat_stream = cited_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = cited_stream
 
         response = client.post(
             '/v2/messages',

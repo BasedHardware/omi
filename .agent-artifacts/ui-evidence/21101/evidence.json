@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-settings-device-no-phone-calls.png",
+      "platform": "mobile-ios",
+      "description": "Settings > Device without Phone Calls",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-record-button-no-options-badge.png",
+      "platform": "mobile-ios",
+      "description": "Record button without the options badge",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-pendant-sheet-no-phone-call.png",
+      "platform": "mobile-ios",
+      "description": "Pendant sheet without the Phone call option",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

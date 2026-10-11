@@ -403,9 +403,9 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
     first page walk the whole historical collection — 50 rows per Firestore
     round trip, unbounded — before it can emit anything, so even ``limit=8``
     ran past the edge timeout. The walk must stop at a bounded row count and
-    surface the detail the route falls back on, instead of hanging.
+    return that prefix as truncated, instead of hanging or raising into an
+    unbounded offset read.
     """
-    from fastapi import HTTPException
     from models.product_memory import MemoryItemStatus
 
     # The shipped bound is what keeps the walk inside the edge timeout; the test
@@ -419,27 +419,27 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
     statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
     _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
 
-    with pytest.raises(HTTPException) as exc_info:
-        service.read_page("uid-test", limit=8, cursor=None)
+    page = service.read_page("uid-test", limit=8, cursor=None)
 
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
-    assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
+    assert page.memories == []
+    assert page.truncated is True
+    assert page.next_cursor is None
     # The walk stopped at the budget instead of scanning every historical row.
     scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
     assert scanned <= 150
     assert scanned < total
+    service_mod.read_canonical_memories.assert_not_called()
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
 
 
 def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(service_mod, monkeypatch):
     """Prod 2026-08-18T08:09Z+: first pages still 504'd after the row budget shipped.
 
     4000 skipped rows is ~80 sequential Firestore round trips, so a slow account
-    burned the whole 30s edge budget inside the bound and left the offset-read
-    fallback no time to answer. The walk must stop on elapsed seconds too, well
-    before the row budget is spent.
+    burned the whole 30s edge budget inside the bound. The walk must stop on
+    elapsed seconds too and return the prefix already walked, well before the
+    row budget is spent, without starting a full-collection read.
     """
-    from fastapi import HTTPException
     from models.product_memory import MemoryItemStatus
 
     monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_DEADLINE_SECONDS", 0.0)
@@ -449,15 +449,64 @@ def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(serv
     statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
     _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
 
-    with pytest.raises(HTTPException) as exc_info:
-        service.read_page("uid-test", limit=8, cursor=None)
+    page = service.read_page("uid-test", limit=8, cursor=None)
 
-    assert exc_info.value.status_code == 503
-    # Same detail the route's first-page fallback already keys on.
-    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    assert page.truncated is True
+    assert page.next_cursor is None
     # Time stopped the walk, not rows: far fewer rows were scanned than the row budget allows.
     scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
     assert scanned < service_mod.MEMORY_LIST_SCAN_ROW_BUDGET
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
+
+
+def test_keyset_budget_returns_walked_prefix_without_full_fetch(service_mod, monkeypatch):
+    """First-page budget exhaustion keeps rows already accepted and does not stream the collection."""
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = [_dated_memory(service_mod, f"c-{index}", day=10 - index) for index in range(3)]
+    _install_streams(service, service_mod, canonical=canonical, historical=[])
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_CHUNK_SIZE", 1)
+    checks = {"n": 0}
+    original = service_mod._ScanRowBudget.check
+
+    def check(self, stream="historical"):
+        checks["n"] += 1
+        if checks["n"] > 3:
+            raise service_mod.MemoryBackingStoreUnavailable(service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL, stream=stream)
+        return original(self, stream)
+
+    monkeypatch.setattr(service_mod._ScanRowBudget, "check", check)
+
+    page = service.read_page("uid-test", limit=8, cursor=None)
+
+    assert page.truncated is True
+    assert page.next_cursor is None
+    assert [memory.id for memory in page.memories] == ["c-0"]
+    service_mod.read_canonical_memories.assert_not_called()
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
+
+
+def test_offset_read_uses_keyset_not_the_full_collection_fetcher(service_mod, monkeypatch):
+    memory = _dated_memory(service_mod, "visible", day=3)
+
+    def fake_scan(*_args, **_kwargs):
+        return [(memory, (memory.updated_at, memory.id))], True
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("offset read must not stream the canonical collection")
+
+    monkeypatch.setattr(service_mod, "read_canonical_scan_page", fake_scan)
+    monkeypatch.setattr(service_mod, "read_canonical_memories", explode)
+    from utils.memory import canonical_memory_adapter as adapter
+    from utils.memory import product_memory_read_service as read_service
+
+    monkeypatch.setattr(adapter, "fetch_authoritative_product_memory_items", explode)
+    monkeypatch.setattr(read_service, "fetch_authoritative_product_memory_items", explode)
+    service = service_mod.MemoryService(db_client=_Db())
+    service.history.read = lambda *_args, **_kwargs: []
+
+    page = service.read("uid-test", limit=10, offset=0)
+
+    assert [item.id for item in page] == ["visible"]
 
 
 def test_scan_budget_charges_within_the_deadline_do_not_raise(service_mod):
@@ -1417,3 +1466,190 @@ def test_building_index_failure_is_the_historical_unavailable_detail(service_mod
     assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
     assert exc_info.value.stream == "historical"
     assert isinstance(exc_info.value.__cause__, gcloud_exceptions.FailedPrecondition)
+
+
+def test_offset_canonical_failure_with_empty_historical_propagates(service_mod):
+    """A canonical outage plus an empty historical merge is not an empty account.
+
+    The offset route only reads ``budget.truncated``. Returning ``[]`` with the
+    budget still open is a 200 the client treats as "No Memories Yet".
+    """
+    from fastapi import HTTPException
+
+    from utils.other.list_budget import ListReadBudget
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    service.history.read = lambda *_args, **_kwargs: []
+    service.canonical_statuses = MagicMock(return_value={})
+    budget = ListReadBudget.for_request(None, route="memories", seconds=60)
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.read("uid-test", offset=1, limit=8, budget=budget)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Canonical memory unavailable"
+    assert budget.truncated is False
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_offset_canonical_failure_returns_historical_rows_and_marks_truncated(service_mod):
+    """Historical rows survive a canonical outage only as an explicit partial page."""
+    from utils.other.list_budget import ListReadBudget
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    historical = _dated_historical(service_mod, "h-kept", day=4)
+    service.history.read = lambda *_args, **_kwargs: [historical]
+    service.canonical_statuses = MagicMock(return_value={})
+    budget = ListReadBudget.for_request(None, route="memories", seconds=60)
+
+    rows = service.read("uid-test", offset=0, limit=8, budget=budget)
+
+    assert [memory.id for memory in rows] == ["h-kept"]
+    assert budget.truncated is True
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+class _LegacyDocRef:
+    def __init__(self, client: "_ChargingLegacyDb", path: str):
+        self._client = client
+        self.path = path
+
+    def collection(self, name: str) -> "_LegacyCollection":
+        return _LegacyCollection(self._client, f"{self.path}/{name}")
+
+
+class _LegacyCollection:
+    def __init__(self, client: "_ChargingLegacyDb", path: str):
+        self._client = client
+        self.path = path
+
+    def document(self, doc_id: str) -> _LegacyDocRef:
+        return _LegacyDocRef(self._client, f"{self.path}/{doc_id}")
+
+
+class _LegacySnapshot:
+    def __init__(self, payload, *, exists: bool, reference: _LegacyDocRef):
+        self._payload = payload
+        self.exists = exists
+        self.reference = reference
+
+    def to_dict(self):
+        return None if self._payload is None else dict(self._payload)
+
+
+class _ChargingLegacyDb:
+    """Stand-in whose ``get_all`` is the production ``get_memories_by_ids`` charge site."""
+
+    def __init__(self, docs):
+        self.docs = {path: dict(payload) for path, payload in docs.items()}
+
+    def collection(self, name: str) -> _LegacyCollection:
+        return _LegacyCollection(self, name)
+
+    def document(self, path: str) -> _LegacyDocRef:
+        return _LegacyDocRef(self, path)
+
+    def get_all(self, refs, timeout=None):
+        del timeout
+        for ref in refs:
+            payload = self.docs.get(ref.path)
+            yield _LegacySnapshot(payload, exists=payload is not None, reference=ref)
+
+
+def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents: Optional[int] = None):
+    """Canonical keyset down, one unhydrated legacy row, real id-hydration that charges."""
+    from tests.unit.test_memory_service_parity import _sample_memory_dict
+    from utils.other.list_budget import ListReadBudget
+
+    memory_id = "leg-budget-1"
+    stored = _sample_memory_dict(memory_id)
+    stored["content"] = "Legacy row hydrated under a live list budget"
+    stored["uid"] = "uid-test"
+    db = _ChargingLegacyDb({f"users/uid-test/memories/{memory_id}": stored})
+    before = {path: dict(payload) for path, payload in db.docs.items()}
+    monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", service_mod._prod_get_memories_by_ids)
+    service = service_mod.MemoryService(db_client=db)
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, memory_id, content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", memory_id),
+        hydrated=False,
+    )
+    service.history.read = lambda *_args, **_kwargs: [stub]
+    service.canonical_statuses = MagicMock(return_value={})
+    budget_kwargs = {"route": "memories", "seconds": 60}
+    if max_documents is not None:
+        budget_kwargs["max_documents"] = max_documents
+    budget = ListReadBudget.for_request(None, **budget_kwargs)
+    rows = service.read("uid-test", limit=8, budget=budget)
+    assert db.docs == before
+    return rows, budget
+
+
+def test_budgeted_legacy_hydration_returns_the_row_truncated(service_mod, monkeypatch):
+    """A live document budget must hydrate the legacy stub before truncation is flagged.
+
+    Production ``get_memories_by_ids`` charges the request budget. Marking that
+    budget exhausted first makes the charge raise ``ListReadBudgetExhausted``
+    and the route 500s instead of returning the truncated page.
+    """
+    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch)
+
+    assert [memory.id for memory in rows] == ["leg-budget-1"]
+    assert rows[0].content == "Legacy row hydrated under a live list budget"
+    assert budget.truncated is True
+    assert budget.remaining_documents > 20_000
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_budgeted_legacy_hydration_keeps_rows_when_the_charge_exhausts(service_mod, monkeypatch):
+    """Hydration that spends the last document still ships that row, truncated."""
+    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, max_documents=0)
+
+    assert [memory.id for memory in rows] == ["leg-budget-1"]
+    assert rows[0].content == "Legacy row hydrated under a live list budget"
+    assert budget.truncated is True
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_lookahead_budget_exhaustion_keeps_the_filled_page(service_mod, monkeypatch):
+    """limit=1 fills the page, then the next-chunk peek hits the scan budget.
+
+    That peek used to escape ``read_page``. The first-page route then answered
+    empty-truncated and dropped the row already accepted.
+    """
+    service = service_mod.MemoryService(db_client=_Db())
+    _install_streams(
+        service,
+        service_mod,
+        canonical=[
+            _dated_memory(service_mod, "c-0", day=3),
+            _dated_memory(service_mod, "c-1", day=2),
+        ],
+        historical=[],
+    )
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_CHUNK_SIZE", 1)
+    original_check = service_mod._ScanRowBudget.check
+    calls = {"n": 0}
+
+    def check(self, stream="historical"):
+        calls["n"] += 1
+        if calls["n"] > 3:
+            raise service_mod.MemoryBackingStoreUnavailable(
+                service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL,
+                stream=stream,
+            )
+        return original_check(self, stream)
+
+    monkeypatch.setattr(service_mod._ScanRowBudget, "check", check)
+
+    page = service.read_page("uid-test", limit=1, cursor=None)
+
+    assert [memory.id for memory in page.memories] == ["c-0"]
+    assert page.truncated is True
+    assert page.next_cursor is None

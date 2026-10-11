@@ -7,6 +7,7 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.byok import BYOKMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
@@ -122,6 +123,11 @@ def _build_app() -> FastAPI:
             "X-Omi-List-Truncated",
         ],
     )
+    # Desktop sends BYOK keys as X-BYOK-* headers on every chat request; without
+    # this middleware they're never read into the contextvar, so get_byok_key()
+    # always returns None here and BYOK users silently ride the managed/quota
+    # lane instead of their own keys. main.py installs the same middleware.
+    app.add_middleware(BYOKMiddleware)
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
     app.include_router(desktop_agent_vm.router)

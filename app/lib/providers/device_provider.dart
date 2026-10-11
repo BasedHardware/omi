@@ -1,4 +1,7 @@
 import 'dart:async';
+
+import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -75,6 +78,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
+  final Future<DeviceConnection?> Function(String) _chargingConnectionLoader;
   final CaptureWedgeMonitor _wedgeMonitor;
   final Set<String> _intentionalDisconnectDevices = {};
 
@@ -88,6 +92,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
   bool isCharging = false;
+  final _chargeStarts = ChargeStartTracker();
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
@@ -143,8 +148,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     BleDiagnosticsLoader? bleDiagnosticsLoader,
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
+    Future<DeviceConnection?> Function(String)? chargingConnectionLoader,
   })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
@@ -171,6 +178,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// account publication from the retired generation must not land.
   void clearUserData() {
     _sessionGeneration++;
+    _deviceHealthTimer?.cancel();
+    _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = null;
@@ -458,13 +467,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         if (!_isCurrent(generation)) return;
-        batteryLevel = value;
-        BatteryWidgetService().updateBatteryInfo(
-          deviceName: connectedDevice?.name ?? '',
-          batteryLevel: value,
-          deviceType: connectedDevice?.type.name ?? 'omi',
-          isConnected: true,
-        );
+        if (batteryLevel != value) {
+          batteryLevel = value;
+          BatteryWidgetService().updateBatteryInfo(
+            deviceName: connectedDevice?.name ?? '',
+            batteryLevel: value,
+            deviceType: connectedDevice?.type.name ?? 'omi',
+            isConnected: true,
+          );
+        }
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = globalNavigatorKey.currentContext;
@@ -510,29 +521,47 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  Future<void> initiateChargingStatusListener() async {
+  Future<void> initiateChargingStatusListener({bool allowCaptureResume = true}) async {
     final generation = _sessionGeneration;
     if (!_isCurrent(generation) || connectedDevice == null) return;
     _bleChargingStatusListener?.cancel();
 
-    var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+    var connection = await _chargingConnectionLoader(connectedDevice!.id);
     if (!_isCurrent(generation)) return;
     if (connection == null) return;
+    // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API. (#5491)
     if (connection is! OmiDeviceConnection) return;
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
-    if (isCharging != currentStatus) {
-      isCharging = currentStatus;
-      notifyListeners();
+    final allowInitialResume = allowCaptureResume && !SyncWakeScope.syncOnly;
+    var initialObservationDone = currentStatus != null;
+    // Failed reads are unknown: retain the last successful observation and UI state.
+    if (currentStatus != null) {
+      final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
+      // An initial read made by a sync wake is observation, not a charge-start event.
+      if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
+      if (isCharging != currentStatus) {
+        isCharging = currentStatus;
+        notifyListeners();
+      }
+      BatteryWidgetService().updateChargingState(currentStatus);
     }
-    BatteryWidgetService().updateChargingState(currentStatus);
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
+        // Firmware notifies its current byte on subscribe. After a failed read,
+        // that first sample inherits the initial read's observation-only gate.
+        // A later scope must defer transport work, not consume an authorized
+        // charge edge. Capture's scope-drop reconciliation owns that deferral.
+        final allowResume = initialObservationDone || allowInitialResume;
+        initialObservationDone = true;
+        final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
+        if (chargeStarted && allowResume) captureProvider?.onChargingStarted();
         if (isCharging != charging) {
           isCharging = charging;
+
           BatteryWidgetService().updateChargingState(charging);
           if (!charging) {
             _hasFullyChargedAlerted = false;
@@ -591,6 +620,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    if (pairedDeviceId.isNotEmpty) {
+      unawaited(DeviceHealthTelemetry.maybeEmit(SharedPreferencesUtil().btDevice));
+    }
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
       Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
@@ -709,6 +741,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _isDisposed = true;
     _sessionGeneration++;
+    _deviceHealthTimer?.cancel();
+    _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
@@ -836,6 +870,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _onDeviceConnected(BtDevice device, int generation) async {
+    final syncOnly = SyncWakeScope.syncOnly;
     Logger.debug('_onConnected inside: $connectedDevice');
     if (!_isCurrent(generation)) return;
     final deviceSetup = setConnectedDevice(device);
@@ -872,13 +907,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Then set up listeners for battery changes and charging status
     await initiateBleBatteryListener();
     if (!_isCurrent(generation)) return;
-    await initiateChargingStatusListener();
+    await initiateChargingStatusListener(allowCaptureResume: !syncOnly);
     if (!_isCurrent(generation)) return;
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
+    if (!syncOnly) await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
 
     await getDeviceInfo();
@@ -917,9 +952,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Auto-sync: check if device has offline files
     unawaited(_checkAndStartAutoSync(device, generation));
     if (pairedDevice != null) unawaited(DeviceHealthTelemetry.maybeEmit(pairedDevice!));
+    final healthDevice = pairedDevice;
     _deviceHealthTimer ??= Timer.periodic(const Duration(hours: 1), (_) {
-      final current = pairedDevice;
-      if (current != null && isConnected) unawaited(DeviceHealthTelemetry.maybeEmit(current));
+      if (!_isCurrent(generation)) return;
+      final current = pairedDevice ?? healthDevice;
+      if (current != null) unawaited(DeviceHealthTelemetry.maybeEmit(current));
     });
 
     notifyListeners();

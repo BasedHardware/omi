@@ -7,8 +7,10 @@ L2 lifecycle filter withholds them until explicit disposition.
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
-from typing import List
+from typing import Iterator, List, Optional
 
 from database.product_memory_items import filter_default_product_memory_items
 from models.product_memory import (
@@ -25,8 +27,15 @@ from utils.observability.fallback import record_fallback
 _L2_PROCESSED_REQUIRES_DISPOSITION = "short_term_l2_processed_requires_explicit_lifecycle_disposition"
 logger = logging.getLogger(__name__)
 
+# Keyset list reads call this filter once per row. Batch those observations so
+# one page emits one warning instead of one warning per expired short-term item.
+_batched_expiry_observations: ContextVar[Optional[List[int]]] = ContextVar(
+    "batched_canonical_expiry_observations",
+    default=None,
+)
 
-def _log_expiry_disposition_observations(items: List[MemoryItem], *, now: datetime) -> None:
+
+def _expired_active_pending_terminal_count(items: List[MemoryItem], *, now: datetime) -> int:
     expired_pending_terminal_apply = 0
     for item in items:
         if (
@@ -36,19 +45,51 @@ def _log_expiry_disposition_observations(items: List[MemoryItem], *, now: dateti
             and effective_short_term_expiry(item) <= now
         ):
             expired_pending_terminal_apply += 1
-    if expired_pending_terminal_apply:
-        logger.warning(
-            "canonical_memory_expiry_observation: expired_active_pending_terminal_apply count=%d",
-            expired_pending_terminal_apply,
-        )
-        record_fallback(
-            component='memory_analytics',
-            from_mode='ttl_hidden',
-            to_mode='readable_pending_adjudication',
-            reason='policy',
-            outcome='degraded',
-            log=logger,
-        )
+    return expired_pending_terminal_apply
+
+
+def _emit_expiry_disposition_observation(count: int) -> None:
+    if count <= 0:
+        return
+    logger.warning(
+        "canonical_memory_expiry_observation: expired_active_pending_terminal_apply count=%d",
+        count,
+    )
+    record_fallback(
+        component='memory_analytics',
+        from_mode='ttl_hidden',
+        to_mode='readable_pending_adjudication',
+        reason='policy',
+        outcome='degraded',
+        log=logger,
+    )
+
+
+@contextmanager
+def batch_canonical_expiry_observations() -> Iterator[None]:
+    """Collect per-row expiry observations and emit one warning for the batch.
+
+    Visibility is unchanged. The batch only collapses the read-path log that
+    the keyset walker used to emit once per singleton filter call.
+    """
+    counts = [0]
+    token = _batched_expiry_observations.set(counts)
+    try:
+        yield
+    finally:
+        _batched_expiry_observations.reset(token)
+        _emit_expiry_disposition_observation(counts[0])
+
+
+def _log_expiry_disposition_observations(items: List[MemoryItem], *, now: datetime) -> None:
+    count = _expired_active_pending_terminal_count(items, now=now)
+    if not count:
+        return
+    batch = _batched_expiry_observations.get()
+    if batch is not None:
+        batch[0] += count
+        return
+    _emit_expiry_disposition_observation(count)
 
 
 def filter_canonical_default_visible_items(

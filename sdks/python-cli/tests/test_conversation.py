@@ -121,6 +121,7 @@ def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_m
     assert "Invalid JSON" in result.stderr
     assert not respx_mock.calls
 
+
 def test_conversation_from_segments_rejects_directory(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
     test_dir = tmp_path / "somedir"
     test_dir.mkdir()
@@ -134,7 +135,9 @@ def test_conversation_from_segments_rejects_directory(config_path, respx_mock, m
     assert not respx_mock.calls
 
 
-def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+def test_conversation_from_segments_rejects_unreadable_file(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
     f = tmp_path / "unreadable.json"
     f.write_text("{}")
 
@@ -150,3 +153,45 @@ def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_m
     err = json.loads(output.err)
     assert "Cannot read file" in err["error"]
     assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("bad_text", ["", "   ", " \n \t "])
+def test_conversation_create_rejects_empty_text(authed_profile, respx_mock, cli_runner, bad_text) -> None:
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", bad_text])
+    assert result.exit_code == 1
+    assert "Empty text" in result.stderr
+
+
+@pytest.mark.parametrize("bad_lang", ["", "   "])
+def test_conversation_create_rejects_empty_language(authed_profile, respx_mock, cli_runner, bad_lang) -> None:
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", "hello", "--language", bad_lang])
+    assert result.exit_code == 1
+    assert "Invalid language" in result.stderr
+
+
+def test_conversation_create_escapes_markup_in_id_and_status(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/conversations").respond(
+        json={"id": "convo[bold]special[/bold]", "status": "pending[cyan]review[/cyan]", "discarded": False}
+    )
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", "hello world"])
+    assert result.exit_code == 0
+    assert "convo[bold]special[/bold]" in result.stdout
+    assert "pending[cyan]review[/cyan]" in result.stdout
+
+
+def test_conversation_from_segments_escapes_markup_in_id(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    f = tmp_path / "segments.json"
+    f.write_text(json.dumps([{"text": "hi", "start": 0.0, "end": 1.0}]))
+    respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": "seg[bold]special[/bold]", "status": "completed", "discarded": False}
+    )
+    result = cli_runner.invoke(app, ["conversation", "from-segments", str(f)])
+    assert result.exit_code == 0
+    assert "seg[bold]special[/bold]" in result.stdout
+
+
+@pytest.mark.parametrize("bad_title", ["", "   "])
+def test_conversation_update_rejects_empty_title(authed_profile, respx_mock, cli_runner, bad_title) -> None:
+    result = cli_runner.invoke(app, ["conversation", "update", "c1", "--title", bad_title])
+    assert result.exit_code == 1
+    assert "Invalid title" in result.stderr

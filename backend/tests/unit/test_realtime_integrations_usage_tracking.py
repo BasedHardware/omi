@@ -313,30 +313,6 @@ def test_realtime_integrations_feature_constant_exists(integration_harness):
 
 
 @pytest.mark.asyncio
-async def test_mentor_notification_tracked_under_realtime_integrations(integration_harness):
-    """The mentor coordinator enters the realtime-integration usage context."""
-    app = integration_harness.app
-    usage = integration_harness.usage
-    captured_contexts = []
-    original_track = usage.track_usage
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        captured_contexts.append((uid, feature))
-        with original_track(uid, feature):
-            yield
-
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', MagicMock(return_value=None)):
-        await app.trigger_realtime_integrations('user-rt-1', [{'text': 'hello'}], 'conv-1')
-
-    assert ('user-rt-1', usage.Features.REALTIME_INTEGRATIONS) in captured_contexts
-
-
-@pytest.mark.asyncio
 async def test_no_tracking_when_no_llm_calls(integration_harness):
     """No mentor payload and no apps means no usage context is entered."""
     app = integration_harness.app
@@ -356,37 +332,6 @@ async def test_no_tracking_when_no_llm_calls(integration_harness):
         await app.trigger_realtime_integrations('user-rt-2', [{'text': 'hello'}], 'conv-2')
 
     assert captured_contexts == []
-
-
-@pytest.mark.asyncio
-async def test_track_usage_context_entered_around_proactive_message(integration_harness):
-    """Usage context surrounds the mentor processing call, including its exit."""
-    app = integration_harness.app
-    usage = integration_harness.usage
-    call_log = []
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        call_log.append(('enter', uid, feature))
-        yield
-        call_log.append(('exit', uid, feature))
-
-    def spy_process(*_args, **_kwargs):
-        call_log.append(('process_called',))
-        return 'Test notification'
-
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', spy_process):
-        await app.trigger_realtime_integrations('user-rt-3', [{'text': 'hello'}], 'conv-3')
-
-    marker = ('enter', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS)
-    process_idx = call_log.index(('process_called',))
-    enter_idx = call_log.index(marker)
-    exit_idx = call_log.index(('exit', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS))
-    assert enter_idx < process_idx < exit_idx
 
 
 @pytest.mark.asyncio

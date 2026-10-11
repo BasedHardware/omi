@@ -156,7 +156,7 @@ runs:
           --min-instances=3
           --max-instances=18
           --max=18
-          --concurrency=3
+          --concurrency=6
           --cpu=2
           --memory=8Gi
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
@@ -195,6 +195,8 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
+        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
+        # to isolate instance packing from higher downstream load.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).

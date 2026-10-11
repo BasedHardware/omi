@@ -56,6 +56,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speechProfileUploadSucceeded | Speech Profile Upload Succeeded | none | active | mobile-instrumentation-presence |
 | speechProfileEmbeddingStored | Speech Profile Embedding Stored | none | active | mobile-instrumentation-presence |
 | speechProfileContinued | Onboarding Step Speech Profile Continued | none | active | mobile-instrumentation-presence |
+| onboardingSetupRatingPromptShown | Onboarding Setup Rating Prompt Shown | none | active | mobile-instrumentation-presence |
+| onboardingSetupRatingPromptAnswered | Onboarding Setup Rating Prompt Answered | answer | active | mobile-instrumentation-presence |
+| firstSummaryRatingPromptShown | First Summary Rating Prompt Shown | none | active | mobile-instrumentation-presence |
+| firstSummaryRatingPromptAnswered | First Summary Rating Prompt Answered | answer | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingWelcome | Use Without Device Onboarding Welcome | none | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingFindDevices | Use Without Device Onboarding Find Devices | none | active | mobile-instrumentation-presence |
 | memoriesPageEditedMemory | Fact Page Edited Fact | none | active | mobile-instrumentation-presence |
@@ -147,6 +151,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | siriAskOmiPerformed | Siri Ask Omi Performed | platform, outcome, latency_ms, invoked_via | active | siri-intents |
 | siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
 | conversationUntitledRendered | Conversation Untitled Rendered | surface, age_bucket, summary_retryable | active | conversation-untitled-rendered |
+| chatAppConnectStarted | Chat App Connect Started | channel | active | chat-apps-funnel |
+| chatAppConnected | Chat App Connected | channel | active | chat-apps-funnel |
+| chatAppDisconnected | Chat App Disconnected | channel | active | chat-apps-funnel |
+| chatAppWaitlistJoined | Chat App Waitlist Joined | none | active | chat-apps-funnel |
 
 ## App Review Opportunity decisions
 

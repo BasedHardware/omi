@@ -8,6 +8,8 @@ import { generateAgentId } from "./sqlite-store.js";
 import { artifactFromRow } from "./kernel-support.js";
 import { migrateJournalConversation } from "./conversation-journal.js";
 import { resolveSurfaceSession, type ResolveSurfaceSessionResult } from "./surface-session.js";
+import { readDefaultExecutionProfilePreference } from "./session-execution-profile.js";
+import { providerBoundaryForAdapter } from "./execution-policy.js";
 import type {
   AgentArtifact,
   AgentStore,
@@ -382,12 +384,18 @@ export function resolveWorkstreamSession(
   input: WorkstreamSessionInput,
   nowMs: () => number = Date.now,
 ): ResolveSurfaceSessionResult {
+  const ownerId = requiredText(input.ownerId, "ownerId");
+  const preference = readDefaultExecutionProfilePreference(store, ownerId);
+  const adapterId = input.defaultAdapterId ?? preference?.adapterId ?? "pi-mono";
   return resolveSurfaceSession(
     store,
     {
-      ownerId: requiredText(input.ownerId, "ownerId"),
+      ownerId,
       surfaceRef: workstreamSurfaceRef(input.workstreamId),
-      defaultAdapterId: input.defaultAdapterId,
+      defaultAdapterId: adapterId,
+      providerBoundary: providerBoundaryForAdapter(adapterId),
+      modelProfile: adapterId === preference?.adapterId ? preference.modelProfile : null,
+      defaultCwd: preference?.workingDirectory,
       title: input.title,
     },
     nowMs,

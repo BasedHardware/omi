@@ -1,7 +1,6 @@
-"""Where the conversation-notes-v2 rollout is on, and where it is not.
+"""Summary context rollout declarations remain aligned across hosts.
 
-`CONVERSATION_NOTES_V2_ENABLED` went prod-on 2026-09-01 after the dev/Beta bake; the calendar
-context read and OCR context flags are still dev-only pending their own bakes. The dev
+Notes v2 is unconditional; the remaining context gates retain deployment authority. The dev
 environment doubles as the Beta ring: the `mobile_beta` profile and the beta desktop bundle
 are pinned to the dev backend (`api.omiapi.com`) while authenticating against the production
 Firebase project, so a flag still dark in prod reaches Beta users by turning dev on.
@@ -19,12 +18,9 @@ import yaml
 BACKEND = Path(__file__).resolve().parents[2]
 
 ROLLOUT_FLAGS = (
-    'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
-    'MEETING_NOTES_RICH_CONTEXT_ENABLED',
-    'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
 )
 
 # backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
@@ -67,13 +63,6 @@ def test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service():
             assert _value(env_maps[scope], flag) == 'true', f'{scope}:{flag}'
 
 
-def test_prod_enables_conversation_notes_v2_on_every_summary_pipeline_service():
-    """Notes v2 went prod-on 2026-09-01 after the dev/Beta bake."""
-    env_maps = _env_maps(_composed()['environments']['prod'])
-    for scope in SUMMARY_PIPELINE_SCOPES:
-        assert _value(env_maps[scope], 'CONVERSATION_NOTES_V2_ENABLED') == 'true', f'{scope}'
-
-
 def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
     """Graduated to prod on 2026-09-30 (David: screen evidence in one pass).
 
@@ -85,8 +74,6 @@ def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
         for flag in (
             'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
             'CONVERSATION_OCR_CONTEXT_ENABLED',
-            'MEETING_NOTES_RICH_CONTEXT_ENABLED',
-            'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
             'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
         ):
             assert _value(env_maps[scope], flag) == 'true', f'{scope}:{flag}'

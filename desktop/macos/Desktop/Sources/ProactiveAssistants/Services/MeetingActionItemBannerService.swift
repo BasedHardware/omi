@@ -202,8 +202,8 @@ final class MeetingActionItemBannerService {
       let recipients = (try? await fetchShareRecipients(conversationID)) ?? []
       presentBanner(MeetingActionItemBannerPolicy.bannerTitle, body, conversationID, recipients)
     } catch {
-      // Silent by design: the meeting-notes card in Chat is the durable
-      // surface; the banner is an opportunistic recommendation on top.
+      // The banner is optional; the saved conversation and notes remain
+      // accessible from the conversations list if this fetch fails.
       log("MeetingActionItemBanner: skipped for \(conversationID) (fetch failed)")
     }
   }

@@ -51,16 +51,16 @@ _PROFILE_IDENTITY = re.compile(
 )
 
 
-def _profile_first_name(profile_text: object) -> Optional[str]:
+def _profile_name(profile_text: object) -> Optional[str]:
     if not isinstance(profile_text, str) or not profile_text:
         return None
     first_line = profile_text.splitlines()[0].strip()
     match = _PROFILE_IDENTITY.fullmatch(first_line)
-    return match.group('name').split(' ')[0] if match else None
+    return match.group('name') if match else None
 
 
-def _get_firestore_user_name(uid: str, *, firestore_client: Any = None) -> Optional[str]:
-    """Resolve the explicit profile name before its first-line AI identity bullet."""
+def _get_firestore_user_full_name(uid: str, *, firestore_client: Any = None) -> Optional[str]:
+    """Resolve the explicit profile name before its first-line AI identity bullet, every word of it."""
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
         user_doc = client.collection('users').document(uid).get()
@@ -69,11 +69,11 @@ def _get_firestore_user_name(uid: str, *, firestore_client: Any = None) -> Optio
             data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
             name = data.get('name')
             if name and isinstance(name, str):
-                return name.split(' ')[0]
+                return name
             ai_profile = data.get('ai_user_profile')
             if isinstance(ai_profile, dict):
                 profile = cast(Dict[str, Any], ai_profile)
-                return _profile_first_name(profile.get('profile_text'))
+                return _profile_name(profile.get('profile_text'))
     except Exception as e:
         logger.error(f"Firestore user name lookup failed: {e}")
     return None
@@ -89,8 +89,23 @@ def get_user_name(uid: str, use_default: bool = True) -> Optional[str]:
     display_name_raw = user.get('display_name') if user else None
     name = display_name_raw.split(' ')[0] if display_name_raw else None
     if not name or name == 'AnonymousUser':
-        name = _get_firestore_user_name(uid)
+        full_name = _get_firestore_user_full_name(uid)
+        name = full_name.split(' ')[0] if full_name else None
     if name:
         cache_user_name(uid, name, ttl=60 * 60)
         return name
     return 'The User' if use_default else None
+
+
+def get_user_full_name(uid: str) -> Optional[str]:
+    """Owner name with every word, from the sources ``get_user_name`` reads, in its order.
+
+    For callers that compare whole names, such as a transcript's "Jane Doe:" speaker
+    label; ``get_user_name`` keeps only the first word. None when no source has one.
+    Not cached: the name cache holds first names.
+    """
+    user = get_user_from_uid(uid)
+    display_name = (user.get('display_name') or '').strip() if user else ''
+    if display_name and display_name != 'AnonymousUser':
+        return display_name
+    return (_get_firestore_user_full_name(uid) or '').strip() or None

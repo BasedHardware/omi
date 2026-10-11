@@ -28,6 +28,7 @@ LINEAGE_FIELD_PATHS = (
     'client_device_id',
     'is_locked',
     'deleted',
+    'discarded',
     'sync_merged_into',
     'smart_merge.role',
     'external_data.recording_session_id',

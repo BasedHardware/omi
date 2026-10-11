@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,8 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'auth_error',
+        'connection_error',
         'first_text_deadline',
         'empty_streak',
         'allocation_rejected',
@@ -246,6 +249,10 @@ def record_fallback(
     except Exception:
         pass
 
+    cohort = current_routing_cohort.get()
+    if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
+        cohort.exhausted = True
+
     emit_log = log or logger
     try:
         fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
@@ -334,4 +341,17 @@ def initialize_live_stt_exhausted_children() -> None:
             )
 
 
+def initialize_cache_write_fail_open_children() -> None:
+    """Expose zero before the first Redis cache-write fail-open so increase() can see it."""
+    for reason in ('capacity_full', 'auth_error', 'connection_error', 'timeout'):
+        OMI_FALLBACK_TOTAL.labels(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+        )
+
+
 initialize_live_stt_exhausted_children()
+initialize_cache_write_fail_open_children()
