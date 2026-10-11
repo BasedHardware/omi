@@ -263,15 +263,22 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     assert timing is not None
     label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
     labels = [TranscriptCue(text=label)] if label else []
-    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
+    timed = [_CUE_TIMING_RE.match(line) is not None for line in lines]
+    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()) and sum(timed[timing_index:]) == 1:
         body = _plain_cue_text(' '.join(lines[timing_index + 1 :]), _SRT_TAG_RE)
         start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
         return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
+    # Several timings in one block: cues written without the blank line between
+    # them. Each timing opens a cue; a bare number right before a timing is that
+    # cue's sequence number, not the text of the cue above it.
     runs: List[tuple[re.Match[str], List[str]]] = []
-    for line in lines[timing_index:]:
+    for index in range(timing_index, len(lines)):
+        line = lines[index]
         line_timing = _CUE_TIMING_RE.match(line)
         if line_timing:
             runs.append((line_timing, [line[line_timing.end() :].strip()]))
+        elif line.isdigit() and index + 1 < len(lines) and timed[index + 1]:
+            continue
         else:
             runs[-1][1].append(line)
     cues: List[TranscriptCue] = labels
