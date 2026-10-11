@@ -192,3 +192,18 @@ def test_duplicate_callback_race_claims_inverse_once(store, monkeypatch):
         results = list(pool.map(lambda _: manager.undo('test', 'session', receipt.id), range(4)))
     assert sum(result.status == 'undone' for result in results) == 1
     assert calls == ['task-one']
+
+
+def test_expired_receipts_cleanup_is_bounded_and_preserves_recent_tombstones(store):
+    manager = UndoStore(store)
+    now = datetime.now(timezone.utc)
+    for i in range(105):
+        manager.ref('test', 'session', str(i)).set(
+            {'expires_at': now - timedelta(days=2), 'state': 'done', 'presentation': 'encrypted snapshot'}
+        )
+    manager.ref('test', 'session', 'recent').set({'expires_at': now, 'state': 'done'})
+    manager.ref('test', 'session').set({'state': 'ready', 'receipt_id': 'recent'})
+    assert manager.prune_expired('test', 'session', now=now) == 100
+    assert manager.prune_expired('test', 'session', now=now) == 5
+    assert manager.ref('test', 'session', 'recent').get().exists
+    assert manager.ref('test', 'session').get().exists

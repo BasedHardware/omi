@@ -529,3 +529,53 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
     asyncio.run(run())
     assert turns == ['Synthetic message', 'Synthetic follow-up']
     assert sum(c[1].endswith('/answerCallbackQuery') for c in adapter.transport.calls) == 1
+
+
+def test_revocation_detected_by_early_typing_never_loads_session_or_model(monkeypatch):
+    adapter, store, message = setup_turn()
+
+    async def revoked(*args):
+        raise PermissionError('Synthetic revoked generation')
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Private session/model work after revocation')
+
+    monkeypatch.setattr(adapter, 'typing', revoked)
+    monkeypatch.setattr(store, 'session', forbidden)
+    gateway = Gateway(adapter, store=store, turn=forbidden, admission=lambda uid: None)
+    asyncio.run(gateway.process(store.enqueue(message)))
+
+
+def test_repeated_linq_text_undo_gets_acknowledgement(monkeypatch):
+    from dataclasses import replace
+    from utils.messaging.contracts import UndoResult
+    from utils.messaging.undo import UndoStore
+
+    adapter, store, message = setup_turn()
+    monkeypatch.setattr(UndoStore, 'undo', lambda *args: UndoResult('already_undone', 'Already undone.'))
+    replies = []
+
+    class Sink:
+        async def finish(self, text):
+            replies.append(text)
+
+    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    asyncio.run(gateway._undo_action('test', {'id': 'session'}, replace(message, command='undo'), Sink()))
+    assert replies == ['Already undone.']
+
+
+def test_bootstrap_cap_counts_only_other_surface_rows(monkeypatch):
+    from utils.messaging import history
+
+    def rows(uid, batch_size):
+        for i in range(40):
+            yield {
+                'id': str(i),
+                'created_at': datetime.now(timezone.utc),
+                'chat_session_id': 'current' if i < 20 else 'app',
+            }
+
+    monkeypatch.setattr(history.chat_db, 'iter_all_messages', rows)
+    result = history.recent_activity('test', exclude_session='current')
+    assert len(result) == 20
+    assert all(row['chat_session_id'] == 'app' for row in result)

@@ -118,8 +118,12 @@ only when the latest write turn contains exactly one receipt. Multiple writes ar
 ambiguous and fail closed. A subsequent write invalidates the text selector before
 mutation. Specific Telegram receipts survive later writes. The inverse admission
 window remains five minutes, without model narration of commands/time windows.
-App behavior adds no inverse IO. Receipts are removed with their session on unlink
-or account deletion.
+App behavior adds no inverse IO. Each new write deletes up to 100 receipts expired
+for more than a day, bounding active-session snapshot accumulation while preserving
+a day for cleanup/edit reconciliation. Idle sessions retain receipts until the next
+write or session removal; no Firestore TTL policy is assumed. Receipts are removed
+with their session on unlink or account deletion. Repeated Linq text undo replies
+“Already undone”; acknowledged Telegram taps remain no-ops.
 
 An inverse atomically claims its own receipt once. A tracked async coordinator runs
 that domain operation on `postprocess_executor`, outside the chat lease and DB worker

@@ -1694,7 +1694,14 @@ async def execute_agentic_chat_stream(
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
             system_prompt = await load_legacy_prompt_for_surface(
-                _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
+                _get_agentic_qa_prompt,
+                uid,
+                app,
+                messages,
+                context=context,
+                tz=tz,
+                platform=platform,
+                blocking=run_blocking,
             )
             system_prompt = append_jit_conversation_retrieval_prompt(
                 system_prompt, enabled=jit_conversation_retrieval_enabled

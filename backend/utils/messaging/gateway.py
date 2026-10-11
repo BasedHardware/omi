@@ -178,7 +178,10 @@ class Gateway:
                     await typing_task
                 except asyncio.CancelledError:
                     pass
-            await _try_typing(sink, False)
+            try:
+                await _try_typing(sink, False)
+            except PermissionError:
+                pass  # revoked links must still release settled turn ownership
             # Cancellation can leave executor/provider work alive. Retain fencing
             # on process shutdown; ordinary settled errors never strand the chat.
             current_task = asyncio.current_task()
@@ -206,7 +209,7 @@ class Gateway:
                 await run_blocking(
                     db_executor, UndoStore(self.store).mark_edited, uid, session['id'], message.undo_receipt_id
                 )
-            elif result.status != 'already_undone':
+            elif result.status != 'already_undone' or not message.callback_id:
                 await sink.finish(result.text)
         except Exception as error:
             logging.getLogger(__name__).error(
@@ -387,6 +390,8 @@ async def _try_typing(sink, active=True):
     try:
         async with asyncio.timeout(2):
             await sink.typing(active)
+    except PermissionError:
+        raise
     except Exception as error:
         from utils.observability.fallback import record_fallback
 

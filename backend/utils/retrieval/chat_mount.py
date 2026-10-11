@@ -37,7 +37,7 @@ def chat_mount(tool_schemas: list, *, deadline_seconds: float = 150.0) -> Mount:
     )
 
 
-async def load_legacy_prompt_for_surface(loader, uid, app, messages, *, context, tz, platform):
+async def load_legacy_prompt_for_surface(loader, uid, app, messages, *, context, tz, platform, blocking=run_blocking):
     """Only app runners consume the legacy prompt; channels own a shaped mount.
 
     Keep the loader injectable so the existing app prompt/parity seams remain
@@ -46,4 +46,4 @@ async def load_legacy_prompt_for_surface(loader, uid, app, messages, *, context,
     runtime = surface_runtime.get()
     if runtime is not None and runtime.surface != 'app':
         return ''
-    return await run_blocking(db_executor, loader, uid, app, messages, context=context, tz=tz, platform=platform)
+    return await blocking(db_executor, loader, uid, app, messages, context=context, tz=tz, platform=platform)

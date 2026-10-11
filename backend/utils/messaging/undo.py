@@ -34,6 +34,7 @@ class UndoStore:
         runtime.principal.authorize(uid)
         if runtime.guard:
             runtime.guard()
+        self.prune_expired(uid, session)
         receipt_id = uuid4().hex
         receipt = action_receipt(receipt_id, kind, object_id, before, after)
         self.fenced_set(
@@ -52,6 +53,20 @@ class UndoStore:
             turn_id=runtime.turn_id or receipt_id,
         )
         return receipt
+
+    def prune_expired(self, uid, session, *, now=None):
+        # Opportunistic, bounded cleanup on each write. Keep one day beyond the
+        # undo window for in-flight cleanup/edit reconciliation; no TTL IAM needed.
+        # Deleting an old running receipt cannot replay it or recreate the fence.
+        cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=1)
+        collection = self.ref(uid, session).parent
+        expired = list(collection.where('expires_at', '<=', cutoff).limit(100).stream())
+        if expired:
+            batch = self.store.db.batch()
+            for row in expired:
+                batch.delete(row.reference)
+            batch.commit()
+        return len(expired)
 
     def fenced_set(self, uid, session, payload, *, receipt_id="last", turn_id=None):
         ref = self.ref(uid, session, receipt_id)
