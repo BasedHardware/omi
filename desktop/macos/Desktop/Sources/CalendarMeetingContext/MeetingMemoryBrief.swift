@@ -121,14 +121,19 @@ enum MeetingMemoryBriefComposer {
     return nil
   }
 
+  /// Normalized characters a title needs before title + attendee may match without an event ID.
+  static let minimumTitleOnlyMatchLength = 8
+
   static func matches(event: SystemCalendarEventSnapshot, identity: ConversationMeetingIdentity) -> Bool {
     let eventID = event.calendarEventID.trimmingCharacters(in: .whitespacesAndNewlines)
     if !eventID.isEmpty && eventID == identity.eventID && identity.source == "system_calendar" {
       return true
     }
 
+    // Without the same event ID, a short generic title ("Sync", "1:1") shared with one
+    // attendee is too weak to tell recurring meetings apart, so it yields no brief.
     let title = normalizedTitle(event.title)
-    guard title.count >= 8, title == normalizedTitle(identity.title) else { return false }
+    guard title.count >= minimumTitleOnlyMatchLength, title == normalizedTitle(identity.title) else { return false }
     let eventEmails = Set(
       event.participants.compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
     return !eventEmails.intersection(identity.attendeeEmails).isEmpty
@@ -159,19 +164,20 @@ enum MeetingMemoryBriefComposer {
       guard let (section, text) = byHeading ?? byLine else { return }
       facts.append(
         MeetingMemoryBriefFact(
-          kind: kind, text: text, sourceConversationID: conversation.id,
+          kind: kind, text: String(text.prefix(cardTextLimit)), sourceConversationID: conversation.id,
           sourceSegmentIDs: section.sourceSegmentIDs))
     }
 
-    // Under a "Decisions" heading an unsettled line is still not a decision.
+    // A "Decisions" heading admits imperative lines ("Ship the pilot first"), but the same
+    // veto as the text fallback still drops anything unsettled or disputed.
     appendSection(
-      .decision, heading: ["decision", "agreed"], headingLine: { !statesOpenQuestion($0) }, line: statesDecision)
+      .decision, heading: ["decision", "agreed"], headingLine: { !isUnsettled($0) }, line: statesDecision)
     if let action = conversation.structured.actionItems.first(where: {
       !$0.completed && !$0.deleted && $0.captureOwner == "user" && !$0.sourceSegmentIDs.isEmpty
     }), let text = firstLine(action.description) {
       facts.append(
         MeetingMemoryBriefFact(
-          kind: .followUp, text: text, sourceConversationID: conversation.id,
+          kind: .followUp, text: String(text.prefix(cardTextLimit)), sourceConversationID: conversation.id,
           sourceSegmentIDs: action.sourceSegmentIDs))
     }
     appendSection(
@@ -180,8 +186,20 @@ enum MeetingMemoryBriefComposer {
     return Array(facts.prefix(3))
   }
 
+  /// Card lines are compact; classification always reads the whole line first.
+  private static let cardTextLimit = 240
   private static let openQuestionPhrases = ["open question", "unresolved", "undecided", "left open", "still open"]
   private static let outcomeWords = ["decided", "agreed", "decision"]
+  /// Verbs that report an outcome as settled. "decision" alone is not one: "We will discuss
+  /// the decision next week" mentions a decision that has not been made.
+  private static let settledWords = ["decided", "agreed", "chose", "chosen", "approved", "settled", "finalized"]
+  private static let settledPhrases = ["made a decision", "made the decision", "reached a decision"]
+  private static let disputeMarkers = ["disagree", "objected", "pushed back", "dispute"]
+  /// Discussion, proposals and questions are not outcomes.
+  private static let uncertaintyMarkers = [
+    "?", "discuss", "revisit", "tbd", "to be decided", "to be determined", "whether", "propose", "proposal",
+    "suggest", "maybe", "might", "pending",
+  ]
   private static let negations: Set<String> = [
     "not", "no", "never", "nothing", "nobody", "none", "neither", "nor", "without",
   ]
@@ -206,18 +224,26 @@ enum MeetingMemoryBriefComposer {
     return tokens[..<outcome].contains(where: isNegation)
   }
 
-  /// A settled outcome only: any negation, "disagree", or open-question wording disqualifies it.
+  /// The shared veto for both the heading path and the text fallback: any negation, dispute,
+  /// discussion, proposal, question, or open-question wording. Ambiguous lines are omitted.
+  static func isUnsettled(_ line: String) -> Bool {
+    let lower = line.lowercased()
+    return words(line).contains(where: isNegation) || disputeMarkers.contains(where: lower.contains)
+      || uncertaintyMarkers.contains(where: lower.contains) || statesOpenQuestion(line)
+  }
+
+  /// A settled outcome only, named by a settled verb and passing the shared veto.
   static func statesDecision(_ line: String) -> Bool {
-    let tokens = words(line)
-    return tokens.contains(where: { word in outcomeWords.contains(where: word.hasPrefix) })
-      && !tokens.contains(where: isNegation) && !line.lowercased().contains("disagree")
-      && !statesOpenQuestion(line)
+    let lower = line.lowercased()
+    let settled =
+      words(line).contains(where: settledWords.contains) || settledPhrases.contains(where: lower.contains)
+    return settled && !isUnsettled(line)
   }
 
   private static func cleanedLines(_ text: String) -> [String] {
     text.split(whereSeparator: \.isNewline).compactMap { raw in
       let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \t-*#•"))
-      return cleaned.isEmpty ? nil : String(cleaned.prefix(240))
+      return cleaned.isEmpty ? nil : cleaned
     }
   }
 
@@ -241,8 +267,10 @@ enum MeetingFollowUpDraftComposer {
         !$0.completed && !$0.deleted && $0.captureOwner == "user" && !$0.sourceSegmentIDs.isEmpty
       }
       .compactMap { action -> String? in
+        // The editable draft keeps every word: dates, links and qualifiers ("do not send
+        // until legal approves") must survive into what the user reviews and copies.
         let text = action.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : String(text.prefix(240))
+        return text.isEmpty ? nil : text
       }
     guard !actions.isEmpty else { return nil }
 

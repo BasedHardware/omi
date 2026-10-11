@@ -245,4 +245,114 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
     XCTAssertTrue(draft?.contains("Commitment 1") == true)
     XCTAssertTrue(draft?.contains("Commitment 7") == true)
   }
+
+  // MARK: - Settled outcomes only
+
+  func testFutureDiscussionAndProposalsAreNeverDecisions() {
+    for line in [
+      "The team will discuss the decision next week.", "We should revisit the decision on hosting.",
+      "Sara proposed shipping on Friday.", "Do we agree on the scope?", "The decision is pending legal review.",
+      "Sara owns the hosting decision.",
+    ] {
+      XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(line), line)
+    }
+    XCTAssertTrue(MeetingMemoryBriefComposer.statesDecision("We decided to ship the pilot on Thursday."))
+    XCTAssertTrue(
+      MeetingMemoryBriefComposer.statesDecision(
+        "The speakers agreed to ship the pilot and considered the fixture tests sufficient."))
+
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Planning", bodyMarkdown: "- The team will discuss the decision next week.",
+          sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertFalse(facts.contains { $0.kind == .decision })
+  }
+
+  func testADecisionsHeadingDropsDisputedAndNegatedLinesButKeepsImperatives() {
+    let disputed = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Decisions",
+          bodyMarkdown: """
+            - Sara disagreed with the rollout date.
+            - They agreed not to ship the beta.
+            - We haven\u{2019}t agreed on scope.
+            """,
+          sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertFalse(disputed.contains { $0.kind == .decision })
+
+    let imperative = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Decisions",
+          bodyMarkdown: """
+            - Sara disagreed with the rollout date.
+            - Ship the smaller pilot first.
+            """,
+          sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertEqual(imperative.first { $0.kind == .decision }?.text, "Ship the smaller pilot first.")
+  }
+
+  func testALateNegationInALongLineStillVetoesTheDecision() {
+    let line =
+      "We agreed to " + String(repeating: "align on the launch checklist and ", count: 8)
+      + "not ship until legal approves."
+    XCTAssertGreaterThan(line.count, 240)
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(line))
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(heading: "Launch", bodyMarkdown: "- " + line, sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertFalse(facts.contains { $0.kind == .decision }, "classified on the whole line, not the card excerpt")
+  }
+
+  // MARK: - Short titles
+
+  func testShortTitlesNeedTheExactEventID() {
+    let shortIdentity = ConversationMeetingIdentity(
+      eventID: "prior-event", source: "system_calendar", title: "Sync", attendeeEmails: ["sara@example.com"])
+    XCTAssertFalse(
+      MeetingMemoryBriefComposer.matches(event: event(id: "other-event", title: "Sync"), identity: shortIdentity),
+      "a short generic title plus one shared attendee is too weak without the event ID")
+    XCTAssertTrue(
+      MeetingMemoryBriefComposer.matches(event: event(id: "prior-event", title: "Sync"), identity: shortIdentity))
+    XCTAssertEqual(MeetingMemoryBriefComposer.minimumTitleOnlyMatchLength, 8)
+  }
+
+  // MARK: - Follow-up draft keeps every word
+
+  func testFollowUpDraftKeepsLongCommitmentsWhole() {
+    let long =
+      "Send the revised Atlas budget to Priya with the vendor quotes from https://example.com/quotes/q3, "
+      + String(repeating: "including the line-item notes from finance, ", count: 6)
+      + "but do not send until legal approves the indemnity clause on Thursday."
+    XCTAssertGreaterThan(long.count, 400)
+    let actions = [
+      ActionItem(description: long, completed: false, deleted: false, captureOwner: "user", sourceSegmentIDs: ["s1"]),
+      ActionItem(
+        description: "Book the follow-up review for October 20", completed: false, deleted: false,
+        captureOwner: "user", sourceSegmentIDs: ["s2"]),
+      ActionItem(
+        description: "Already done", completed: true, deleted: false, captureOwner: "user", sourceSegmentIDs: ["s3"]),
+      ActionItem(
+        description: "Deleted task", completed: false, deleted: true, captureOwner: "user", sourceSegmentIDs: ["s4"]),
+      ActionItem(
+        description: "Sara owns this", completed: false, deleted: false, captureOwner: "other",
+        sourceSegmentIDs: ["s5"]),
+      ActionItem(description: "Uncited", completed: false, deleted: false, captureOwner: "user"),
+    ]
+
+    let draft = MeetingFollowUpDraftComposer.compose(from: conversation(identity: matchingIdentity, actions: actions))
+
+    XCTAssertTrue(draft?.contains(long) == true, "the whole commitment, qualifier included")
+    XCTAssertTrue(draft?.contains("do not send until legal approves the indemnity clause on Thursday.") == true)
+    XCTAssertTrue(draft?.contains("Book the follow-up review for October 20") == true)
+    for excluded in ["Already done", "Deleted task", "Sara owns this", "Uncited"] {
+      XCTAssertFalse(draft?.contains(excluded) == true, excluded)
+    }
+  }
 }
