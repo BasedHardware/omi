@@ -10,11 +10,15 @@ from utils.http_client import get_webhook_client
 
 
 class ProviderError(RuntimeError):
-    pass
+    def __init__(self, message, *, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class DeliveryUncertain(ProviderError):
     """The provider may have accepted the send; operator reconciliation required."""
+
+    reason = 'delivery_uncertain'
 
 
 class ProviderLogFilter(logging.Filter):
@@ -86,7 +90,7 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
             except (TypeError, ValueError):
                 delay = 1
             if not 0 <= delay <= 60 or attempt == 3:
-                raise ProviderError('Provider rate limit; retry later')
+                raise ProviderError('Provider rate limit; retry later', status_code=429)
             await sleep(max(delay, 0.1))
             continue
         if status >= 500:
@@ -96,6 +100,6 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
                 await sleep(2**attempt)
                 continue
         if status >= 400 or value.get('ok') is False:
-            raise ProviderError('Provider rejected request')
+            raise ProviderError('Provider rejected request', status_code=status)
         return value
     raise ProviderError('Provider retry budget exhausted')

@@ -68,10 +68,20 @@ An injected `wake(paths)` may instead publish content-free task pointers in Stag
 Stage B must call it on startup and periodically for each registered adapter. A job
 moves `pending -> running -> done`. Completed jobs retain content-free dedup tombstones.
 A running job with ambiguous tool/delivery outcomes is **not automatically replayed**.
-A settled exception is terminal: the worker attempts a short error reply, completes
-the dedup tombstone and releases the chat lease. Shutdown cancellation retains
-fencing while executor/provider work may still be alive. Action inverses own separate
-once-only receipt claims; slow domain cleanup does not occupy the chat lease.
+A handled inbound worker failure closes its stream, stops typing, attempts one guarded
+failure reply, and releases the surface lease so new inbound messages can progress. The
+failed inbox row stays running and is not replayed. A `CancelledError` from a finished
+turn is the same settled failure. Only a worker task that is still cancelling retains
+its lease, because executor work may still be running. A settled deferred reentry
+writes a content-free failure fence, sends at most one notice, and releases the lease.
+A later reentry that sees the fence, the started reentry, or the delivered reply does
+not run the turn again. Process-loss leases still need operator reconciliation.
+Assistant events are recorded only after delivery succeeds. Error frames are drained
+through the shared producer's terminal fallback; an error without a reply fails visibly.
+Action inverses own separate once-only receipt claims; slow domain cleanup does not
+occupy the chat lease. Settled failures retain their running inbox row for reconciliation
+but carry a FIFO settlement marker so new messages can proceed.
+
 Surface leases use atomic create and a random ownership token. They cannot be stolen,
 even after a timeout: operator recovery must first establish the previous worker is
 stopped, reconcile effects, then reset the affected job/lease. This follows the existing

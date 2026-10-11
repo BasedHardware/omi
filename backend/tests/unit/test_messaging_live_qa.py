@@ -90,14 +90,15 @@ def test_no_write_callback_then_messages_and_provider_failure_release(monkeypatc
             item = replace(
                 message, provider_message_id=str(index), text=text, command='undo' if text == 'undo' else None
             )
-            assert await gateway.process(store.enqueue(item))
+            assert await gateway.process(store.enqueue(item)) is (text != 'fail')
             assert not store.leases
 
     asyncio.run(run())
     assert turns == ['message', 'after undo', 'fail', 'after failure', 'reminder request']
-    assert all(job['status'] == 'done' for job in store.jobs.values())
+    assert [job['status'] for job in store.jobs.values()] == ['done', 'done', 'done', 'running', 'done', 'done']
+    assert list(store.jobs.values())[3]['fifo_settled_at']
     texts = [call[2].get('json', {}).get('text', '') for call in adapter.transport.calls]
-    assert any('couldn’t finish' in text for text in texts)
+    assert any('could not finish' in text for text in texts)
     assert not any('Undo last write' in text for text in texts)
 
 
@@ -436,7 +437,7 @@ def test_typing_outage_and_stream_without_terminal_do_not_silence_chat(monkeypat
 
     asyncio.run(run())
     replies = [c[2]['json']['text'] for c in adapter.transport.calls if c[1].endswith('/sendMessage')]
-    assert len(replies) == 2 and all('couldn’t finish' in text for text in replies)
+    assert len(replies) == 2 and all('could not finish' in text for text in replies)
 
 
 def test_authenticated_receipt_callback_recovers_interrupted_bubble_binding(monkeypatch):
@@ -727,9 +728,9 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
     second = store.enqueue(replace(message, provider_message_id='second'))
 
     async def run():
-        with pytest.raises(PermissionError):
-            await gateway.process(first)
-        assert store.jobs[first]['status'] == 'done'
+        assert not await gateway.process(first)
+        assert store.jobs[first]['status'] == 'running'
+        assert store.jobs[first]['fifo_settled_at']
         denied[0] = False
         assert await gateway.process(second)
 
@@ -753,3 +754,66 @@ def test_telegram_request_clock_uses_message_date_not_late_webhook_time():
     callback = {'id': 'ask', 'from': item['from'], 'message': item, 'data': 'ask:Synthetic follow-up'}
     parsed = adapter.parse(json.dumps({'update_id': 2, 'callback_query': callback}).encode())[0]
     assert parsed.received_at >= before
+
+
+def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
+    from dataclasses import replace
+    from utils.messaging.adapters.transport import ProviderError
+
+    adapter, store, message = setup_turn()
+    original_send, original_release = adapter.send, store.release
+    rejected, releases, typing_stops = [], [], []
+
+    async def send(message, **kwargs):
+        if kwargs.get('text') == 'Synthetic answer' and not rejected:
+            rejected.append(True)
+            raise ProviderError('Synthetic rejected send')
+        return await original_send(message, **kwargs)
+
+    def release(uid, surface, token):
+        releases.append(token)
+        original_release(uid, surface, token)
+
+    async def typing(message, active=True):
+        if not active:
+            typing_stops.append(message.provider_message_id)
+
+    async def digest(*args):
+        pass
+
+    def turn(*args, **kwargs):
+        async def stream():
+            yield terminal()
+
+        return stream()
+
+    monkeypatch.setattr(adapter, 'send', send)
+    monkeypatch.setattr(adapter, 'typing', typing)
+    monkeypatch.setattr(store, 'release', release)
+    monkeypatch.setattr(gateway_module, 'append_digest', digest)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    failed = store.enqueue(message)
+    callback = store.enqueue(replace(message, provider_message_id='undo', command='undo', callback_id='callback'))
+    following = store.enqueue(replace(message, provider_message_id='next'))
+
+    async def run():
+        assert not await gateway.process(failed)
+        assert store.jobs[failed]['status'] == 'running'
+        assert store.jobs[failed]['fifo_settled_at']
+        assert 'payload' in store.jobs[failed]
+        assert not store.leases
+        session = next(iter(store.sessions.values()))
+        assert not any(
+            e['id'] == 'reply:' + gateway_module.key('telegram', 'first') for e in store.events('test', session['id'])
+        )
+        assert not await gateway.process(failed)  # retained evidence is never replayed
+        assert await gateway.process(callback)
+        assert await gateway.process(following)
+        assert not store.leases
+
+    asyncio.run(run())
+    assert len(releases) == 3 and len(set(releases)) == 3
+    assert typing_stops == ['first', 'undo', 'next']
+    replies = [call[2].get('json', {}).get('text', '') for call in adapter.transport.calls]
+    assert replies.count('Synthetic answer') == 1
+    assert sum('could not finish' in text for text in replies) == 1

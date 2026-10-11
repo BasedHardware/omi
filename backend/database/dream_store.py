@@ -333,13 +333,6 @@ def vocabulary(uid, *, firestore_client=None):
     return (_review_store().decode_doc(uid, ref.get().to_dict()) or {}).get('source', [])
 
 
-def save_vocabulary(uid, terms, *, firestore_client=None):
-    ref = client(firestore_client).collection('users').document(uid).collection('dream_vocabulary').document('current')
-    merged = {row['spelling'].casefold(): row for row in vocabulary(uid, firestore_client=firestore_client)}
-    merged.update({t.spelling.casefold(): t.model_dump() for t in terms})
-    ref.set(_review_store().encode_doc(uid, {'source': list(merged.values())[-500:]}))
-
-
 def demoted_types(uid, caps, *, firestore_client=None):
     since = datetime.now(timezone.utc) - timedelta(days=30)
     query = client(firestore_client).collection('users').document(uid).collection('review_changes')
@@ -378,7 +371,7 @@ def reserve_questions(uid, run_id, requested, *, firestore_client=None):
         if (data.get('lease') or {}).get('run_id') != run_id:
             raise RuntimeError('dream_lease_lost')
         proposed = data.get('questions', 0) if data.get('question_day') == day else 0
-        count = max(0, min(requested, 3 - proposed, 3 - answers.get('used', 0)))
+        count = max(0, min(requested, 3 - proposed - answers.get('dream_suggestions', 0), 3 - answers.get('used', 0)))
         tx.update(state, {'question_day': day, 'questions': proposed + count})
         return count
 

@@ -164,7 +164,9 @@ def test_shadow_never_invokes_any_effect_and_records_safe_report(monkeypatch, pa
 
     for fn in ('apply_edit', 'ask', 'request_frame', 'propose_task'):
         monkeypatch.setattr(dream_tools, fn, forbidden)
-    monkeypatch.setattr(dream_store, 'save_vocabulary', forbidden)
+    monkeypatch.setattr(dream_tools, 'apply_vocabulary', forbidden)
+    monkeypatch.setattr(dream_tools, 'suggest_edit', forbidden)
+    monkeypatch.setattr(dream_tools, 'suggest_vocabulary', forbidden)
     monkeypatch.setattr(dream_feedback, 'store', forbidden)
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['status'] == 'complete'
@@ -214,7 +216,8 @@ def test_demotion_and_kill_switch(monkeypatch, pass_context):
     )
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=[edit]), 1)))
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: {'spelling'})
-    assert asyncio.run(dream_agent.run_pass(UID))['outcomes'][0]['status'] == 'suggest_only'
+    monkeypatch.setattr(dream_tools, 'suggest_edit', lambda *a: 'suggested')
+    assert asyncio.run(dream_agent.run_pass(UID))['outcomes'][0]['status'] == 'suggested'
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setenv('DREAM_AGENT_MODE', 'off')
     assert asyncio.run(dream_agent.run_pass(UID))['outcomes'][0]['status'] == 'shadow'
@@ -415,7 +418,7 @@ def test_summary_proposals_are_shadow_only(monkeypatch, pass_context, kind):
     monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: pytest.fail('shadow mutated conversation'))
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['status'] == 'complete'
-    assert result['proposed']['edits'] == [edit.model_dump()]
+    assert result['proposed']['edits'] == [{**edit.model_dump(), 'policy': 'auto'}]
     assert result['outcomes'][0]['status'] == 'shadow'
 
 
@@ -425,3 +428,116 @@ def test_feedback_record_ref_is_removed_before_shadow_persistence(monkeypatch, p
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['proposed']['feedback'] == []
     assert result['outcomes'] == [{'tool': 'feedback', 'status': 'privacy_rejected'}]
+
+
+def test_tier_policy_defaults_and_override(monkeypatch, caplog):
+    from config.dream_agent import AUTO, SUGGEST, auto_apply_kinds, apply_policy
+    from utils.dream_metrics import POLICY_WARNINGS
+
+    monkeypatch.delenv('DREAM_AGENT_AUTO_APPLY_KINDS', raising=False)
+    assert auto_apply_kinds() == {'title', 'overview', 'spelling', 'vocabulary'}
+    assert SUGGEST == {'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
+    assert all(apply_policy(kind, AUTO) == 'auto' for kind in AUTO)
+    assert all(apply_policy(kind, AUTO) == 'suggest' for kind in SUGGEST)
+    before = POLICY_WARNINGS._value.get()
+    monkeypatch.setenv('DREAM_AGENT_AUTO_APPLY_KINDS', ' title, spelling , title, mystery, close_task')
+    assert auto_apply_kinds() == {'title', 'spelling'}
+    assert POLICY_WARNINGS._value.get() == before + 2
+    assert 'count=2' in caplog.text and 'mystery' not in caplog.text
+    monkeypatch.setenv('DREAM_AGENT_AUTO_APPLY_KINDS', '')
+    assert auto_apply_kinds() == set()
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_tier_routes_and_shadow_labels(monkeypatch, pass_context, mode):
+    from datetime import timedelta
+
+    lease, records, _ = pass_context
+    lease['mode'] = mode
+    monkeypatch.setenv('DREAM_AGENT_MODE', mode)
+    records['action_items/task'] = {
+        'status': 'active',
+        'created_at': NOW - timedelta(days=10),
+        'updated_at': NOW - timedelta(days=9),
+    }
+    records['conversations/new'] = {'created_at': NOW}
+    edits = [
+        Edit(
+            kind='spelling',
+            target='conversations/c1',
+            before='Meting',
+            after='Meeting',
+            reason='Correct',
+            evidence=['conversations/c1'],
+        ),
+        Edit(kind='retire_task', target='action_items/task', reason='No longer needed', evidence=['conversations/new']),
+    ]
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=edits), 100)))
+    calls = []
+    monkeypatch.setattr(
+        dream_tools, 'apply_edit', lambda uid, edit, records: calls.append(('auto', edit.kind)) or 'applied'
+    )
+    monkeypatch.setattr(
+        dream_tools, 'suggest_edit', lambda uid, edit, records: calls.append(('suggest', edit.kind)) or 'suggested'
+    )
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == 'complete'
+    assert [edit['policy'] for edit in report['proposed']['edits']] == ['auto', 'suggest']
+    assert calls == ([('auto', 'spelling'), ('suggest', 'retire_task')] if mode == 'on' else [])
+    assert [outcome['status'] for outcome in report['outcomes']] == (
+        ['applied', 'suggested'] if mode == 'on' else ['shadow', 'shadow']
+    )
+
+
+def test_vocabulary_override_routes_to_review(monkeypatch, pass_context):
+    lease, _, _ = pass_context
+    lease['mode'] = 'on'
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('DREAM_AGENT_AUTO_APPLY_KINDS', '')
+    term = Term(kind='project', spelling='ToyBoat', evidence=['conversations/c1'])
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(vocabulary=[term]), 100)))
+    calls = []
+    monkeypatch.setattr(dream_tools, 'suggest_vocabulary', lambda *a: calls.append(a[1]) or 'suggested')
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert calls == [term] and report['proposed']['vocabulary'][0]['policy'] == 'suggest'
+
+
+@pytest.mark.parametrize(
+    'kind', ['close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary']
+)
+def test_every_risky_kind_only_calls_suggestion_tool(monkeypatch, pass_context, kind):
+    from datetime import timedelta
+
+    lease, records, _ = pass_context
+    lease['mode'] = 'on'
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    records['conversations/c1']['created_at'] = NOW
+    if kind in {'close_task', 'retire_task'}:
+        target, other = 'action_items/task', ''
+        records[target] = {
+            'status': 'active',
+            'created_at': NOW - timedelta(days=10),
+            'updated_at': NOW - timedelta(days=9),
+        }
+    elif kind in {'memory', 'merge_memories'}:
+        target, other = 'memory_items/one', 'memory_items/two' if kind == 'merge_memories' else ''
+        records[target] = records['memory_items/two'] = {'content': 'Toy fact', 'visibility': 'private'}
+    else:
+        target, other = 'entity/person:one', 'entity/person:two' if kind == 'merge_people' else ''
+        records[target] = {'entity_id': 'person:one', 'type': 'person'}
+        records['entity/person:two'] = {'entity_id': 'person:two', 'type': 'person'}
+    edit = Edit(
+        kind=kind,
+        target=target,
+        other=other,
+        after='Updated synthetic text',
+        reason='Review this change',
+        evidence=['conversations/c1'],
+    )
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=[edit]), 100)))
+    monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: pytest.fail('Risky edit applied without user review'))
+    calls = []
+    monkeypatch.setattr(dream_tools, 'suggest_edit', lambda *a: calls.append(a[1]) or 'suggested')
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == 'complete'
+    assert calls == [edit] and report['outcomes'][0]['policy'] == 'suggest'

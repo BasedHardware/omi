@@ -14,7 +14,15 @@ from google.cloud import firestore
 import pytest
 
 from database import _client, review_changes as journal, review_store as store
-from models.review import EntitySummary, ReviewAnswer, ReviewChange, ReviewItem, SamePersonItem, SpellingItem
+from models.review import (
+    EntitySummary,
+    ReviewAnswer,
+    ReviewChange,
+    ReviewItem,
+    ReviewItemV2,
+    SamePersonItem,
+    SpellingItem,
+)
 from routers import review as router
 from utils import entity_pages, review
 
@@ -63,6 +71,8 @@ def test_default_off_gate_blocks_every_route(harness, monkeypatch):
     monkeypatch.delenv('REVIEW_SURFACE_MODE')
     for method, path, body in [
         ('get', '/v1/review/items', None),
+        ('get', '/v2/review/items', None),
+        ('post', '/v2/review/items/item/answer', {'not_sure': True}),
         ('get', '/v1/review/changes', None),
         ('post', '/v1/review/items/spelling:1/answer', {'not_sure': True}),
         ('post', '/v1/review/changes/x/undo', None),
@@ -652,16 +662,23 @@ def test_dream_summary_edits_apply_undo_redo_and_suppress(harness, kind):
         'structured': {
             'title': '',
             'overview': '',
-            'sections': [{'heading': 'Old section'}],
+            'sections': [{'heading': 'Old section'}] if kind == 'title' else [],
             'note_claims': [{'text': 'Old claim'}],
         },
-        'transcript_segments': [{'text': 'We will build a toy boat.'}],
+        'transcript_segments': [{'text': 'We will build a toy boat. ' * 7}],
     }
     target = user.collection('conversations').document(before['id'])
     target.set(before)
     ref = 'conversations/' + before['id']
     edit = Edit(
-        kind=kind, target=ref, before='', after='Building a toy boat', reason='Missing summary field', evidence=[ref]
+        kind=kind,
+        target=ref,
+        before='',
+        after=(
+            'Building a toy boat' if kind == 'title' else '## Toy boat\n\n- We will build and test a toy boat tomorrow.'
+        ),
+        reason='Missing summary field',
+        evidence=[ref],
     )
     assert dream_tools.apply_edit(uid, edit, {ref: before}) == 'applied'
     after = target.get().to_dict()
@@ -688,7 +705,7 @@ def test_dream_title_and_overview_in_same_pass_share_evidence(harness):
     before = {
         'id': 'synthetic-pair',
         'structured': {'title': '', 'overview': ''},
-        'transcript_segments': [{'text': 'We will build a toy boat.'}],
+        'transcript_segments': [{'text': 'We will build a toy boat. ' * 7}],
     }
     target = user.collection('conversations').document(before['id'])
     target.set(before)
@@ -698,10 +715,348 @@ def test_dream_title_and_overview_in_same_pass_share_evidence(harness):
             kind=kind,
             target=ref,
             before='',
-            after='Building a toy boat',
+            after=(
+                'Building a toy boat'
+                if kind == 'title'
+                else '## Toy boat\n\n- We will build and test a toy boat tomorrow.'
+            ),
             reason='Missing summary field',
             evidence=[ref],
         )
         assert dream_tools.apply_edit(uid, edit, {ref: before}) == 'applied'
     assert target.get().to_dict()['structured']['title'] == 'Building a toy boat'
-    assert target.get().to_dict()['structured']['overview'] == 'Building a toy boat'
+    assert (
+        target.get().to_dict()['structured']['overview']
+        == '## Toy boat\n\n- We will build and test a toy boat tomorrow.'
+    )
+
+
+def dream_task_proposal(harness, *, kind='retire_task', index=1):
+    from models.dream_agent import Edit
+    from utils import dream_reads, dream_tools
+
+    client, uid, user, db = harness
+    task_id = f'dream-task-{index}'
+    conversation_id = f'dream-evidence-{index}'
+    user.collection('action_items').document(task_id).set(
+        {
+            'description': 'Build a toy boat',
+            'status': 'active',
+            'completed': False,
+            'created_at': NOW - timedelta(days=10),
+            'updated_at': NOW - timedelta(days=9),
+            'account_generation': 3,
+        }
+    )
+    user.collection('conversations').document(conversation_id).set(
+        {
+            'id': conversation_id,
+            'created_at': NOW,
+            'status': 'completed',
+            'discarded': False,
+            'structured': {'title': 'Toy boat'},
+            'transcript_segments': [{'text': 'The toy boat is no longer needed.'}],
+        }
+    )
+    refs = [f'action_items/{task_id}', f'conversations/{conversation_id}']
+    records = {ref: dream_reads.read_record(uid, ref) for ref in refs}
+    edit = Edit(kind=kind, target=refs[0], reason='Toy boat work is done', evidence=[refs[1]])
+    status = dream_tools.suggest_edit(uid, edit, records)
+    item_id = 'agent_proposal:' + store.safe_id(dream_tools.edit_key(edit, records))
+    return edit, records, status, item_id
+
+
+@pytest.mark.parametrize('kind', ['close_task', 'retire_task'])
+def test_dream_suggestion_accept_journals_undo_and_exact_retry(harness, kind):
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness, kind=kind)
+    assert status == 'suggested'
+    target = user.collection('action_items').document(edit.target.split('/')[1])
+    before = target.get().to_dict()
+    assert before['status'] == 'active'
+    items = client.get('/v2/review/items').json()['items']
+    assert items[0]['kind'] == 'agent_proposal'
+    assert items[0]['agent_proposal']['edit']['evidence'] == edit.evidence
+    raw = user.collection('review_proposals').document(store.safe_id(item_id)).get().to_dict()
+    assert 'Toy boat' not in str(raw) and 'review_encrypted_v1' in raw['source']
+    body = {'agent_proposal': {'decision': 'accept'}}
+    response = client.post(f'/v2/review/items/{item_id}/answer', json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()['applied']
+    assert target.get().to_dict()['status'] == ('completed' if kind == 'close_task' else 'cancelled')
+    assert client.post(f'/v2/review/items/{item_id}/answer', json=body).status_code == 200
+    changes = client.get('/v1/review/changes').json()['changes']
+    assert len(changes) == 1
+    assert client.post(f'/v1/review/changes/{changes[0]["change_id"]}/undo').status_code == 200
+    assert target.get().to_dict() == before
+    assert dream_tools.suggest_edit(uid, edit, records) == 'suppressed'
+    assert client.get('/v2/review/items').json()['items'] == []
+
+
+def test_dream_dismiss_is_durable_across_versions(harness):
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    client.get('/v2/review/items')
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
+    assert response.status_code == 200, response.text
+    assert not response.json()['applied']
+    assert list(user.collection('review_changes').stream()) == []
+    records[edit.evidence[0]]['structured']['title'] = 'New evidence version'
+    assert (
+        dream_tools.suggest_edit(uid, edit.model_copy(update={'reason': 'Different wording'}), records) == 'suppressed'
+    )
+    assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
+    assert client.get('/v2/review/items').json()['items'] == []
+
+
+@pytest.mark.parametrize('changed', ['target', 'evidence', 'generation'])
+def test_dream_stale_accept_conflicts_and_refunds_attention(harness, changed):
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    client.get('/v2/review/items')
+    if changed == 'generation':
+        user.collection('task_intelligence_control').document('state').set({'account_generation': 4})
+    else:
+        ref = edit.target if changed == 'target' else edit.evidence[0]
+        collection, key = ref.split('/')
+        user.collection(collection).document(key).update(
+            {'description' if changed == 'target' else 'structured.title': 'User correction'}
+        )
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    assert response.status_code == 409, response.text
+    assert store.remaining_today(uid) == 3
+    assert list(user.collection('review_changes').stream()) == []
+    assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
+    day = datetime.now(timezone.utc).date().isoformat()
+    assert user.collection('review_attention').document(day).get().to_dict()['dream_suggestions'] == 1
+
+
+def test_dream_attention_cap_is_atomic_and_idempotent(harness):
+    client, uid, user, db = harness
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        proposals = list(pool.map(lambda index: dream_task_proposal(harness, index=index), range(6)))
+    assert sorted(row[2] for row in proposals) == ['suggested'] * 3 + ['suggestion_cap'] * 3
+    from utils import dream_tools
+
+    for edit, records, status, item_id in proposals:
+        assert dream_tools.suggest_edit(uid, edit, records) == (
+            'already_suggested' if status == 'suggested' else 'suggestion_cap'
+        )
+    assert len(list(user.collection('review_proposals').stream())) == 3
+    assert len(client.get('/v2/review/items').json()['items']) == 3
+
+
+def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
+    from models.dream_agent import Edit, Term
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    user.collection('knowledge_nodes').document('org').set(
+        {'id': 'org', 'node_type': 'organization', 'label': 'Toy Works'}
+    )
+    row = entity_pages.resolve_entity(uid, 'org')
+    edit = Edit(
+        kind='entity_summary',
+        target='knowledge_nodes/org',
+        before='',
+        after='Makes toy boats',
+        reason='Summarize toy company',
+        evidence=['knowledge_nodes/org'],
+    )
+    assert dream_tools.suggest_edit(uid, edit, {edit.target: row}) == 'suggested'
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    assert response.status_code == 200, response.text
+    cache = user.collection('entity_pages').document('org')
+    assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
+    assert edit.after not in str(cache.get().to_dict())
+    term = Term(kind='project', spelling='ToyBoat', evidence=[edit.target])
+    assert dream_tools.apply_vocabulary(uid, [term]) == 'applied'
+    vocabulary = user.collection('dream_vocabulary').document('current')
+    assert 'ToyBoat' not in str(vocabulary.get().to_dict())
+    changes = client.get('/v1/review/changes').json()['changes']
+    assert len(changes) == 2
+    for change in changes:
+        assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 200
+    assert cache.get().to_dict() == {}
+    assert vocabulary.get().to_dict() == {}
+    assert dream_tools.suggest_edit(uid, edit, {edit.target: row}) == 'suppressed'
+    for change in changes:
+        assert client.post(f'/v1/review/changes/{change["change_id"]}/redo').status_code == 200
+    assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
+    assert store.decode_doc(uid, vocabulary.get().to_dict())['source'][0]['spelling'] == 'ToyBoat'
+
+
+def test_dream_accept_fences_evidence_in_actual_journal_transaction(harness, monkeypatch):
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    client.get('/v2/review/items')
+    original = journal.record_agent_change
+
+    def racing_write(*args, **kwargs):
+        user.collection('conversations').document(edit.evidence[0].split('/')[1]).update(
+            {'structured.title': 'Intervening correction'}
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(journal, 'record_agent_change', racing_write)
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    assert response.status_code == 409, response.text
+    assert list(user.collection('review_changes').stream()) == []
+    assert store.remaining_today(uid) == 3
+    assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
+
+
+@pytest.mark.parametrize('kind', ['memory', 'merge_memories'])
+def test_dream_canonical_memory_suggestion_accept_and_undo(harness, monkeypatch, kind):
+    from models.dream_agent import Edit
+    from models.product_memory import LedgerWriteReason, MemorySubjectScope
+    from utils import dream_reads, dream_tools
+    from utils.memory.knowledge_ledger import LedgerProvenance, save_fact
+    from utils.memory.memory_service import MemoryService
+
+    client, uid, user, db = harness
+    _canonical_control(user, uid)
+    monkeypatch.setattr(MemoryService, '_invalidate_prompt_cache', lambda *a: None)
+    ids = [
+        save_fact(
+            uid,
+            content,
+            provenance=LedgerProvenance(
+                source_id='toy-source', source_type='agent_conclusion', action_id=f'toy-seed-{index}'
+            ),
+            write_reason=LedgerWriteReason.agent_reusable_conclusion,
+            subject_scope=MemorySubjectScope.third_party,
+            subject_entity_id='toy-org',
+            db_client=db,
+        )
+        for index, content in enumerate(['Toy company makes boats', 'Toy company builds boats'])
+    ]
+    refs = [f'memory_items/{key}' for key in ids]
+    records = {ref: dream_reads.read_record(uid, ref) for ref in refs}
+    edit = Edit(
+        kind=kind,
+        target=refs[0],
+        other=refs[1] if kind == 'merge_memories' else '',
+        before=records[refs[0]]['content'],
+        after='Toy company makes wooden boats',
+        reason='Update synthetic fact',
+        evidence=refs,
+    )
+    assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    assert response.status_code == 200, response.text
+
+    def contents():
+        return sorted(
+            doc.to_dict()['content']
+            for doc in user.collection('memory_items').stream()
+            if doc.to_dict()['status'] == 'active'
+        )
+
+    assert edit.after in contents()
+    changes = client.get('/v1/review/changes').json()['changes']
+    assert len(changes) == 1
+    response = client.post(f'/v1/review/changes/{changes[0]["change_id"]}/undo')
+    assert response.status_code == 200, response.text
+    assert contents() == ['Toy company builds boats', 'Toy company makes boats']
+    assert not journal.agent_change_allowed(uid, dream_tools.edit_key(edit, records))
+
+
+def test_dream_people_merge_suggestion_accept_and_undo(harness):
+    from models.dream_agent import Edit
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    for key, name in [('a', 'Toy Mira'), ('b', 'Toy Meera')]:
+        user.collection('people').document(key).set({'name': name})
+        user.collection('knowledge_nodes').document('person:' + key).set(
+            {'id': 'person:' + key, 'node_type': 'person', 'label': name, 'aliases': []}
+        )
+    refs = ['entity/person:a', 'entity/person:b']
+    records = {ref: entity_pages.resolve_entity(uid, ref.split('/')[1]) for ref in refs}
+    edit = Edit(
+        kind='merge_people', target=refs[0], other=refs[1], reason='Synthetic duplicate identity', evidence=refs
+    )
+    assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    assert response.status_code == 200, response.text
+    other = user.collection('knowledge_nodes').document('person:b')
+    assert other.get().to_dict()['redirect_entity_id'] == 'person:a'
+    change = client.get('/v1/review/changes').json()['changes'][0]
+    assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 200
+    assert 'redirect_entity_id' not in other.get().to_dict()
+    assert dream_tools.suggest_edit(uid, edit, records) == 'suppressed'
+
+
+def test_dream_suggestions_share_question_budget_and_reset_next_day(harness, monkeypatch):
+    from database import dream_store
+
+    client, uid, user, db = harness
+    day = datetime.now(timezone.utc).date().isoformat()
+    db.collection('dream_users').document(uid).set({'lease': {'run_id': 'toy-run'}})
+    assert dream_task_proposal(harness)[2] == 'suggested'
+    assert dream_store.reserve_questions(uid, 'toy-run', 3) == 2
+    assert dream_task_proposal(harness, index=2)[2] == 'suggestion_cap'
+
+    original = store.enqueue_review_proposal
+    monkeypatch.setattr(
+        store, 'enqueue_review_proposal', lambda *args, **kwargs: original(*args, **kwargs, now=NOW + timedelta(days=1))
+    )
+    assert dream_task_proposal(harness, index=3)[2] == 'suggested'
+    assert user.collection('review_attention').document(day).get().to_dict()['dream_suggestions'] == 1
+
+
+def test_dismiss_hides_an_in_flight_refresh_of_same_operation(harness, monkeypatch):
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    client.get('/v2/review/items')
+    proposal_ref = user.collection('review_proposals').document(store.safe_id(item_id))
+    proposal = store.require_doc(uid, proposal_ref.get().to_dict())
+    item = ReviewItemV2.model_validate(proposal['item'])
+    original = journal.suppress_agent_change
+
+    def refresh_then_dismiss(owner, key):
+        assert (
+            store.enqueue_review_proposal(
+                owner, item, evidence_version='refreshed-version', source=proposal['source'], edit_key=key
+            )
+            == 'suggested'
+        )
+        original(owner, key)
+
+    monkeypatch.setattr(journal, 'suppress_agent_change', refresh_then_dismiss)
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
+    assert response.status_code == 200, response.text
+    assert store.require_doc(uid, proposal_ref.get().to_dict())['status'] == 'pending'
+    assert client.get('/v2/review/items').json()['items'] == []
+
+
+def test_review_v1_hides_v2_proposals_and_cannot_answer_them(harness):
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    enqueue(uid)
+    legacy = client.get('/v1/review/items').json()['items']
+    assert [item['kind'] for item in legacy] == ['spelling']
+    modern = client.get('/v2/review/items').json()['items']
+    assert {item['kind'] for item in modern} == {'spelling', 'agent_proposal'}
+    response = client.post(f'/v1/review/items/{item_id}/answer', json={'not_sure': True})
+    assert response.status_code == 409
+    assert store.remaining_today(uid) == 3
+    assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
+    user.collection('knowledge_nodes').document('toy-org').set(
+        {'id': 'toy-org', 'node_type': 'organization', 'label': 'Toy Works'}
+    )
+    page = client.get('/v1/entities/toy-org/page')
+    assert page.status_code == 200, page.text
+    assert page.json()['pending_question'] is None
+    first = client.post('/v1/review/items/spelling:1/answer', json={'not_sure': True})
+    retry = client.post('/v2/review/items/spelling:1/answer', json={'not_sure': True})
+    assert first.status_code == retry.status_code == 200
+    assert first.json() == retry.json()

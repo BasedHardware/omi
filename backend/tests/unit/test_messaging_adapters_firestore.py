@@ -228,3 +228,18 @@ def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
     assert store.claim(paths[1]) is not None
     store.complete(paths[1])
     assert store.claim(paths[2]) is not None
+
+
+def test_settled_failed_head_retains_evidence_without_blocking_fifo(store):
+    from dataclasses import replace
+
+    incoming = message()
+    failed = store.enqueue(incoming)
+    following = store.enqueue(replace(incoming, provider_message_id='following'))
+    assert store.claim(failed) is not None
+    assert store.claim(following) is None
+    store.settle(failed)
+    row = store.db.document(failed).get().to_dict()
+    assert row['status'] == 'running' and row['payload'] and row['fifo_settled_at']
+    assert store.claim(failed) is None
+    assert store.claim(following) is not None

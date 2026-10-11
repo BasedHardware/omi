@@ -52,7 +52,10 @@ Production bindings are declared only for Cloud Run `backend`.
 
 The actual registered routes are `/v1/messaging/webhooks/telegram` and
 `/v1/messaging/webhooks/imessage`; setup-guide `/v1/channels/...` paths were placeholders.
-Startup/periodic recovery drains only pending jobs. Running jobs and leases remain fenced.
+Startup/periodic recovery drains only pending jobs. Failed running jobs remain fenced.
+Handled worker failures, including a finished turn's CancelledError, release the
+lease. In-flight task cancellation and process loss keep the lease for operator
+reconciliation.
 
 ## Media, tools and presentation
 
@@ -130,8 +133,9 @@ that domain operation on `postprocess_executor`, outside the chat lease and DB w
 pool, because canonical privacy cleanup may take minutes. Other chat turns can proceed.
 Inverse exceptions send a guarded short error and leave that inverse `running` for
 reconciliation; ambiguous effects are never replayed. Ordinary settled turn failures
-finish the inbox tombstone, try an error reply, and release the surface lease. Shutdown
-cancellation retains fencing when executor/provider work may still be alive.
+retain the running inbox row for reconciliation, try an error reply only before accepted
+delivery, and release the surface lease. A settled FIFO marker allows the next update
+without replaying this row. Shutdown cancellation retains fencing when executor/provider work may still be alive.
 
 Task restoration compares the complete observed row inside a transaction and cancels
 or restores scheduled reminders. Memory inverses use the universal `MemoryService`;
@@ -214,7 +218,9 @@ retention, fallback and production-number assurances also remain provider rollou
 ## Ordered backlog and reminder clock
 
 An identity's inbox is admitted in `created_at` order inside the claim transaction.
-The oldest `pending` or `running` job is the only eligible head. Recovery scans in
+The oldest pending or unsettled running job is the only eligible head. Settled
+failures retain their running row and carry `fifo_settled_at`; they are never replayed
+and no longer block admission of the next job. Recovery scans in
 that order; after release, the worker wakes the next pending head. An ambiguous
 running head still needs operator reconciliation, never TTL stealing. Private
 channel identities have one thread, so this also serializes their normal replies.

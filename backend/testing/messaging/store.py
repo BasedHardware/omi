@@ -60,7 +60,9 @@ class MemoryStore:
             row = self.jobs[path]
             if row['status'] != 'pending':
                 return None
-            unfinished = [r for r in self.jobs.values() if r['status'] in ('pending', 'running')]
+            unfinished = [
+                r for r in self.jobs.values() if r['status'] in ('pending', 'running') and not r.get('fifo_settled_at')
+            ]
             if min(unfinished, key=lambda r: r['created_at']) is not row:
                 return None
             row['status'] = 'running'
@@ -71,6 +73,10 @@ class MemoryStore:
 
     def complete(self, path):
         self.jobs[path] = {'status': 'done'}
+
+    def settle(self, path):
+        if self.jobs[path]['status'] == 'running':
+            self.jobs[path]['fifo_settled_at'] = datetime.now(timezone.utc)
 
     def acquire(self, uid, surface):
         with self.lock:

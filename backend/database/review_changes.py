@@ -38,6 +38,8 @@ ALLOWED_FIELDS = {
         'manual_speaker_assignments',
     },
     'action_items': {'status', 'completed', 'completed_at'},
+    'entity_pages': {'summary', 'updated_at'},
+    'dream_vocabulary': {'source'},
 }
 
 
@@ -45,7 +47,9 @@ class AgentEdit(BaseModel):
     """Internal writer input. Patch keys are constrained to supported reversible fields."""
 
     model_config = ConfigDict(extra='forbid')
-    collection: Literal['knowledge_nodes', 'people', 'conversations', 'action_items']
+    collection: Literal[
+        'knowledge_nodes', 'people', 'conversations', 'action_items', 'entity_pages', 'dream_vocabulary'
+    ]
     document_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     patch: dict
 
@@ -76,6 +80,14 @@ def agent_change_allowed(uid: str, edit_key: str) -> bool:
     return not store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).get().exists
 
 
+def suppress_agent_change(uid: str, edit_key: str) -> None:
+    """A dismissed Review operation uses the same durable fence as an undo."""
+    store.require_enabled()
+    store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).set(
+        {'edit_key': edit_key, 'created_at': datetime.now(timezone.utc)}
+    )
+
+
 def record_agent_change(
     uid: str,
     change: ReviewChange,
@@ -84,6 +96,7 @@ def record_agent_change(
     edit_key: str,
     memory_edit=None,
     expected_documents: dict | None = None,
+    expected_records: dict | None = None,
     entity_merge: tuple[str, str] | None = None
 ) -> ReviewChange:
     """Apply and journal a supported edit exactly once, keyed by change_id.
@@ -99,10 +112,10 @@ def record_agent_change(
         if getattr(memory_edit, 'duplicate_memory_id', None):
             from database.review_memory_merges import record_merge
 
-            return record_merge(uid, change, memory_edit, edit_key)
+            return record_merge(uid, change, memory_edit, edit_key, expected_records=expected_records)
         from database.review_memory_changes import record_memory_change
 
-        return record_memory_change(uid, change, memory_edit, edit_key)
+        return record_memory_change(uid, change, memory_edit, edit_key, expected_records=expected_records)
     if not edit_key.strip() or not edits or len(edits) > 100 or change.undone:
         raise ValueError('An edit key and 1..100 edits are required')
     keys = {(e.collection, e.document_id) for e in edits}
@@ -132,11 +145,14 @@ def record_agent_change(
             raise _Unchanged
         if blocked:
             raise store.ReviewConflict('Agent edit was undone by the user')
+        store.validate_records(uid, tx, expected_records)
         records = []
         for edit, _, data in rows:
             if expected_documents is not None and data != expected_documents.get(edit.document_id):
                 raise store.ReviewConflict('Entity changed while preparing merge')
-            if not data or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
+            if data is None and edit.collection in {'entity_pages', 'dream_vocabulary'}:
+                data = {}
+            if data is None or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
                 raise store.ReviewNotFound('Edit target not found')
             records.append(
                 {
@@ -161,8 +177,11 @@ def record_agent_change(
         result.update(journal)
 
         def write(transaction):
-            for edit, target, _ in rows:
-                transaction.update(target, edit.patch)
+            for edit, target, original in rows:
+                if original is None:
+                    transaction.set(target, edit.patch)
+                else:
+                    transaction.update(target, edit.patch)
             transaction.set(ref, store.encode_doc(uid, journal))
 
         return {'mutations': mutations, 'projection_writer': write}
@@ -176,7 +195,9 @@ def record_agent_change(
     return _wire(result)
 
 
-def merge_review_entities(uid: str, change: ReviewChange, left: str, right: str, *, edit_key: str) -> ReviewChange:
+def merge_review_entities(
+    uid: str, change: ReviewChange, left: str, right: str, *, edit_key: str, expected_records: dict | None = None
+) -> ReviewChange:
     """Use the existing merge mutation, keeping the secondary as a redirect for facts/edges.
 
     People ids remain stable; the derived page folds facts/edges of both nodes.
@@ -188,6 +209,7 @@ def merge_review_entities(uid: str, change: ReviewChange, left: str, right: str,
     # only their canonical identity, preserving stable person ids on undo.
     @firestore.transactional
     def ensure_nodes(tx):
+        store.validate_records(uid, tx, expected_records)
         rows = []
         for entity_id in (left, right):
             ref = store.user(uid).collection('knowledge_nodes').document(entity_id)
@@ -245,6 +267,7 @@ def merge_review_entities(uid: str, change: ReviewChange, left: str, right: str,
         edit_key=edit_key,
         entity_merge=(left, right),
         expected_documents={left: a, right: b},
+        expected_records={path: value for path, value in (expected_records or {}).items() if value is not None},
     )
 
 
@@ -278,7 +301,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         for edit in data['edits']:
             target = store.user(uid).collection(edit['collection']).document(edit['document_id'])
             current = target.get(transaction=tx).to_dict()
-            if not current or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
+            if current is None or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
                 raise store.ReviewConflict('Edit target no longer available')
             if any(_get(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')

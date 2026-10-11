@@ -7,7 +7,7 @@ from collections import Counter
 
 from pydantic import ValidationError
 
-from config.dream_agent import Caps, mode
+from config.dream_agent import Caps, mode, auto_apply_kinds, apply_policy
 from database import dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
@@ -158,6 +158,19 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             accepted = dream_guards.cap_feedback(accepted, usage_sink=report)
             report['proposed']['feedback'] = [f.model_dump() for f in accepted]
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
+            automatic = auto_apply_kinds() - demoted
+            edit_policies = {
+                dream_tools.edit_key(edit, records): (
+                    'suggest'
+                    if dream_tools.edit_key(edit, records).split(':')[1] in demoted
+                    else apply_policy(edit.kind, automatic)
+                )
+                for edit in plan.edits
+            }
+            for edit, proposed_edit in zip(plan.edits, report['proposed']['edits']):
+                proposed_edit['policy'] = edit_policies[dream_tools.edit_key(edit, records)]
+            for term in report['proposed']['vocabulary']:
+                term['policy'] = apply_policy('vocabulary', automatic)
             outcomes: list[dict[str, Any]] = report['outcomes']
             token = dream_writing.set(True)
             try:
@@ -176,21 +189,23 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
                     try:
-                        dream_tools.validate_summary_edit(edit, records[edit.target])
+                        dream_tools.validate_edit(edit, records)
                     except (ValueError, review_store.ReviewConflict):
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
                     allowed = await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key)
                     if not allowed:
                         status = 'suppressed'
-                    elif key.split(':')[1] in demoted:
-                        status = 'suggest_only'
                     elif remaining <= 0:
                         status = 'edit_cap'
                     else:
                         remaining -= 1
-                        status = await effect(dream_tools.apply_edit, edit, records)
-                    outcomes.append({'key': key, 'status': status})
+                        tool = dream_tools.apply_edit if edit_policies[key] == 'auto' else dream_tools.suggest_edit
+                        try:
+                            status = await effect(tool, edit, records)
+                        except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
+                            status = 'invalid_evidence'
+                    outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
                 attention = await run_blocking(db_executor, review_store.remaining_today, uid)
                 if lease['mode'] == 'on' and mode() == 'on' and plan.questions:
                     attention = await run_blocking(
@@ -209,9 +224,15 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                         {'tool': 'slow_task', 'status': await effect(dream_tools.propose_task, task, records)}
                     )
                 terms = [t for t in plan.vocabulary if all(ref in records for ref in t.evidence)]
-                if terms and remaining > 0:
+                for term in terms[:remaining]:
                     remaining -= 1
-                    outcomes.append({'tool': 'vocabulary', 'status': await effect(dream_store.save_vocabulary, terms)})
+                    policy = apply_policy('vocabulary', automatic)
+                    tool = dream_tools.apply_vocabulary if policy == 'auto' else dream_tools.suggest_vocabulary
+                    try:
+                        status = await effect(tool, [term]) if policy == 'auto' else await effect(tool, term, records)
+                    except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
+                        status = 'invalid_evidence'
+                    outcomes.append({'tool': 'vocabulary', 'policy': policy, 'status': status})
                 for frame in plan.frames:
                     outcomes.append(
                         {'tool': 'frame', 'status': await effect(dream_tools.request_frame, frame, records)}
