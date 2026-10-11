@@ -67,6 +67,9 @@ def project_run(uid, run_id, doc):
     edits = []
     for index, edit in enumerate(proposed.get('edits', [])):
         outcome = edit_outcomes[index]['status'] if index < len(edit_outcomes) else 'invalid_evidence'
+        outcome = {'suggested': 'suggest_only', 'already_suggested': 'suggest_only', 'suggestion_cap': 'edit_cap'}.get(
+            outcome, outcome
+        )
         if outcome not in {
             'shadow',
             'applied',
@@ -74,9 +77,6 @@ def project_run(uid, run_id, doc):
             'suggest_only',
             'edit_cap',
             'invalid_evidence',
-            'suggested',
-            'already_suggested',
-            'suggestion_cap',
         }:
             outcome = 'invalid_evidence'
         edits.append(

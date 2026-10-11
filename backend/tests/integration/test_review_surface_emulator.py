@@ -14,7 +14,15 @@ from google.cloud import firestore
 import pytest
 
 from database import _client, review_changes as journal, review_store as store
-from models.review import EntitySummary, ReviewAnswer, ReviewChange, ReviewItem, SamePersonItem, SpellingItem
+from models.review import (
+    EntitySummary,
+    ReviewAnswer,
+    ReviewChange,
+    ReviewItem,
+    ReviewItemV2,
+    SamePersonItem,
+    SpellingItem,
+)
 from routers import review as router
 from utils import entity_pages, review
 
@@ -63,6 +71,8 @@ def test_default_off_gate_blocks_every_route(harness, monkeypatch):
     monkeypatch.delenv('REVIEW_SURFACE_MODE')
     for method, path, body in [
         ('get', '/v1/review/items', None),
+        ('get', '/v2/review/items', None),
+        ('post', '/v2/review/items/item/answer', {'not_sure': True}),
         ('get', '/v1/review/changes', None),
         ('post', '/v1/review/items/spelling:1/answer', {'not_sure': True}),
         ('post', '/v1/review/changes/x/undo', None),
@@ -766,23 +776,23 @@ def test_dream_suggestion_accept_journals_undo_and_exact_retry(harness, kind):
     target = user.collection('action_items').document(edit.target.split('/')[1])
     before = target.get().to_dict()
     assert before['status'] == 'active'
-    items = client.get('/v1/review/items').json()['items']
+    items = client.get('/v2/review/items').json()['items']
     assert items[0]['kind'] == 'agent_proposal'
     assert items[0]['agent_proposal']['edit']['evidence'] == edit.evidence
     raw = user.collection('review_proposals').document(store.safe_id(item_id)).get().to_dict()
     assert 'Toy boat' not in str(raw) and 'review_encrypted_v1' in raw['source']
     body = {'agent_proposal': {'decision': 'accept'}}
-    response = client.post(f'/v1/review/items/{item_id}/answer', json=body)
+    response = client.post(f'/v2/review/items/{item_id}/answer', json=body)
     assert response.status_code == 200, response.text
     assert response.json()['applied']
     assert target.get().to_dict()['status'] == ('completed' if kind == 'close_task' else 'cancelled')
-    assert client.post(f'/v1/review/items/{item_id}/answer', json=body).status_code == 200
+    assert client.post(f'/v2/review/items/{item_id}/answer', json=body).status_code == 200
     changes = client.get('/v1/review/changes').json()['changes']
     assert len(changes) == 1
     assert client.post(f'/v1/review/changes/{changes[0]["change_id"]}/undo').status_code == 200
     assert target.get().to_dict() == before
     assert dream_tools.suggest_edit(uid, edit, records) == 'suppressed'
-    assert client.get('/v1/review/items').json()['items'] == []
+    assert client.get('/v2/review/items').json()['items'] == []
 
 
 def test_dream_dismiss_is_durable_across_versions(harness):
@@ -790,8 +800,8 @@ def test_dream_dismiss_is_durable_across_versions(harness):
 
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness)
-    client.get('/v1/review/items')
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
+    client.get('/v2/review/items')
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
     assert response.status_code == 200, response.text
     assert not response.json()['applied']
     assert list(user.collection('review_changes').stream()) == []
@@ -800,14 +810,14 @@ def test_dream_dismiss_is_durable_across_versions(harness):
         dream_tools.suggest_edit(uid, edit.model_copy(update={'reason': 'Different wording'}), records) == 'suppressed'
     )
     assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
-    assert client.get('/v1/review/items').json()['items'] == []
+    assert client.get('/v2/review/items').json()['items'] == []
 
 
 @pytest.mark.parametrize('changed', ['target', 'evidence', 'generation'])
 def test_dream_stale_accept_conflicts_and_refunds_attention(harness, changed):
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness)
-    client.get('/v1/review/items')
+    client.get('/v2/review/items')
     if changed == 'generation':
         user.collection('task_intelligence_control').document('state').set({'account_generation': 4})
     else:
@@ -816,7 +826,7 @@ def test_dream_stale_accept_conflicts_and_refunds_attention(harness, changed):
         user.collection(collection).document(key).update(
             {'description' if changed == 'target' else 'structured.title': 'User correction'}
         )
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 409, response.text
     assert store.remaining_today(uid) == 3
     assert list(user.collection('review_changes').stream()) == []
@@ -837,7 +847,7 @@ def test_dream_attention_cap_is_atomic_and_idempotent(harness):
             'already_suggested' if status == 'suggested' else 'suggestion_cap'
         )
     assert len(list(user.collection('review_proposals').stream())) == 3
-    assert len(client.get('/v1/review/items').json()['items']) == 3
+    assert len(client.get('/v2/review/items').json()['items']) == 3
 
 
 def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
@@ -858,8 +868,8 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
         evidence=['knowledge_nodes/org'],
     )
     assert dream_tools.suggest_edit(uid, edit, {edit.target: row}) == 'suggested'
-    item_id = client.get('/v1/review/items').json()['items'][0]['item_id']
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
     cache = user.collection('entity_pages').document('org')
     assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
@@ -884,7 +894,7 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
 def test_dream_accept_fences_evidence_in_actual_journal_transaction(harness, monkeypatch):
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness)
-    client.get('/v1/review/items')
+    client.get('/v2/review/items')
     original = journal.record_agent_change
 
     def racing_write(*args, **kwargs):
@@ -894,7 +904,7 @@ def test_dream_accept_fences_evidence_in_actual_journal_transaction(harness, mon
         return original(*args, **kwargs)
 
     monkeypatch.setattr(journal, 'record_agent_change', racing_write)
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 409, response.text
     assert list(user.collection('review_changes').stream()) == []
     assert store.remaining_today(uid) == 3
@@ -938,8 +948,8 @@ def test_dream_canonical_memory_suggestion_accept_and_undo(harness, monkeypatch,
         evidence=refs,
     )
     assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
-    item_id = client.get('/v1/review/items').json()['items'][0]['item_id']
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
 
     def contents():
@@ -974,8 +984,8 @@ def test_dream_people_merge_suggestion_accept_and_undo(harness):
         kind='merge_people', target=refs[0], other=refs[1], reason='Synthetic duplicate identity', evidence=refs
     )
     assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
-    item_id = client.get('/v1/review/items').json()['items'][0]['item_id']
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+    item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
     other = user.collection('knowledge_nodes').document('person:b')
     assert other.get().to_dict()['redirect_entity_id'] == 'person:a'
@@ -1006,10 +1016,10 @@ def test_dream_suggestions_share_question_budget_and_reset_next_day(harness, mon
 def test_dismiss_hides_an_in_flight_refresh_of_same_operation(harness, monkeypatch):
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness)
-    client.get('/v1/review/items')
+    client.get('/v2/review/items')
     proposal_ref = user.collection('review_proposals').document(store.safe_id(item_id))
     proposal = store.require_doc(uid, proposal_ref.get().to_dict())
-    item = ReviewItem.model_validate(proposal['item'])
+    item = ReviewItemV2.model_validate(proposal['item'])
     original = journal.suppress_agent_change
 
     def refresh_then_dismiss(owner, key):
@@ -1022,7 +1032,31 @@ def test_dismiss_hides_an_in_flight_refresh_of_same_operation(harness, monkeypat
         original(owner, key)
 
     monkeypatch.setattr(journal, 'suppress_agent_change', refresh_then_dismiss)
-    response = client.post(f'/v1/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
+    response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'dismiss'}})
     assert response.status_code == 200, response.text
     assert store.require_doc(uid, proposal_ref.get().to_dict())['status'] == 'pending'
-    assert client.get('/v1/review/items').json()['items'] == []
+    assert client.get('/v2/review/items').json()['items'] == []
+
+
+def test_review_v1_hides_v2_proposals_and_cannot_answer_them(harness):
+    client, uid, user, db = harness
+    edit, records, status, item_id = dream_task_proposal(harness)
+    enqueue(uid)
+    legacy = client.get('/v1/review/items').json()['items']
+    assert [item['kind'] for item in legacy] == ['spelling']
+    modern = client.get('/v2/review/items').json()['items']
+    assert {item['kind'] for item in modern} == {'spelling', 'agent_proposal'}
+    response = client.post(f'/v1/review/items/{item_id}/answer', json={'not_sure': True})
+    assert response.status_code == 409
+    assert store.remaining_today(uid) == 3
+    assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
+    user.collection('knowledge_nodes').document('toy-org').set(
+        {'id': 'toy-org', 'node_type': 'organization', 'label': 'Toy Works'}
+    )
+    page = client.get('/v1/entities/toy-org/page')
+    assert page.status_code == 200, page.text
+    assert page.json()['pending_question'] is None
+    first = client.post('/v1/review/items/spelling:1/answer', json={'not_sure': True})
+    retry = client.post('/v2/review/items/spelling:1/answer', json={'not_sure': True})
+    assert first.status_code == retry.status_code == 200
+    assert first.json() == retry.json()

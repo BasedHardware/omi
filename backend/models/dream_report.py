@@ -25,9 +25,6 @@ class DreamReportEdit(BaseModel):
         'suggest_only',
         'edit_cap',
         'invalid_evidence',
-        'suggested',
-        'already_suggested',
-        'suggestion_cap',
     ]
 
 

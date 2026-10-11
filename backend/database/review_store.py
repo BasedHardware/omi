@@ -17,7 +17,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database._client import get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database import review_queries
-from models.review import ReviewItem, ReviewAnswerReceipt
+from models.review import ReviewItem, ReviewItemV2, ReviewAnswerReceipt
 
 DAILY_BUDGET = 3
 
@@ -53,7 +53,7 @@ def require_enabled() -> None:
 
 def enqueue_review_proposal(
     uid: str,
-    item: ReviewItem,
+    item: ReviewItem | ReviewItemV2,
     *,
     evidence_version: str,
     source: dict | None = None,
@@ -66,13 +66,14 @@ def enqueue_review_proposal(
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
     require_enabled()
+    is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
     ref = user(uid).collection('review_proposals').document(safe_id(item.item_id))
 
-    if item.agent_proposal and (not source or not edit_key):
+    if is_agent and (not source or not edit_key):
         raise ValueError('Agent proposals require a source snapshot and suppression key')
     day = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date().isoformat()
     budget_ref = user(uid).collection('review_attention').document(day)
@@ -80,13 +81,13 @@ def enqueue_review_proposal(
 
     @firestore.transactional
     def enqueue(tx):
-        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if item.agent_proposal else {}
+        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent else {}
         current = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
         if marker is not None and marker.get(transaction=tx).exists:
             return 'suppressed'
         if current.get('status') == 'resolved' or current.get('evidence_version') == evidence_version:
             return 'already_suggested'
-        if item.agent_proposal:
+        if is_agent:
             from config.dream_agent import SUGGESTIONS_PER_DAY
 
             dream_state = client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
@@ -116,7 +117,7 @@ def enqueue_review_proposal(
     result = run_with_transaction_contention_retry(
         client().transaction, enqueue, operation_name='review_proposal_enqueue'
     )
-    return result if item.agent_proposal else item.item_id
+    return result if is_agent else item.item_id
 
 
 def validate_records(uid: str, tx, expected_records: dict | None) -> None:
@@ -143,7 +144,7 @@ def remaining_today(uid: str, now: datetime | None = None) -> int:
     return max(0, DAILY_BUDGET - int(data.get('used', 0)))
 
 
-def offer_item(uid: str, item: ReviewItem, source: dict, version: str) -> bool:
+def offer_item(uid: str, item: ReviewItem | ReviewItemV2, source: dict, version: str) -> bool:
     """Atomically publish a version, preserving unanswered/terminal receipts."""
     ref = user(uid).collection('review_answers').document(safe_id(item.item_id))
 

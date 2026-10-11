@@ -410,7 +410,9 @@ folder's README for the verified dev tunnel procedure.
 When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
-become `agent_proposal` items in the existing Review queue. Review must be enabled
+become `agent_proposal` items in the existing Review queue, exposed through
+`GET /v2/review/items` and its v2 answer endpoint. Released v1 item and entity-page
+contracts remain unchanged and hide this new kind. Review must be enabled
 for either journaled effects or proposals; a disabled Review surface never routes
 risky edits into automatic writes. All accepted operations use the same undo and
 do-not-redo journal. A dismissal permanently suppresses its semantic operation key.

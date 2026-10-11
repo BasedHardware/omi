@@ -8,7 +8,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from models.dream_edit import Edit, Term
 
 EntityType = Literal['person', 'organization', 'project']
-ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling', 'agent_proposal']
+ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']
+ReviewKindV2 = Literal['speaker', 'task', 'same_person', 'spelling', 'agent_proposal']
 
 
 class PersonRef(BaseModel):
@@ -99,6 +100,25 @@ class ReviewItem(BaseModel):
     task: Optional[TaskItem] = None
     same_person: Optional[SamePersonItem] = None
     spelling: Optional[SpellingItem] = None
+
+    @model_validator(mode='after')
+    def matching_payload(self):
+        arms = ['speaker', 'task', 'same_person', 'spelling', 'agent_proposal']
+        if [arm for arm in arms if getattr(self, arm, None) is not None] != [self.kind]:
+            raise ValueError('Exactly the matching kind payload is required')
+        return self
+
+
+class ReviewItemV2(BaseModel):
+    item_id: str
+    kind: ReviewKindV2
+    title: str
+    quote: Optional[str] = None
+    created_at: datetime
+    speaker: Optional[SpeakerItem] = None
+    task: Optional[TaskItem] = None
+    same_person: Optional[SamePersonItem] = None
+    spelling: Optional[SpellingItem] = None
     agent_proposal: Optional[AgentProposalItem] = None
 
     @model_validator(mode='after')
@@ -111,6 +131,11 @@ class ReviewItem(BaseModel):
 
 class ReviewItemsResponse(BaseModel):
     items: list[ReviewItem] = Field(max_length=3)
+    remaining_today: int = Field(ge=0, le=3)
+
+
+class ReviewItemsResponseV2(BaseModel):
+    items: list[ReviewItemV2] = Field(max_length=3)
     remaining_today: int = Field(ge=0, le=3)
 
 
@@ -152,6 +177,25 @@ class AgentProposalAnswer(BaseModel):
 
 
 class ReviewAnswer(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    speaker: Optional[SpeakerAnswer] = None
+    task: Optional[TaskAnswer] = None
+    same_person: Optional[SamePersonAnswer] = None
+    spelling: Optional[SpellingAnswer] = None
+    not_sure: bool = False
+
+    @model_validator(mode='after')
+    def single_answer(self):
+        count = sum(
+            getattr(self, arm, None) is not None
+            for arm in ['speaker', 'task', 'same_person', 'spelling', 'agent_proposal']
+        )
+        if count != (0 if self.not_sure else 1):
+            raise ValueError('Supply one answer or generic not_sure')
+        return self
+
+
+class ReviewAnswerV2(BaseModel):
     model_config = ConfigDict(extra='forbid')
     speaker: Optional[SpeakerAnswer] = None
     task: Optional[TaskAnswer] = None

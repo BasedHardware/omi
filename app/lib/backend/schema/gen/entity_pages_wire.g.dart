@@ -310,116 +310,7 @@ class GeneratedSpellingItem {
   }
 }
 
-class GeneratedEdit {
-  final String after;
-  final String before;
-  final List<String> evidence;
-  final String kind;
-  final String other;
-  final String reason;
-  final String target;
-
-  const GeneratedEdit({
-    this.after = "",
-    this.before = "",
-    required this.evidence,
-    required this.kind,
-    this.other = "",
-    required this.reason,
-    required this.target,
-  });
-
-  factory GeneratedEdit.fromJson(Map<String, dynamic> json) {
-    return GeneratedEdit(
-      after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
-      before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
-      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
-      target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'after': after,
-      'before': before,
-      'evidence': evidence,
-      'kind': kind,
-      'other': other,
-      'reason': reason,
-      'target': target,
-    };
-  }
-}
-
-class GeneratedTerm {
-  final List<String>? aliases;
-  final List<String> evidence;
-  final String kind;
-  final String spelling;
-
-  const GeneratedTerm({
-    this.aliases,
-    required this.evidence,
-    required this.kind,
-    required this.spelling,
-  });
-
-  factory GeneratedTerm.fromJson(Map<String, dynamic> json) {
-    return GeneratedTerm(
-      aliases: _readFieldValue<List<String>>(_readField(json, const ["aliases"]), "aliases", _readStringList, requiredField: false, nullable: true),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      spelling: _required(_readFieldValue<String>(_readField(json, const ["spelling"]), "spelling", _readString, requiredField: true, nullable: false), "spelling"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'aliases': aliases,
-      'evidence': evidence,
-      'kind': kind,
-      'spelling': spelling,
-    };
-  }
-}
-
-class GeneratedAgentProposalItem {
-  final GeneratedEdit? edit;
-  final String? otherLabel;
-  final String targetLabel;
-  final GeneratedTerm? vocabulary;
-
-  const GeneratedAgentProposalItem({
-    this.edit,
-    this.otherLabel,
-    this.targetLabel = "",
-    this.vocabulary,
-  });
-
-  factory GeneratedAgentProposalItem.fromJson(Map<String, dynamic> json) {
-    return GeneratedAgentProposalItem(
-      edit: _readFieldValue<GeneratedEdit>(_readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson), requiredField: false, nullable: true),
-      otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
-      targetLabel: _required(_readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: false, defaultValue: ""), "target_label"),
-      vocabulary: _readFieldValue<GeneratedTerm>(_readField(json, const ["vocabulary"]), "vocabulary", (value) => _readObject(value, GeneratedTerm.fromJson), requiredField: false, nullable: true),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'edit': edit?.toJson(),
-      'other_label': otherLabel,
-      'target_label': targetLabel,
-      'vocabulary': vocabulary?.toJson(),
-    };
-  }
-}
-
 class GeneratedReviewItem {
-  final GeneratedAgentProposalItem? agentProposal;
   final DateTime createdAt;
   final String itemId;
   final String kind;
@@ -431,7 +322,6 @@ class GeneratedReviewItem {
   final String title;
 
   const GeneratedReviewItem({
-    this.agentProposal,
     required this.createdAt,
     required this.itemId,
     required this.kind,
@@ -445,7 +335,6 @@ class GeneratedReviewItem {
 
   factory GeneratedReviewItem.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItem(
-      agentProposal: _readFieldValue<GeneratedAgentProposalItem>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalItem.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
@@ -460,7 +349,6 @@ class GeneratedReviewItem {
 
   Map<String, dynamic> toJson() {
     return {
-      'agent_proposal': agentProposal?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'item_id': itemId,
       'kind': kind,

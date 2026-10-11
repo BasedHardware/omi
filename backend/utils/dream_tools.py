@@ -14,7 +14,7 @@ from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
 from models.candidate import CandidateCreate, TaskCreateCandidate
-from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem
+from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItemV2
 from utils.entity_pages import resolve_entity
 from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
 
@@ -435,7 +435,7 @@ def suggest_edit(uid, edit, records):
         and records[edit.target].get('account_generation', 0) != get_task_workflow_control(uid).account_generation
     ):
         raise review_store.ReviewConflict('Dream task generation changed')
-    item = ReviewItem(
+    item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',
         title=edit.reason,
@@ -517,7 +517,7 @@ def suggest_vocabulary(uid, term, records):
     }
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
-    item = ReviewItem(
+    item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',
         title='Add vocabulary: ' + term.spelling,

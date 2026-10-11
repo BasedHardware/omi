@@ -439,7 +439,6 @@ class GeneratedAgentProposalAnswer {
 }
 
 class GeneratedReviewItem {
-  final GeneratedAgentProposalItem? agentProposal;
   final DateTime createdAt;
   final String itemId;
   final String kind;
@@ -451,7 +450,6 @@ class GeneratedReviewItem {
   final String title;
 
   const GeneratedReviewItem({
-    this.agentProposal,
     required this.createdAt,
     required this.itemId,
     required this.kind,
@@ -465,6 +463,60 @@ class GeneratedReviewItem {
 
   factory GeneratedReviewItem.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItem(
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: false, nullable: true),
+      samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonItem.fromJson), requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerItem>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson), requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingItem.fromJson), requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskItem>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson), requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'item_id': itemId,
+      'kind': kind,
+      'quote': quote,
+      'same_person': samePerson?.toJson(),
+      'speaker': speaker?.toJson(),
+      'spelling': spelling?.toJson(),
+      'task': task?.toJson(),
+      'title': title,
+    };
+  }
+}
+
+class GeneratedReviewItemV2 {
+  final GeneratedAgentProposalItem? agentProposal;
+  final DateTime createdAt;
+  final String itemId;
+  final String kind;
+  final String? quote;
+  final GeneratedSamePersonItem? samePerson;
+  final GeneratedSpeakerItem? speaker;
+  final GeneratedSpellingItem? spelling;
+  final GeneratedTaskItem? task;
+  final String title;
+
+  const GeneratedReviewItemV2({
+    this.agentProposal,
+    required this.createdAt,
+    required this.itemId,
+    required this.kind,
+    this.quote,
+    this.samePerson,
+    this.speaker,
+    this.spelling,
+    this.task,
+    required this.title,
+  });
+
+  factory GeneratedReviewItemV2.fromJson(Map<String, dynamic> json) {
+    return GeneratedReviewItemV2(
       agentProposal: _readFieldValue<GeneratedAgentProposalItem>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalItem.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
@@ -490,6 +542,70 @@ class GeneratedReviewItem {
       'spelling': spelling?.toJson(),
       'task': task?.toJson(),
       'title': title,
+    };
+  }
+}
+
+class GeneratedReviewItemsResponseV2 {
+  final List<GeneratedReviewItemV2> items;
+  final int remainingToday;
+
+  const GeneratedReviewItemsResponseV2({
+    required this.items,
+    required this.remainingToday,
+  });
+
+  factory GeneratedReviewItemsResponseV2.fromJson(Map<String, dynamic> json) {
+    return GeneratedReviewItemsResponseV2(
+      items: _required(_readFieldValue<List<GeneratedReviewItemV2>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedReviewItemV2.fromJson), requiredField: true, nullable: false), "items"),
+      remainingToday: _required(_readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt, requiredField: true, nullable: false), "remaining_today"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'items': items.map((value) => value.toJson()).toList(),
+      'remaining_today': remainingToday,
+    };
+  }
+}
+
+class GeneratedReviewAnswerV2 {
+  final GeneratedAgentProposalAnswer? agentProposal;
+  final bool notSure;
+  final GeneratedSamePersonAnswer? samePerson;
+  final GeneratedSpeakerAnswer? speaker;
+  final GeneratedSpellingAnswer? spelling;
+  final GeneratedTaskAnswer? task;
+
+  const GeneratedReviewAnswerV2({
+    this.agentProposal,
+    this.notSure = false,
+    this.samePerson,
+    this.speaker,
+    this.spelling,
+    this.task,
+  });
+
+  factory GeneratedReviewAnswerV2.fromJson(Map<String, dynamic> json) {
+    return GeneratedReviewAnswerV2(
+      agentProposal: _readFieldValue<GeneratedAgentProposalAnswer>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalAnswer.fromJson), requiredField: false, nullable: true),
+      notSure: _required(_readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool, requiredField: false, nullable: false, defaultValue: false), "not_sure"),
+      samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson), requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson), requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingAnswer>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingAnswer.fromJson), requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskAnswer>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskAnswer.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'agent_proposal': agentProposal?.toJson(),
+      'not_sure': notSure,
+      'same_person': samePerson?.toJson(),
+      'speaker': speaker?.toJson(),
+      'spelling': spelling?.toJson(),
+      'task': task?.toJson(),
     };
   }
 }
@@ -623,7 +739,6 @@ class GeneratedSpellingAnswer {
 }
 
 class GeneratedReviewAnswer {
-  final GeneratedAgentProposalAnswer? agentProposal;
   final bool notSure;
   final GeneratedSamePersonAnswer? samePerson;
   final GeneratedSpeakerAnswer? speaker;
@@ -631,7 +746,6 @@ class GeneratedReviewAnswer {
   final GeneratedTaskAnswer? task;
 
   const GeneratedReviewAnswer({
-    this.agentProposal,
     this.notSure = false,
     this.samePerson,
     this.speaker,
@@ -641,7 +755,6 @@ class GeneratedReviewAnswer {
 
   factory GeneratedReviewAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewAnswer(
-      agentProposal: _readFieldValue<GeneratedAgentProposalAnswer>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalAnswer.fromJson), requiredField: false, nullable: true),
       notSure: _required(_readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool, requiredField: false, nullable: false, defaultValue: false), "not_sure"),
       samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson), requiredField: false, nullable: true),
       speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson), requiredField: false, nullable: true),
@@ -652,7 +765,6 @@ class GeneratedReviewAnswer {
 
   Map<String, dynamic> toJson() {
     return {
-      'agent_proposal': agentProposal?.toJson(),
       'not_sure': notSure,
       'same_person': samePerson?.toJson(),
       'speaker': speaker?.toJson(),
