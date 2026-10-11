@@ -12,7 +12,12 @@ from utils.audio import AudioRingBuffer
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 
 
-def fresh_audio_ranges(pending, incoming, covered, bounds) -> list[tuple[float, float]]:
+def fresh_audio_ranges(
+    pending: list[tuple[float, float]],
+    incoming: list[tuple[float, float]],
+    covered: list[tuple[float, float]],
+    bounds: tuple[float, float],
+) -> list[tuple[float, float]]:
     fresh = []
     for start, end in sorted(pending + incoming):
         start, end = max(start, bounds[0]), min(end, bounds[1])
@@ -41,7 +46,9 @@ def encode_query(pcm: bytes, sample_rate: int) -> bytes:
     return buffer.getvalue()
 
 
-def select_query_audio(ring: AudioRingBuffer, fresh, *, prefer_recent: bool, sample_rate: int):
+def select_query_audio(
+    ring: AudioRingBuffer, fresh: list[tuple[float, float]], *, prefer_recent: bool, sample_rate: int
+) -> tuple[bytes, list[tuple[float, float]]]:
     selected, chunks = [], []
     remaining_seconds = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
     ordered = sorted(fresh, key=lambda r: (-min(10.0, r[1] - r[0]), -r[1])) if prefer_recent else fresh

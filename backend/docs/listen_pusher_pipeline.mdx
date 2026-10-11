@@ -3856,7 +3856,7 @@ Freshness uses the ring's absolute append byte positions AND a capture-axis
 high-watermark, with sample-aligned, non-overlapping span proof. Segment duration,
 client/provider timestamps, arrival gaps, repeated pending windows, and overlapping
 PCM spans cannot mint fresh seconds. Old prebuffered audio is excluded; a replaced
-ring starts a new proof checkpoint without renewing granted attempts. Reordered
+ring starts a new byte checkpoint while retaining the capture watermark and granted attempts. Reordered
 windows can conservatively lose credit. State is bounded by the existing 128-voice
 inventory, contains scalar metadata, and holds only a weak reference to the ring.
 Unproven buffers fail closed. Grant consumption discards excess pre-grant credit;
