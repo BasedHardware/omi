@@ -46,6 +46,13 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   StreamSubscription? _otaStatusSubscription;
   OmiGlassConnection? _connection;
   DeviceProvider? _deviceProvider;
+  bool _hasTriggeredReconnect = false;
+
+  void _reconnectUpdatedDevice(DeviceProvider provider, String caller) {
+    if (_hasTriggeredReconnect) return;
+    _hasTriggeredReconnect = true;
+    provider.initiateConnection(caller, boundDeviceOnly: true);
+  }
 
   // Track high progress for handling device reboot/disconnection
   bool _reachedHighProgress = false;
@@ -80,10 +87,14 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     _ssidController.dispose();
     _passwordController.dispose();
     final provider = _deviceProvider;
+    final success = _isSuccess;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
+        if (success) {
+          _reconnectUpdatedDevice(provider, 'OmiGlassOtaExit');
+        }
       });
     }
     super.dispose();
@@ -612,7 +623,11 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           label: context.l10n.done,
           expand: true,
           // Back to the Home underneath, not a second Home on top of the stack.
-          onPressed: () => HomeNavigation.returnHome(context),
+          onPressed: () {
+            final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+            _reconnectUpdatedDevice(deviceProvider, 'OmiGlassOtaDone');
+            HomeNavigation.returnHome(context);
+          },
         ),
       ],
     );

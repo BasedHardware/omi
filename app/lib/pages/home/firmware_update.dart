@@ -26,9 +26,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   bool shouldUpdate = false;
   String updateMessage = '';
   bool isLoading = false;
+  bool _hasTriggeredReconnect = false;
 
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
+
+  void _reconnectUpdatedDevice(DeviceProvider provider, String caller) {
+    if (_hasTriggeredReconnect) return;
+    _hasTriggeredReconnect = true;
+    provider.initiateConnection(caller, boundDeviceOnly: true);
+  }
 
   @override
   void initState() {
@@ -80,10 +87,14 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   void dispose() {
     killMcuUpdateManager();
     final provider = _deviceProvider;
+    final installed = isInstalled;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
+        if (installed) {
+          _reconnectUpdatedDevice(provider, 'FirmwareUpdateExit');
+        }
       });
     }
     super.dispose();
@@ -221,6 +232,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           onPressed: () {
             final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
             deviceProvider.resetFirmwareUpdateState();
+            // Reconnect the updated device so Home resumes capture automatically (#20778).
+            _reconnectUpdatedDevice(deviceProvider, 'FirmwareUpdateDone');
             // Back to the Home underneath, not a second Home on top of the stack.
             HomeNavigation.returnHome(context);
           },
