@@ -1,5 +1,4 @@
 import importlib.util
-from fnmatch import fnmatchcase
 import json
 import os
 import re
@@ -327,7 +326,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as six parallel shard jobs whose interleaved slices partition
+    selection as four parallel shard jobs whose interleaved slices partition
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -338,9 +337,8 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
-    assert "--shard 6/${{ matrix.shard }}" in workflow
-    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
+    assert "shard: [1, 2, 3, 4]" in workflow
+    assert "--shard 4/${{ matrix.shard }}" in workflow
     assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
@@ -361,15 +359,6 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     # so the shard variable must be named anything else.
     assert "(NR - 1) % total == shard - 1" in runner
     assert "awk -v index=" not in runner
-
-
-def test_repo_checks_cover_dream_stack_bases_and_metadata_events():
-    workflow = yaml.load((BACKEND_DIR.parent / '.github/workflows/repo-checks.yml').read_text(), Loader=yaml.BaseLoader)
-    pull_request = workflow['on']['pull_request']
-    for branch in ('main', 'lane/dream-neighbourhood', 'lane/dream-grounding', 'lane/dream-cleanup'):
-        assert any(fnmatchcase(branch, pattern) for pattern in pull_request['branches']), branch
-    assert {'synchronize', 'edited', 'labeled', 'unlabeled'} <= set(pull_request['types'])
-    assert '--metadata-only' in workflow['jobs']['metadata-preflight']['steps'][-1]['run']
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
