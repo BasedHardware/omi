@@ -1569,7 +1569,9 @@ class _ChargingLegacyDb:
             yield _LegacySnapshot(payload, exists=payload is not None, reference=ref)
 
 
-def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents: Optional[int] = None):
+def _budgeted_unhydrated_legacy_read(
+    service_mod, monkeypatch, *, max_documents: Optional[int] = None, spend_before_hydration=False
+):
     """Canonical keyset down, one unhydrated legacy row, real id-hydration that charges."""
     from tests.unit.test_memory_service_parity import _sample_memory_dict
     from utils.other.list_budget import ListReadBudget
@@ -1582,7 +1584,13 @@ def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents:
     before = {path: dict(payload) for path, payload in db.docs.items()}
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", service_mod._prod_get_memories_by_ids)
     service = service_mod.MemoryService(db_client=db)
-    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+
+    def unavailable_scan(*args, **kwargs):
+        if spend_before_hydration and budget.remaining_documents:
+            budget.charge(1)
+        raise RuntimeError("canonical index unavailable")
+
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=unavailable_scan)
     service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
     stub = service_mod.HistoricalMemoryRecord(
         memory=_memory(service_mod, memory_id, content=""),
@@ -1618,11 +1626,16 @@ def test_budgeted_legacy_hydration_returns_the_row_truncated(service_mod, monkey
 
 def test_budgeted_legacy_hydration_keeps_rows_when_the_charge_exhausts(service_mod, monkeypatch):
     """Hydration that spends the last document still ships that row, truncated."""
-    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, max_documents=0)
+    # Admission now requires a positive entry budget. Spend its final document
+    # in the failed scan so the real hydration charge still exhausts it mid-read.
+    rows, budget = _budgeted_unhydrated_legacy_read(
+        service_mod, monkeypatch, max_documents=1, spend_before_hydration=True
+    )
 
     assert [memory.id for memory in rows] == ["leg-budget-1"]
     assert rows[0].content == "Legacy row hydrated under a live list budget"
     assert budget.truncated is True
+    assert budget.docs_scanned == 2, "scan plus real hydration must charge past the last document"
     service_mod.read_canonical_memories.assert_not_called()
 
 
