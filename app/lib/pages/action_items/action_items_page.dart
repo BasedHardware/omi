@@ -10,12 +10,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
+import 'project_task_sections.dart';
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -56,6 +58,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   bool _overdueExpanded = true;
 
   bool _noDeadlineExpanded = true;
+
+  /// Group the list by project instead of by due date (offered once projects exist).
+  bool _groupByProject = false;
 
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
@@ -251,6 +256,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             }
           },
         ),
+        if (context.read<ReviewProvider?>()?.isOn ?? false)
+          PullDownMenuItem(
+            title: _groupByProject ? context.l10n.tasksGroupByDate : context.l10n.tasksGroupByProject,
+            iconWidget: Icon(_groupByProject ? Icons.event_outlined : Icons.folder_outlined, size: 18),
+            onTap: () {
+              OmiHaptics.light();
+              final review = context.read<ReviewProvider?>();
+              if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
+              setState(() => _groupByProject = !_groupByProject);
+            },
+          ),
         PullDownMenuItem(
           title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
           iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
@@ -438,11 +454,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
+        // Successful empty results use the existing icon and conversation guidance.
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
-            apiPhase == ApiViewPhase.authenticationRequired ||
-            apiPhase == ApiViewPhase.empty;
+            apiPhase == ApiViewPhase.authenticationRequired;
 
         return Scaffold(
           body: Stack(
@@ -473,9 +489,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
-              // Hide the corner FAB when the empty state already
-              // shows its own "Create Task" button — otherwise we
-              // render two competing add buttons on top of each other.
+              // The empty state points to conversation capture on Home.
               if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
               // Selection-mode action bar is mounted at the home page's outer
               // Stack so it paints above the BottomNavBar (mirrors the
@@ -503,10 +517,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 20)),
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
-      ],
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
     );
   }
 
@@ -518,17 +529,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         child: OmiEmptyState(
           icon: Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
+          titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
-          // Primary action: the obvious next step is to write a task.
-          action: OmiButton(
-            label: context.l10n.createActionItem,
-            icon: Icons.add_rounded,
-            size: OmiButtonSize.compact,
-            onPressed: () {
-              OmiHaptics.light();
-              showActionItemFormSheet(context);
-            },
-          ),
         ),
       ),
     );
@@ -566,6 +568,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 );
               }, childCount: filteredItems.length),
             ),
+        ] else if (_groupByProject) ...[
+          const SliverPadding(padding: EdgeInsets.only(top: 6)),
+          ...projectTaskSections(
+            context: context,
+            items: categorizedItems.values.expand((items) => items).toList(growable: false),
+            projects: context.watch<ReviewProvider?>()?.projects ?? const {},
+            buildRow: (item, group) =>
+                _buildTaskItem(item, provider, category: _getCategoryForItem(item), categoryItems: group),
+          ),
         ] else ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
@@ -641,7 +652,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -652,7 +663,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(title, style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -732,7 +743,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1266,10 +1277,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
 final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
   color: OmiColors.textTertiary,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
 );
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.

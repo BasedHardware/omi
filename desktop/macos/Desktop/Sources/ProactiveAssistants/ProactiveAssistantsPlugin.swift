@@ -50,7 +50,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var screenCaptureService: ScreenCaptureService?
   private var windowMonitor: WindowMonitor?
   private var taskAssistant: TaskAssistant?
-  private var insightAssistant: InsightAssistant?
   private var memoryAssistant: MemoryAssistant?
   private var suggestionAssistant: SuggestionAssistant?
   private var captureTimer: Timer?
@@ -64,13 +63,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var monitoringSessionTracker = MonitoringSessionTracker()
   private let monitoringSessionStore: MonitoringSessionPersisting = MonitoringSessionDefaultsStore.shared
   private var monitoringHeartbeatTimer: Timer?
-  // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
-  // the last real context switch or fired refresh, reset on real switches.
-  private var dwellContextAnchor: Date?
-  private var dwellRefreshCount = 0
-  private var dwellGeneration = 0
-  private var lastQuestionRescueBurstStamp: Date?
-
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
@@ -236,16 +228,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Set up system event observers for sleep/wake/lock recovery
     setupSystemEventObservers()
 
-    // A silent evaluation with no forced lookup right after typing gets ONE
-    // re-extraction: the extraction model stochastically omits the typed
-    // question, and this is the deterministic second chance (see
-    // ContextDwellRefreshPolicy.questionRescueGrant).
-    NotificationCenter.default.addObserver(
-      forName: Self.contextEvalSilentWithoutLookup, object: nil, queue: .main
-    ) { [weak self] _ in
-      Task { @MainActor in self?.grantQuestionRescueIfEarned() }
-    }
-
     // Listen for CLI-triggered test notifications
     setupTestNotificationListeners()
 
@@ -258,8 +240,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     switch identifier {
     case "task-extraction":
       TaskAssistantSettings.shared.isEnabled = enabled
-    case "insight":
-      InsightAssistantSettings.shared.isEnabled = enabled
     case "memory-extraction":
       MemoryAssistantSettings.shared.isEnabled = enabled
     default:
@@ -361,12 +341,6 @@ public class ProactiveAssistantsPlugin: NSObject {
       Task { await TaskDeduplicationService.shared.start() }
       Task { await TaskPrioritizationService.shared.start() }
       Task { await TaskPromotionService.shared.start() }
-
-      insightAssistant = try InsightAssistant()
-
-      if let insight = insightAssistant {
-        AssistantCoordinator.shared.register(insight)
-      }
 
       memoryAssistant = try MemoryAssistant()
 
@@ -615,11 +589,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     Task { await TaskDeduplicationService.shared.stop() }
     Task { await TaskPromotionService.shared.stop() }
-    if let insight = insightAssistant {
-      Task {
-        await insight.stop()
-      }
-    }
     if let memory = memoryAssistant {
       Task {
         await memory.stop()
@@ -628,7 +597,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     _ = RewindShutdownFlush.flush(timeout: 5, context: "ProactiveAssistantsPlugin")
 
     taskAssistant = nil
-    insightAssistant = nil
     memoryAssistant = nil
     screenCaptureService = nil
 
@@ -710,163 +678,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     } else {
       log("CaptureGate: capture ticks flowing")
     }
-  }
-
-  /// Seconds since the last key-down in this login session. The dwell-refresh
-  /// trigger (ContextDwellRefreshPolicy) keys on typing because typed text is
-  /// invisible to pixel-similarity signals. `combinedSessionState` on purpose:
-  /// it counts what actually reaches the focused app — hardware keys and
-  /// assistive/automation input alike — where `hidSystemState` counts only raw
-  /// hardware and reads accessibility users' typing as idleness.
-  private static func keyboardIdleSeconds() -> TimeInterval {
-    CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
-  }
-
-  /// Posted by the engine when an evaluation ends in model-chosen silence with
-  /// no forced lookup armed — the signature of an extraction that missed the
-  /// typed question.
-  public static let contextEvalSilentWithoutLookup = Notification.Name(
-    "OmiContextEvalSilentWithoutLookup")
-
-  private func grantQuestionRescueIfEarned() {
-    let idle = Self.keyboardIdleSeconds()
-    let burstStamp = Date().addingTimeInterval(-idle)
-    guard
-      ContextDwellRefreshPolicy.questionRescueGrant(
-        lastRescueBurstStamp: lastQuestionRescueBurstStamp,
-        currentBurstStamp: burstStamp,
-        keyboardIdleSeconds: idle)
-    else { return }
-    lastQuestionRescueBurstStamp = burstStamp
-    dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
-    log("Context dwell refresh: silent evaluation after typing; granting one re-extraction")
-  }
-
-  /// SCShareableContent resolution inside captureWindowCGImage can stall for
-  /// tens of seconds under capture-pipeline contention; a dwell refresh that
-  /// waits that long delivers its answer a minute late. Bound the wait — a
-  /// timed-out capture aborts the refresh through the ordinary retry path
-  /// (anchor backdate, ~10s), which beats blocking the whole chain.
-  @available(macOS 14.0, *)
-  private func dwellCaptureWithTimeout(
-    windowID: CGWindowID, seconds: TimeInterval
-  ) async -> ScreenCaptureService.WindowCaptureResult? {
-    guard let service = screenCaptureService else { return nil }
-    return await AsyncFirstResolved.run(
-      { await service.captureWindowCGImage(windowID: windowID) },
-      {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        return nil
-      }
-    )
-  }
-
-  /// A dwell refresh must capture its own frame: the preview-skip path starves
-  /// full captures while the user types, so the freshest tracked frame would
-  /// otherwise predate the very content this refresh exists to evaluate.
-  private func captureFrameThenRefreshActiveContext(
-    windowID: CGWindowID, appName: String, windowTitle: String?, launchGeneration: Int
-  ) async {
-    // Capture BEFORE the transition so the departing extraction sees the typed
-    // content even when the preview-skip path starved full captures. Skip the
-    // whole refresh if the user already switched away: tracking the old app's
-    // frame after a switch would contaminate the new context's bucket.
-    log("Context dwell refresh chain: started")
-    guard AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle) else {
-      // The slot must not die silently: backdate the anchor exactly like a
-      // failed capture so the next settled tick can retry, and say why. SPA
-      // titles (compose drafts) shift underneath the tick, so this guard
-      // fires in normal use, not only on real app switches.
-      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
-        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
-      {
-        dwellContextAnchor = anchor
-      }
-      log("Context dwell refresh aborted: context no longer tracked; retrying shortly")
-      return
-    }
-    // The fresh pre-transition capture is REQUIRED: transitioning without it
-    // would extract a stale frame that predates the typed content, spending
-    // the refresh (and its cooldown) on nothing. On failure — or on macOS 13,
-    // which has no window-image capture path here — the anchor is backdated so
-    // the refresh retries in ~10s instead of waiting out the full cooldown.
-    var capturedFreshFrame = false
-    if #available(macOS 14.0, *) {
-      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
-      // A declined consent must NOT fall through to the retry-anchor path below: that
-      // backdates the anchor and re-attempts in ~10 s, which is another timer-cadence
-      // capture session and another chance to re-arm the consent dialog. Same contract
-      // as the capture tick and the recovery polls — terminal, not retried.
-      if case .permissionDeclined = result {
-        log("Context dwell refresh aborted: consent declined — stopping capture, no retry")
-        handleCaptureConsentDeclined()
-        return
-      }
-      if case .success(let image) = result,
-        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
-      {
-        frameCount += 1
-        AssistantCoordinator.shared.trackFrame(
-          CapturedFrame(
-            cgImage: image,
-            jpegQuality: 0.8,
-            appName: appName,
-            windowTitle: windowTitle,
-            frameNumber: frameCount,
-            captureTime: Date()
-          ))
-        capturedFreshFrame = true
-      }
-    }
-    guard capturedFreshFrame else {
-      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
-        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
-      {
-        dwellContextAnchor = anchor
-      }
-      log("Context dwell refresh aborted: fresh capture failed; retrying shortly")
-      return
-    }
-    log("Context dwell refresh chain: fresh frame captured")
-    guard
-      let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(
-        expectedApp: appName, expectedWindowTitle: windowTitle)
-    else {
-      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
-        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
-      {
-        dwellContextAnchor = anchor
-      }
-      log("Context dwell refresh aborted: coordinator refused the transition; retrying shortly")
-      return
-    }
-    // Capture AGAIN after the visit opened: the entry evaluation only grounds
-    // on frames captured at or after the visit began, and a static screen may
-    // never produce another full frame through the preview-skip path.
-    if #available(macOS 14.0, *) {
-      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
-      if case .permissionDeclined = result {
-        log("Context dwell refresh: consent declined on the post-visit capture — stopping capture")
-        handleCaptureConsentDeclined()
-        return
-      }
-      if case .success(let image) = result,
-        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
-      {
-        frameCount += 1
-        AssistantCoordinator.shared.trackFrame(
-          CapturedFrame(
-            cgImage: image,
-            jpegQuality: 0.8,
-            appName: appName,
-            windowTitle: windowTitle,
-            frameNumber: frameCount,
-            captureTime: Date()
-          ))
-      }
-    }
-    log("Context dwell refresh chain: transitioned; entering evaluation")
-    await ContextProactivityEngine.shared.contextEntered(arrivingFence)
   }
 
   private func handleCaptureTargetUnavailable() {
@@ -1143,40 +954,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
-      // Content-refresh dwell tracking (see ContextDwellRefreshPolicy). This
-      // sits BEFORE the capture decision on purpose: typed text moves almost
-      // no preview pixels, so the preview-skip path starves full captures
-      // during exactly the dwells this exists to re-evaluate.
-      if ContextBucketsFeature.isDwellRefreshEnabled,
-        !RewindSettings.shared.isAppExcluded(appForCheck)
-      {
-        let tickTime = Date()
-        if switched || dwellContextAnchor == nil {
-          dwellContextAnchor = tickTime
-          dwellRefreshCount = 0
-          dwellGeneration += 1
-        } else if let anchor = dwellContextAnchor,
-          ContextDwellRefreshPolicy.shouldRefresh(
-            secondsSinceAnchor: tickTime.timeIntervalSince(anchor),
-            firedRefreshesThisContext: dwellRefreshCount,
-            keyboardIdleSeconds: Self.keyboardIdleSeconds())
-        {
-          dwellContextAnchor = tickTime
-          dwellRefreshCount += 1
-          log(
-            "Context dwell refresh #\(dwellRefreshCount): typed content settled; re-evaluating active context"
-          )
-          let refreshApp = appForCheck
-          let refreshTitle = windowTitle
-          let refreshWindowID = windowID
-          let launchGeneration = dwellGeneration
-          Task { [weak self] in
-            await self?.captureFrameThenRefreshActiveContext(
-              windowID: refreshWindowID, appName: refreshApp, windowTitle: refreshTitle,
-              launchGeneration: launchGeneration)
-          }
-        }
-      }
       if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
         if delaySeconds > 0 {
@@ -1264,6 +1041,10 @@ public class ProactiveAssistantsPlugin: NSObject {
       break
     }
 
+    // Bind before the capture suspension; a later account/privacy transition cannot rebind pixels.
+    var taskBinding = appName.flatMap { ScreenTaskFrameBinding.capture(app: $0, title: currentWindowTitle) }
+    if let appName, ScreenTaskPrivacy.isPrivateWindow(app: appName, title: currentWindowTitle) { return }
+
     // Always capture frames (other features may need them)
     // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
     // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
@@ -1276,15 +1057,16 @@ public class ProactiveAssistantsPlugin: NSObject {
         // The target disappeared or ScreenCaptureKit does not expose it. Retry
         // once after a fresh resolution, then treat a second unavailable target
         // as a normal paused tick rather than an engine failure.
-        captureResult = await screenCaptureService.captureActiveWindowCGImage()
-        // Privacy: re-resolve app name since captureActiveWindowCGImage captures
-        // whatever is currently active, which may differ from the earlier resolution.
-        let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-        if let fallbackApp = fallbackApp {
-          appName = fallbackApp
-          currentWindowTitle = fallbackTitle
-          isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
-        }
+        let (fallbackApp, fallbackTitle, fallbackWindow) = await WindowMonitor.getActiveWindowInfoAsync()
+        guard
+          let resolved = ScreenTaskCaptureResolution.resolve(
+            app: fallbackApp, title: fallbackTitle, window: fallbackWindow)
+        else { return }
+        appName = resolved.app
+        currentWindowTitle = resolved.title
+        isRewindExcluded = RewindSettings.shared.isAppExcluded(resolved.app)
+        taskBinding = resolved.binding
+        captureResult = await screenCaptureService.captureWindowCGImage(windowID: resolved.window)
       }
       switch captureResult {
       case .success(let image):
@@ -1319,6 +1101,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
+        let capturedUptime = ProcessInfo.processInfo.systemUptime
         // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
         // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
         // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
@@ -1341,7 +1124,9 @@ public class ProactiveAssistantsPlugin: NSObject {
             appName: appName,
             windowTitle: currentWindowTitle,
             frameNumber: frameCount,
-            captureTime: captureTime
+            captureTime: captureTime,
+            capturedUptime: capturedUptime,
+            taskBinding: taskBinding
           )
           AssistantCoordinator.shared.trackFrame(frame)
           if !isInDelayPeriod {
@@ -1392,6 +1177,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         currentWindowTitle = freshTitle
         isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
       }
+      // The old JPEG API does not identify its captured window. Keep task admission
+      // only when fresh resolution matches the original capture binding.
+      guard !ScreenTaskPrivacy.isPrivateWindow(app: resolvedApp, title: currentWindowTitle) else { return }
 
       let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
       if !lastCaptureSucceeded {
@@ -1410,7 +1198,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         appName: resolvedApp,
         windowTitle: currentWindowTitle,
         frameNumber: frameCount,
-        captureTime: captureTime
+        captureTime: captureTime,
+        taskBinding: taskBinding
       )
 
       // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
@@ -1540,30 +1329,16 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Distributed notifications may arrive on the posting thread, so entering a selector on this
     // MainActor-isolated plugin can trap before a Task-based actor hop executes.
     let observers = [
-      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.insight")) {
-        [weak self] payload in
-        self?.handleInsightTestNotification(payload)
-      },
       ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.notification")) {
         [weak self] payload in
         self?.handleNotificationTestNotification(payload)
-      },
+      }
     ]
     for observer in observers {
       observer.register(in: DistributedNotificationCenter.default())
     }
     testNotificationObservers = observers
-    log("InsightTestCLI: Notification observer registered")
     log("NotificationTestCLI: Notification observer registered")
-  }
-
-  private func handleInsightTestNotification(_ payload: ProactiveTestNotificationPayload) {
-    Task { @MainActor in
-      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
-      let count = payload["count"].flatMap { Int($0) } ?? 10
-      log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-      await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
-    }
   }
 
   private func handleNotificationTestNotification(_ payload: ProactiveTestNotificationPayload) {
@@ -1625,7 +1400,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         self?.pauseCaptureForSystemInterruption()
         self?.monitoringSessionTracker.pause(at: Date(), source: .systemSleep)
         self?.persistMonitoringSessionIfActive()
-        ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
     }
     systemEventObservers.append(sleepObserver)
@@ -1665,7 +1439,6 @@ public class ProactiveAssistantsPlugin: NSObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        ContextVisitCoordinator.interruptForSleepIfEnabled()
         self?.handleScreenLock()
       }
     }
@@ -1699,15 +1472,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
 
-    let shouldRearmVisit = ContextVisitSystemResumePolicy.shouldRearmContextVisit(
-      bucketsEnabled: ContextBucketsFeature.isEnabled,
-      wasMonitoringBeforeEvent: wasMonitoringBeforeSleep,
-      isMonitoring: isMonitoring,
-      appName: currentApp,
-      isAppExcluded: currentApp.map { RewindSettings.shared.isAppExcluded($0) } ?? true,
-      displayAvailable: !isScreenLocked
-    )
-
     // If we were monitoring before sleep, reinitialize capture service and restart timer
     if wasMonitoringBeforeSleep && isMonitoring && !isScreenLocked {
       log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
@@ -1725,10 +1489,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         self.resumeCaptureAfterSystemInterruption(reason: "system wake")
         log("ProactiveAssistantsPlugin: Capture scheduling resumed after wake")
       }
-    }
-
-    if shouldRearmVisit {
-      rearmContextVisitAfterSystemResume(reason: "system wake")
     }
 
     wasMonitoringBeforeSleep = false
@@ -1769,14 +1529,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
 
-    let shouldRearmVisit = ContextVisitSystemResumePolicy.shouldRearmContextVisit(
-      bucketsEnabled: ContextBucketsFeature.isEnabled,
-      wasMonitoringBeforeEvent: wasMonitoringBeforeLock,
-      isMonitoring: isMonitoring,
-      appName: currentApp,
-      isAppExcluded: currentApp.map { RewindSettings.shared.isAppExcluded($0) } ?? true
-    )
-
     if wasMonitoringBeforeLock && isMonitoring {
       log("ProactiveAssistantsPlugin: Restarting capture timer after unlock")
 
@@ -1794,30 +1546,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
 
-    if shouldRearmVisit {
-      rearmContextVisitAfterSystemResume(reason: "screen unlock")
-    }
-
     wasMonitoringBeforeLock = false
   }
 
   /// Sleep/lock finalizes the active visit. The next capture tick often sees the
   /// same app/title, so context-switch detection will not open a new visit unless
   /// we rearm explicitly for the still-frontmost context.
-  private func rearmContextVisitAfterSystemResume(reason: String) {
-    guard let appName = currentApp, !appName.isEmpty else { return }
-    let windowTitle = currentWindowTitle
-    Task {
-      do {
-        let fence = try await ContextVisitCoordinator.shared.rearmAfterSystemResume(
-          appName: appName, windowTitle: windowTitle)
-        await ContextProactivityEngine.shared.contextEntered(fence)
-        log("ProactiveAssistantsPlugin: Rearmed context visit after \(reason)")
-      } catch {
-        logError("ProactiveAssistantsPlugin: Failed to rearm context visit after \(reason)", error: error)
-      }
-    }
-  }
 
   /// Handle repeated capture failures (likely permission issue)
   private func handleRepeatedCaptureFailures() {

@@ -179,8 +179,6 @@ export function Conversations(): React.JSX.Element {
   // Bumped when search goes inactive → active so re-entering the same text cannot
   // treat a prior session's hits/errors as the current answer.
   const [searchActivation, setSearchActivation] = useState(0)
-  // Bumped each time search goes inactive → active so re-entering the same query
-  // still shows in-flight state and cannot reuse a stale answer/error as current.
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)

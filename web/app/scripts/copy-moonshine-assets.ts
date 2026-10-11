@@ -1,6 +1,12 @@
 import { cp, mkdir } from 'node:fs/promises';
 import { categoryMetadata } from '../src/components/marketplace/category';
 
+// Bun.serve closes a connection after 10s with no response bytes. In-flight
+// /api/proxy calls are still awaiting the API at that point, so the socket
+// dies and Cloud Run reports a malformed response / instance connection error.
+// 255s is Bun's maximum and stays inside the Cloud Run request limit (300s).
+export const BUN_REQUEST_TIMEOUT_SECONDS = 255;
+
 export function deriveWebSocketBaseUrl(
   apiBaseUrl: string,
   webSocketBaseUrl = '',
@@ -271,6 +277,9 @@ const handler = createRequestHandler({
 });
 // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
 const fetch = async (request) => {
+  // Arm before the handler awaits. The SSE branch below only runs after a
+  // response exists, which is too late for a proxy still waiting on the API.
+  server.timeout(request, ${BUN_REQUEST_TIMEOUT_SECONDS});
   const response = await handler(request);
   // Streamed chat replies can pause for 25s during a tool call, longer than Bun's 10s idle default.
   if (response.headers.get('content-type')?.includes('text/event-stream')) {

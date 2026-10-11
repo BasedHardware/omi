@@ -315,7 +315,9 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     defer { isTestingAgentConnection = false }
 
     do {
-      let key = try await MemoryExportService.shared.ensureMCPKey()
+      guard let key = await MemoryExportService.shared.storedMCPKey() else {
+        throw MemoryExportError.requestFailed("Copy the setup prompt before testing the connection.")
+      }
       let localToken = try LocalAgentAPISettings.enable()
       mcpKey = key
       let result = try await MemoryExportService.shared.testAgentConnections(
@@ -595,9 +597,6 @@ struct MemoryExportDestinationSheet: View {
     .task {
       await model.loadConfiguration()
       statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
-      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
-        await model.generateMCPKey()
-      }
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()

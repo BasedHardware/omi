@@ -13,6 +13,10 @@ import {
 vi.mock('../analytics', () => ({ trackEvent: vi.fn() }))
 import { trackEvent } from '../analytics'
 
+vi.mock('../geminiClient', () => ({ generate: vi.fn(async () => 'note') }))
+import { generate as geminiGenerate } from '../geminiClient'
+import { GeminiLane } from '../../../../shared/geminiAttribution'
+
 // A transcript line with `n` words under a stable id.
 function line(id: string, n: number): TranscriptLine {
   return { id, text: Array.from({ length: n }, (_, i) => `w${i}`).join(' ') }
@@ -263,5 +267,22 @@ describe('LiveNotesMonitor', () => {
     live.push([line('a', 500)])
     await vi.waitFor(() => expect(monitor.getNotes()).toHaveLength(1))
     expect(generator).toHaveBeenCalledTimes(4)
+  })
+
+  it('the default generator attributes the call to the liveNotes lane', async () => {
+    vi.mocked(geminiGenerate).mockClear()
+    const live = makeFakeLive()
+    const storage = makeFakeStorage()
+    const monitor = new LiveNotesMonitor(undefined, storage, live)
+    monitor.start()
+
+    live.push([line('a', 60)])
+    await vi.waitFor(() => expect(geminiGenerate).toHaveBeenCalled())
+    expect(vi.mocked(geminiGenerate).mock.calls[0][0]).toMatchObject({
+      model: 'gemini-2.5-flash',
+      lane: GeminiLane.liveNotes,
+      workload: 'extraction',
+      thinkingBudget: 0
+    })
   })
 })

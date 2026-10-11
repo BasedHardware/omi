@@ -12,6 +12,22 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+        SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+        CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
         TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
         TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -76,9 +92,6 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
-        OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-          value: 'true'
-          category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
           value: gateway
           category: rollout
@@ -89,10 +102,10 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
-        STT_CONNECT_ORDER_FROM_CONFIG:
+        STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
-        STT_RESILIENT_RECONNECT:
+        STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
           category: rollout
         STT_ROUTING_MODE:
@@ -101,9 +114,15 @@ environment_shared:
         STT_ROUTING_REDIS_TIMEOUT_SECONDS:
           value: '0.075'
           category: rollout
-        STT_ROUTING_PROBE_PERCENT:
-          value: '2'
+        STT_ROUTING_ON_PERCENT:
+          value: '0'
           category: rollout
+        STT_ROUTING_TARGETS_JSON:
+          value: ''
+          category: rollout
+        STT_ROUTING_DISRUPTION_GATE:
+          value: '0.08'
+          category: reliability
         STT_NO_TEXT_SECONDS:
           value: '30'
           category: rollout
@@ -171,14 +190,8 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: CONVERSATION_SUMMARIZED_APP_IDS
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
-          category: rollout
-        MEETING_RECEIPT_RECONCILER_ENABLED:
-          value: 'false'
           category: rollout
         LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
           value: 'true'
@@ -186,12 +199,6 @@ environment_shared:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -313,6 +320,21 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+        CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -327,18 +349,9 @@ environment_shared:
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -394,6 +407,18 @@ environment_shared:
   region: us-central1
   desktop_backend:
     env:
+      OMI_VERTEX_RESERVATION_STATES:
+        env_var: OMI_VERTEX_RESERVATION_STATES
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MODE:
+        env_var: OMI_VERTEX_LEGACY_TASK_MODE
+        provisional: true
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         category: rollout
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -401,8 +426,6 @@ environment_shared:
       FREE_TIER_EMERGENCY_STOP:
         category: rollout
       MEMORY_BELIEF_MODEL_ENABLED:
-        category: rollout
-      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
         category: rollout
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         category: rollout
@@ -424,6 +447,10 @@ environment_shared:
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
+      FIRESTORE_READ_LEDGER:
+        value: '1'
+      FIRESTORE_READ_LEDGER_SERVICE:
+        value: desktop-backend
     secrets:
       GEMINI_API_KEY:
         secret: GEMINI_API_KEY
@@ -471,6 +498,32 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -485,6 +538,9 @@ environment_shared:
           TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
           TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+          SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -494,24 +550,12 @@ environment_shared:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
-            category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -624,6 +668,35 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-sync
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -717,18 +790,9 @@ environment_shared:
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
             category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -760,6 +824,35 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-sync-backfill
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -881,6 +974,35 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-integration
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -972,6 +1094,10 @@ environment_shared:
             secret: PINECONE_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: notifications-job
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -980,6 +1106,53 @@ environment_shared:
             value: 'true'
             category: memory_rollout
           PINECONE_INDEX_NAME:
+            category: integrations
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+      x-connector-sync-job:
+        flags:
+          --task-timeout: 3600s
+        secrets:
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+          OPENAI_API_KEY:
+            secret: OPENAI_API_KEY
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          PINECONE_API_KEY:
+            secret: PINECONE_API_KEY
+            version: latest
+          X_OAUTH_CLIENT_SECRET:
+            secret: X_OAUTH_CLIENT_SECRET
+            version: latest
+          RAPID_API_KEY:
+            secret: RAPID_API_KEY
+            version: latest
+        env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
+            category: memory_rollout
+          PINECONE_INDEX_NAME:
+            category: integrations
+          X_OAUTH_CLIENT_ID:
+            env_var: X_OAUTH_CLIENT_ID
+            category: oauth_metadata
+          X_OAUTH_REDIRECT_URI:
+            env_var: X_OAUTH_REDIRECT_URI
+            category: oauth_metadata
+          RAPID_API_HOST:
+            env_var: RAPID_API_HOST
             category: integrations
           OMI_ENV_STAGE:
             value: '{env}'
@@ -1011,6 +1184,8 @@ environment_shared:
           --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           --task-timeout: 3600s
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
           BUCKET_FRAME_REQUESTS:
             env_var: BUCKET_FRAME_REQUESTS
             default: '{env}-omi-frame-requests'
@@ -1041,9 +1216,6 @@ environment_shared:
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
             category: memory_rollout
             value: 'true'
-          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-            category: memory_rollout
-            value: 'false'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1075,6 +1247,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: frame-request-retention-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1106,6 +1282,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: daily-memory-sweep-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1157,6 +1337,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: knowledge-ledger-drain-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1186,6 +1370,10 @@ environment_shared:
             secret: LIFECYCLE_EMAIL_SIGNING_SECRET
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: day3-reengagement-email-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

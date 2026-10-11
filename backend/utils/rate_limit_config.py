@@ -74,10 +74,11 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 # exempt too — they are the shared hourly ceilings the dedicated policies
 # compose with; exempting only the dedicated budgets would leave the aggregate
 # hourly caps boosted into no-ops.
+# Transcript uploads keep their storage budget even on boosted environments.
 _BOOST_EXEMPT_DEFAULT = (
-    "action_items:list,action_items:list_hot_client,static_map:get,"
+    "import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -90,6 +91,7 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
     "conversations:reprocess": (3, 3600),
@@ -104,15 +106,24 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
+    # Device tool results carry no LLM cost — one cheap Redis write per tool the
+    # model calls on the user's own device. Bounded well above chat:send_message
+    # because a single turn can dispatch several device tool calls.
+    "chat:device_tool_result": (600, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
     "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
+    # Imports have their own bucket, separate from chat file uploads.
+    # The picker sends one request per loose file; 30 covers a month of meetings unzipped.
+    "import:upload": (30, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may
     # queue voice-sample extraction. A daily set holds at most a handful.
+    "review:read": (120, 3600),
+    "review:write": (30, 3600),
     "speaker_tag_prompts:list": (20, 3600),
     "speaker_tag_prompts:clip": (60, 3600),
     "speaker_tag_prompts:answer": (60, 3600),
@@ -128,6 +139,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # sync alone and 429 their conversation photo loads. Sized for several
     # devices plus reconnect bursts.
     "screen_activity:sync": (600, 3600),
+    "screen_task:gate": (30, 60),
+    "screen_task:gate_daily": (6000, 86400),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),
@@ -210,6 +223,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Dev API. Read limits are intentionally separate from write limits so a
     # polling client cannot consume the processing/write budget. Developer and
     # MCP API-key contexts are keyed by app/key identity when available.
+    "dev:key_read": (120, 3600),
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
     # Conversation reads are limited in two tiers. Every conversation read consumes

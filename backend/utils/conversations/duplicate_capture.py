@@ -20,6 +20,11 @@ from typing import Any, Mapping
 
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
+from utils.conversations.capture_containment import (
+    capture_group_containment_mode,
+    measure_capture_containment,
+    record_capture_containment,
+)
 from utils.conversations.shared_speech import measure_shared_speech
 from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
 from utils.observability.fallback import record_fallback
@@ -161,20 +166,39 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
         _record_degraded(to_mode='separate_captures')
         return
     own_segments = _segments_of(own_row or {})
+    containment_mode = capture_group_containment_mode()
     for other in matches:
         try:
             other_row, other_fingerprint = conversations_db.get_conversation_for_capture_check(
                 uid, other.conversation_id
             )
             shared = measure_shared_speech(own_segments, _segments_of(other_row or {}))
-            if not shared.confirms():
+            containment = None
+            if containment_mode != 'off':
+                try:
+                    containment = measure_capture_containment(own_row or {}, other_row or {}, mode=containment_mode)
+                    record_capture_containment(containment, mode=containment_mode, phase='rule')
+                except Exception:
+                    logger.warning('capture_group_containment detector failed')
+                    _record_degraded(to_mode='separate_captures')
+                    containment = None
+            if shared.confirms():
+                evidence = shared.evidence()
+            elif (
+                containment_mode == 'on'
+                and containment is not None
+                and containment.would_join
+                and containment.basis == 'full'
+            ):
+                evidence = containment.evidence()
+            else:
                 record_product_event('capture_group_joined', outcome='none')
                 continue
             group_id = capture_groups_db.join_capture_group(
                 uid,
                 candidate.conversation_id,
                 other.conversation_id,
-                shared.evidence(),
+                evidence,
                 expected_windows={
                     record.conversation_id: (record.started_at, record.finished_at) for record in (candidate, other)
                 },

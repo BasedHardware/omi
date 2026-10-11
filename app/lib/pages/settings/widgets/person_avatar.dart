@@ -10,10 +10,13 @@ import 'package:omi/ui/ui.dart';
 /// Decorative for accessibility: the row or header that holds it names the person and the voice
 /// status.
 class PersonAvatar extends StatelessWidget {
-  const PersonAvatar({super.key, required this.person, this.size = 44, this.ring});
+  const PersonAvatar({super.key, required this.person, this.size = 44, this.ring, this.showVoiceBadge = true});
 
   final Person person;
   final double size;
+
+  /// Off in the People list, where the reason line already says what Omi knows of the voice.
+  final bool showVoiceBadge;
 
   /// The surface behind the avatar, drawn as a ring around the badge so it reads as cut out.
   final Color? ring;
@@ -33,11 +36,13 @@ class PersonAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = switch (person.voiceReadiness) {
-      'ready' => OmiColors.success,
-      'saved_sample_awaiting_embedding' => OmiColors.warning,
-      _ => null,
-    };
+    final badge = !showVoiceBadge
+        ? null
+        : switch (person.voiceReadiness) {
+            'ready' => OmiColors.success,
+            'saved_sample_awaiting_embedding' => OmiColors.warning,
+            _ => null,
+          };
     final badgeSize = size * 0.34;
     return ExcludeSemantics(
       child: SizedBox.square(

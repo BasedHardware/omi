@@ -188,7 +188,7 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
 
     with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=(metadata, 'UTC'))):
         persona = SimpleNamespace(id='persona1', is_a_persona=lambda: True)
-        with patch.object(graph, 'execute_persona_chat_stream', stream):
+        with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], app=persona)] == [None]
         with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)] == [
@@ -232,6 +232,95 @@ def test_agentic_history_marks_only_the_turn_that_carried_files():
     history = agentic._messages_to_anthropic(messages)
     assert 'old-image' in history[0]['content']
     assert history[1]['content'] == 'Where did you save this?'
+
+
+def test_bare_continue_gets_resume_contract_without_mutating_stored_history():
+    history = [
+        {'role': 'user', 'content': 'Write a detailed report in several parts.'},
+        {'role': 'assistant', 'content': 'Part one ends with an unfinished'},
+        {'role': 'user', 'content': 'Continue.'},
+    ]
+
+    marked = agentic._with_continuation_contract(history)
+
+    assert marked is not history
+    assert marked[:-1] == history[:-1]
+    assert marked[-1]['content'].startswith('Continue.\n\n<continuation_request>')
+    assert 'exact endpoint' in marked[-1]['content']
+    assert 'Do not restart' in marked[-1]['content']
+    assert history[-1]['content'] == 'Continue.'
+
+
+def test_continuation_contract_is_limited_to_unambiguous_followups_after_an_answer():
+    prior_answer = {'role': 'assistant', 'content': 'Deployment has three stages.'}
+
+    for text in (
+        'please continue',
+        'continue please',
+        'Continue,',
+        'Resume where you left off!',
+        'resume please',
+        'go on',
+        'next part',
+    ):
+        marked = agentic._with_continuation_contract([prior_answer, {'role': 'user', 'content': text}])
+        assert '<continuation_request>' in marked[-1]['content']
+
+    specific = [prior_answer, {'role': 'user', 'content': 'Continue explaining the deployment rollback.'}]
+    assert agentic._with_continuation_contract(specific) is specific
+
+    no_answer = [{'role': 'user', 'content': 'Continue'}]
+    assert agentic._with_continuation_contract(no_answer) is no_answer
+
+
+async def test_bare_continue_reaches_chat_agent_with_resume_contract():
+    messages = [
+        SimpleNamespace(sender='human', text='Write a detailed report in several parts.', files_id=[]),
+        SimpleNamespace(sender='ai', text='Part one ends here.', files_id=[]),
+        SimpleNamespace(sender='human', text='Continue', files_id=[]),
+    ]
+    received = {}
+
+    async def capture_agent_stream(
+        _system_prompt,
+        provider_messages,
+        _tool_schemas,
+        _tool_registry,
+        callback,
+        _full_response,
+        _safety_guard,
+        _configurable,
+    ):
+        received['messages'] = provider_messages
+        await callback.end()
+
+    with patch.object(agentic, 'get_user_timezone', return_value='UTC'), patch.object(
+        agentic, '_get_agentic_qa_prompt', return_value='SYSTEM'
+    ), patch.object(agentic, 'load_app_tools', return_value=[]), patch.object(
+        agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False)
+    ), patch.object(
+        agentic, '_convert_tools', return_value=([], {})
+    ), patch.object(
+        agentic, '_run_openai_agent_stream', new=capture_agent_stream
+    ):
+        chunks = [
+            chunk
+            async for chunk in agentic.execute_agentic_chat_stream(
+                'uid1',
+                messages,
+                app=None,
+                callback_data={},
+                chat_session=None,
+                current_datetime_block='<current_datetime>now</current_datetime>',
+                tz='UTC',
+            )
+        ]
+
+    assert chunks == [f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}', None]
+    assert received['messages'][-2]['content'] == 'Part one ends here.'
+    assert received['messages'][-1]['content'].startswith(
+        '<current_datetime>now</current_datetime>\n\nContinue\n\n<continuation_request>'
+    )
 
 
 async def test_chat_router_and_agentic_share_one_setup_deadline():

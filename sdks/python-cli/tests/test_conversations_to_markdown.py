@@ -190,10 +190,15 @@ class TestConversationsToMarkdown(unittest.TestCase):
         # Single conversation with various valid fields unwraps properly
         self.assertEqual(c2m.extract_conversations({"id": "c1"}), [{"id": "c1"}])
         self.assertEqual(c2m.extract_conversations({"transcript_segments": []}), [{"transcript_segments": []}])
-        self.assertEqual(c2m.extract_conversations({"structured": {"title": "Test"}}), [{"structured": {"title": "Test"}}])
-        self.assertEqual(c2m.extract_conversations({"started_at": "2026-09-28T00:00:00Z"}), [{"started_at": "2026-09-28T00:00:00Z"}])
-        self.assertEqual(c2m.extract_conversations({"created_at": "2026-09-28T00:00:00Z"}), [{"created_at": "2026-09-28T00:00:00Z"}])
-
+        self.assertEqual(
+            c2m.extract_conversations({"structured": {"title": "Test"}}), [{"structured": {"title": "Test"}}]
+        )
+        self.assertEqual(
+            c2m.extract_conversations({"started_at": "2026-09-28T00:00:00Z"}), [{"started_at": "2026-09-28T00:00:00Z"}]
+        )
+        self.assertEqual(
+            c2m.extract_conversations({"created_at": "2026-09-28T00:00:00Z"}), [{"created_at": "2026-09-28T00:00:00Z"}]
+        )
 
     def test_empty_conversations_export_produces_no_files(self):
         """Exporting an empty list must create 0 files and leave the directory clean."""
@@ -203,6 +208,77 @@ class TestConversationsToMarkdown(unittest.TestCase):
 
             self.assertEqual(len(exported), 0)
             self.assertEqual(list(out_dir.glob("*.md")), [])
+
+    def test_strip_surrogates_keeps_valid_text(self):
+        """Only unpaired surrogates are dropped; all other text is preserved."""
+        self.assertEqual(c2m.strip_surrogates("plain"), "plain")
+        self.assertEqual(c2m.strip_surrogates("中文 ok"), "中文 ok")
+        self.assertEqual(c2m.strip_surrogates("emoji \U0001f600 ok"), "emoji \U0001f600 ok")
+        self.assertEqual(c2m.strip_surrogates("a\ud800b"), "ab")
+        self.assertEqual(c2m.strip_surrogates("\udfff"), "")
+
+    def test_rendered_note_is_always_utf8_encodable(self):
+        """Regression: the rendered note must always be writable as UTF-8.
+
+        json.loads accepts an escaped lone surrogate (e.g. "\\ud800") from a
+        malformed export. It reached the rendered note verbatim, so
+        `filepath.write_text(..., encoding="utf-8")` raised UnicodeEncodeError and
+        the whole conversation was lost. Every field that can carry free text is
+        exercised here.
+        """
+        conv = {
+            "id": "conv_\udfff",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {
+                "title": "bad \ud800 title",
+                "overview": "sum\udfffmary",
+                # read from structured.action_items, not a top-level key
+                "action_items": [{"description": "do \ud800 it", "completed": False}],
+            },
+            "transcript_segments": [{"text": "x\ud800y", "speaker": "SPEAKER_00"}],
+        }
+        md = c2m.conversation_to_markdown(conv)
+        # Must not raise: this is the exact call that failed before the fix.
+        md.encode("utf-8")
+
+    def test_frontmatter_has_no_surrogate_escapes(self):
+        """Escaped surrogates are forbidden YAML code points and break note metadata.
+
+        json.dumps would render a lone surrogate as the \\uD800 escape, which is
+        valid JSON but not valid YAML, so Obsidian/Notion fail to parse the
+        frontmatter. The scalars must be sanitized before escaping.
+        """
+        conv = {
+            "id": "conv_\ud800",
+            "started_at": "2026-09-17T12:00:00Z\ud800",
+            "structured": {"title": "bad \ud800 title", "category": "work\udfff"},
+            "source": "omi\udfff",
+        }
+        md = c2m.conversation_to_markdown(conv)
+        frontmatter = md.split("---")[1]
+        self.assertNotIn("\\ud800", frontmatter.lower())
+        self.assertNotIn("\\udfff", frontmatter.lower())
+        self.assertIn('title: "bad  title"', frontmatter)
+        self.assertIn('date: "2026-09-17T12:00:00Z"', frontmatter)
+        self.assertIn('source: "omi"', frontmatter)
+
+    def test_lone_surrogate_in_transcript_does_not_abort_export(self):
+        """The conversation still exports, minus only the unencodable code point."""
+        conv = {
+            "id": "12345678-3333-4333-8333-333333333333",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Sync", "overview": "ok"},
+            "transcript_segments": [
+                {"text": "hello \ud800 world", "speaker": "SPEAKER_00", "start": 1.0},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            exported = c2m.export_conversations([conv], output_dir=out_dir)
+
+            self.assertEqual(len(exported), 1)
+            text = exported[0].read_text(encoding="utf-8")
+            self.assertIn("hello  world", text)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,9 @@ class TranscriptSegment {
   bool speechProfileProcessed;
   String? sttProvider;
 
+  /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
+  String? speakerLabelSource;
+
   TranscriptSegment({
     required this.id,
     required this.text,
@@ -36,6 +39,7 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerLabelSource,
     int? speakerId,
   }) {
     final parts = speaker?.split('_') ?? [];
@@ -72,6 +76,7 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerLabelSource: generated.speakerLabelSource,
     );
   }
 
@@ -88,6 +93,7 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerLabelSource: speakerLabelSource,
     );
   }
 
@@ -183,12 +189,14 @@ class TranscriptSegment {
     List<Person>? people,
     String? ownerName,
     List<TranscriptSegment>? numberingSegments,
+    bool unresolved = false,
   }) {
     final names = SpeakerNames.forSegments(
       numberingSegments ?? segments,
       people: people ?? SharedPreferencesUtil().cachedPeople,
       ownerName: ownerName ?? SharedPreferencesUtil().givenName,
       l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+      unresolved: unresolved,
     );
     final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);

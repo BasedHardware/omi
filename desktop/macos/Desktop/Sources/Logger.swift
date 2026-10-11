@@ -256,6 +256,11 @@ private func writeToLogFile(_ data: Data) {
 
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
@@ -326,6 +331,11 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Write to log file synchronously — guaranteed to persist even if the app terminates immediately after.
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -339,6 +349,11 @@ func logSync(_ message: String) {
 
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -674,6 +689,11 @@ func logError(
   fileID: StaticString = #fileID,
   function: StaticString = #function
 ) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(error.map { "\(message): \($0.localizedDescription)" } ?? message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message

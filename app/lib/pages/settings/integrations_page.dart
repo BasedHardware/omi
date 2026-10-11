@@ -9,8 +9,10 @@ import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
+import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/services/integrations/gmail_service.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
@@ -128,9 +130,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   /// The app catalog below the connected services (what the Apps tab loaded).
   Future<void> _loadApps() async {
     try {
-      final appProvider = context.read<AppProvider>();
-      if (appProvider.apps.isEmpty) await appProvider.getApps();
-      if (mounted && appProvider.popularApps.isEmpty) await appProvider.getPopularApps();
+      await context.read<AppProvider>().ensureCatalogLoaded();
     } catch (e, s) {
       Logger.handle(e, s, message: 'Error loading the app catalog on Integrations');
     }
@@ -155,6 +155,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Future<void> _loadFromBackend() async {
+    unawaited(context.read<MessagingChannelsProvider>().load());
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
     await context.read<IntegrationProvider>().loadFromBackend();
@@ -462,6 +463,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
               sliver: SliverList.list(
                 children: [
+                  const ChatAppsIntegrationsEntry(),
                   ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
@@ -469,21 +471,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   ),
                   _buildCreateYourOwnAppTile(),
                   _buildAddMcpServerTile(),
-                  Padding(
-                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
-                        const SizedBox(width: OmiSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            context.l10n.integrationsFooter,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),

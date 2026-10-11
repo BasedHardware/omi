@@ -518,9 +518,15 @@ def journey_metrics(events: Sequence[Event], *, as_of: datetime) -> dict[str, An
         )
 
     for event in events:
-        if event.name in {"Product Journey Started", "Recording Started", "Phone Mic Recording Started"}:
+        if event.name in {"Product Journey Started", "Recording Requested", "Recording Started", "Phone Mic Recording Started"}:
             key = event.correlation_id or event.event_id or f"row:{id(event)}"
-            attempts.setdefault(key, {"started": event, "first_result": None, "outcome": None})
+            attempt = attempts.setdefault(key, {"started": event, "first_result": None, "outcome": None})
+            started = attempt["started"]
+            # Requested is the attempt boundary, independent of export row order.
+            # Historical clients emit only Started. Earliest same-kind event wins.
+            priority = lambda row: (row.name != "Recording Requested", row.occurred_at, row.event_id)
+            if priority(event) < priority(started):
+                attempt["started"] = event
     for event in events:
         if event.name in {"Product Journey First Result", "Transcribe Later Recording Processed"}:
             key = event.correlation_id or event.event_id or f"row:{id(event)}"
@@ -785,7 +791,7 @@ def operational_observation_metrics(events: Sequence[Event]) -> dict[str, Any]:
     starts = {
         str(event.prop("recording_id", "recording_session_id", default=""))
         for event in events
-        if event.name in {"Recording Started", "Phone Mic Recording Started"}
+        if event.name in {"Recording Requested", "Recording Started", "Phone Mic Recording Started"}
         and str(event.prop("recording_id", "recording_session_id", default="")).strip()
     }
     audio = {
@@ -844,6 +850,7 @@ def recording_linkage_metrics(events: Sequence[Event]) -> dict[str, Any]:
     unknown, never inferred from timestamp proximity.
     """
     recording_names = {
+        "Recording Requested",
         "Recording Started",
         "Recording Completed",
         "Recording Start Failed",

@@ -38,8 +38,8 @@ class _AudioRingBuffer:
     def get_time_range(self):
         return 0.0, 60.0
 
-    def extract(self, _start, _end):
-        return b'\x00\x00' * 32000
+    def extract(self, start, end):
+        return b'\x00\x00' * round((end - start) * 16000)
 
 
 @pytest.mark.anyio

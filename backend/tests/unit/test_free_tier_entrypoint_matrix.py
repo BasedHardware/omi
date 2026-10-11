@@ -77,6 +77,10 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     def put(mod: ModuleType, attr: str, value: Any) -> None:
         setattr(mod, attr, value)
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    put(refresh, 'preserve', lambda *a, **k: False)
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     put(database_pkg, '__path__', [str(_BACKEND / 'database')])
     add('database', database_pkg)
@@ -84,6 +88,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     client_mod = ModuleType('database._client')
     put(client_mod, 'db', MagicMock(name='db'))
     put(client_mod, 'get_firestore_client', lambda: getattr(client_mod, 'db'))
+    put(client_mod, 'get_data_plane_firestore_client', lambda: getattr(client_mod, 'db'))
     put(client_mod, 'document_id_from_seed', lambda seed: 'seed-id')
     add('database._client', client_mod)
 
@@ -152,12 +157,9 @@ def _build_fakes() -> dict[str, ModuleType | None]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())

@@ -537,3 +537,18 @@ The Flutter app parses these to show:
     WebSocket transcription and STT providers
   </Card>
 </CardGroup>
+
+
+## Messaging provider adapters
+
+Telegram and iMessage integrations consume the same `run_chat_turn` service as app
+chat, with a provider adapter for webhook verification, message normalization and
+reply delivery. Each linked channel has its own chat session and uses the shared
+memory and task tools. Files use the existing chat file store; voice messages use
+the existing prerecorded speech-to-text service before becoming a chat turn.
+
+Provider webhooks are acknowledged after durable inbox admission. A separate worker
+runs the turn, checks the active account link before delivery, and records provider
+receipts. The adapter contract tests and sanitized payload replay suite live under
+`backend/testing/messaging/`. The manual dev harness is separate from CI and uses
+dedicated test accounts. This source integration does not establish live availability.

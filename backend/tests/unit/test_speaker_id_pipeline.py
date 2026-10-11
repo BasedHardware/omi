@@ -140,6 +140,7 @@ for _real_import in (
 _install_module("database._client", MagicMock())
 _conversations_mod = ModuleType("database.conversations")
 _conversations_mod.get_conversation = MagicMock(return_value=None)
+_conversations_mod.decode_manual_speaker_assignments = MagicMock()
 _install_module("database.conversations", _conversations_mod)
 
 _users_mod = ModuleType("database.users")

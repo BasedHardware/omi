@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-billing-payer-inferred-from-transport-status",
+  "violated_contract": "A billing rejection shared by managed and BYOK requests must not identify the account owner or assert which credentials were used from its HTTP status alone. Displayed billing copy must retain its non-retryable classification when another surface classifies it again.",
+  "canonical_prevention": "The shared AgentErrorClassifier emits source-unattributed billing copy for transport and credit-balance errors, recognizes its canonical sentence and previously shipped billing copy before generic plan-limit advice, and retains explicit plan-limit precedence. Provider-specific attribution requires independent routing evidence, not a transport-status inference.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/AgentErrorClassifierTests.swift",
+    "desktop/macos/Desktop/Tests/ChatTurnFailureNoticeTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift",
+    "desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift"
+  ],
+  "status": "open"
+}

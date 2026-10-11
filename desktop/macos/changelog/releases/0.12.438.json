@@ -1,0 +1,7 @@
+{
+  "version": "0.12.438",
+  "date": "2026-10-03",
+  "changes": [
+    "Assistant voice now uses the shared Gemini voice picker (30 voices) synced with the mobile app — spoken replies and live voice sessions follow your choice."
+  ]
+}

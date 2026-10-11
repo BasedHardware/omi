@@ -412,6 +412,102 @@ extension AppState {
     }
   }
 
+  enum LiveSpeakerAssignment {
+    struct Context {
+      let backendConversationId: String?
+      let sessionId: Int64?
+    }
+
+    @MainActor
+    static func run(
+      context: Context,
+      isCurrent: @MainActor () -> Bool,
+      persistBackend: (String) async throws -> [String],
+      persistLocal: (Int64) async throws -> Int,
+      flushPendingWrites: () async -> Void,
+      notifySocket: ([String]) -> Void,
+      applyAssignment: @MainActor () -> Void
+    ) async -> Bool {
+      guard isCurrent() else { return false }
+      if let backendId = context.backendConversationId {
+        let acknowledgedIds: [String]
+        do {
+          acknowledgedIds = try await persistBackend(backendId)
+        } catch {
+          return false
+        }
+        guard isCurrent() else { return false }
+        notifySocket(acknowledgedIds)
+        applyAssignment()
+        if isCurrent(), let sessionId = context.sessionId {
+          _ = try? await persistLocal(sessionId)
+        }
+        return true
+      }
+
+      await flushPendingWrites()
+      guard isCurrent() else { return false }
+      guard let sessionId = context.sessionId else { return false }
+      let updated: Int
+      do {
+        updated = try await persistLocal(sessionId)
+      } catch {
+        return false
+      }
+      guard updated > 0 else { return false }
+      guard isCurrent() else { return false }
+      applyAssignment()
+      return true
+    }
+  }
+
+  func assignLiveSpeaker(speakerId: Int, personId: String) async -> Bool {
+    guard isTranscribing else { return false }
+    let context = LiveSpeakerAssignment.Context(
+      backendConversationId: currentBackendConversationId ?? pendingBackendConversationId,
+      sessionId: currentSessionId
+    )
+    let ownerGeneration = ownerScopeGeneration
+    let generation = recordingGeneration
+    let useLocalSTT = sttSession.useLocalSTT
+    let isCurrent: @MainActor () -> Bool = { [weak self] in
+      guard let self else { return false }
+      return self.isTranscribing
+        && self.ownerScopeGeneration == ownerGeneration
+        && self.recordingGeneration == generation
+        && self.currentSessionId == context.sessionId
+        && (self.currentBackendConversationId ?? self.pendingBackendConversationId)
+          == context.backendConversationId
+        && self.sttSession.useLocalSTT == useLocalSTT
+    }
+
+    return await LiveSpeakerAssignment.run(
+      context: context,
+      isCurrent: isCurrent,
+      persistBackend: { backendId in
+        let updated = try await APIClient.shared.assignConversationSpeaker(
+          conversationId: backendId, speakerId: speakerId, personId: personId)
+        guard updated.id == backendId else { throw APIError.invalidResponse }
+        return updated.transcriptSegments
+          .filter { $0.speakerId == speakerId && $0.personId == personId && !$0.isUser }
+          .compactMap(\.id)
+      },
+      persistLocal: { sessionId in
+        try await TranscriptionStorage.shared.updateLiveSpeakerAssignment(
+          sessionId: sessionId, speakerId: speakerId, personId: personId)
+      },
+      flushPendingWrites: { await flushTranscriptPersistence() },
+      notifySocket: { [weak self] segmentIds in
+        self?.transcriptionService?.notifySpeakerAssigned(
+          personId: personId, segmentIds: segmentIds)
+      },
+      applyAssignment: { [weak self] in
+        self?.liveSpeakerPersonMap[speakerId] = personId
+        self?.liveManualSpeakerPersonMap[speakerId] = personId
+      }
+    )
+  }
+
   // MARK: - Backend Segment Handling
 
   /// Handle incoming transcript segments from Python backend `/v4/listen`.

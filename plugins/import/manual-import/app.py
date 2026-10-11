@@ -8,6 +8,8 @@ import openai
 import httpx
 from dotenv import load_dotenv
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -308,7 +310,7 @@ def submit_memories():
                 time.sleep(0.5)  # Half second delay between requests
 
             # Send the request to OMI API with dynamic user_id
-            response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data))
+            response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data), timeout=REQUEST_TIMEOUT)
 
             # Record result
             result = {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,25 +9,37 @@ import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 
-Future<void> pump(WidgetTester tester, GuidedVoiceController flow,
-    {double scale = 1, Size size = const Size(390, 844), VoidCallback? skip, VoidCallback? next}) async {
+Future<void> pump(
+  WidgetTester tester,
+  GuidedVoiceController flow, {
+  double scale = 1,
+  Size size = const Size(390, 844),
+  VoidCallback? skip,
+  VoidCallback? next,
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(MaterialApp(
-    theme: ThemeData.dark(),
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate
-    ],
-    supportedLocales: AppLocalizations.supportedLocales,
-    builder: (context, child) =>
-        MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
-    home: Scaffold(body: SpeechProfileWidget(controller: flow, goNext: next ?? () {}, onSkip: skip ?? () {})),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData.dark(),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: SpeechProfileWidget(controller: flow, goNext: next ?? () {}, onSkip: skip ?? () {}),
+      ),
+    ),
+  );
 }
 
 void main() {
@@ -39,6 +52,15 @@ void main() {
     expect(find.text('Let Omi get to know you'), findsOneWidget);
     expect(io.audio, isNull);
     expect(find.textContaining('My name is'), findsOneWidget);
+    // No subtext: the title and the sentence carry the step. One "1 of 4", no second progress bar.
+    expect(find.textContaining('Finish four short sentences'), findsNothing);
+    expect(find.textContaining('Say the whole sentence'), findsNothing);
+    expect(find.text('1 of 4'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    // One way out of the whole step before recording; sentence-skip belongs to recording.
+    expect(find.byKey(const Key('introduction_skip_prompt')), findsNothing);
+    expect(find.text('Start Speaking'), findsOneWidget);
+    expect(find.text('Try Another Prompt'), findsOneWidget);
     await tester.tap(find.byKey(const Key('introduction_another')));
     await tester.pump();
     expect(find.textContaining('My favorite food'), findsOneWidget);
@@ -58,6 +80,11 @@ void main() {
     io.speak();
     await tester.pump();
     expect(find.byKey(const Key('introduction_audio_level')), findsOneWidget);
+    // Recording: Next leads, Pause and Skip Question are small, and the whole-step Skip is gone.
+    expect(find.byKey(const Key('introduction_pause')), findsOneWidget);
+    expect(find.byKey(const Key('introduction_skip_prompt')), findsOneWidget);
+    expect(find.byKey(const Key('speech_profile_skip_intro')), findsNothing);
+    expect(find.text('Listening'), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('introduction_next')));
     await tester.tap(find.byKey(const Key('introduction_next')));
     await tester.pumpAndSettle();
@@ -69,9 +96,34 @@ void main() {
     await flow.skipPrompt();
     await tester.pumpAndSettle();
     expect(find.text('Here is what I heard'), findsOneWidget);
+    expect(find.text('Let Omi get to know you'), findsNothing, reason: 'review has one heading');
+    expect(find.text("Uncheck anything you don't want saved."), findsOneWidget);
+    expect(find.textContaining('Saves your voice profile'), findsNothing);
     expect(find.byType(TextFormField), findsOneWidget);
     expect(find.text('Voice profile saved'), findsNothing);
     expect(io.remembered, isEmpty);
+  });
+
+  testWidgets('the silence hint shows only while the microphone hears nothing', (tester) async {
+    final io = FakeVoiceIO();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await pump(tester, flow);
+    await tester.tap(find.byKey(const Key('speech_profile_start')));
+    await tester.pump();
+    expect(find.byKey(const Key('introduction_silence_hint')), findsNothing, reason: 'nothing heard yet');
+    io.speak(3); // three seconds of silence
+    await tester.pump();
+    expect(find.byKey(const Key('introduction_silence_hint')), findsOneWidget);
+    final loud = Uint8List(3200);
+    final data = ByteData.sublistView(loud);
+    for (var i = 0; i + 1 < loud.length; i += 2) {
+      data.setInt16(i, i.isEven ? 4000 : -4000, Endian.little);
+    }
+    io.audio!(loud);
+    await tester.pump();
+    expect(find.byKey(const Key('introduction_silence_hint')), findsNothing);
+    await flow.pause();
   });
 
   testWidgets('short phone and large text can scroll to actions without overflow', (tester) async {
@@ -120,7 +172,7 @@ void main() {
     var exits = 0;
     await pump(tester, flow, next: () => exits++);
     expect(find.text('Ship Omi'), findsOneWidget);
-    expect(find.text('Save and finish'), findsOneWidget);
+    expect(find.text('Save and Finish'), findsOneWidget);
     await tester.tap(find.byKey(const Key('introduction_save_all')));
     await tester.pumpAndSettle();
     expect(io.uploads, hasLength(1));
@@ -140,8 +192,8 @@ void main() {
     io.speak();
     await flow.next();
     await pump(tester, flow);
-    await tester.ensureVisible(find.text('Use original wording'));
-    await tester.tap(find.text('Use original wording'));
+    await tester.ensureVisible(find.text('Use Original Wording'));
+    await tester.tap(find.text('Use Original Wording'));
     await tester.pumpAndSettle();
     expect(find.text('My goal is to ship Omi.'), findsOneWidget);
     expect(flow.answers.single.text, io.text);

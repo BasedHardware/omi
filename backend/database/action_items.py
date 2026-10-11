@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
-
+from database.dream_dirty import after_write
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
     GoogleAPICallError,
@@ -12,6 +12,10 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.action_items_cache import bump_action_items_list_version
+from database.action_item_codec import (
+    prepare_action_item_for_read,
+    prepare_action_item_for_write as _prepare_action_item_for_write,
+)
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from database.firestore_index_registry import (
@@ -78,7 +82,6 @@ def validate_task_relationship_in_transaction(
 
 def typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
-
     Returns an empty dict when the document has no fields (None payload),
     so callers can safely mutate the result without None checks.
     """
@@ -202,99 +205,10 @@ def get_visible_action_item_ids(
     return visible_ids
 
 
-def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
-    """Prepare action item data for writing to database"""
-    action_item_data = dict(action_item_data)
-    if not partial or 'status' in action_item_data or 'completed' in action_item_data:
-        status = action_item_data.get('status')
-        completed = action_item_data.get('completed')
-        if status is None:
-            status = 'completed' if completed is True else 'active'
-            action_item_data['status'] = status
-        if completed is None:
-            action_item_data['completed'] = status == 'completed'
-        elif completed != (status == 'completed'):
-            raise ValueError('completed must agree with canonical status')
-    if not partial:
-        action_item_data.setdefault('owner', 'unknown')
-        action_item_data.setdefault('source', 'legacy')
-        action_item_data.setdefault('provenance', [])
-        action_item_data.setdefault('sort_order', 0)
-        action_item_data.setdefault('indent_level', 0)
-    else:
-        for field in ('description', 'owner', 'source', 'provenance', 'sort_order', 'indent_level', 'exported'):
-            if field in action_item_data and action_item_data.get(field) is None:
-                action_item_data.pop(field)
-    # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
-    # ISO strings or datetime objects from tool-/LLM-created action items (extraction
-    # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects
-    # tz-naive datetimes, and a failed batch create on the fire-and-forget
-    # postprocess path silently drops extracted tasks. Mirror
-    # ``api_key_metadata._coerce_utc_datetime`` / ``mcp_action_items.parse_due_at``:
-    # parse strings tolerantly, attach UTC to naive values, drop only malformed
-    # / out-of-range values (ValueError or OverflowError from UTC normalization)
-    # so a single bad field cannot 500 the whole create/update or batch.
-    for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
-        value = action_item_data.get(date_field)
-        if value is None or value == '':
-            if date_field in action_item_data and value == '':
-                action_item_data.pop(date_field, None)
-            continue
-        try:
-            if isinstance(value, datetime):
-                parsed = value
-            elif isinstance(value, str):
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            else:
-                logger.warning(
-                    "Dropping non-datetime %s type=%s on action item write",
-                    date_field,
-                    type(value).__name__,
-                )
-                action_item_data.pop(date_field, None)
-                continue
-
-            # OverflowError: boundary aware values whose offset conversion leaves
-            # Python's datetime range (same tolerance as api_key_metadata).
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            else:
-                parsed = parsed.astimezone(timezone.utc)
-        except (OverflowError, ValueError):
-            logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
-            action_item_data.pop(date_field, None)
-            continue
-        action_item_data[date_field] = parsed
-
-    return action_item_data
-
-
-def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Prepare action item data for reading from database"""
-    # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
-    # won't overwrite an existing null, so drop it first and let status derive a concrete
-    # bool — strict client parsers reject a null `completed` and drop the whole page.
-    if action_item_data.get('completed') is None:
-        action_item_data.pop('completed', None)
-    action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
-    action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
-    action_item_data.setdefault('owner', 'unknown')
-    action_item_data.setdefault('source', 'legacy')
-    action_item_data.setdefault('provenance', [])
-    action_item_data.setdefault('sort_order', 0)
-    action_item_data.setdefault('indent_level', 0)
-    for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
-        if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
-    return action_item_data
-
-
-# *****************************
-# ********** CREATE ***********
 # *****************************
 
 
+@after_write('action_items')
 def create_action_item(
     uid: str,
     action_item_data: Dict[str, Any],
@@ -404,11 +318,12 @@ def create_action_item(
     return created_id
 
 
+@after_write('action_items')
 def create_action_items_batch(
     uid: str,
     action_items_data: List[Dict[str, Any]],
     *,
-    document_ids: Optional[List[str]] = None,
+    document_ids: Optional[List[Optional[str]]] = None,
 ) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -416,6 +331,7 @@ def create_action_items_batch(
     Args:
         uid: User ID
         action_items_data: List of action item data dictionaries
+        document_ids: Optional per-item ids; a None entry gets a fresh Firestore id
 
     Returns:
         List of created action item IDs
@@ -443,9 +359,8 @@ def create_action_items_batch(
         if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = (
-            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
-        )
+        reserved_id = document_ids[index] if document_ids is not None else None
+        doc_ref = action_items_ref.document(reserved_id) if reserved_id is not None else action_items_ref.document()
         prepared_items.append(action_item_data)
         document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
@@ -551,6 +466,7 @@ ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'export_date',
     'export_platform',
     'apple_reminder_id',
+    'sync_requested',
 )
 
 
@@ -576,6 +492,7 @@ def _stream_action_items_bounded(
     *,
     max_docs: int,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> tuple[List[Dict[str, Any]], int]:
     """Stream at most max_docs Firestore documents; skip soft-deleted rows.
 
@@ -590,7 +507,7 @@ def _stream_action_items_bounded(
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
-    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
+    query = query.select([*ACTION_ITEMS_LIST_SELECT_FIELDS, *extra_fields]).limit(max_docs)
     if budget is None:
         iterator = query.stream()
     else:
@@ -796,6 +713,7 @@ def get_action_items(
     limit: Optional[int] = None,
     offset: int = 0,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -848,7 +766,9 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget), budget=budget)
+        items, docs = _stream_action_items_bounded(
+            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+        )
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
@@ -948,18 +868,13 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
     return None
 
 
-def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
-    """
-    Get all action items for a specific conversation.
+def get_action_items_by_conversation(
+    uid: str, conversation_id: str, *, extra_fields: tuple[str, ...] = ()
+) -> List[Dict[str, Any]]:
+    """A conversation's live action items; ``extra_fields`` widens the projection of its bucket reads.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-
-    Returns:
-        List of action items for the conversation
-    """
-    return get_action_items(uid, conversation_id=conversation_id)
+    Legacy rows harvested for a missing ``completed`` keep the plain list projection."""
+    return get_action_items(uid, conversation_id=conversation_id, extra_fields=extra_fields)
 
 
 def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Dict[str, int]:
@@ -1043,6 +958,7 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 # *****************************
 
 
+@after_write('action_items')
 def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
     """
     Update an action item.
@@ -1094,6 +1010,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         )
         if updated:
             bump_action_items_list_version(uid)
+            if update_data.get('completed') is True:
+                _record_followup_completion(uid, action_item_id)
         return updated
 
     # Check if exists
@@ -1105,9 +1023,50 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    if update_data.get('completed') is True:
+        _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
+
+
+@after_write('action_items')
+def restore_channel_write(
+    uid: str, action_item_id: str, expected: Dict[str, Any], before: Optional[Dict[str, Any]]
+) -> bool:
+    """Undo a channel task write only if the complete observed row is unchanged."""
+    import json
+
+    ref = db.collection('users').document(uid).collection(action_items_collection).document(action_item_id)
+
+    @firestore.transactional
+    def apply(tx):
+        snapshot = ref.get(transaction=tx)
+        if not snapshot.exists:
+            return False
+        current = typed_doc(snapshot)
+        current['id'] = snapshot.id
+        current = prepare_action_item_for_read(current)
+        if json.dumps(current, sort_keys=True, default=str) != json.dumps(expected, sort_keys=True, default=str):
+            return False
+        if before is None:
+            tx.delete(ref)
+        else:
+            data = {field: before.get(field) for field in ('description', 'completed', 'completed_at', 'due_at')}
+            for field in ('due_at', 'completed_at'):
+                value = data[field]
+                if isinstance(value, str):
+                    data[field] = datetime.fromisoformat(value)
+            data['updated_at'] = datetime.now(timezone.utc)
+            tx.update(ref, _prepare_action_item_for_write(data, partial=True))
+        return True
+
+    changed = run_with_transaction_contention_retry(db.transaction, apply, operation_name='channel_task_undo')
+    if changed:
+        bump_action_items_list_version(uid)
+        if before is None:
+            _purge_proactivity_source(uid, action_item_id)
+    return changed
 
 
 def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> BatchMutationResult:
@@ -1173,6 +1132,12 @@ def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = 
 # *****************************
 
 
+def _purge_proactivity_source(uid: str, item_id: str) -> None:
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='action_item', source_id=item_id, firestore_client=db)
+
+
 def delete_action_item(uid: str, action_item_id: str) -> bool:
     """
     Delete an action item.
@@ -1189,10 +1154,12 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Check if exists
     if not action_item_ref.get().exists:
+        _purge_proactivity_source(uid, action_item_id)
         return False
 
     # Delete the document
     action_item_ref.delete()
+    _purge_proactivity_source(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1226,6 +1193,8 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    for item_id in action_item_ids:
+        _purge_proactivity_source(uid, item_id)
     bump_action_items_list_version(uid)
     return list(action_item_ids)
 
@@ -1250,9 +1219,11 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
 
     for doc in docs:
         batch.delete(doc.reference)
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1263,6 +1234,8 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     if count > 0:
         batch.commit()
 
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
 
@@ -1288,6 +1261,7 @@ def retire_action_items_for_conversation(
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1304,6 +1278,7 @@ def retire_action_items_for_conversation(
                 'updated_at': now,
             },
         )
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1312,6 +1287,8 @@ def retire_action_items_for_conversation(
             count = 0
     if count > 0:
         batch.commit()
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
     return total
@@ -1417,6 +1394,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             result.missing_ids.append(entry['id'])
             continue
         result.updated_ids.append(entry['id'])
+        if update_data.get('completed') is True:
+            _record_followup_completion(uid, entry['id'])
 
     if result.updated_ids:
         bump_action_items_list_version(uid)
@@ -1598,3 +1577,12 @@ def get_scores(
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
     }
+
+
+def _record_followup_completion(uid: str, task_id: str) -> None:
+    from database.proactivity_producers import record_task_completion
+
+    try:
+        record_task_completion(uid, task_id, firestore_client=db)
+    except Exception:
+        logger.info('commitment_followup outcome_unavailable')

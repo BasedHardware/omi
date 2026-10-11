@@ -1,0 +1,44 @@
+version: 2
+name: conversation-summary-app-picker
+tier: manual
+description: Installed summary app selection, search, and empty states in conversation detail
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummaryAppPicker.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Prepare installed and uninstalled apps
+    do: "In a test account, install two memory-capable apps with different authors. Leave another memory-capable app uninstalled and install a chat-only app. Open a conversation with a summary."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2
+    name: Open the summary app picker
+    do: "Choose Change beside the conversation summary. Verify the picker lists the two installed memory-capable apps, omits the uninstalled and chat-only apps, and shows the Search installed apps field. The current summary app has a selected marker."
+    expect:
+      text_visible:
+        - Select App
+
+  - id: S3
+    name: Search by name and author
+    do: "In the search field (accessibility identifier summary-app-search), type part of one installed app's name, then clear it and type part of the other app's author. Each search must show only matching installed apps. Type an unmatched term and verify No Apps Found; choose Clear Search to restore the list."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Preserve selection and preferred markers
+    do: "Set one listed app as Default with its context menu, then close and reopen the picker. Verify its Default marker remains, choose the other installed app, and verify the conversation reprocesses with that app as the selected summary source."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5
+    name: Empty installed-app state offers discovery
+    do: "In a test account with no installed memory-capable apps, reopen the picker. Verify No Summary Apps Installed appears. Choose Browse Apps and verify the Apps destination opens."
+    expect:
+      text_visible:
+        - Apps

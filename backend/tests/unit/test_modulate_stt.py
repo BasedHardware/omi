@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
     SafeModulateSocket,
@@ -15,6 +16,11 @@ from utils.stt.streaming import (
     sort_segments_by_start,
     sort_transcript_segments_in_place,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 def _exercise_abrupt_modulate_close():
@@ -34,7 +40,7 @@ def _exercise_abrupt_modulate_close():
     loop = asyncio.new_event_loop()
 
     async def run():
-        class ObservedSendQueue(asyncio.Queue[bytes]):
+        class ObservedSendQueue(AudioSendQueue[bytes]):
             def __init__(self):
                 super().__init__(maxsize=2000)
                 self.get_count = 0

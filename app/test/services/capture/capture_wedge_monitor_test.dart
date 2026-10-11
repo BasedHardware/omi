@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 
 void main() {
   late DateTime now;
@@ -51,6 +52,75 @@ void main() {
     flagEnabled = true;
   });
 
+  test('native recovery owns retries and only exhausted failure projects a banner', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    monitor.setNativeIngressOwner('dev-a', true);
+    CaptureIngressHealth health(String phase) => CaptureIngressHealth(
+          phase: phase,
+          generation: 'epoch-1',
+          reason: phase,
+          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+          subscriptionConfirmed: phase == 'quiet',
+          unverifiedSinceMs: 1234,
+        );
+    for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
+      monitor.observeIngressHealth('dev-a', health(phase));
+      zeroSession(monitor);
+      monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull);
+      expect(retriedDevices, isEmpty);
+    }
+    monitor.observeIngressHealth('dev-a', health('actionRequired'));
+    expect(monitor.visiblePrompt!.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+    monitor.onTranscriptObserved('dev-a');
+    expect(monitor.visiblePrompt, isNotNull, reason: 'cached transcripts do not prove current audio ingress');
+    monitor.retryVisibleEpisode();
+    await pumpEventQueue();
+    expect(retriedDevices, isEmpty, reason: 'banner must not bypass native persistent budget');
+    monitor.observeIngressHealth('dev-a', health('flowing'));
+    expect(monitor.visiblePrompt, isNull);
+    expect(forEvent('Capture Ingress Health').singleWhere((e) => e['phase'] == 'actionRequired')['build'], '987');
+    expect(forEvent('Capture Ingress Health').map((e) => e['phase']), [
+      'unverified',
+      'repairing',
+      'reconnecting',
+      'quiet',
+      'actionRequired',
+      'flowing',
+    ]);
+  });
+
+  test('Android CCCD recovery suppresses legacy retries until acknowledgement clears it', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    monitor.observeIngressHealth(
+      'dev-a',
+      const CaptureIngressHealth(
+        phase: 'recovering',
+        generation: 'android',
+        reason: CaptureIngressHealth.cccdRecoveryReason,
+        validUntilMs: 0,
+        subscriptionConfirmed: false,
+        unverifiedSinceMs: 1,
+      ),
+    );
+    for (var i = 0; i < 6; i++) {
+      zeroSession(monitor);
+      monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
+    }
+    await pumpEventQueue();
+    expect(monitor.visiblePrompt, isNull);
+    expect(retriedDevices, isEmpty);
+    monitor.observeIngressHealth('dev-a', null);
+    for (var i = 0; i < 3; i++) {
+      zeroSession(monitor);
+    }
+    await pumpEventQueue();
+    expect(retriedDevices, ['dev-a'], reason: 'healthy Android regains its ordinary watchdog');
+  });
+
   group('zero-byte session streak', () {
     test('two zero-byte sessions do not declare a wedge', () async {
       final monitor = makeMonitor(withRetry: true);
@@ -77,7 +147,10 @@ void main() {
       expect(detected.single['source'], 'omi');
       expect(detected.single['consecutive_zero_byte_sessions'], 3);
       expect(detected.single['app_build'], '987');
+      expect(detected.single['build'], '987');
       expect(detected.single['platform'], 'ios');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
     });
 
     test('three zero-byte sessions exactly 10 minutes apart declare', () async {
@@ -128,6 +201,26 @@ void main() {
       zeroSession(monitor);
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNotNull);
+    });
+
+    test('native ownership arriving while the feature gate is pending blocks the declaration', () async {
+      final gate = Completer<bool>();
+      final monitor = makeMonitor(featureGate: () => gate.future, withRetry: true);
+      zeroSession(monitor);
+      zeroSession(monitor);
+      zeroSession(monitor); // streak reached; declaration waits on the gate
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+
+      // Ownership lands while the gate is still pending.
+      monitor.setNativeIngressOwner('dev-a', true);
+      gate.complete(true);
+      await pumpEventQueue();
+
+      // The legacy episode must not be declared behind native ownership: it
+      // would be invisible (owner guard hides it) yet block later declarations.
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      expect(retriedDevices, isEmpty);
     });
 
     test('a session that never reached connected does not count', () async {
@@ -212,6 +305,9 @@ void main() {
       final detected = forEvent('Capture Wedge Detected');
       expect(detected.single['trigger'], 'rapid_reconnects');
       expect(detected.single['source'], 'omi');
+      expect(detected.single['build'], '987');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
       expect(retriedDevices, ['dev-a']);
     });
 
@@ -350,6 +446,53 @@ void main() {
       expect(monitor.visiblePrompt, isNull);
     });
 
+    test('a transcript during an ingress alert still releases the telemetry slot', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.setNativeIngressOwner('dev-a', true);
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'actionRequired',
+          generation: 'epoch-1',
+          reason: 'recovery_exhausted',
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 1234,
+        ),
+      );
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+
+      // A byte-producing session with no transcript declares the telemetry-only
+      // episode natively-owned devices can still get.
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+
+      // Transcript arrives during the alert: the ingress failure must stay
+      // (native owns it), but the telemetry slot must be released so later
+      // declarations are not blocked.
+      monitor.onTranscriptObserved('dev-a');
+      await pumpEventQueue();
+
+      expect(
+        monitor.visiblePrompt?.trigger,
+        CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+        reason: 'the ingress failure stays owned by native recovery',
+      );
+      // The telemetry episode is gone; three more no-transcript sessions can
+      // declare a fresh one instead of being blocked by the stale slot.
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+      expect(
+        forEvent('Capture Wedge Detected').where((e) => e['trigger'] == 'bytes_sent_no_transcript'),
+        isNotEmpty,
+        reason: 'a stale telemetry slot must not block later declarations',
+      );
+    });
+
     test('two minutes of byte-producing silence tracks and retries without a prompt', () async {
       var transferRetries = 0;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
@@ -388,10 +531,7 @@ void main() {
       positiveSession(monitor);
       expect(
         forEvent('Capture Recovery Resolved').map((event) => event['trigger']),
-        containsAll([
-          CaptureWedgeMonitor.triggerBytesSentNoTranscript,
-          CaptureWedgeMonitor.triggerZeroByteStreak,
-        ]),
+        containsAll([CaptureWedgeMonitor.triggerBytesSentNoTranscript, CaptureWedgeMonitor.triggerZeroByteStreak]),
       );
       expect(forEvent('Capture Recovery Resolved'), hasLength(2));
       monitor.dispose();
@@ -454,6 +594,120 @@ void main() {
     });
   });
 
+  group('connected no bytes', () {
+    test('five minutes with zero ingress bytes declares connected_no_bytes once', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor, deviceId: 'pendant-9');
+
+      now = now.add(const Duration(minutes: 4, seconds: 59));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+
+      now = now.add(const Duration(seconds: 1));
+      monitor.runConnectedWatchdog();
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, ['pendant-9']);
+      final detected = forEvent('Capture Wedge Detected');
+      expect(detected, hasLength(1));
+      expect(detected.single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      expect(detected.single['build'], '987');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
+      expect(detected.single['ingress_bytes'], 0);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
+      monitor.dispose();
+    });
+
+    test('ingress bytes resuming before five minutes do not declare', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor);
+
+      now = now.add(const Duration(minutes: 4, seconds: 30));
+      monitor.onBleIngressBytes('dev-a', 40);
+      now = now.add(const Duration(minutes: 4, seconds: 59));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      expect(retriedDevices, isEmpty);
+      expect(monitor.visiblePrompt, isNull);
+      monitor.dispose();
+    });
+
+    test('a native-owned silent link still retries the session device', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.setNativeIngressOwner('pendant-9', true);
+      connectedSession(monitor, deviceId: 'pendant-9');
+      now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, ['pendant-9']);
+      expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      monitor.dispose();
+    });
+
+    test('an in-progress CCCD recovery is not declared again', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'recovering',
+          generation: 'android',
+          reason: CaptureIngressHealth.cccdRecoveryReason,
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 1,
+        ),
+      );
+      connectedSession(monitor);
+      now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, isEmpty);
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      monitor.dispose();
+    });
+
+    test('a late check reports the age of the last ingress byte', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor);
+      now = now.add(const Duration(minutes: 1));
+      monitor.onBleIngressBytes('dev-a', 80);
+      now = now.add(const Duration(minutes: 6));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      expect(detected['build'], '987');
+      expect(detected['seconds_since_last_ingress_byte'], 360);
+      expect(detected['seconds_since_last_transcript'], -1);
+      monitor.dispose();
+    });
+
+    test('transcript age is measured from the transcript observation', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final handle = connectedSession(monitor);
+      monitor.onTranscriptObserved('dev-a');
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(detected['seconds_since_last_transcript'], 120);
+      expect(detected['seconds_since_last_ingress_byte'], -1);
+      expect(detected['build'], '987');
+      monitor.dispose();
+    });
+  });
+
   group('upload silence', () {
     test('two-hour local backlog tracks and wakes transfer without a prompt', () async {
       var transferRetries = 0;
@@ -468,6 +722,9 @@ void main() {
       final detected = forEvent('Capture Wedge Detected').single;
       expect(detected['pending_wal_count'], 4);
       expect(detected['oldest_pending_age_seconds'], 7200);
+      expect(detected['build'], '987');
+      expect(detected['seconds_since_last_ingress_byte'], -1);
+      expect(detected['seconds_since_last_transcript'], -1);
     });
 
     test('recent backlog stays quiet and a successful upload resolves an active episode', () async {
@@ -486,23 +743,39 @@ void main() {
   });
 
   group('storage retention risk', () {
-    test('cap engagement is surfaced once with eviction telemetry', () async {
+    test('count cap emits diagnostic telemetry once without a prompt or recovery', () async {
       var transferRetries = 0;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
       final engagedAt = now;
 
-      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
-      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
       await pumpEventQueue();
 
-      expect(transferRetries, 1);
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+      expect(transferRetries, 0);
+      expect(monitor.visiblePrompt, isNull);
       final detected = forEvent('Capture Wedge Detected').single;
-      expect(detected['evicted_wal_count'], 3);
+      expect(detected['blocked_wal_count'], 3);
       expect(detected['retained_wal_count'], 720);
-      expect(detected['retention_policy'], 'oldest_first_count_cap');
+      expect(detected['retention_policy'], 'admission_count_cap');
       monitor.dispose();
     });
+
+    for (final reason in ['disk_reserve', 'disk_space_unknown']) {
+      test('$reason still surfaces after count-cap diagnostics', () async {
+        var transferRetries = 0;
+        final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+        monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'count_cap');
+        await pumpEventQueue();
+        expect(monitor.visiblePrompt, isNull);
+        monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: reason);
+        await pumpEventQueue();
+        expect(transferRetries, 1);
+        expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+        expect(forEvent('Capture Wedge Detected').map((event) => event['block_reason']), ['count_cap', reason]);
+        monitor.dispose();
+      });
+    }
 
     test('storage risk stays visible alongside a quiet upload episode', () async {
       final monitor = makeMonitor(transferRetry: () async {});
@@ -510,7 +783,7 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
 
-      monitor.observeStorageAtRisk(engagedAt: now, evictedCount: 1, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
       await pumpEventQueue();
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
       expect(forEvent('Capture Wedge Detected'), hasLength(2));
@@ -601,6 +874,7 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
       expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+      expect(forEvent('Capture Recovery Resolved').single['build'], '987');
     });
 
     test('resolved fires once on the first positive session within 30 minutes', () async {
@@ -641,12 +915,14 @@ void main() {
       monitor.markPromptShown();
       monitor.markPromptShown();
       expect(forEvent('Capture Recovery Prompt Shown'), hasLength(1));
+      expect(forEvent('Capture Recovery Prompt Shown').single['build'], '987');
     });
 
     test('actioned telemetry records the surface', () {
       final monitor = makeMonitor();
       monitor.onRecoveryActioned(surface: 'banner');
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
+      expect(forEvent('Capture Recovery Actioned').single['build'], '987');
     });
   });
 

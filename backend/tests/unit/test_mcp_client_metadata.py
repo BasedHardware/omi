@@ -759,6 +759,7 @@ def test_client_record_shape_and_public_pkce(monkeypatch):
     assert client["client_secret_hash"] == ""
     assert client["metadata_host"] == "app.example.com"
     assert client["allowed_redirect_uri_prefixes"] == []
+    assert "people.cleanup" in client["allowed_scopes"]
 
 
 # --- Redis cache ------------------------------------------------------------

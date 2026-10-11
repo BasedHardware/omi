@@ -172,9 +172,14 @@ class MirrorTests(unittest.TestCase):
         same panel type — except the five no-mobile-data placeholders, which
         must be text panels in the same slots."""
         macos, mobile = load("omi-tv-macos"), load("omi-tv-mobile")
-        self.assertEqual(len(mobile["panels"]), len(macos["panels"]))
+        # Battery panels are mobile-only; the shared mirror is everything else.
+        mobile_panels = [
+            panel for panel in mobile["panels"]
+            if build_dashboards.base_title(panel) not in build_dashboards.MOBILE_BATTERY_TITLES
+        ]
+        self.assertEqual(len(mobile_panels), len(macos["panels"]))
         placeholder_norms = {self.normalize(t) for t in build_dashboards.DESKTOP_ONLY_TITLES}
-        for m_panel, mob_panel in zip(macos["panels"], mobile["panels"]):
+        for m_panel, mob_panel in zip(macos["panels"], mobile_panels):
             m_norm = self.normalize(m_panel["title"])
             self.assertEqual(m_norm, self.normalize(mob_panel["title"]))
             self.assertEqual(m_panel["gridPos"], mob_panel["gridPos"],
@@ -183,6 +188,57 @@ class MirrorTests(unittest.TestCase):
                 self.assertEqual(mob_panel["type"], "text", m_panel["title"])
             else:
                 self.assertEqual(mob_panel["type"], m_panel["type"], m_panel["title"])
+
+    def test_mobile_board_adds_battery_health_panels(self) -> None:
+        mobile = load("omi-tv-mobile")
+        by_title = {build_dashboards.base_title(panel): panel for panel in mobile["panels"]}
+        pendant = by_title[build_dashboards.PENDANT_DRAIN_TITLE]
+        phone = by_title[build_dashboards.PHONE_DRAIN_TITLE]
+        self.assertEqual(pendant["type"], "barchart")
+        self.assertEqual(phone["type"], "barchart")
+        self.assertEqual(pendant["datasource"]["uid"], "omi-admin-api")
+        self.assertEqual(phone["datasource"]["uid"], "omi-admin-api")
+        self.assertEqual(pendant["targets"][0]["root_selector"], "pendant_health")
+        self.assertEqual(phone["targets"][0]["root_selector"], "phone_health.series")
+        self.assertIn(
+            "/api/omi/stats/device-health?days=7",
+            pendant["targets"][0]["url"],
+        )
+        self.assertIn(
+            "/api/omi/stats/device-health?days=14",
+            phone["targets"][0]["url"],
+        )
+        self.assertNotIn("days=14", pendant["targets"][0]["url"])
+        self.assertEqual(
+            [column["selector"] for column in pendant["targets"][0]["columns"]],
+            ["firmware_label", "p50_drain_valid", "p90_drain_valid", "users"],
+        )
+        self.assertEqual(
+            [column["selector"] for column in phone["targets"][0]["columns"]],
+            ["label", "p50_drain_per_hour", "p90_drain_per_hour", "users"],
+        )
+        for panel in (pendant, phone):
+            defaults = panel["fieldConfig"]["defaults"]
+            self.assertNotIn("max", defaults)
+            self.assertEqual(defaults["custom"]["barWidth"], 0.62)
+            self.assertEqual(panel["options"]["orientation"], "horizontal")
+            self.assertEqual(panel["options"]["tooltip"]["mode"], "multi")
+            hidden = [
+                override for override in panel["fieldConfig"]["overrides"]
+                if override["matcher"]["options"] == "users"
+            ]
+            self.assertEqual(
+                hidden[0]["properties"][1]["value"],
+                {"tooltip": False, "viz": True, "legend": True},
+            )
+            p90 = [
+                override for override in panel["fieldConfig"]["overrides"]
+                if override["matcher"]["options"] == "p90 drain %/h"
+            ]
+            self.assertTrue(p90)
+        for uid in ("omi-tv", "omi-tv-macos"):
+            titles = {build_dashboards.base_title(panel) for panel in load(uid)["panels"]}
+            self.assertTrue(build_dashboards.MOBILE_BATTERY_TITLES.isdisjoint(titles), uid)
 
     def test_desktop_only_surfaces_are_explicit_placeholders_on_mobile(self) -> None:
         mobile = load("omi-tv-mobile")

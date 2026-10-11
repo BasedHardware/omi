@@ -720,11 +720,122 @@
     {
       "id": "deviceDisconnected",
       "wire_name": "Device Disconnected",
+      "status": "deprecated",
+      "replaced_by": "deviceDisconnectedDetailed",
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceDisconnectedDetailed",
+      "wire_name": "Device Disconnected Detailed",
       "status": "active",
       "replaced_by": null,
       "phase": "point",
       "intent": null,
-      "properties": {},
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "clean_disconnect",
+            "connection_timeout",
+            "remote_device_terminated",
+            "connection_failed_instant_passed",
+            "paired_to_another_phone",
+            "link_key_mismatch",
+            "pairing_lost",
+            "app_closed",
+            "manual",
+            "gatt_error",
+            "unknown"
+          ]
+        },
+        "reasonCode": {
+          "type": "int",
+          "wire_name": "reason_code"
+        },
+        "appState": {
+          "type": "enum",
+          "wire_name": "app_state",
+          "values": [
+            "foreground",
+            "background",
+            "inactive",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSent",
+      "wire_name": "Diagnostics Sent",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSendFailed",
+      "wire_name": "Diagnostics Send Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        },
+        "failureStage": {
+          "type": "enum",
+          "wire_name": "failure_stage",
+          "values": [
+            "build_bundle",
+            "dialog_cancelled",
+            "upload",
+            "ticket_parse"
+          ]
+        },
+        "statusCode": {
+          "type": "int",
+          "wire_name": "status_code"
+        }
+      },
       "consumers": [
         "mobile-instrumentation-presence"
       ],
@@ -790,6 +901,76 @@
       "phase": "point",
       "intent": null,
       "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingSetupRatingPromptShown",
+      "wire_name": "Onboarding Setup Rating Prompt Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingSetupRatingPromptAnswered",
+      "wire_name": "Onboarding Setup Rating Prompt Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "support",
+            "not_really"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "firstSummaryRatingPromptShown",
+      "wire_name": "First Summary Rating Prompt Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "firstSummaryRatingPromptAnswered",
+      "wire_name": "First Summary Rating Prompt Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "yes",
+            "no"
+          ]
+        }
+      },
       "consumers": [
         "mobile-instrumentation-presence"
       ],
@@ -2295,7 +2476,8 @@
             "new_person",
             "someone_else",
             "skip",
-            "unknown"
+            "unknown",
+            "not_a_person"
           ]
         },
         "clipPlayed": {
@@ -2558,7 +2740,9 @@
             "siri",
             "shortcuts",
             "spotlight",
-            "unknown"
+            "unknown",
+            "app_intent",
+            "user_activity"
           ]
         }
       },
@@ -2575,12 +2759,45 @@
       "phase": "point",
       "intent": null,
       "properties": {
-        "platform": {"type": "enum", "wire_name": "platform", "values": ["macos", "ios"]},
-        "outcome": {"type": "enum", "wire_name": "outcome", "values": ["ok", "auth", "network", "rate_limited", "quota", "server", "cancelled"]},
-        "latencyMs": {"type": "int", "wire_name": "latency_ms"},
-        "invokedVia": {"type": "enum", "wire_name": "invoked_via", "values": ["siri", "shortcuts", "spotlight", "unknown"]}
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        },
+        "invokedVia": {
+          "type": "enum",
+          "wire_name": "invoked_via",
+          "values": [
+            "siri",
+            "shortcuts",
+            "spotlight",
+            "unknown"
+          ]
+        }
       },
-      "consumers": ["siri-intents"],
+      "consumers": [
+        "siri-intents"
+      ],
       "correlation": null
     },
     {
@@ -2634,11 +2851,114 @@
       "phase": "point",
       "intent": null,
       "properties": {
-        "surface": {"type": "enum", "wire_name": "surface", "values": ["list", "map", "actions", "home_widget"]},
-        "ageBucket": {"type": "enum", "wire_name": "age_bucket", "values": ["under_1h", "under_1d", "under_7d", "under_30d", "over_30d"]},
-        "summaryRetryable": {"type": "bool", "wire_name": "summary_retryable"}
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "list",
+            "map",
+            "actions",
+            "home_widget"
+          ]
+        },
+        "ageBucket": {
+          "type": "enum",
+          "wire_name": "age_bucket",
+          "values": [
+            "under_1h",
+            "under_1d",
+            "under_7d",
+            "under_30d",
+            "over_30d"
+          ]
+        },
+        "summaryRetryable": {
+          "type": "bool",
+          "wire_name": "summary_retryable"
+        }
       },
-      "consumers": ["conversation-untitled-rendered"],
+      "consumers": [
+        "conversation-untitled-rendered"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppConnectStarted",
+      "wire_name": "Chat App Connect Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppConnected",
+      "wire_name": "Chat App Connected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppDisconnected",
+      "wire_name": "Chat App Disconnected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppWaitlistJoined",
+      "wire_name": "Chat App Waitlist Joined",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "chat-apps-funnel"
+      ],
       "correlation": null
     }
   ]

@@ -114,18 +114,69 @@ def cancel_subscription(subscription_id: str):
 TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
 
 
+def cancel_subscription_for_account_deletion(subscription_id: str) -> None:
+    """Cancel now for erasure; absent/terminal subscriptions already satisfy it.
+
+    Unlike period-end cancellation, transport/rate-limit/server errors propagate
+    so the deletion task can retry without mistaking an outage for success.
+    """
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        if subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES:
+            return
+        canceled = subscription.delete()
+        if canceled.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise RuntimeError('Stripe immediate cancellation did not reach a terminal status')
+    except stripe.InvalidRequestError as error:
+        if error.code == 'resource_missing' or 'no such subscription' in str(error).lower():
+            return
+        # A concurrent cancellation can win between retrieve and delete. Verify
+        # the goal state rather than accepting an arbitrary Stripe 400.
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+        except stripe.InvalidRequestError as read_error:
+            if read_error.code == 'resource_missing' or 'no such subscription' in str(read_error).lower():
+                return
+            raise
+        if subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise error
+
+
 def is_subscription_terminal(subscription_id: str) -> bool:
     """Whether Stripe currently reports the subscription in a terminal, non-billing state.
 
     Fails closed: an unreadable subscription or any non-terminal status returns False, so a
-    caller never mistakes a transport error for a subscription that is already canceled.
+    caller never mistakes a transport error for a subscription that is already canceled. A
+    subscription that does not exist at all (Stripe ``resource_missing``) is terminal: nothing
+    can bill through an id Stripe does not know.
     """
     try:
         subscription = stripe.Subscription.retrieve(subscription_id)
+    except stripe.InvalidRequestError as e:
+        if getattr(e, 'code', None) == 'resource_missing' or getattr(e, 'http_status', None) == 404:
+            # A subscription id Stripe has never heard of (a stale or synthetic id stored on the
+            # user) cannot bill anyone, so the billing goal state is already met. Treating it as a
+            # failure left account-deletion wipes retrying forever behind the auth fence.
+            logger.warning(f"Subscription {subscription_id} does not exist in Stripe; treating as terminal")
+            return True
+        logger.error(f"Error retrieving subscription: {e}")
+        return False
     except Exception as e:
         logger.error(f"Error retrieving subscription: {e}")
         return False
     return subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES
+
+
+def find_billable_app_subscription_ids(uid: str) -> list[str]:
+    if not stripe.api_key:
+        return []
+    subscriptions = stripe.Subscription.search(query=f"metadata['uid']:'{uid}'")
+    return [
+        subscription.id
+        for subscription in subscriptions.auto_paging_iter()
+        if subscription.get('metadata', {}).get('app_id')
+        and subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES
+    ]
 
 
 def find_app_subscription_by_customer_id(

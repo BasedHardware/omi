@@ -92,68 +92,25 @@ enum KnowledgeLedgerMirrorStageResult: Sendable {
   case activated(KnowledgeLedgerMirrorReceipt)
 }
 
-enum MemoryLedgerTriggerSnapshotCompleteness: Equatable, Sendable {
-  /// The bounded local query exhausted rows currently present in SQLite. This
-  /// does not claim that the server mirror is complete: MemoryStorage has no
-  /// durable receipt proving an exhaustive canonical ledger sync.
-  case localCacheExhausted
-  /// The sentinel row proves that the local query was truncated at its bound.
-  case localCacheTruncated
-}
-
-struct MemoryLedgerTriggerSnapshotDiagnostics: Equatable, Sendable {
-  let completeness: MemoryLedgerTriggerSnapshotCompleteness
-  let localRowCount: Int
-  let hasMoreLocalRows: Bool
-  let isAuthoritative: Bool
-  let quarantined: [KnowledgeLedgerTriggerWatchlistProjection.QuarantinedRow]
-}
-
-struct MemoryLedgerTriggerSnapshot: Equatable, Sendable {
-  let projection: KnowledgeLedgerTriggerWatchlistProjection
-  let diagnostics: MemoryLedgerTriggerSnapshotDiagnostics
-}
-
 /// Actor-based storage manager for memories with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor MemoryStorage {
   static let shared = MemoryStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "MemoryStorage")
 
   private init() {}
 
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Ensure database is initialized before use
   func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    // Initialize RewindDatabase which creates our tables via migrations
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("MemoryStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw MemoryStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   private static func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryLayer]?)
@@ -264,42 +221,6 @@ actor MemoryStorage {
   /// detects local truncation. Even an exhausted local cache is marked
   /// non-authoritative because this storage actor does not persist a proof that
   /// the server's canonical ledger was exhaustively mirrored.
-  func getCanonicalTriggerSnapshot(limit: Int) async throws -> MemoryLedgerTriggerSnapshot {
-    guard limit > 0, limit < Int.max else {
-      throw MemoryLedgerTriggerSnapshotError.invalidLimit(limit)
-    }
-    let db = try await ensureInitialized()
-    let records = try await db.read { database in
-      try MemoryRecord.fetchAll(
-        database,
-        sql: """
-          SELECT * FROM memories
-          WHERE backendId IS NOT NULL
-            AND ledgerMetadataJson IS NOT NULL
-            AND CASE
-              WHEN json_valid(ledgerMetadataJson)
-                THEN json_extract(ledgerMetadataJson, '$.kind') = 'trigger'
-              ELSE instr(ledgerMetadataJson, '"kind":"trigger"') > 0
-            END
-          ORDER BY updatedAt DESC, backendId ASC
-          LIMIT ?
-          """,
-        arguments: [limit + 1]
-      )
-    }
-
-    let hasMoreLocalRows = records.count > limit
-    let boundedRecords = Array(records.prefix(limit))
-    let projection = KnowledgeLedgerTriggerCompiler.project(records: boundedRecords)
-    let diagnostics = MemoryLedgerTriggerSnapshotDiagnostics(
-      completeness: hasMoreLocalRows ? .localCacheTruncated : .localCacheExhausted,
-      localRowCount: boundedRecords.count,
-      hasMoreLocalRows: hasMoreLocalRows,
-      isAuthoritative: false,
-      quarantined: projection.quarantined
-    )
-    return MemoryLedgerTriggerSnapshot(projection: projection, diagnostics: diagnostics)
-  }
 
   /// Get count of local memories
   func getLocalMemoriesCount(

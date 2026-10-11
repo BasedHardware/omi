@@ -8,6 +8,8 @@ import {
   type ListenMode,
   type ListenStartArgs
 } from '../../shared/types'
+import { translateToGlosses, defaultSignOpts } from '../integrations/signLanguage'
+import { isSignLanguageEnabled } from './integrations'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { isByokActive, withByokHeaders } from '../../shared/byok'
 import { decodeUidFromIdToken } from '../auth/omiAuth'
@@ -145,10 +147,15 @@ export function isSocketStale(
 
 type Session = {
   ws: WebSocket
-  ownerId: number // webContents id for routing replies back
+  ownerId: number
   source: 'mic' | 'system'
   mode: ListenMode
   closed: boolean
+  // Sign-language translation throttle: rolling buffer so re-translation
+  // only fires once per semantic unit rather than on every segment.
+  transcriptBuffer: string
+  lastTranslationTime: number
+  translationInFlight: boolean
   // Audio captured before the socket reaches OPEN. The renderer starts streaming
   // PCM the moment the mic is live, but the WS handshake can take a beat (esp. PTT
   // transcribe-stream under load). Without this, a quick hold ("hello") is spoken
@@ -221,6 +228,9 @@ export function startTestListenSession(sessionId: string, source: 'mic' | 'syste
     source,
     mode: 'conversation',
     closed: false,
+    transcriptBuffer: '',
+    lastTranslationTime: 0,
+    translationInFlight: false,
     pending: [],
     pendingBytes: 0,
     lastFeedAt: Date.now(),
@@ -242,6 +252,15 @@ export function getListenStats(): Record<string, { bytes: number; chunks: number
   const out: Record<string, { bytes: number; chunks: number }> = {}
   for (const [k, v] of listenStats) out[k] = { bytes: v.bytes, chunks: v.chunks }
   return out
+}
+
+let proactivityWakeup: ((ownerID: string, payload: Record<string, unknown>) => void) | null = null
+
+/** Main-process consumer reads the feed; socket copy never renders a second card. */
+export function setProactivityWakeupHandler(
+  handler: (ownerID: string, payload: Record<string, unknown>) => void
+): void {
+  proactivityWakeup = handler
 }
 
 function emit(ownerId: number, msg: ListenMessage): void {
@@ -336,6 +355,9 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     source: args.source,
     mode,
     closed: false,
+    transcriptBuffer: '',
+    lastTranslationTime: 0,
+    translationInFlight: false,
     pending: [],
     pendingBytes: 0,
     lastFeedAt: Date.now(),
@@ -399,10 +421,48 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
         kind: 'segments',
         segments
       })
+
+      // Live Sign Language translation: accumulate the latest segment text and
+      // translate (throttled) so the renderer can drive the sign avatar.
+      // Opt-in only — disabled by default until a maintainer confirms consent.
+      if (isSignLanguageEnabled()) {
+        let textToTranslate = ''
+        segments.forEach((seg) => {
+          textToTranslate += (textToTranslate ? ' ' : '') + seg.text
+        })
+        if (textToTranslate) {
+          session.transcriptBuffer = `${session.transcriptBuffer} ${textToTranslate}`
+            .trim()
+            .slice(-256)
+          const now = Date.now()
+          const lastTranslated = now - session.lastTranslationTime
+          if (
+            !session.translationInFlight &&
+            (lastTranslated > 2000 || session.transcriptBuffer.length > 50)
+          ) {
+            const limitedText = session.transcriptBuffer
+            session.transcriptBuffer = ''
+            session.lastTranslationTime = now
+            session.translationInFlight = true
+            translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
+              .then((result) => {
+                const wc = webContents.fromId(session.ownerId)
+                if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
+              })
+              .catch((e) => console.error('[omi-listen] live translation failed:', e))
+              .finally(() => {
+                session.translationInFlight = false
+              })
+          }
+        }
+      }
       return
     }
     if (json && typeof json === 'object' && 'type' in (json as object)) {
       const obj = json as Record<string, unknown>
+      if (!session.closed && mode === 'conversation') {
+        proactivityWakeup?.(decodeUidFromIdToken(args.token) ?? '', obj)
+      }
       const event: ListenEvent = { type: String(obj.type), raw: obj }
       emit(session.ownerId, { sessionId: args.sessionId, kind: 'event', event })
     }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -19,13 +20,48 @@ enum SpeakerTagAnswer {
   person('person'),
   newPerson('new_person'),
   someoneElse('someone_else'),
-  skip('skip');
+  skip('skip'),
+  notAPerson('not_a_person');
 
   const SpeakerTagAnswer(this.wireName);
   final String wireName;
 }
 
 typedef ClipLoader = Future<ApiResult<Uint8List>> Function(GeneratedSpeakerTagPrompt prompt);
+
+/// An answer shown on the card but not sent yet: it commits when its Undo window closes.
+class PendingSpeakerTagAnswer {
+  const PendingSpeakerTagAnswer({
+    required this.promptId,
+    required this.answer,
+    this.personId,
+    this.name,
+    this.displayName,
+    this.committed = false,
+    this.excerptOnly = false,
+  });
+
+  final String promptId;
+  final SpeakerTagAnswer answer;
+  final String? personId;
+  final String? name;
+
+  /// Who the voice was saved as, for the answered state and the toast.
+  final String? displayName;
+  final bool committed;
+  final bool excerptOnly;
+
+  PendingSpeakerTagAnswer asCommitted({String? personId}) => PendingSpeakerTagAnswer(
+        promptId: promptId,
+        answer: answer,
+        personId: personId ?? this.personId,
+        name: name,
+        displayName: displayName,
+        committed: true,
+        excerptOnly: excerptOnly,
+      );
+}
+
 typedef ClipPlayer = Future<bool> Function(String promptId, Uint8List wav);
 
 /// Drives the "Help Omi recognize voices" card: a small daily set of short clips
@@ -35,7 +71,7 @@ typedef ClipPlayer = Future<bool> Function(String promptId, Uint8List wav);
 class SpeakerTagPromptsProvider extends BaseProvider {
   SpeakerTagPromptsProvider({
     Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function()? fetchPrompts,
-    Future<ApiResult<bool>> Function(List<String>)? markShown,
+    Future<ApiResult<bool>> Function(List<String>, {bool setShown})? markShown,
     Future<ApiResult<void>> Function()? dismiss,
     Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(
       GeneratedSpeakerTagPromptAnswerRequest,
@@ -50,6 +86,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     ClipPlayer? playClip,
     void Function(RegisteredEvent)? emit,
     DateTime Function()? now,
+    this.answeredHold = const Duration(milliseconds: 1400),
   })  : _fetchPrompts = fetchPrompts ?? api.getSpeakerTagPrompts,
         _markShown = markShown ?? api.markSpeakerTagPromptsShown,
         _dismiss = dismiss ?? api.dismissSpeakerTagPrompts,
@@ -63,8 +100,11 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   static const Duration refetchInterval = Duration(minutes: 30);
 
+  /// How long the answered state stays after a commit, so the person's meter can tick up.
+  final Duration answeredHold;
+
   final Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function() _fetchPrompts;
-  final Future<ApiResult<bool>> Function(List<String>) _markShown;
+  final Future<ApiResult<bool>> Function(List<String>, {bool setShown}) _markShown;
   final Future<ApiResult<void>> Function() _dismiss;
   final Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(
     GeneratedSpeakerTagPromptAnswerRequest,
@@ -83,6 +123,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   AudioPlayer? _player;
   DateTime? _lastFetchAt;
   bool _shownReported = false;
+  final Set<String> _shownPromptIds = {};
   bool _isDisposed = false;
   final Set<String> _played = {};
   final Map<String, Uint8List> _clips = {};
@@ -102,6 +143,25 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   String? clipErrorPromptId;
   bool answerFailed = false;
 
+  /// The answer on screen during its Undo window (and briefly after it commits).
+  PendingSpeakerTagAnswer? pending;
+  Timer? _answeredHoldTimer;
+  Completer<void>? _answeredHoldDone;
+
+  void _cancelAnsweredHold() {
+    _answeredHoldTimer?.cancel();
+    _answeredHoldTimer = null;
+    final done = _answeredHoldDone;
+    _answeredHoldDone = null;
+    if (done != null && !done.isCompleted) done.complete();
+  }
+
+  /// The decoded clip once it has been played, for drawing its waveform.
+  Uint8List? clipFor(String promptId) => _clips[promptId];
+
+  bool hasPlayed(String promptId) => _played.contains(promptId);
+  GeneratedSpeakerTagPromptAnswerResponse? lastAnswer;
+
   bool saveOtherVoiceProfiles = true;
   bool speakerTagPromptsEnabled = true;
   bool settingsLoaded = false;
@@ -113,7 +173,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   /// Fetch today's set when the conversations page appears. Cheap to call often.
   Future<void> loadIfDue({bool force = false}) async {
     final now = _now();
-    if (_isDisposed || visible || loading) return;
+    if (_isDisposed || visible || loading || pending != null || submitting) return;
     if (!force && _lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
     _lastFetchAt = now;
     loading = true;
@@ -134,6 +194,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     _unavailablePromptIds.removeWhere((_, failedAt) => now.difference(failedAt) >= refetchInterval);
     final fetched = (response.prompts ?? const <GeneratedSpeakerTagPrompt>[])
         .where((prompt) => !_unavailablePromptIds.containsKey(prompt.id))
+        .where((prompt) => prompt.kind != 'owner_check' || (prompt.evidenceId?.isNotEmpty ?? false))
         .toList();
     if (fetched.isEmpty) {
       notifyListeners();
@@ -147,6 +208,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     finished = false;
     answerFailed = false;
     _shownReported = false;
+    _shownPromptIds.clear();
     _played.clear();
     _clips.clear();
     notifyListeners();
@@ -154,22 +216,24 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   /// Called once the card is actually on screen; starts the server's daily cooldown.
   Future<void> reportShown() async {
-    if (_isDisposed || _shownReported || prompts.isEmpty) return;
+    final prompt = current;
+    if (_isDisposed || !visible || finished || prompt == null || _shownPromptIds.contains(prompt.id)) return;
+    final setShown = !_shownReported;
+    if (!setShown && prompt.kind != 'owner_check') return;
     _shownReported = true;
-    _emit(
-      SpeakerTagPromptsViewed(
-        promptCount: prompts.length,
-        firstTime: firstTime,
-      ),
-    );
+    _shownPromptIds.add(prompt.id);
+    if (setShown) {
+      _emit(SpeakerTagPromptsViewed(promptCount: prompts.length, firstTime: firstTime));
+    }
     final generation = _sessionGeneration;
     final result = await _markShown(
-      prompts.map((prompt) => prompt.id).toList(),
+      [prompt.id],
+      setShown: setShown,
     );
     if (!_isCurrent(generation)) return;
     switch (result) {
       case ApiSuccess(:final data):
-        if (data != firstTime) {
+        if (setShown && data != firstTime) {
           firstTime = data;
           notifyListeners();
         }
@@ -242,11 +306,66 @@ class SpeakerTagPromptsProvider extends BaseProvider {
       played = playClip != null ? await playClip(prompt.id, wav) : await _playWithJustAudio(wav, generation, ticket);
       if (!_isCurrent(generation) || ticket != _playbackTicket) return;
     }
-    _played.add(prompt.id);
+    if (played) _played.add(prompt.id);
     _emit(SpeakerTagPromptClipPlayed(kind: _kind(prompt.kind), loaded: played));
     if (!played) clipErrorPromptId = prompt.id;
     if (playingPromptId == prompt.id) playingPromptId = null;
     notifyListeners();
+  }
+
+  /// Shows [answer] as given without sending it. Commit it with [commitPending] when its Undo window
+  /// closes, or drop it with [undoPending]. "Not Sure" is harmless and never staged.
+  void stage(SpeakerTagAnswer answer, {String? personId, String? name, String? displayName}) {
+    final prompt = current;
+    if (_isDisposed || prompt == null || submitting || pending != null) return;
+    pending = PendingSpeakerTagAnswer(
+      promptId: prompt.id,
+      answer: answer,
+      personId: personId,
+      name: name,
+      displayName: displayName,
+      excerptOnly: prompt.kind == 'owner_check',
+    );
+    answerFailed = false;
+    notifyListeners();
+  }
+
+  void undoPending() {
+    if (_isDisposed || submitting || pending == null || pending!.committed) return;
+    pending = null;
+    notifyListeners();
+  }
+
+  /// Sends the staged answer. On success the answered state stays for [answeredHold] (after
+  /// [onSaved], which refreshes the person so their meter can tick up), then the card moves on.
+  Future<bool> commitPending({Future<void> Function(String? personId)? onSaved}) async {
+    final staged = pending;
+    if (_isDisposed || staged == null || staged.committed || current?.id != staged.promptId) return false;
+    final generation = _sessionGeneration;
+    final saved = await _submit(staged.answer, personId: staged.personId, name: staged.name);
+    if (!_isCurrent(generation)) return false;
+    if (saved == null) {
+      pending = null;
+      notifyListeners();
+      return false;
+    }
+    pending = staged.asCommitted(personId: saved.personId);
+    notifyListeners();
+    await onSaved?.call(pending?.personId);
+    if (!_isCurrent(generation)) return true;
+    if (answeredHold > Duration.zero) {
+      final done = _answeredHoldDone = Completer<void>();
+      _answeredHoldTimer = Timer(answeredHold, () {
+        _answeredHoldTimer = null;
+        _answeredHoldDone = null;
+        done.complete();
+      });
+      await done.future;
+    }
+    if (!_isCurrent(generation)) return true;
+    pending = null;
+    _advance();
+    return true;
   }
 
   /// Returns true when the answer was saved and the card moved on.
@@ -255,8 +374,24 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     String? personId,
     String? name,
   }) async {
+    final generation = _sessionGeneration;
+    final saved = await _submit(answer, personId: personId, name: name);
+    if (saved == null || !_isCurrent(generation)) return false;
+    _advance();
+    return true;
+  }
+
+  /// Posts one answer for the current prompt. Null when it failed ([answerFailed] is then set).
+  Future<GeneratedSpeakerTagPromptAnswerResponse?> _submit(
+    SpeakerTagAnswer answer, {
+    String? personId,
+    String? name,
+  }) async {
     final prompt = current;
-    if (_isDisposed || prompt == null || submitting) return false;
+    if (_isDisposed || prompt == null || submitting) return null;
+    if (prompt.kind == 'owner_check' && answer != SpeakerTagAnswer.skip && !hasPlayed(prompt.id)) return null;
+    if (prompt.kind == 'owner_check' &&
+        !{SpeakerTagAnswer.me, SpeakerTagAnswer.notMe, SpeakerTagAnswer.skip}.contains(answer)) return null;
     submitting = true;
     answerFailed = false;
     notifyListeners();
@@ -274,9 +409,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         name: name,
         suggestedPersonId: prompt.suggestedPersonId,
         firstTime: firstTime,
+        evidenceId: prompt.evidenceId,
       ),
     );
-    if (!_isCurrent(generation)) return false;
+    if (!_isCurrent(generation)) return null;
     final succeeded = result is ApiSuccess<GeneratedSpeakerTagPromptAnswerResponse>;
     _emit(
       SpeakerTagPromptAnswerSubmitted(
@@ -289,24 +425,37 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     );
     submitting = false;
     if (!succeeded) {
+      if (result case ApiFailure(:final problem) when problem.statusCode == 409) {
+        _unavailablePromptIds[prompt.id] = _now();
+        pending = null;
+        _advance();
+      }
       answerFailed = true;
       notifyListeners();
-      return false;
+      return null;
     }
     _playbackTicket++;
     await _player?.stop();
-    if (!_isCurrent(generation)) return false;
+    if (!_isCurrent(generation)) return null;
     playingPromptId = null;
     answeredCount += 1;
+    notifyListeners();
+    // Promoted: `succeeded` above is exactly `result is ApiSuccess`.
+    lastAnswer = result.data;
+    return result.data;
+  }
+
+  void _advance() {
     index += 1;
     finished = index >= prompts.length;
     notifyListeners();
-    return true;
   }
 
-  /// The user closed the card. An unanswered set counts toward the server's back-off.
+  /// The user closed the card. An unanswered set counts toward the server's back-off. A staged
+  /// answer waits for the existing Undo window; the toast commits it only when that window closes.
   Future<void> close() async {
     if (_isDisposed || !visible) return;
+    final answering = pending != null;
     _emit(
       SpeakerTagPromptsClosed(
         answeredCount: answeredCount,
@@ -320,7 +469,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     if (!_isCurrent(generation)) return;
     playingPromptId = null;
     notifyListeners();
-    if (answeredCount == 0 && _shownReported) {
+    if (answeredCount == 0 && !answering && _shownReported) {
       if (await _dismiss() case ApiFailure(:final problem)) {
         Logger.debug('speaker tag prompts dismiss failed: $problem');
       }
@@ -420,6 +569,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   void clearUserData() {
     _sessionGeneration++;
+    _cancelAnsweredHold();
     _playbackTicket++;
     prompts = [];
     index = 0;
@@ -432,11 +582,14 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     playingPromptId = null;
     clipErrorPromptId = null;
     answerFailed = false;
+    pending = null;
+    lastAnswer = null;
     saveOtherVoiceProfiles = true;
     speakerTagPromptsEnabled = true;
     settingsLoaded = false;
     _lastFetchAt = null;
     _shownReported = false;
+    _shownPromptIds.clear();
     _played.clear();
     _clips.clear();
     _unavailablePromptIds.clear();
@@ -447,6 +600,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   @override
   void dispose() {
     _isDisposed = true;
+    _cancelAnsweredHold();
     _sessionGeneration++;
     _playbackTicket++;
     _player?.dispose();
@@ -473,7 +627,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
       await player.setFilePath(file.path);
       if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
       await player.play();
-      return true;
+      return player.processingState == ProcessingState.completed;
     } catch (error) {
       Logger.debug(
         'speaker tag prompt clip playback failed: ${error.runtimeType}',
@@ -508,6 +662,8 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         conversationId: prompt.conversationId,
         start: prompt.clipStart,
         end: prompt.clipEnd,
+        promptId: prompt.kind == 'owner_check' ? prompt.id : null,
+        evidenceId: prompt.evidenceId,
       );
 
   static SpeakerTagPromptClipPlayedKind _kind(String kind) => switch (kind) {
@@ -534,5 +690,6 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         SpeakerTagAnswer.newPerson => SpeakerTagPromptAnswerSubmittedAnswer.newPerson,
         SpeakerTagAnswer.someoneElse => SpeakerTagPromptAnswerSubmittedAnswer.someoneElse,
         SpeakerTagAnswer.skip => SpeakerTagPromptAnswerSubmittedAnswer.skip,
+        SpeakerTagAnswer.notAPerson => SpeakerTagPromptAnswerSubmittedAnswer.notAPerson,
       };
 }

@@ -21,6 +21,8 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
   /// card would be a second, degraded copy (title truncated, no day stats) of
   /// a row the transcript already renders.
   case dailyRecap = "daily_recap"
+  /// Feed-backed v2 cards open their source; the feed owns their history.
+  case proactivityV2 = "proactivity_v2"
   case suggestion
   case insight
   case task
@@ -59,6 +61,7 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
     case "trial": return .trial
     case "onboarding": return .onboarding
     case "daily_recap": return .dailyRecap
+    case "proactivity_v2": return .proactivityV2
     default: return .functional
     }
   }
@@ -67,7 +70,7 @@ enum ProactiveNotificationKind: String, Equatable, CaseIterable {
   /// journal. See `FloatingControlBarManager.persistNotificationMessageIfNeeded`.
   var isJournaled: Bool {
     switch self {
-    case .trial, .onboarding, .dailyRecap: return false
+    case .trial, .onboarding, .dailyRecap, .proactivityV2: return false
     case .general, .functional, .suggestion, .insight, .task, .memory, .goal, .meetingNotes,
       .resurface, .integration:
       return true

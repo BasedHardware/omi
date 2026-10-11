@@ -571,7 +571,7 @@ def test_nested_task_export_carries_owning_parent_id(monkeypatch):
     users_collection.document.return_value = user_document
     mock_db = MagicMock()
     mock_db.collection.return_value = users_collection
-    monkeypatch.setattr(data_export.database_client, 'db', mock_db)
+    monkeypatch.setattr(data_export.database_client, 'get_firestore_client', lambda: mock_db)
 
     records = list(_REAL_ITER_USER_NESTED_SUBCOLLECTION('uid1', 'workstreams', 'events'))
 
@@ -674,7 +674,16 @@ def test_memory_spool_is_streamed_in_bounded_chunks(monkeypatch):
 
 def test_frame_export_pulls_incrementally_instead_of_materializing_collection(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     pulled = 0
 
     def rows(_uid, name):

@@ -9,6 +9,9 @@ Endpoints:
 import logging
 from typing import Any
 
+from utils.messaging.contracts import Principal
+from utils.messaging.projection import ToolProjection
+
 from utils.executors import db_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout, resolve_jit_rollout_sync
 
@@ -65,7 +68,8 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     tools = []
     jit_tools_enabled = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY).permits_work
 
-    for t in CORE_TOOLS:
+    core_projection = ToolProjection.build(CORE_TOOLS, (), (), principal=Principal(uid))
+    for t in core_projection.registry.values():
         if t.name in JIT_ONLY_TOOL_NAMES and not jit_tools_enabled:
             continue
         tools.append(_tool_schema(t))
@@ -113,6 +117,13 @@ async def execute_tool(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
 ):
     """Execute a named tool and return its result."""
+    return await execute_tool_for_principal(body, Principal(uid))
+
+
+async def execute_tool_for_principal(body: ExecuteToolRequest, principal: Principal):
+    """Internal broker seam. The caller authenticates the task token before entry."""
+    uid = principal.uid
+    principal.authorize(uid, body.tool_name)
     if body.tool_name in JIT_ONLY_TOOL_NAMES:
         rollout = await resolve_jit_rollout(
             uid,
@@ -147,14 +158,11 @@ async def execute_tool(
             outcome='degraded',
         )
 
-    target = None
-    for t in all_tools:
-        if t.name == body.tool_name:
-            target = t
-            break
-
-    if target is None:
-        raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found")
+    projection = ToolProjection.build(all_tools, (), (), principal=principal)
+    try:
+        target = projection.authorize(uid, body.tool_name)
+    except PermissionError:
+        raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found") from None
 
     # Strip config param if caller accidentally included it
     params = {k: v for k, v in body.params.items() if k != "config"}

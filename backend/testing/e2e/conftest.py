@@ -176,6 +176,22 @@ def _guarded_create_connection(address, timeout=None, source_address=None, *args
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
     if host is not None and host not in _ALLOWED_NETWORK_HOSTS:
+        # RFC 6761 reserves the ".test" TLD so it can never resolve on the real
+        # DNS, which makes it the natural fixture domain for hermetic suites.
+        # Newer config-time validators (SSRF guards resolving webhook targets)
+        # need a successful public-class resolution, so answer reserved .test
+        # names with a deterministic public address instead of tripping the
+        # guard: nothing leaves the process because real connects stay guarded
+        # below. A real DNS lookup must never happen, and a non-.test host
+        # still fails exactly as before.
+        hostname = host.decode("idna") if isinstance(host, bytes) else host
+        if hostname.lower().endswith(".test") or hostname.lower() == "test":
+            # Mirror the shape and public-class answer the SSRF unit tests use
+            # (AF_INET, 8.8.8.8): deterministic on every runner, and the only
+            # address class the config-time validator accepts.
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+            ]
         raise AssertionError(f"Hermetic e2e blocked DNS lookup for {host!r}")
     return _original_getaddrinfo(host, port, *args, **kwargs)
 

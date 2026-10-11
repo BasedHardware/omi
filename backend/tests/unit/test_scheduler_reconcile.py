@@ -86,6 +86,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
     prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
     assert set(dev_jobs) == {
+        "dream-agent-canary-half-hourly",
         "daily-memory-sweep-hourly",
         "day3-reengagement-email-daily",
         "frame-request-retention-hourly",
@@ -94,6 +95,8 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "dream-agent-canary-half-hourly",
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
@@ -182,9 +185,13 @@ def test_explicitly_selected_planned_job_can_be_created():
 
     assert differences == [resource]
     assert messages == [f"APPLIED {resource}: missing, state"]
-    assert [
-        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
-    ] == [("post", "frame-request-retention-hourly")]
+    # Cloud Scheduler v1 create takes the full job name in the body; it has no jobId parameter.
+    posts = [(url, kwargs) for method, url, kwargs in session.calls if method == "post"]
+    assert len(posts) == 1
+    url, kwargs = posts[0]
+    assert url.endswith("/projects/based-hardware-dev/locations/us-central1/jobs")
+    assert "params" not in kwargs
+    assert kwargs["json"]["name"] == resource
 
 
 def test_check_validates_a_planned_job_after_it_exists():
@@ -292,3 +299,21 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert '--project "$PROJECT_ID" --check' in central
     assert '--project "$PROJECT_ID" --check --jobs' not in central
+
+
+def test_notifications_cadence_covers_every_local_hour_boundary():
+    manifest = reconcile.load_manifest()
+    job = next(
+        job for job in manifest['environments']['prod']['jobs'] if job['name'] == 'notifications-job-scheduler-trigger'
+    )
+    assert job['schedule'] == '*/15 * * * *'
+    assert job['state'] == 'ENABLED'
+    assert job.get('lifecycle') is None  # Existing managed resource, scoped by the owner workflow.
+    assert job['owner'] == '.github/workflows/gcp_notifications_job.yml'
+    assert job['target']['uri'].endswith('/jobs/notifications-job:run')
+    assert job['retry']['max_retry'] == '0s'
+    # Dedicated least-privilege invoker, never the project default compute account.
+    assert (
+        job['target']['oauth']['service_account']
+        == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
+    )

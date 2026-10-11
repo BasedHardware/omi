@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -45,21 +46,22 @@ class CaptureRecordingsChip extends StatelessWidget {
           OmiHaptics.selection();
           onTap();
         },
+        // The header's outlined chip (Omi v8 `.chipm`), led by the recording devices.
         child: Container(
-          constraints: const BoxConstraints(minHeight: 30),
-          padding: const EdgeInsets.only(left: 4, right: 8),
-          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+          constraints: const BoxConstraints(minHeight: 34),
+          padding: const EdgeInsets.only(left: 6, right: 10),
+          decoration: BoxDecoration(
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: ConversationDetailInk.hairline),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               CaptureSourceStack(sources: recordings.map((recording) => recording.source).toList()),
               const SizedBox(width: 6),
-              Text(
-                count,
-                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-              ),
+              Text(count, style: OmiType.subhead.copyWith(color: ConversationDetailInk.words, height: 1.2)),
               const SizedBox(width: 2),
-              Icon(Icons.keyboard_arrow_down, size: 16, color: OmiColors.textSecondary),
+              Icon(Icons.keyboard_arrow_down, size: 16, color: ConversationDetailInk.words),
             ],
           ),
         ),

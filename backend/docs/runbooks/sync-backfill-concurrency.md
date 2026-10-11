@@ -1,0 +1,17 @@
+# Backfill concurrency experiment
+
+Draft proposal, 2026-10-04. No production changes. Review, dev synthetic long-file/retry stress and aggregate observability acceptance precede production through the normal backend deploy path.
+
+The first step changes only backfill container concurrency **3 → 6**, keeping 2 vCPU, **8 GiB**, min/max 3/18 and request-based CPU. `.github/actions/sync-backfill-lifecycle/action.yml` owns both queue create/update: **40 concurrent dispatches, 10 dispatches/s, 5–60s retry backoff**. A `ro-prod` live read was denied `cloudtasks.queues.get`; these are source settings, not verified live limits. Do not escalate credentials for this build.
+
+Nominal worker capacity rises from `18 × 3 = 54` to `18 × 6 = 108`. Keeping dispatch at 40 is aligned with both capacities, including mixed-revision rollout. At full dispatch, packing can fall from at least 14 to at least 7 instances; autoscaling can still choose more. Leave dispatch unchanged to isolate packing from an increase in Firestore/Parakeet traffic. A later independently reviewed queue step can try 40 → 54, then consider 80 only after all traffic serves concurrency 6 and downstream acceptance. Keep 10/s and never exceed the lower serving capacity during transition.
+
+Higher concurrency can overlap GCS and Parakeet I/O, but six requests share two vCPUs. Decode/VAD/PCM allocations can compete for CPU and memory; more requests also increase Firestore transaction contention, retries and write latency. Per-UID sequencing avoids overlapping jobs for one account, not fleet-wide contention. Contention can eliminate savings or increase costs.
+
+Expected saving is conditional: 25–50% less active instance-time at the evidence's ~$44–65/day resource cost gives **$330–970/month** gross at 8 GiB, before residual idle costs and credits. Memory, minimum and CPU-billing estimates overlap; do not add them. At 4 GiB, the same overlap scenario gives about $283–843/month. [Cloud Run pricing](https://cloud.google.com/run/pricing).
+
+The supplied full-range memory histogram includes an Oct 1 bucket with upper bound **1.76 GiB** at concurrency 3. A conservative doubled footprint is **3.52 GiB**, leaving only 0.48 GiB under a 4-GiB limit before unsampled peaks. Do not merge this draft with the memory-4-GiB draft until that combination is qualified. Merging both produces 4 GiB/concurrency 6, while this first experiment deliberately assumes 8 GiB. If memory is already reduced, restore 8 GiB in a separately reviewed normal deploy before admitting the concurrency experiment, or qualify the combined setting in dev first.
+
+After review: baseline phase calls/durations, CPU, memory, retries, whole-job p95 and queue age for a day; run synthetic dev stress at 8 GiB/concurrency 6; then deploy concurrency alone at 8 GiB. Hold at least 24 hours before further sizing. Require zero memory terminations, no sustained CPU saturation, no increased retries/queue age and <10% p95 whole-job/Firestore/Parakeet regression. Missing phase metrics is an acceptance failure, not zero latency. Only then qualify 4 GiB/concurrency 6 with synthetic headroom stress.
+
+Rollback through the normal deploy path: concurrency back to 3, retain 8 GiB until memory is separately qualified, restore queue to 40/10 if independently increased, or restore the preceding serving revision. Coordinator owns review, merge and deploy. No sync logic or workflow YAML changed.

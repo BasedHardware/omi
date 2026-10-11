@@ -168,6 +168,25 @@ jobs:
             echo "- Break glass: ${SKIP_PROOF:-false}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.admitted-source.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3
@@ -336,6 +355,8 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
             TTS_PROVIDER=gemini
@@ -351,21 +372,25 @@ jobs:
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=false
-            BASIC_PLAN_GATE_PROACTIVITY_ENABLED=false
             FREE_TIER_LOCAL_PROCESSING=false
             FREE_TIER_EMERGENCY_STOP=false
             FREE_TIER_LOCAL_PROCESSING_COHORT=
             BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=false
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
+            MENTOR_PIPELINE=cohort
+            POSTHOG_HOST=https://us.posthog.com
+            OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            FIRESTORE_READ_LEDGER=1
+            FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
           secrets: |
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
             REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
             REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
             REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
+            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest

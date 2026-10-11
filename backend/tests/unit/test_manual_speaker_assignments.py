@@ -451,6 +451,7 @@ def test_apply_copies_only_segments_whose_identity_changes():
         'person_id': 'new',
         'is_user': False,
         'speaker_identity_status': 'not_user',
+        'speaker_label_source': 'manual',
     }
     unlabeled = {'id': 's1', 'speaker_id': 0, 'person_id': None, 'is_user': False}
     receipt = {'speakers': {'0': {'generation': 1, 'person_id': 'new', 'is_user': False}}}
@@ -518,3 +519,141 @@ def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded():
     resolved = [segment['id'] for segment in segments]
     assert resolved == [f's{i}' for i in range(6)]
     assert teaching_segment_ids(segments, resolved) == ['s1', 's3', 's5']
+
+
+def test_assignment_records_label_evidence_once_per_conversation(world):
+    store, path, _ = world
+    store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'live_embedding'
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    new = store.rows[('users', 'u', 'people', 'new')]['label_evidence']
+    old = store.rows[('users', 'u', 'people', 'old')]['label_evidence']
+    assert new['manual_labels'] == 1 and new['counted'] == ['manual_labels:c'] and new['last_labeled_at']
+    # The automatic match to "old" was moved away: a correction for that person.
+    assert old['auto_corrected'] == 1 and 'last_labeled_at' not in old
+    # A repeated assignment in the same conversation does not count again.
+    db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4)
+    assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 1
+
+
+def test_card_answer_confirming_an_automatic_match_is_a_card_confirm(world):
+    store, path, _ = world
+    store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'sync_embedding'
+    db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'], evidence_source='card')
+    assert store.rows[('users', 'u', 'people', 'old')]['label_evidence']['card_confirms'] == 1
+
+
+def test_relabeling_away_retracts_the_conversations_positive_evidence(world):
+    store, _, _ = world
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'])
+    assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 0
+    assert store.rows[('users', 'u', 'people', 'old')]['label_evidence']['manual_labels'] == 1
+
+
+def test_card_and_manual_labels_in_one_conversation_do_not_double_count(world):
+    store, path, segments = world
+    segments.append(dict(segments[1], id='s2', speaker_id=5, person_id=None))
+    store.rows[path]['transcript_segments'] = segments
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'], evidence_source='card')
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s2'])
+    evidence = store.rows[('users', 'u', 'people', 'new')]['label_evidence']
+    assert evidence.get('manual_labels') == 1
+    assert evidence.get('card_picks', 0) == 0
+
+
+def test_correction_never_recreates_evidence_for_a_deleted_person(world):
+    store, _, _ = world
+    del store.rows[('users', 'u', 'people', 'old')]
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    assert ('users', 'u', 'people', 'old') not in store.rows
+    assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 1
+
+
+@pytest.mark.parametrize(
+    'source,automatic,counter',
+    [
+        ('card', False, 'card_picks'),
+        ('card', True, 'card_confirms'),
+        ('manual', True, 'auto_confirmed'),
+    ],
+)
+def test_reviewed_evidence_is_retracted_for_every_positive_source(world, source, automatic, counter):
+    store, path, _ = world
+    if automatic:
+        store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'sync_embedding'
+        db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'], evidence_source=source)
+        person_id = 'old'
+        other = 'new'
+    else:
+        db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'], evidence_source=source)
+        person_id = 'new'
+        other = 'old'
+    evidence_path = ('users', 'u', 'people', person_id)
+    assert store.rows[evidence_path]['label_evidence'][counter] == 1
+    db.assign_conversation_speaker('u', 'c', person_id=other, segment_ids=['s1'])
+    assert store.rows[evidence_path]['label_evidence'][counter] == 0
+    assert read(world)['manual_speaker_assignments']['label_evidence'][person_id]['kinds'] == []
+
+
+def test_range_assignment_preserves_history_and_future_cluster_segments(world):
+    store, path, segments = world
+    # First label the cluster; a range correction must cover only the second segment.
+    db.assign_conversation_speaker('u', 'c', person_id='old', speaker_id=4)
+    raw, ids, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4, time_range=(1, 2))
+    assert ids == ['s1']
+    assert [s['person_id'] for s in raw['transcript_segments']] == ['old', 'new']
+    saved = read(world)
+    assert saved['manual_speaker_assignments']['speakers']['4']['person_id'] == 'old'
+    assert saved['manual_speaker_assignments']['segments']['s1']['person_id'] == 'new'
+    future = dict(segments[1], id='future', start=2, end=3, person_id=None)
+    applied = apply_manual_assignments([future], saved['manual_speaker_assignments'])
+    assert applied[0]['person_id'] == 'old'
+    # A later legacy whole-cluster edit still replaces selected overrides.
+    raw, ids, *_ = db.assign_conversation_speaker('u', 'c', is_user=True, speaker_id=4)
+    assert ids == ['s0', 's1']
+    assert all(s['is_user'] for s in raw['transcript_segments'])
+    assert 'segments' not in raw['manual_speaker_assignments']
+
+
+def test_range_rejection_does_not_clear_other_segments_in_same_cluster(world):
+    db.assign_conversation_speaker('u', 'c', is_user=True, speaker_id=4)
+    raw, ids, *_ = db.assign_conversation_speaker(
+        'u',
+        'c',
+        speaker_id=4,
+        time_range=(1, 2),
+        rejection={'kind': 'not_me'},
+    )
+    assert ids == ['s1']
+    assert [s['is_user'] for s in raw['transcript_segments']] == [True, False]
+    assert read(world)['manual_speaker_assignments']['segments']['s1']['segment_only'] is True
+
+
+@pytest.mark.parametrize('time_range', [(0, 0), (2, 1), (-1, 1), (0, float('inf')), (float('nan'), 3)])
+def test_invalid_assignment_range_never_writes(world, time_range):
+    store, _, _ = world
+    before = deepcopy(store.rows)
+    with pytest.raises(ValueError, match='range'):
+        db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4, time_range=time_range)
+    assert store.rows == before
+
+
+def test_range_excludes_segments_crossing_its_boundary(world):
+    store, path, _ = world
+    with pytest.raises(LookupError):
+        db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4, time_range=(0.5, 1.5))
+    assert 'manual_speaker_assignments' not in store.rows[path]
+
+
+def test_merged_donor_range_selects_using_original_offsets(world):
+    store, path, original = world
+    store.rows[('users', 'u', 'conversations', 'donor')] = dict(
+        id='donor', deleted=True, sync_merged_into='c', transcript_segments=deepcopy(original)
+    )
+    store.rows[path]['transcript_segments'] = [
+        dict(s, start=s['start'] + 100, end=s['end'] + 100, speaker_id=9) for s in original
+    ]
+    raw, ids, *_ = db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4, time_range=(1, 2))
+    assert ids == ['s1']
+    assert raw['transcript_segments'][0]['person_id'] is None
+    assert raw['transcript_segments'][1]['person_id'] == 'new'

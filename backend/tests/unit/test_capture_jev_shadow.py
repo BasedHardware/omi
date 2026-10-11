@@ -19,6 +19,14 @@ def test_hard_expiry_even_if_flag_and_later_override(monkeypatch):
     assert capture_jev_shadow_enabled(datetime(2026, 10, 1, tzinfo=timezone.utc)) == (False, 'expired')
 
 
+def test_naive_or_date_only_deadline_fails_closed_without_raising(monkeypatch):
+    """A deadline with no UTC offset is malformed: the contract is fail-closed, not TypeError."""
+    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    for value in ('2026-10-05T00:00:00', '2026-10-05'):
+        monkeypatch.setenv('CAPTURE_JEV_SHADOW_EXPIRY', value)
+        assert capture_jev_shadow_enabled(datetime(2026, 10, 1, tzinfo=timezone.utc)) == (False, 'expired')
+
+
 def test_expired_shadow_never_submits(monkeypatch):
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_EXPIRY', '2026-09-01T00:00:00Z')

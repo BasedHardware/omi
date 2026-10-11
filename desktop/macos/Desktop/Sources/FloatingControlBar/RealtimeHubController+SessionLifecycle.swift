@@ -592,6 +592,7 @@ extension RealtimeHubController {
       stableCacheIdentity: topLevelContext.stableCacheIdentity,
       dynamicContextIdentity: topLevelContext.dynamicContextIdentity,
       contextCacheReplaced: pendingContextCacheReplacement,
+      assistantVoiceID: AssistantVoiceStore.shared.currentVoiceID,
       delegate: self)
     pendingContextCacheReplacement = false
     lastWarmAt = nil

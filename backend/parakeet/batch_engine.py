@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import time
 import wave as _wave
@@ -28,9 +29,15 @@ class PendingRequest:
     submitted_at: float = field(default_factory=time.monotonic)
     duration_sec: Optional[float] = None
     lane: str = 'backfill'
+    queue_deadline: Optional[float] = None
+    expire_handle: Optional[asyncio.TimerHandle] = field(default=None, repr=False)
 
 
 class QueueFullError(Exception):
+    pass
+
+
+class QueueTimeoutError(Exception):
     pass
 
 
@@ -170,29 +177,47 @@ class BatchEngine:
         return self._auto_threshold_sec
 
     async def submit(
-        self, audio_path: str, timestamps: bool = True, owns_file: bool = False, lane: str = 'backfill'
+        self,
+        audio_path: str,
+        timestamps: bool = True,
+        owns_file: bool = False,
+        lane: str = 'backfill',
+        *,
+        queue_deadline: Optional[float] = None,
     ) -> Dict[str, Any]:
-        if lane not in ('live', 'backfill'):
-            raise ValueError('Unknown Parakeet batch lane')
         enqueued = False
-        duration = self._get_audio_duration(audio_path)
+        req: Optional[PendingRequest] = None
+        loop = cast(asyncio.AbstractEventLoop, self._loop)
         try:
+            if lane not in ('live', 'backfill'):
+                raise ValueError('Unknown Parakeet batch lane')
+            if queue_deadline is not None:
+                if lane != 'live':
+                    raise ValueError('queue_deadline applies only to the live lane')
+                if not math.isfinite(queue_deadline):
+                    raise ValueError('queue_deadline must be finite')
+            duration = self._get_audio_duration(audio_path)
             async with self._lock:
+                self._prune_pending()
+                if queue_deadline is not None and time.monotonic() >= queue_deadline:
+                    raise QueueTimeoutError("Queue deadline expired before enqueue")
                 if len(self._pending) >= self._max_queue_depth:
                     self._metrics["rejected_requests"] += 1
                     raise QueueFullError(f"Queue depth {len(self._pending)} exceeds limit {self._max_queue_depth}")
 
-                future = cast(asyncio.AbstractEventLoop, self._loop).create_future()
-                self._pending.append(
-                    PendingRequest(
-                        audio_path=audio_path,
-                        timestamps=timestamps,
-                        future=future,
-                        owns_file=owns_file,
-                        duration_sec=duration,
-                        lane=lane,
-                    )
+                future = loop.create_future()
+                req = PendingRequest(
+                    audio_path=audio_path,
+                    timestamps=timestamps,
+                    future=future,
+                    owns_file=owns_file,
+                    duration_sec=duration,
+                    lane=lane,
+                    queue_deadline=queue_deadline,
                 )
+                if queue_deadline is not None:
+                    req.expire_handle = loop.call_at(queue_deadline, self._expire_queued, req)
+                self._pending.append(req)
                 enqueued = True
                 self._metrics["total_requests"] += 1
 
@@ -215,11 +240,64 @@ class BatchEngine:
                 _unlink_safe(audio_path)
             raise
 
-        return await future
+        try:
+            return await future
+        except asyncio.CancelledError:
+            self._remove_pending(req)
+            raise
+
+    def _cancel_expire(self, req: PendingRequest) -> None:
+        handle = req.expire_handle
+        req.expire_handle = None
+        if handle is not None:
+            handle.cancel()
+
+    def _remove_pending(self, req: PendingRequest) -> bool:
+        if req not in self._pending:
+            return False
+        self._pending.remove(req)
+        self._cancel_expire(req)
+        if not req.future.done():
+            req.future.cancel()
+        if req.owns_file:
+            _unlink_safe(req.audio_path)
+        return True
+
+    def _expire_queued(self, req: PendingRequest) -> None:
+        if req not in self._pending:
+            return
+        self._pending.remove(req)
+        req.expire_handle = None
+        if not req.future.done():
+            req.future.set_exception(QueueTimeoutError("Queued request exceeded its deadline"))
+        if req.owns_file:
+            _unlink_safe(req.audio_path)
+
+    def _prune_pending(self, now: Optional[float] = None) -> None:
+        if not self._pending:
+            return
+        if now is None:
+            now = time.monotonic()
+        survivors: List[PendingRequest] = []
+        for req in self._pending:
+            if req.future.done():
+                self._cancel_expire(req)
+                if req.owns_file:
+                    _unlink_safe(req.audio_path)
+                continue
+            if req.queue_deadline is not None and now >= req.queue_deadline:
+                self._cancel_expire(req)
+                req.future.set_exception(QueueTimeoutError("Queued request exceeded its deadline"))
+                if req.owns_file:
+                    _unlink_safe(req.audio_path)
+                continue
+            survivors.append(req)
+        self._pending = survivors
 
     async def _flush_loop(self) -> None:
         while not self._shutting_down:
             await asyncio.sleep(self._max_wait_seconds)
+            self._prune_pending()
             if self._pending and not self._flush_pending and self._batches_inflight == 0:
                 self._flush_pending = True
                 t = asyncio.create_task(self._guarded_flush())
@@ -295,6 +373,7 @@ class BatchEngine:
     def pressure_snapshot(self) -> Dict[str, float | int]:
         """One event-loop snapshot of waiting requests, excluding in-flight work."""
         now = time.monotonic()
+        self._prune_pending(now)
         live = [r for r in self._pending if r.lane == 'live']
         return {
             'pending_requests': len(self._pending),
@@ -311,11 +390,14 @@ class BatchEngine:
         try:
             self._try_init_vram()
             async with self._lock:
+                self._prune_pending()
                 if not self._pending:
                     return
                 batch = self._select_batch()
                 batch_set = set(id(r) for r in batch)
                 self._pending = [r for r in self._pending if id(r) not in batch_set]
+                for req in batch:
+                    self._cancel_expire(req)
             self._flush_pending = False
 
             if not batch:
@@ -402,6 +484,7 @@ class BatchEngine:
 
     @property
     def metrics(self) -> Dict[str, Any]:
+        self._prune_pending()
         return {
             **self._metrics,
             "pending_requests": len(self._pending),

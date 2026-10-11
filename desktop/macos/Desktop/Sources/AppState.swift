@@ -402,6 +402,7 @@ class AppState: ObservableObject {
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
   @Published var liveSpeakerPersonMap: [Int: String] = [:]
+  var liveManualSpeakerPersonMap: [Int: String] = [:]
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false

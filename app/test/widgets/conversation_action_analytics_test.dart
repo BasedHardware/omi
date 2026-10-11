@@ -173,9 +173,11 @@ void main() {
 
     testWidgets('a swipe to delete records row_swipe', (tester) async {
       await pumpRow(tester, _conversation('b'));
-      await tester.fling(find.byType(Dismissible), const Offset(-600, 0), 2000);
+      await tester.fling(find.byKey(const ValueKey('conversation_card')), const Offset(-600, 0), 2000);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      // The confirm is a menu from the row's delete button; a tap outside it cancels.
+      expect(find.text('Delete Conversation'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 400));
       await tester.pumpAndSettle();
       expect(await tester.runAsync(actions), [
         {'action': 'delete', 'surface': 'row_swipe'},

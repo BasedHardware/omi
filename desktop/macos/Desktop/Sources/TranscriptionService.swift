@@ -330,6 +330,30 @@ class TranscriptionService: @unchecked Sendable {
     clientStateSubscription = nil
   }
 
+  func notifySpeakerAssigned(personId: String, segmentIds: [String]) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let message = Self.speakerAssignedMessage(personId: personId, segmentIds: segmentIds)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send speaker assignment", error: error)
+      }
+    }
+  }
+
+  static func speakerAssignedMessage(personId: String, segmentIds: [String]) -> String? {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: [
+        "type": "speaker_assigned",
+        "person_id": personId,
+        "segment_ids": segmentIds,
+      ])
+    else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
   private func sendClientState(_ snapshot: ListenClientState.Snapshot) {
     guard streamingMode == .conversation,
       isConnected,

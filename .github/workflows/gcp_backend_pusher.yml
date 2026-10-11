@@ -164,7 +164,8 @@ jobs:
             --expected-workflow-id "$EXPECTED_WORKFLOW_ID" \
             --expected-run-id "$QUALIFICATION_RUN_ID"
           QUALIFIED_SOURCE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "${EVIDENCE_FILES[0]}")"
-          if ! git cat-file -e "${QUALIFIED_SOURCE_SHA}^{commit}" || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
+          # git 2.54 regressed "<full-sha>^{commit}" peeling; type check instead.
+          if ! [ "$(git cat-file -t "${QUALIFIED_SOURCE_SHA}" 2>/dev/null)" = "commit" ] || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
             echo "Development qualification source is not a commit on fresh origin/main." >&2
             exit 1
           fi
@@ -187,7 +188,40 @@ jobs:
             echo "PUSHER_QUALIFICATION_RUN_JSON=$QUALIFICATION_DIR/run.json"
             echo "PUSHER_QUALIFICATION_WORKFLOW_ID=$EXPECTED_WORKFLOW_ID"
             echo "PUSHER_QUALIFICATION_RUN_ID=$QUALIFICATION_RUN_ID"
+            echo "QUALIFIED_SOURCE_SHA=$QUALIFIED_SOURCE_SHA"
           } >> "$GITHUB_ENV"
+
+      - name: Resolve Firestore gate source
+        run: |
+          set -euo pipefail
+          if [[ "${{ env.SERVICE }}" == "pusher" && "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            if [[ ! "${QUALIFIED_SOURCE_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Qualified Pusher source SHA is missing or malformed." >&2
+              exit 1
+            fi
+            echo "FIRESTORE_GATE_SOURCE_SHA=$QUALIFIED_SOURCE_SHA" >> "$GITHUB_ENV"
+          else
+            echo "FIRESTORE_GATE_SOURCE_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.FIRESTORE_GATE_SOURCE_SHA }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.

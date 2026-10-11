@@ -168,6 +168,7 @@ class TestActionItemsToMarkdown(unittest.TestCase):
                 dt = due_dt or created_dt
                 date_str = dt.strftime("%Y-%m-%d") if dt else "undated"
                 import re
+
                 date_prefix = date_str if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str) else "undated"
                 groups.setdefault(date_prefix, []).append(it)
 
@@ -296,7 +297,48 @@ class TestActionItemsToMarkdown(unittest.TestCase):
             f_empty_dict.write_text("{}", encoding="utf-8")
             self.assertEqual(ai2m.load_input_data(str(f_empty_dict)), [])
 
+    def test_strip_surrogates_keeps_valid_text(self):
+        """Only unpaired surrogates are dropped; all other text is preserved."""
+        self.assertEqual(ai2m.strip_surrogates("plain"), "plain")
+        self.assertEqual(ai2m.strip_surrogates("中文 ok"), "中文 ok")
+        self.assertEqual(ai2m.strip_surrogates("emoji \U0001f600 ok"), "emoji \U0001f600 ok")
+        self.assertEqual(ai2m.strip_surrogates("a\ud800b"), "ab")
+        self.assertEqual(ai2m.strip_surrogates("\udfff"), "")
+
+    def test_lone_surrogate_in_description_does_not_abort_export(self):
+        """Regression: a lone surrogate must not abort the action-item export.
+
+        json.loads accepts an escaped lone surrogate (e.g. "\\ud800") from a
+        malformed export. It reached the rendered note verbatim, so
+        `filepath.write_text(..., encoding="utf-8")` raised UnicodeEncodeError and
+        the whole export was lost.
+        """
+        items = [{"id": "t1", "description": "do \ud800 it", "completed": False}]
+        md = ai2m.items_to_markdown(items)
+        # Must not raise: this is the exact call that failed before the fix.
+        md.encode("utf-8")
+        self.assertIn("do  it", md)
+
+    def test_single_item_render_is_utf8_encodable(self):
+        """The per-item renderer is written on its own path, so it must be safe too."""
+        rendered = ai2m.format_action_item({"id": "t1", "description": "x \ud800 y"})
+        rendered.encode("utf-8")
+        self.assertIn("x  y", rendered)
+
+    def test_lone_surrogate_renders_in_every_grouping_mode(self):
+        """Both grouping modes render to a writable file rather than aborting."""
+        items = [
+            {"id": "t1", "description": "a \ud800 b", "completed": False, "created_at": "2026-09-20T10:00:00Z"},
+            {"id": "t2", "description": "c \udfff d", "completed": True, "created_at": "2026-09-21T10:00:00Z"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for mode in ("status", "date"):
+                out = Path(tmp_dir) / ("%s.md" % mode)
+                out.write_text(ai2m.items_to_markdown(items, group_by=mode), encoding="utf-8")
+                text = out.read_text(encoding="utf-8")
+                self.assertIn("a  b", text)
+                self.assertIn("c  d", text)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -174,17 +174,13 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              getProcessingConversationsWidget([
-                ServerConversation(
-                  id: '0',
-                  createdAt: DateTime.utc(2026),
-                  structured: Structured('', '', emoji: ''),
-                  status: ConversationStatus.processing,
-                ),
-              ]),
-            ],
+          body: ProcessingConversationWidget(
+            conversation: ServerConversation(
+              id: '0',
+              createdAt: DateTime.utc(2026),
+              structured: Structured('', '', emoji: ''),
+              status: ConversationStatus.processing,
+            ),
           ),
         ),
       ),

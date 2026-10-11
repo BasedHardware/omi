@@ -93,10 +93,10 @@ class QuickActionsService {
         break;
       // D1: chat is a normal pushed page everywhere.
       case _kAskOmi:
-        openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: true));
+        openChatSheet(context, const ChatPage(isPivotBottom: false));
         break;
       case _kVoiceMode:
-        openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: true));
+        openChatSheet(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
         _toggleMute(context, mute: true);

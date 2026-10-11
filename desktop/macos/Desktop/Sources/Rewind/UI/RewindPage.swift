@@ -1519,8 +1519,7 @@ struct RewindPage: View {
           people: appState.people,
           currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
           onSave: { personId in
-            appState.liveSpeakerPersonMap[segment.speaker] = personId
-            selectedSpeakerSegment = nil
+            await appState.assignLiveSpeaker(speakerId: segment.speaker, personId: personId)
           },
           onCreatePerson: { name in
             return await appState.createPerson(name: name)

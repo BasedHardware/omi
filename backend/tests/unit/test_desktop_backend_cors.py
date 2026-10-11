@@ -192,3 +192,39 @@ def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     assert response.status_code == 200
     assert response.headers['content-type'].startswith('text/plain')
     assert 'omi_client_journey_accepted_total' in response.text
+
+
+def test_desktop_startup_and_retired_routes_need_no_v2_redis(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from database import proactivity_redis, redis_db
+
+    for key in ('HOST', 'PORT', 'PASSWORD'):
+        monkeypatch.delenv(f'PROACTIVITY_REDIS_{key}', raising=False)
+    v2_client = Mock(side_effect=AssertionError('desktop must not acquire a v2 Redis client'))
+    monkeypatch.setattr(proactivity_redis, 'get_client', v2_client)
+    monkeypatch.setattr(desktop_backend, 'load_backend_env', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'prepare_google_credentials', lambda: None)
+    monkeypatch.setattr(desktop_backend, '_initialize_firebase_admin', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'start_metrics_sidecar_server', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'stop_metrics_sidecar_server', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'shutdown_managed_spend_ledger', AsyncMock())
+    monkeypatch.setattr(desktop_backend, 'close_all_clients', AsyncMock())
+    monkeypatch.setattr(desktop_backend.reservation_state, 'aclose', AsyncMock())
+    monkeypatch.setattr(desktop_backend, 'close_posthog_control_plane', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'close_free_tier_control_plane', lambda: None)
+    # Readiness continues to probe the existing desktop Redis, independent of v2.
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-desktop.example')
+    normal_ping = Mock(return_value=True)
+    monkeypatch.setattr(redis_db.r, 'ping', normal_ping)
+
+    app = desktop_backend.create_app()
+    with TestClient(app) as client:
+        assert client.get('/health').status_code == 200
+        assert client.get('/ready').status_code == 200
+        assert client.post('/v1/desktop/proactivity/completions', content=b'not json').status_code == 429
+        assert client.post('/v1/jit/proactivity/reservations', content=b'not json').status_code == 410
+        assert client.post('/v1/jit/trigger-feedback', content=b'not json').status_code == 410
+        assert client.get('/v1/proactivity/feed').status_code == 404
+        assert client.post('/v1/proactivity/items/item/outcomes', json={}).status_code == 404
+    normal_ping.assert_called_once()
+    v2_client.assert_not_called()

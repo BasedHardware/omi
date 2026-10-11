@@ -12,16 +12,14 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
-import 'package:omi/pages/conversations/capture_gaps_controller.dart';
-import 'package:omi/pages/conversations/widgets/capture_gap_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
@@ -29,13 +27,21 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
+
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
+  final dates = OmiDateFormat.of(context);
+  if (end == null || (start.year == end.year && start.month == end.month && start.day == end.day)) {
+    return dates.date(start);
+  }
+  return '${dates.date(start)} – ${dates.date(end)}';
+}
 
 enum _ConversationListRowKind {
   topSpacer,
   dateHeader,
-  captureGapHeader,
-  captureGap,
+  processing,
   conversation,
   recording,
   groupSpacer,
@@ -47,7 +53,6 @@ typedef _ConversationListRow = ({
   bool isFirst,
   ServerConversation? conversation,
   LocalRecording? recording,
-  CalendarCaptureGap? captureGap,
   int conversationIndex,
 });
 
@@ -138,7 +143,7 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
-  Map<DateTime, List<CalendarCaptureGap>> captureGapsByDate = const {},
+  Map<DateTime, ServerConversation> processingByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -147,14 +152,12 @@ List<_ConversationListRow> _buildConversationListRows({
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
-    final captureGaps = captureGapsByDate[date] ?? const <CalendarCaptureGap>[];
+    final processing = processingByDate[date];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
-    // A day with only uncaptured meetings still deserves its date header —
-    // the capture-gap group is the honest row for that day.
-    if (entries.isEmpty && captureGaps.isEmpty) continue;
+    if (entries.isEmpty && processing == null) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -163,7 +166,6 @@ List<_ConversationListRow> _buildConversationListRows({
         isFirst: true,
         conversation: null,
         recording: null,
-        captureGap: null,
         conversationIndex: -1,
       ));
     }
@@ -173,31 +175,19 @@ List<_ConversationListRow> _buildConversationListRows({
       isFirst: !hasRenderedDate,
       conversation: null,
       recording: null,
-      captureGap: null,
       conversationIndex: -1,
     ));
 
-    if (captureGaps.isNotEmpty) {
+    // Process Now belongs to the list, above the day where the completed conversation lands.
+    if (processing != null) {
       rows.add((
-        kind: _ConversationListRowKind.captureGapHeader,
+        kind: _ConversationListRowKind.processing,
         date: date,
         isFirst: false,
-        conversation: null,
+        conversation: processing,
         recording: null,
-        captureGap: null,
         conversationIndex: -1,
       ));
-      for (final captureGap in captureGaps) {
-        rows.add((
-          kind: _ConversationListRowKind.captureGap,
-          date: date,
-          isFirst: false,
-          conversation: null,
-          recording: null,
-          captureGap: captureGap,
-          conversationIndex: -1,
-        ));
-      }
     }
 
     for (final entry in entries) {
@@ -210,7 +200,6 @@ List<_ConversationListRow> _buildConversationListRows({
           isFirst: false,
           conversation: conversation,
           recording: null,
-          captureGap: null,
           conversationIndex: conversationIndexes[conversation.id] ?? -1,
         ));
       } else {
@@ -220,7 +209,6 @@ List<_ConversationListRow> _buildConversationListRows({
           isFirst: false,
           conversation: null,
           recording: recording,
-          captureGap: null,
           conversationIndex: -1,
         ));
       }
@@ -232,13 +220,32 @@ List<_ConversationListRow> _buildConversationListRows({
       isFirst: false,
       conversation: null,
       recording: null,
-      captureGap: null,
       conversationIndex: -1,
     ));
     hasRenderedDate = true;
   }
 
   return rows;
+}
+
+bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
+    index >= 0 &&
+    index < rows.length &&
+    rows[index].kind == _ConversationListRowKind.conversation &&
+    rows[index].conversation!.isLocked;
+
+/// For a locked conversation row in a run of two or more consecutive locked rows (one day): the
+/// whole run when [index] starts it, an empty list when an earlier row already drew it, and null
+/// for any other row, which draws itself.
+List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int index) {
+  if (!_isLockedRow(rows, index)) return null;
+  if (_isLockedRow(rows, index - 1)) return const [];
+  var end = index + 1;
+  while (_isLockedRow(rows, end)) {
+    end++;
+  }
+  if (end - index < 2) return null;
+  return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
 /// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
@@ -266,7 +273,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
-  final CaptureGapsController _captureGaps = CaptureGapsController();
 
   @override
   bool get wantKeepAlive => true;
@@ -292,9 +298,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
       // Keep filesystem scanning off the first navigation/scroll frame.
       _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
-
-      // Capture gaps depend on the loaded date span; refresh once it exists.
-      _scheduleDeferred(() => _refreshCaptureGapsIfNeeded(context.read<ConversationProvider>()));
     });
   }
 
@@ -313,28 +316,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       }
     });
     _deferred.add(timer);
-  }
-
-  /// The capture-gap group only belongs in the unfiltered default view; the
-  /// same predicate gates the fetch and the rendering so a filtered view never
-  /// shows stale gaps beside filtered rows.
-  bool _captureGapsEligible(ConversationProvider provider) =>
-      provider.previousQuery.isEmpty &&
-      provider.selectedFolderId == null &&
-      provider.selectedSpeakerId == null &&
-      provider.selectedStartDate == null &&
-      provider.selectedEndDate == null &&
-      !provider.showStarredOnly &&
-      !provider.showDiscardedConversations &&
-      !provider.showShortConversations;
-
-  /// SCA-381: keep the Conversations list honest — calendar events in the
-  /// loaded date span that have no recorded conversation render as a compact
-  /// "Not captured" group per day, above the audio rows, never replacing them.
-  Future<void> _refreshCaptureGapsIfNeeded(ConversationProvider provider) async {
-    if (!_captureGapsEligible(provider)) return;
-    final changed = await _captureGaps.refresh(provider.groupedConversations.keys);
-    if (changed && mounted) setState(() {});
   }
 
   bool _requestMoreIfNeeded(ConversationProvider provider) {
@@ -385,9 +366,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             // the latch so the next scroll can retry the same offset.
             _lastLoadMoreRequestKey = null;
           }
-          // Loading a page extends the loaded date span; the capture-gap
-          // window must follow it or older days show no gaps.
-          if (mounted) unawaited(_refreshCaptureGapsIfNeeded(context.read<ConversationProvider>()));
         }),
       );
     }
@@ -459,17 +437,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  Widget _buildNoConversationsHero(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120),
-      child: OmiEmptyState(
-        icon: Icons.forum_rounded,
-        title: context.l10n.noConversationsYet,
-        message: context.l10n.noConversationsHeroMessage,
-      ),
-    );
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -521,6 +488,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
+        final processingNewest = newestProcessingConversation(snapshot.processingConversations);
+        final processingByDate = <DateTime, ServerConversation>{
+          if (processingNewest != null)
+            conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
+        };
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -532,20 +504,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
-        final bool showCaptureGaps = _captureGapsEligible(convoProvider) && !convoProvider.isSelectionModeActive;
-        final captureGapsByDate =
-            showCaptureGaps ? _captureGaps.gapsByDate : const <DateTime, List<CalendarCaptureGap>>{};
         final mergedDates = <DateTime>{
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
-          if (showCaptureGaps) ...captureGapsByDate.keys,
+          ...processingByDate.keys,
         }.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
-          captureGapsByDate: captureGapsByDate,
+          processingByDate: processingByDate,
         );
 
         return RefreshIndicator(
@@ -558,9 +527,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
             ]);
-            // Pull-to-refresh is the explicit user request for honest data.
-            _captureGaps.invalidate();
-            await _refreshCaptureGapsIfNeeded(convoProvider);
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -572,15 +538,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-              const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
+              // Review absorbs the voice prompts; the old card shows only while Review is off.
+              const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
                     : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
-              // Process Now belongs to the list, above the day where the completed conversation lands.
-              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
@@ -599,19 +564,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
-              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
-                const SliverToBoxAdapter(child: SizedBox(height: 20))
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32.0),
-                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                      child: EmptyConversationsWidget(
+                        isStarredFilterActive: convoProvider.showStarredOnly,
+                        dateFilterLabel: convoProvider.selectedStartDate == null
+                            ? null
+                            : _conversationDateRangeLabel(
+                                context,
+                                convoProvider.selectedStartDate!,
+                                convoProvider.selectedEndDate,
+                              ),
+                      ),
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && isShowingConversationSkeleton)
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  isShowingConversationSkeleton)
                 _buildLoadingShimmer()
               else
                 SliverList(
@@ -643,17 +621,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                           isFirst: row.isFirst,
                         );
-                      case _ConversationListRowKind.captureGapHeader:
-                        return CaptureGapHeader(
-                          key: ValueKey('gaps_${row.date.toIso8601String()}'),
-                          count: captureGapsByDate[row.date]?.length ?? 0,
-                        );
-                      case _ConversationListRowKind.captureGap:
-                        return CaptureGapListItem(
-                          key: ValueKey('gap_${row.captureGap!.eventId}'),
-                          gap: row.captureGap!,
+                      case _ConversationListRowKind.processing:
+                        return ProcessingConversationWidget(
+                          key: ValueKey('processing_${row.conversation!.id}'),
+                          conversation: row.conversation!,
                         );
                       case _ConversationListRowKind.conversation:
+                        // Consecutive locked rows share one frosted card and one upgrade action;
+                        // the run's first row draws it and the rest of the run draws nothing.
+                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        if (lockedRun != null) {
+                          if (lockedRun.isEmpty) return const SizedBox.shrink();
+                          return LockedConversationRun(
+                            key: ValueKey('locked_run_${row.conversation!.id}'),
+                            conversations: lockedRun,
+                            date: row.date,
+                          );
+                        }
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
                           conversation: row.conversation!,

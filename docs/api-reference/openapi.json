@@ -3110,6 +3110,39 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/dev/key": {
+      "get": {
+        "description": "Return only the calling key's metadata and effective scopes. No data scope is required.",
+        "operationId": "getCallingApiKey",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevApiKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          }
+        },
+        "security": [
+          {
+            "developerApiKey": []
+          }
+        ],
+        "summary": "Get calling API key",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
     "/v1/dev/keys": {
       "get": {
         "operationId": "listApiKeys",

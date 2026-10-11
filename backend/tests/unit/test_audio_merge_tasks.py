@@ -147,7 +147,7 @@ class TestEnqueueAudioMergeJob:
         """
         ct = _load_cloud_tasks()
         merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
-        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, 'enqueue_named_task') as enqueue:
             ct.enqueue_audio_merge_job(
                 {'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'u', 'timestamps': [1.0]}
             )
@@ -159,7 +159,7 @@ class TestEnqueueAudioMergeJob:
     def test_schema_v2_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
         ct = _load_cloud_tasks()
         merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
-        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, 'enqueue_named_task') as enqueue:
             ct.enqueue_audio_merge_job(
                 {'schema_version': 2, 'conversation_id': 'conv1', 'fingerprint': 'abc123def456', 'uid': 'u'}
             )

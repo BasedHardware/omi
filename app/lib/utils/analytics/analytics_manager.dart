@@ -15,6 +15,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -47,6 +48,18 @@ class AnalyticsManager {
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+
+  /// Events whose PostHog rows were missing the release build. The value is
+  /// the same `app_build` super-property Device Connected already flushes.
+  static const Set<String> _captureWedgeFamilyEvents = {
+    'Capture Wedge Detected',
+    'Local WAL Stuck',
+    'Recording Start Failed',
+    'Capture Recovery Prompt Shown',
+    'Capture Recovery Actioned',
+    'Capture Recovery Resolved',
+    'Capture Ingress Health',
+  };
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -63,10 +76,15 @@ class AnalyticsManager {
 
   static void Function(String? identity, bool enabled)? identityChanged;
   static int get identityEpoch => _identityEpoch;
+  static final ValueNotifier<int> _identityChanges = ValueNotifier(0);
+  static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
+  static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
+  static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
   static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
@@ -99,9 +117,16 @@ class AnalyticsManager {
     if (_identityKnown && _boundIdentity == identity) return;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
+    // Preserve a durable epoch across relaunch of the same account so native
+    // session markers survive process death, but retire them on account changes.
+    final savedIdentity = _preferences.getString('device_health_identity');
+    final savedEpoch = _preferences.getInt('device_health_identity_epoch');
+    final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
+    _identityEpoch = sameOnRestart ? savedEpoch - 1 : (_identityEpoch > savedEpoch ? _identityEpoch : savedEpoch);
     _identityKnown = true;
     _identityEpoch++;
     _boundIdentity = identity;
+    _identityChanges.value = _identityEpoch;
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -110,6 +135,9 @@ class AnalyticsManager {
       CrashlyticsManager.instance.setUserAttribute('app_session_id', '');
     } catch (_) {}
     _settledDistinctId = null;
+    unawaited(_preferences.saveString('device_health_identity', identity ?? ''));
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: _trackingEnabled && identity != null, retire: !sameOnRestart));
     _notifyIdentity(null, false);
     unawaited(_settleIdentity());
     if (hadSession && _trackingEnabled) {
@@ -209,6 +237,8 @@ class AnalyticsManager {
         final consent = await SharedPreferences.getInstance();
         if (consentRevision == _consentRevision) {
           _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
+          _trackingConsent.value = _trackingEnabled;
+          if (!_trackingEnabled) await DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true);
         }
         await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
         if (!identical(_adapter, adapter)) return;
@@ -281,6 +311,7 @@ class AnalyticsManager {
     _globalEventProperties = {'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
+    _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
     _identityEpoch++;
@@ -434,7 +465,10 @@ class AnalyticsManager {
   void optInTracking() {
     _consentRevision++;
     if (!_trackingEnabled) _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
     _trackingEnabled = true;
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: !_identityKnown || _boundIdentity != null, retire: false));
+    _trackingConsent.value = true;
     unawaited(_persistTrackingPreference(true));
     _notifyIdentity(null, false);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
@@ -451,8 +485,11 @@ class AnalyticsManager {
   void optOutTracking() {
     _consentRevision++;
     _trackingEnabled = false;
+    _trackingConsent.value = false;
     unawaited(_persistTrackingPreference(false));
     _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true));
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
     _settledDistinctId = null;
@@ -555,6 +592,7 @@ class AnalyticsManager {
         final adapter = _adapter;
         if (adapter == null || !_trackingEnabled) return;
         final props = <String, Object>{};
+        final ownedKeys = properties?.keys.toSet() ?? <String>{};
         if (properties != null) {
           properties.forEach((k, v) {
             final coerced = _coerceProperty(v);
@@ -566,7 +604,15 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        props.addAll(_eventContext);
+        for (final entry in _eventContext.entries) {
+          if (!ownedKeys.contains(entry.key)) props.putIfAbsent(entry.key, () => entry.value);
+        }
+        // Only positive integer schema versions are valid. Invalid versions
+        // use the default delivery envelope rather than entering the wire.
+        final schemaVersion = props['schema_version'];
+        if (schemaVersion != null && (schemaVersion is! int || schemaVersion < 1)) {
+          props.remove('schema_version');
+        }
         if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
           props['experiment_context_verified'] = true;
         }
@@ -574,6 +620,7 @@ class AnalyticsManager {
           _QueuedAnalyticsEvent(
             eventName: eventName,
             properties: props,
+            ownedKeys: ownedKeys,
             eventId: const Uuid().v4(),
             occurredAt: DateTime.now().toUtc(),
             identityEpoch: _identityEpoch,
@@ -634,7 +681,20 @@ class AnalyticsManager {
         final event = _queuedEvents.removeAt(0);
         try {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
-          final properties = {...event.properties, ..._globalEventProperties};
+          final properties = <String, Object>{
+            for (final entry in _globalEventProperties.entries)
+              if (!event.ownedKeys.contains(entry.key)) entry.key: entry.value,
+            ...event.properties,
+          };
+          // Device lifecycle events already carry this value as `app_build`.
+          // Capture-wedge events were emitted without it, so fleet queries on
+          // `build` could not attribute a wedge to a release.
+          final build = _globalEventProperties['app_build'];
+          if (build != null &&
+              _captureWedgeFamilyEvents.contains(event.eventName) &&
+              !event.ownedKeys.contains('build')) {
+            properties.putIfAbsent('build', () => build);
+          }
           if (adapter is AnalyticsDeliveryAdapter) {
             await (adapter as AnalyticsDeliveryAdapter).deliver(
               eventName: event.eventName,
@@ -643,7 +703,7 @@ class AnalyticsManager {
                 'event_id': event.eventId,
                 r'$insert_id': event.eventId,
                 'occurred_at': event.occurredAt.toIso8601String(),
-                'schema_version': 1,
+                'schema_version': properties['schema_version'] ?? 1,
                 'client_app_namespace': _clientAppNamespace,
                 'client_app_profile': Env.profile.name,
               },
@@ -961,7 +1021,93 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => const TypedEvents().emit(const DeviceDisconnected());
+  /// Enriched replacement for the deprecated property-less `Device Disconnected`
+  /// emission. [reason], [reasonCode] and [appState] come from the disconnect
+  /// event native persists before notifying Dart; nulls map to `unknown`/-1.
+  void deviceDisconnected({String? reason, int? reasonCode, String? appState}) {
+    const TypedEvents().emit(
+      DeviceDisconnectedDetailed(
+        reason: disconnectReasonFromNative(reason),
+        reasonCode: reasonCode ?? -1,
+        appState: disconnectAppStateFromNative(appState),
+      ),
+    );
+  }
+
+  /// Maps native disconnect reason strings onto the closed registry enum.
+  /// `gatt_error_<code>` collapses to [DeviceDisconnectedDetailedReason.gattError];
+  /// the code itself travels in `reason_code`.
+  @visibleForTesting
+  static DeviceDisconnectedDetailedReason disconnectReasonFromNative(String? reason) {
+    switch (reason) {
+      case 'clean_disconnect':
+        return DeviceDisconnectedDetailedReason.cleanDisconnect;
+      case 'connection_timeout':
+        return DeviceDisconnectedDetailedReason.connectionTimeout;
+      case 'remote_device_terminated':
+        return DeviceDisconnectedDetailedReason.remoteDeviceTerminated;
+      case 'connection_failed_instant_passed':
+        return DeviceDisconnectedDetailedReason.connectionFailedInstantPassed;
+      case 'paired_to_another_phone':
+        return DeviceDisconnectedDetailedReason.pairedToAnotherPhone;
+      case 'link_key_mismatch':
+        return DeviceDisconnectedDetailedReason.linkKeyMismatch;
+      case 'pairing_lost':
+        return DeviceDisconnectedDetailedReason.pairingLost;
+      case 'app_closed':
+        return DeviceDisconnectedDetailedReason.appClosed;
+      case 'manual':
+        return DeviceDisconnectedDetailedReason.manual;
+      default:
+        if (reason != null && reason.startsWith('gatt_error_')) {
+          return DeviceDisconnectedDetailedReason.gattError;
+        }
+        return DeviceDisconnectedDetailedReason.unknown;
+    }
+  }
+
+  @visibleForTesting
+  static DeviceDisconnectedDetailedAppState disconnectAppStateFromNative(String? appState) {
+    switch (appState) {
+      case 'foreground':
+        return DeviceDisconnectedDetailedAppState.foreground;
+      case 'background':
+        return DeviceDisconnectedDetailedAppState.background;
+      case 'inactive':
+        return DeviceDisconnectedDetailedAppState.inactive;
+      default:
+        return DeviceDisconnectedDetailedAppState.unknown;
+    }
+  }
+
+  /// Device Diagnostics bundle accepted by the support backend. Never carries
+  /// bundle content or device identifiers — only sizes and counts.
+  void diagnosticsSent({required int bundleBytes, required int disconnectCount, required int schemaVersion}) {
+    const TypedEvents().emit(
+      DiagnosticsSent(bundleBytes: bundleBytes, disconnectCount: disconnectCount, schemaVersion: schemaVersion),
+    );
+  }
+
+  /// Device Diagnostics bundle that never reached the support backend. Bundle
+  /// metrics are 0 when the failure precedes the build; [statusCode] is the HTTP
+  /// status when the failure is the upload, else 0.
+  void diagnosticsSendFailed({
+    required DiagnosticsSendFailedFailureStage failureStage,
+    int bundleBytes = 0,
+    int disconnectCount = 0,
+    int schemaVersion = 0,
+    int statusCode = 0,
+  }) {
+    const TypedEvents().emit(
+      DiagnosticsSendFailed(
+        bundleBytes: bundleBytes,
+        disconnectCount: disconnectCount,
+        schemaVersion: schemaVersion,
+        failureStage: failureStage,
+        statusCode: statusCode,
+      ),
+    );
+  }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
@@ -2460,6 +2606,11 @@ class AnalyticsManager {
     setUserProperty('Daily Summary Hour', hour);
   }
 
+  /// Shape-only dimensions: no advice, source identities or arbitrary producer text.
+  void proactivityOutcome({required String action, required String channel, required String surface}) {
+    track('proactivity_v2_outcome', properties: {'action': action, 'channel': channel, 'surface': surface});
+  }
+
   void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {
     track(
       'Daily Summary Detail Viewed',
@@ -2746,7 +2897,9 @@ class _QueuedAnalyticsEvent {
     required this.occurredAt,
     required this.identityEpoch,
     this.attempts = 0,
+    this.ownedKeys = const {},
   });
+  final Set<String> ownedKeys;
   final String eventName;
   final Map<String, Object> properties;
   final String eventId;
@@ -2756,6 +2909,7 @@ class _QueuedAnalyticsEvent {
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
         eventName: eventName,
         properties: properties,
+        ownedKeys: ownedKeys,
         eventId: eventId,
         occurredAt: occurredAt,
         identityEpoch: identityEpoch,

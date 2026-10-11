@@ -398,9 +398,13 @@ async def _run_relay(
     monkeypatch.setattr(omni_relay, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(omni_relay.users_db, 'is_byok_active', lambda _uid: byok)
     monkeypatch.setattr(omni_relay, 'get_chat_quota_snapshot', snapshot)
+    monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: store)
     # The relay's own persisted response count and its reader run for real against `store`;
     # the only writer that must never fire is the question writer (the chat request owns it).
-    monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: store)
+    # Both resolve "this month" through llm_usage/user_usage's own clocks, so freeze them
+    # here as well: tests that seed September buckets must not drift with the real calendar.
+    monkeypatch.setattr(llm_usage_db, 'datetime', _FrozenDatetime)
+    monkeypatch.setattr(user_usage_db, 'datetime', _FrozenDatetime)
     monkeypatch.setattr(llm_usage_db, 'record_chat_quota_question', lambda *a, **k: writes.append('question'))
     monkeypatch.setattr(omni_relay, 'schedule_managed_attempt', lambda _attempt: True)
     monkeypatch.setattr(omni_relay, '_upstream', lambda _p, _m: upstream or (('wss://upstream.invalid', {}), None))

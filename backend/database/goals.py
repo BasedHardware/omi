@@ -346,6 +346,11 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
     if status_value not in {status.value for status in GoalStatus}:
         status_value = GoalStatus.background.value if normalized.get('is_active', True) else GoalStatus.abandoned.value
     metric = _metric_from_storage(normalized)
+    success_criteria = normalized.get('success_criteria')
+    if success_criteria is None:
+        success_criteria = []
+    elif not isinstance(success_criteria, list):
+        raise ValueError('success_criteria must be a list')
     normalized.update(
         {
             'id': resolved_id,
@@ -353,7 +358,7 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
             'title': str(normalized.get('title') or ''),
             'desired_outcome': str(normalized.get('desired_outcome') or normalized.get('title') or ''),
             'why_it_matters': normalized.get('why_it_matters'),
-            'success_criteria': list(normalized.get('success_criteria') or []),
+            'success_criteria': list(success_criteria),
             'status': status_value,
             'focus_rank': normalized.get('focus_rank') if status_value == GoalStatus.focused.value else None,
             'metric': metric.model_dump(mode='python') if metric is not None else None,
@@ -377,6 +382,26 @@ def get_goal_by_id(uid: str, goal_id: str, *, firestore_client: Any = None) -> O
     return normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
 
 
+def _normalize_goal_documents(documents: Any) -> List[Dict[str, Any]]:
+    """Normalize streamed goal snapshots independently so one corrupt row cannot hide peers.
+
+    Snapshot conversion and stream iteration stay outside the per-row error boundary. A Firestore
+    read failure therefore still propagates to callers; only invalid stored goal payloads are
+    skipped, with a diagnostic that contains no row contents.
+    """
+    goals = []
+    for doc in documents:
+        data = _goal_dict(doc)
+        try:
+            goals.append(normalize_goal_storage(data, goal_id=doc.id))
+        except (AttributeError, TypeError, ValueError) as exc:
+            logger.warning(
+                'Skipping malformed goal during list projection error_type=%s',
+                type(exc).__name__,
+            )
+    return goals
+
+
 def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     """Released compatibility projection: focused first, otherwise oldest non-terminal goal."""
 
@@ -396,7 +421,7 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
     return goals[:limit]
@@ -423,7 +448,7 @@ def get_all_goals(
     """
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)

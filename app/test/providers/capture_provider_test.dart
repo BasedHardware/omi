@@ -22,12 +22,15 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
+
+import '../support/crashlytics_recorder.dart';
 
 /// Fake external actions that tracks people-refresh calls.
 class MockCaptureExternalActions extends NoopCaptureExternalActions {
@@ -74,6 +77,27 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   }
 }
 
+class _NoopBle implements CaptureBleListeners {
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) {}
+
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
+}
+
+CaptureProvider _seamedProvider(CaptureExternalActions actions) {
+  return CaptureProvider(
+    externalActions: actions,
+    connectivity: CaptureConnectivityBoundary(
+      initiallyConnected: true,
+      changes: const Stream.empty(),
+      isConnected: () => true,
+    ),
+    bleListeners: _NoopBle(),
+    inProgressConversationLoader: () async {},
+  );
+}
+
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async {
@@ -95,6 +119,29 @@ TranscriptSegment _segment(String id, String text) {
     end: 1.0,
     translations: [],
   );
+}
+
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
 }
 
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
@@ -316,11 +363,14 @@ class _TestEnvFields implements EnvFields {
   bool? get useAuthCustomToken => false;
 }
 
+late CrashlyticsRecorder crashlytics;
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    crashlytics = await installCrashlyticsRecorder();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -340,6 +390,8 @@ void main() {
       // Ignore if already initialized by another test.
     }
   });
+
+  setUp(() => crashlytics.reset());
 
   // ------------------------------------------------------------------ //
   // Existing tests (preserved verbatim from the original file)          //
@@ -558,9 +610,10 @@ void main() {
       device: _device(id: 'omi-1', type: DeviceType.omi),
     );
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties['failure_class'], 'capture_unavailable');
-    expect(events.single.properties['recording_id'], 'recording-device-fail');
+    expect(events.map((event) => event.name),
+        [RecordingLifecycleTelemetry.requestedEvent, RecordingLifecycleTelemetry.startFailedEvent]);
+    expect(events.last.properties['failure_class'], 'capture_unavailable');
+    expect(events.last.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
   });
 
@@ -739,6 +792,32 @@ void main() {
       expect(provider.segments.first.personId, isNull);
     });
 
+    test('replacing a near match removes the old chip across segments of the same speaker', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello'), _segment('seg2', 'later')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Sam', segmentId: 'seg2', suggestedPersonId: 'sam'));
+      expect(provider.suggestionsBySegmentId.keys, ['seg2']);
+      expect(provider.suggestionsBySegmentId['seg2']?.suggestedPersonId, 'sam');
+      expect(provider.segments.every((segment) => segment.personId == null), isTrue);
+    });
+
+    test('a wire retraction clears every stale chip for that speaker even after its segment leaves', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.suggestionsBySegmentId['other'] = SpeakerLabelSuggestionEvent(
+          speakerId: 1, personId: '', personName: 'Other', segmentId: 'other', suggestedPersonId: 'other');
+      provider.segments = [];
+      final retraction = SpeakerLabelSuggestionEvent.fromJson(
+          {'speaker_id': 0, 'person_id': '', 'person_name': '', 'segment_id': 'new', 'retracted': true});
+      provider.onMessageEventReceived(retraction);
+      expect(provider.suggestionsBySegmentId.keys, ['other']);
+    });
+
     test('auto-applies assignment when personId is provided', () {
       final provider = CaptureProvider();
       // Create segment with speakerId 1 to match the event
@@ -900,6 +979,111 @@ void main() {
 
       // Should trigger a new call
       expect(mockExternalActions.setPeopleCallCount, 2);
+    });
+
+    test('a failed refresh from unknown-person segments reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [_segmentWithPerson('seed', null)];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
+        expect(actions.setPeopleCallCount, 1);
+        provider.onSegmentReceived([_segmentWithPerson('seg-b', 'seg-person-b')]);
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onSegmentReceived([_segmentWithPerson('seg-c', 'seg-person-c')]);
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      final args = crashlytics.recordErrors.single.arguments as Map<dynamic, dynamic>;
+      expect(args['exception'], 'capture_people_refresh_segments: StateError');
+      expect(args['fatal'], isFalse);
+      expect(args['stackTraceElements'], isNotEmpty);
+    });
+
+    test('a failed refresh from a speaker suggestion reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [
+        _segmentWithPerson('seg-a', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+        _segmentWithPerson('seg-c', null)..speakerId = 2,
+      ];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 0, personId: 'suggested-a', personName: 'A', segmentId: 'seg-a'));
+        expect(actions.setPeopleCallCount, 1);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        expect(crashlytics.recordErrors, hasLength(1));
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 2, personId: 'suggested-c', personName: 'C', segmentId: 'seg-c'));
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      final args = crashlytics.recordErrors.single.arguments as Map<dynamic, dynamic>;
+      expect(args['exception'], 'capture_people_refresh_suggestion: StateError');
+      expect(args['fatal'], isFalse);
+      expect(args['stackTraceElements'], isNotEmpty);
+    });
+
+    test('a suggestion joining a segment-owned refresh attaches no second error observer', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [
+        _segmentWithPerson('seed', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+      ];
+
+      final outcome = await _runInGuardedZone(() async {
+        final gate = Completer<void>();
+        actions.setSetPeopleCompleter(gate);
+        provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
+        expect(actions.setPeopleCallCount, 1);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
+        expect(actions.setPeopleCallCount, 1);
+        gate.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      expect(crashlytics.recordErrors.single.arguments['exception'], 'capture_people_refresh_segments: StateError');
     });
   });
 

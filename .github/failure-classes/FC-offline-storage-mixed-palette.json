@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-offline-storage-mixed-palette",
+  "violated_contract": "Offline Sync storage category labels and counts must remain readable against their card and badge backgrounds in both light and dark appearance.",
+  "canonical_prevention": "Resolve card, badge, and text colors from the same active palette, and execute contrast checks against the rendered production sheet in both appearances.",
+  "canonical_prevention_artifact": ["app/test/widgets/offline_sync_storage_contrast_test.dart"],
+  "evidence_prs": [19378],
+  "scope_hints": ["app/lib/pages/conversations/widgets/offline_sync_storage_sheet.dart"],
+  "status": "open"
+}

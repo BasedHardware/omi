@@ -163,12 +163,6 @@ def search_apps_db(
     apps: List[Dict[str, Any]] = []
     if reads_public_set:
         apps = get_public_approved_apps_cached_db()
-        # category/capability were server-side filters on the Firestore read this replaces; my_apps is
-        # False on this branch, so both are unconditional here.
-        if category:
-            apps = [app for app in apps if app.get('category') == category]
-        if capability:
-            apps = [app for app in apps if capability in (app.get('capabilities') or [])]
     elif filters:
         query = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters))
         apps = [_typed_doc(doc) for doc in query.stream()]
@@ -191,13 +185,13 @@ def search_apps_db(
             if user_app.get('id') in enabled_set and user_app.get('id') not in existing_ids:
                 apps.append(user_app)
 
-    # Post-filter for category if my_apps is enabled
-    if my_apps and category:
-        apps = [app for app in apps if app.get('category') == category]
-
-    # Post-filter for capability if my_apps is enabled
-    if my_apps and capability:
-        apps = [app for app in apps if capability in app.get('capabilities', [])]
+    # Post-filter category/capability whenever the primary read did not push them to Firestore
+    # (cached public-set reads, >30 installed_apps user_apps merge, and my_apps).
+    if reads_public_set or my_apps:
+        if category:
+            apps = [app for app in apps if app.get('category') == category]
+        if capability:
+            apps = [app for app in apps if capability in (app.get('capabilities') or [])]
 
     return apps
 

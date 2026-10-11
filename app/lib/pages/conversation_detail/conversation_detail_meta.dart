@@ -38,6 +38,20 @@ abstract final class ConversationDetailMeta {
     return (named: named, unnamed: unnamedIds.where(participants.contains).length, uncounted: false);
   }
 
+  /// The people chip's avatars: the first two named people's initials, then one circle counting
+  /// everyone else ("1" for one more voice), or "+" when other voices spoke but cannot be counted.
+  static List<String> avatars(List<String> named, int unnamed, {bool uncounted = false}) {
+    final shown = [for (final name in named.take(2)) _initial(name)];
+    if (uncounted) return [...shown, '+'];
+    final rest = named.length - shown.length + unnamed;
+    return rest > 0 ? [...shown, '$rest'] : shown;
+  }
+
+  static String _initial(String name) {
+    final trimmed = name.trim();
+    return trimmed.isEmpty ? '?' : String.fromCharCode(trimmed.runes.first).toUpperCase();
+  }
+
   /// "David", "David + 3 others" through [summary], or "David + others" through [uncountedSummary]
   /// when other voices spoke but cannot be counted; null when nobody is named, so the people chip
   /// hides rather than listing anonymous speakers.

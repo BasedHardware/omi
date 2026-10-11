@@ -6,6 +6,8 @@ Provides shared executors with strict separation (bulkhead pattern):
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
   to prevent slow LLM retries from blocking DB or auth operations.
+- jev_shadow_executor: lazy ten-worker pool for best-effort EXP-004 measurements,
+  isolated from foreground LLM work even during dependency outages.
 - stripe_executor: Stripe API calls (Subscription.retrieve, etc.). External network I/O
   with unpredictable latency, isolated from everything else.
 - sync_executor: sync pipeline VAD/STT/segment processing.
@@ -134,6 +136,21 @@ _ALL_EXECUTORS = [
     cimd_executor,
 ]
 
+_jev_shadow_executor: MonitoredThreadPoolExecutor | None = None
+_jev_shadow_executor_lock = threading.Lock()
+
+
+def get_jev_shadow_executor() -> ThreadPoolExecutor:
+    """Create the shadow bulkhead only when eligible work is first submitted."""
+    global _jev_shadow_executor
+    with _jev_shadow_executor_lock:
+        if _jev_shadow_executor is None:
+            _jev_shadow_executor = MonitoredThreadPoolExecutor(
+                name='jev_shadow', max_workers=10, thread_name_prefix='jev-shadow'
+            )
+            _ALL_EXECUTORS.append(_jev_shadow_executor)
+        return _jev_shadow_executor
+
 
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
@@ -147,8 +164,15 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
     error = future.exception()
-    if error is not None:
-        logger.error("background task %s failed: %s", name, error, exc_info=error)
+    if error is None:
+        return
+    # external_write_fence raises this while a deletion or retention cleanup
+    # owns the account. The write is refused on purpose. A traceback here is
+    # what Cloud Error Reporting groups as a crash at legal_holds.py.
+    if type(error).__name__ == 'DestructiveOperationInProgress':
+        logger.info('background task %s deferred reason=destructive_operation', name)
+        return
+    logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
 def submit_with_context(

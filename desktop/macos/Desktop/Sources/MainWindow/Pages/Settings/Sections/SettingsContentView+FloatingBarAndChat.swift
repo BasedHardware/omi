@@ -131,32 +131,9 @@ extension SettingsContentView {
       // constant and these two never dimmed. A greyed, unresponsive control is how the rest of
       // this pane says "the thing behind this is off" — spending that signal on a state no
       // setting can reach makes a live control read as dead.
-      voicePicker(settingId: "floatingbar.voice")
+      assistantVoicePicker(settingId: "floatingbar.voice")
 
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
-    }
-  }
-
-  func voicePicker(settingId: String) -> some View {
-    settingsCard(settingId: settingId) {
-      HStack(spacing: OmiSpacing.lg) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Voice")
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text(
-            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
-          )
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-        }
-        Spacer()
-        SettingsMenuPicker(selection: $shortcutSettings.selectedVoiceID) {
-          ForEach(ShortcutSettings.availableVoices) { voice in
-            Text(voice.name).tag(voice.id)
-          }
-        }
-      }
     }
   }
 

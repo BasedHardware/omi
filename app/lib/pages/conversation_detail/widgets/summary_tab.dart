@@ -62,6 +62,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
           final summarySelection = provider.getSummarySelection();
+          // Room under the tab row (Omi v8 `.sum`). A leading section heading brings its own.
+          final leadsWithHeading = summarySelection.content.trimLeft().startsWith('#');
           // App-result summaries require result coordinates for trustworthy
           // feedback provenance. Keep this prompt on the canonical overview /
           // sections population until that wire is available.
@@ -99,7 +101,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                       sliver: SliverMainAxisGroup(slivers: [
                         // Title and facts live in the page header, shared by every tab.
-                        const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                        SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(

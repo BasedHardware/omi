@@ -405,6 +405,75 @@ final class DeviceDisconnected extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+enum DeviceDisconnectedDetailedReason {
+  cleanDisconnect("clean_disconnect"),
+  connectionTimeout("connection_timeout"),
+  remoteDeviceTerminated("remote_device_terminated"),
+  connectionFailedInstantPassed("connection_failed_instant_passed"),
+  pairedToAnotherPhone("paired_to_another_phone"),
+  linkKeyMismatch("link_key_mismatch"),
+  pairingLost("pairing_lost"),
+  appClosed("app_closed"),
+  manual("manual"),
+  gattError("gatt_error"),
+  unknown("unknown");
+  const DeviceDisconnectedDetailedReason(this.wireName);
+  final String wireName;
+}
+
+enum DeviceDisconnectedDetailedAppState {
+  foreground("foreground"),
+  background("background"),
+  inactive("inactive"),
+  unknown("unknown");
+  const DeviceDisconnectedDetailedAppState(this.wireName);
+  final String wireName;
+}
+
+final class DeviceDisconnectedDetailed extends RegisteredEvent {
+  const DeviceDisconnectedDetailed({required this.reason, required this.reasonCode, required this.appState});
+  final DeviceDisconnectedDetailedReason reason;
+  final int reasonCode;
+  final DeviceDisconnectedDetailedAppState appState;
+  @override
+  String get wireName => "Device Disconnected Detailed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "reason_code": reasonCode, "app_state": appState.wireName};
+}
+
+final class DiagnosticsSent extends RegisteredEvent {
+  const DiagnosticsSent({required this.bundleBytes, required this.disconnectCount, required this.schemaVersion});
+  final int bundleBytes;
+  final int disconnectCount;
+  final int schemaVersion;
+  @override
+  String get wireName => "Diagnostics Sent";
+  @override
+  Map<String, Object> get properties => {"bundle_bytes": bundleBytes, "disconnect_count": disconnectCount, "schema_version": schemaVersion};
+}
+
+enum DiagnosticsSendFailedFailureStage {
+  buildBundle("build_bundle"),
+  dialogCancelled("dialog_cancelled"),
+  upload("upload"),
+  ticketParse("ticket_parse");
+  const DiagnosticsSendFailedFailureStage(this.wireName);
+  final String wireName;
+}
+
+final class DiagnosticsSendFailed extends RegisteredEvent {
+  const DiagnosticsSendFailed({required this.bundleBytes, required this.disconnectCount, required this.schemaVersion, required this.failureStage, required this.statusCode});
+  final int bundleBytes;
+  final int disconnectCount;
+  final int schemaVersion;
+  final DiagnosticsSendFailedFailureStage failureStage;
+  final int statusCode;
+  @override
+  String get wireName => "Diagnostics Send Failed";
+  @override
+  Map<String, Object> get properties => {"bundle_bytes": bundleBytes, "disconnect_count": disconnectCount, "schema_version": schemaVersion, "failure_stage": failureStage.wireName, "status_code": statusCode};
+}
+
 final class SpeechProfileCapturePageClicked extends RegisteredEvent {
   const SpeechProfileCapturePageClicked();
   @override
@@ -443,6 +512,54 @@ final class SpeechProfileContinued extends RegisteredEvent {
   String get wireName => "Onboarding Step Speech Profile Continued";
   @override
   Map<String, Object> get properties => {};
+}
+
+final class OnboardingSetupRatingPromptShown extends RegisteredEvent {
+  const OnboardingSetupRatingPromptShown();
+  @override
+  String get wireName => "Onboarding Setup Rating Prompt Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingSetupRatingPromptAnsweredAnswer {
+  support("support"),
+  notReally("not_really");
+  const OnboardingSetupRatingPromptAnsweredAnswer(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingSetupRatingPromptAnswered extends RegisteredEvent {
+  const OnboardingSetupRatingPromptAnswered({required this.answer});
+  final OnboardingSetupRatingPromptAnsweredAnswer answer;
+  @override
+  String get wireName => "Onboarding Setup Rating Prompt Answered";
+  @override
+  Map<String, Object> get properties => {"answer": answer.wireName};
+}
+
+final class FirstSummaryRatingPromptShown extends RegisteredEvent {
+  const FirstSummaryRatingPromptShown();
+  @override
+  String get wireName => "First Summary Rating Prompt Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum FirstSummaryRatingPromptAnsweredAnswer {
+  yes("yes"),
+  no("no");
+  const FirstSummaryRatingPromptAnsweredAnswer(this.wireName);
+  final String wireName;
+}
+
+final class FirstSummaryRatingPromptAnswered extends RegisteredEvent {
+  const FirstSummaryRatingPromptAnswered({required this.answer});
+  final FirstSummaryRatingPromptAnsweredAnswer answer;
+  @override
+  String get wireName => "First Summary Rating Prompt Answered";
+  @override
+  Map<String, Object> get properties => {"answer": answer.wireName};
 }
 
 final class UseWithoutDeviceOnboardingWelcome extends RegisteredEvent {
@@ -1425,7 +1542,8 @@ enum SpeakerTagPromptAnswerSubmittedAnswer {
   newPerson("new_person"),
   someoneElse("someone_else"),
   skip("skip"),
-  unknown("unknown");
+  unknown("unknown"),
+  notAPerson("not_a_person");
   const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
   final String wireName;
 }
@@ -1619,7 +1737,9 @@ enum SiriIntentPerformedInvokedVia {
   siri("siri"),
   shortcuts("shortcuts"),
   spotlight("spotlight"),
-  unknown("unknown");
+  unknown("unknown"),
+  appIntent("app_intent"),
+  userActivity("user_activity");
   const SiriIntentPerformedInvokedVia(this.wireName);
   final String wireName;
 }
@@ -1736,4 +1856,60 @@ final class ConversationUntitledRendered extends RegisteredEvent {
   String get wireName => "Conversation Untitled Rendered";
   @override
   Map<String, Object> get properties => {"surface": surface.wireName, "age_bucket": ageBucket.wireName, "summary_retryable": summaryRetryable};
+}
+
+enum ChatAppConnectStartedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppConnectStartedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppConnectStarted extends RegisteredEvent {
+  const ChatAppConnectStarted({required this.channel});
+  final ChatAppConnectStartedChannel channel;
+  @override
+  String get wireName => "Chat App Connect Started";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+enum ChatAppConnectedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppConnectedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppConnected extends RegisteredEvent {
+  const ChatAppConnected({required this.channel});
+  final ChatAppConnectedChannel channel;
+  @override
+  String get wireName => "Chat App Connected";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+enum ChatAppDisconnectedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppDisconnectedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppDisconnected extends RegisteredEvent {
+  const ChatAppDisconnected({required this.channel});
+  final ChatAppDisconnectedChannel channel;
+  @override
+  String get wireName => "Chat App Disconnected";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+final class ChatAppWaitlistJoined extends RegisteredEvent {
+  const ChatAppWaitlistJoined();
+  @override
+  String get wireName => "Chat App Waitlist Joined";
+  @override
+  Map<String, Object> get properties => {};
 }

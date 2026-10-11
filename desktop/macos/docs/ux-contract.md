@@ -88,8 +88,7 @@ One policy:
 Billing, trial and error cards that need an action persist until acted on.
 
 The floating bar applies this through `FloatingBarNoticePolicy`: confirmations use
-`FloatingBarNoticePolicy.confirmation`; every timed notch card pauses while the bar is hovered
-(Interject lengthens informational cards to reading time, 4–14 s); `.trial` cards and any card sent
+`FloatingBarNoticePolicy.confirmation`; every timed notch card pauses while the bar is hovered; `.trial` cards and any card sent
 `isPersistent` stay until acted on, dismissed, or Esc. A new card picks a row there rather than
 starting its own timer.
 

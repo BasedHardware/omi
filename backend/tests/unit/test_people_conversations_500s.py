@@ -91,6 +91,33 @@ class TestGetPeopleDocIdInjection:
         result = users_mod.get_people('uid-123')
         assert result[0]['id'] == 'stored-id'
 
+    def test_get_people_excludes_soft_dismissed_people_by_default(self):
+        from database import users as users_mod
+
+        active = self._make_mock_doc('active', {'name': 'Alice'})
+        dismissed = self._make_mock_doc('dismissed', {'name': 'False positive', 'is_dismissed': True})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.stream.return_value = [
+            active,
+            dismissed,
+        ]
+
+        assert [person['id'] for person in users_mod.get_people('uid-123')] == ['active']
+
+    def test_get_people_can_include_soft_dismissed_people_for_export(self):
+        from database import users as users_mod
+
+        dismissed = self._make_mock_doc('dismissed', {'name': 'False positive', 'is_dismissed': True})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.stream.return_value = [
+            dismissed
+        ]
+
+        result = users_mod.get_people('uid-123', include_dismissed=True)
+
+        assert result[0]['id'] == 'dismissed'
+        assert result[0]['is_dismissed'] is True
+
     def test_get_person_injects_doc_id(self):
         """get_person() should inject doc ID for legacy docs."""
         from database import users as users_mod
@@ -116,6 +143,34 @@ class TestGetPeopleDocIdInjection:
 
         result = users_mod.get_person('uid-123', 'nonexistent')
         assert result is None
+
+    def test_get_person_excludes_soft_dismissed_person_by_default(self):
+        from database import users as users_mod
+
+        dismissed = self._make_mock_doc(
+            'dismissed',
+            {'name': 'False positive', 'is_dismissed': True, 'speech_samples': ['private/sample.wav']},
+        )
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            dismissed
+        )
+
+        assert users_mod.get_person('uid-123', 'dismissed') is None
+
+    def test_get_person_can_include_soft_dismissed_person_for_export(self):
+        from database import users as users_mod
+
+        dismissed = self._make_mock_doc('dismissed', {'name': 'False positive', 'is_dismissed': True})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            dismissed
+        )
+
+        result = users_mod.get_person('uid-123', 'dismissed', include_dismissed=True)
+
+        assert result['id'] == 'dismissed'
+        assert result['is_dismissed'] is True
 
     def test_get_people_by_ids_uses_doc_fetch(self):
         """get_people_by_ids() should use document fetches and inject IDs."""

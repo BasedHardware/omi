@@ -48,13 +48,25 @@ def validate_db_path(db_path: str) -> None:
             )
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    both sqlite3 and file writes raise UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the row import.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def text(value):
     """Store loosely typed API fields as text; anything non-null is coerced, not rejected."""
     if value is None:
         return None
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value, ensure_ascii=False)
+    elif not isinstance(value, str):
+        value = str(value)
+    return strip_surrogates(value)
 
 
 def utc_stamp(value):
@@ -107,16 +119,19 @@ def rows_from(source):
         item_id = item.get("id")
         if item_id is None or str(item_id).strip() == "":
             raise ValueError(f"{source}: action item is missing an id")
-        description = item.get("description") or item.get("title") or ""
+        description = item.get("description")
+        if description is None:
+            description = item.get("title") or ""
+        clean_id = strip_surrogates(str(item_id))
         rows.append((
-            str(item_id),
+            clean_id,
             text(description),
             boolean_to_int(item.get("completed")),
             utc_stamp(item.get("due_at")),
             utc_stamp(item.get("created_at")),
             utc_stamp(item.get("updated_at")),
             text(item.get("conversation_id")),
-            json.dumps(item, ensure_ascii=False)
+            strip_surrogates(json.dumps(item, ensure_ascii=False))
         ))
     return rows
 

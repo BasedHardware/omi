@@ -116,7 +116,7 @@ func deepHashPigeonCommunicator(value: Any?, hasher: inout Hasher) {
   }
 
   if let valueDict = value as? [AnyHashable: AnyHashable] {
-    for key in valueDict.keys { 
+    for key in valueDict.keys {
       hasher.combine(key)
       deepHashPigeonCommunicator(value: valueDict[key]!, hasher: &hasher)
     }
@@ -130,7 +130,7 @@ func deepHashPigeonCommunicator(value: Any?, hasher: inout Hasher) {
   return hasher.combine(String(describing: value))
 }
 
-    
+
 
 /// Discovered BLE peripheral info passed from native to Dart.
 ///
@@ -898,8 +898,10 @@ protocol BleHostApi {
   func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void)
   func readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   func writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void)
-  func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws
+  func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  func setCaptureAuthorized(uuid: String, authorized: Bool) throws
   func getBluetoothState() throws -> String
   /// (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
   /// once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
@@ -1046,11 +1048,13 @@ class BleHostApiSetup {
         let peripheralUuidArg = args[0] as! String
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
-        do {
-          try api.subscribeCharacteristic(peripheralUuid: peripheralUuidArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg)
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
+        api.subscribeCharacteristic(peripheralUuid: peripheralUuidArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
         }
       }
     } else {
@@ -1072,6 +1076,23 @@ class BleHostApiSetup {
       }
     } else {
       unsubscribeCharacteristicChannel.setMessageHandler(nil)
+    }
+    /// iOS Omi ingress recovery; Android leaves this cut disabled.
+    let setCaptureAuthorizedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.setCaptureAuthorized\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setCaptureAuthorizedChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        let authorizedArg = args[1] as! Bool
+        do {
+          try api.setCaptureAuthorized(uuid: uuidArg, authorized: authorizedArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setCaptureAuthorizedChannel.setMessageHandler(nil)
     }
     let getBluetoothStateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBluetoothState\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
@@ -1243,6 +1264,8 @@ protocol BleFlutterApiProtocol {
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onRssiUpdate(peripheralUuid peripheralUuidArg: String, rssi rssiArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  func onCaptureHealth(peripheralUuid peripheralUuidArg: String, snapshot snapshotArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   func onBatchRecordingFinalized(fileName fileNameArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -1369,6 +1392,25 @@ class BleFlutterApi: BleFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralUuidsArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  func onCaptureHealth(peripheralUuid peripheralUuidArg: String, snapshot snapshotArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([peripheralUuidArg, snapshotArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
