@@ -581,6 +581,48 @@ def test_one_line_cues_without_blank_lines_each_become_a_cue(extension):
     ]
 
 
+@pytest.mark.parametrize('extension', ['.txt', '.srt'])
+def test_numbered_multiline_cues_without_blank_lines_each_become_a_cue(extension):
+    text = (
+        '1\n00:00:01,000 --> 00:00:02,000\nHello\n'
+        '2\n00:00:03,000 --> 00:00:04,000\nWorld\n'
+        '3\n00:00:05,000 --> 00:00:06,000\nAgain\n'
+    )
+
+    parsed = tf.parse_transcript_file(f'call{extension}', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start, cue.end) for cue in parsed.cues] == [
+        ('Hello', 1.0, 2.0),
+        ('World', 3.0, 4.0),
+        ('Again', 5.0, 6.0),
+    ]
+
+
+@pytest.mark.parametrize('extension', ['.txt', '.srt'])
+def test_a_numbered_multiline_cue_keeps_its_speaker_label(extension):
+    text = '1\n00:00:01,000 --> 00:00:02,000\nAlice: Hello\n2\n00:00:03,000 --> 00:00:04,000\nBob: World\n'
+
+    parsed = tf.parse_transcript_file(f'call{extension}', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == [('Alice', 'Hello'), ('Bob', 'World')]
+
+
+@pytest.mark.parametrize('extension', ['.txt', '.srt'])
+def test_a_cue_whose_text_is_a_number_keeps_it_when_written_with_blank_lines(extension):
+    text = '1\n00:00:01,000 --> 00:00:02,000\n42\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n'
+
+    parsed = tf.parse_transcript_file(f'call{extension}', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start, cue.end) for cue in parsed.cues] == [
+        ('42', 1.0, 2.0),
+        ('World', 3.0, 4.0),
+    ]
+
+
+
 @pytest.mark.parametrize(
     'line',
     ['00:00:01,000 --> 00:00:04,000', '[00:00:00.000 --> 00:00:05.000]'],

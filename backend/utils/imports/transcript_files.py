@@ -263,16 +263,25 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     assert timing is not None
     label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
     labels = [TranscriptCue(text=label)] if label else []
-    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
+    # A block holding a single timing line keeps the classic "one cue, its text on the
+    # following lines" reading (including a bare timing that carries no text at all).
+    # A block that holds more than one timing line is a run of cues; without this the
+    # later cues' numbers and timings are glued into the first cue's text.
+    extra_timings = sum(1 for line in lines[timing_index + 1 :] if _CUE_TIMING_RE.match(line))
+    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()) and extra_timings == 0:
         body = _plain_cue_text(' '.join(lines[timing_index + 1 :]), _SRT_TAG_RE)
         start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
         return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
     runs: List[tuple[re.Match[str], List[str]]] = []
-    for line in lines[timing_index:]:
+    for index, line in enumerate(lines[timing_index:], start=timing_index):
         line_timing = _CUE_TIMING_RE.match(line)
         if line_timing:
             runs.append((line_timing, [line[line_timing.end() :].strip()]))
-        else:
+        elif runs:
+            # A bare number directly before the next timing is that cue's sequence
+            # number, not its text; a numeric-text cue (its own block) keeps the number.
+            if line.isdigit() and _followed_by_timing(lines, index):
+                continue
             runs[-1][1].append(line)
     cues: List[TranscriptCue] = labels
     for line_timing, parts in runs:
@@ -282,6 +291,13 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
                 TranscriptCue(text=body, start=_seconds(line_timing.group(1)), end=_seconds(line_timing.group(2)))
             )
     return cues
+
+
+def _followed_by_timing(lines: Sequence[str], index: int) -> bool:
+    """Whether the next non-blank line after ``lines[index]`` is a cue timing."""
+    for following in lines[index + 1 :]:
+        return _CUE_TIMING_RE.match(following) is not None
+    return False
 
 
 def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
