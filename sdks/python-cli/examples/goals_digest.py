@@ -40,7 +40,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 ACHIEVED_STATUSES = {"completed", "achieved", "done"}
-INACTIVE_STATUSES = {"inactive", "archived", "cancelled", "canceled", "abandoned"}
+INACTIVE_STATUSES = {"inactive", "archived", "cancelled", "canceled", "abandoned", "paused"}
+
 
 
 def sanitize_text(value: Any) -> str:
@@ -107,11 +108,53 @@ def parse_float(value: Any) -> Optional[float]:
         return None
 
 
+def is_qualitative_goal(goal: Dict[str, Any]) -> bool:
+    """Return True if the goal is qualitative (metricless).
+
+    The Omi backend sets canonical `metric: None` for qualitative goals while injecting
+    inert compatibility aliases (goal_type='scale', current=0, target=0) for older clients.
+    A goal is qualitative if:
+    1. The canonical 'metric' field is explicitly present and None, OR
+    2. 'goal_type' is explicitly 'qualitative', OR
+    3. No metric dictionary and no target_value/min_value/max_value are present.
+    """
+    if "metric" in goal:
+        return goal.get("metric") is None
+    gtype = str(goal.get("goal_type") or "").strip().lower()
+    if gtype == "qualitative":
+        return True
+    if gtype in ("scale", "numeric", "boolean"):
+        return False
+    has_metrics = any(
+        goal.get(k) is not None
+        for k in ("target_value", "current_value", "min_value", "max_value")
+    )
+    return not has_metrics
+
+
+def resolve_goal_type(goal: Dict[str, Any]) -> str:
+    """Resolve the canonical goal type ('boolean', 'numeric', 'scale', or 'qualitative')."""
+    if is_qualitative_goal(goal):
+        return "qualitative"
+    metric = goal.get("metric")
+    if isinstance(metric, dict) and metric.get("type"):
+        return str(metric["type"]).strip().lower()
+    raw_type = goal.get("goal_type")
+    if raw_type:
+        return str(raw_type).strip().lower()
+    return "scale"
+
+
 def calculate_progress(goal: Dict[str, Any]) -> float:
     """Calculate progress percentage (0.0 to 100.0+) for a goal."""
-    goal_type = str(goal.get("goal_type") or "scale").strip().lower()
+    gtype = resolve_goal_type(goal)
+    if gtype == "qualitative":
+        raw_status = str(goal.get("status") or "").strip().lower()
+        if raw_status in ACHIEVED_STATUSES:
+            return 100.0
+        return 0.0
 
-    if goal_type == "boolean":
+    if gtype == "boolean":
         val = goal.get("current_value")
         b_norm = normalize_bool_flag(val)
         if b_norm is True:
@@ -123,10 +166,17 @@ def calculate_progress(goal: Dict[str, Any]) -> float:
             return 100.0
         return 0.0
 
-    curr = parse_float(goal.get("current_value")) or 0.0
-    target = parse_float(goal.get("target_value")) or 0.0
-    min_val = parse_float(goal.get("min_value")) or 0.0
-    max_val = parse_float(goal.get("max_value"))
+    metric = goal.get("metric")
+    if isinstance(metric, dict):
+        curr = parse_float(metric.get("current") if "current" in metric else goal.get("current_value")) or 0.0
+        target = parse_float(metric.get("target") if "target" in metric else goal.get("target_value")) or 0.0
+        min_val = parse_float(metric.get("min") if "min" in metric else goal.get("min_value")) or 0.0
+        max_val = parse_float(metric.get("max") if "max" in metric else goal.get("max_value"))
+    else:
+        curr = parse_float(goal.get("current_value")) or 0.0
+        target = parse_float(goal.get("target_value")) or 0.0
+        min_val = parse_float(goal.get("min_value")) or 0.0
+        max_val = parse_float(goal.get("max_value"))
 
     if min_val > target:
         span = min_val - target
@@ -142,7 +192,9 @@ def calculate_progress(goal: Dict[str, Any]) -> float:
         prog = 0.0
 
     prog = max(0.0, prog)
-    if max_val is not None and max_val > 0 and curr > max_val:
+    # Only cap if max_val represents a true bound higher than or equal to target.
+    # Default CLI aliases set max_value=10 even when target=100; don't cap in that case.
+    if max_val is not None and max_val > 0 and curr > max_val and target <= max_val:
         prog = min(prog, (max_val / target) * 100.0 if target > 0 else prog)
 
     return prog
@@ -152,7 +204,7 @@ def determine_status(goal: Dict[str, Any], progress: float) -> Tuple[str, str]:
     """Determine the normalized status category and display label for a goal.
 
     Inactive status takes strict precedence over numerical progress completion:
-    an inactive or archived goal remains inactive unless explicitly completed.
+    an inactive, paused, or archived goal remains inactive unless explicitly completed.
 
     Returns:
         (category, display_label) where category is one of 'active', 'achieved', 'inactive'.
@@ -164,15 +216,16 @@ def determine_status(goal: Dict[str, Any], progress: float) -> Tuple[str, str]:
     if raw_status in ACHIEVED_STATUSES:
         return "achieved", "✅ Achieved"
 
-    # Inactive precedence
+    # Inactive precedence (including paused)
     if is_active is False or raw_status in INACTIVE_STATUSES:
         return "inactive", "⚪ Inactive"
 
-    # Progress completion for active goals
-    if progress >= 100.0:
+    # Progress completion for active metric-backed goals
+    if not is_qualitative_goal(goal) and progress >= 100.0:
         return "achieved", "✅ Achieved"
 
     return "active", "🟢 Active"
+
 
 
 def render_progress_bar(progress: float, width: int = 10) -> str:
@@ -304,7 +357,7 @@ def calculate_kpis(goals: Sequence[Dict[str, Any]]) -> DigestKPIs:
     type_progress_sum: Dict[str, float] = {}
 
     for goal in goals:
-        gtype = str(goal.get("goal_type") or "scale").strip().lower()
+        gtype = resolve_goal_type(goal)
         prog = calculate_progress(goal)
         cat, _ = determine_status(goal, prog)
 
@@ -347,7 +400,7 @@ def generate_markdown_digest(
     """Format goal records into a comprehensive GitHub-flavored Markdown digest."""
     filtered: List[Dict[str, Any]] = []
     for g in goals:
-        gtype = str(g.get("goal_type") or "scale").strip().lower()
+        gtype = resolve_goal_type(g)
         prog = calculate_progress(g)
         cat, _ = determine_status(g, prog)
 
@@ -431,27 +484,35 @@ def generate_markdown_digest(
             prog = calculate_progress(goal)
             _, status_label = determine_status(goal, prog)
             title_text = sanitize_text(goal.get("title") or "Untitled Goal")
-            gtype = sanitize_text(goal.get("goal_type") or "scale")
+            gtype = sanitize_text(resolve_goal_type(goal))
             unit = sanitize_text(goal.get("unit") or "")
 
-            curr = goal.get("current_value")
-            tval = goal.get("target_value")
-
-            if curr is None:
-                curr_disp = "0"
-            elif isinstance(curr, float) and math.isfinite(curr) and curr.is_integer():
-                curr_disp = str(int(curr))
+            if resolve_goal_type(goal) == "qualitative":
+                target_repr = "-"
             else:
-                curr_disp = str(curr)
+                curr = goal.get("current_value")
+                tval = goal.get("target_value")
 
-            if tval is None:
-                tval_disp = "0"
-            elif isinstance(tval, float) and math.isfinite(tval) and tval.is_integer():
-                tval_disp = str(int(tval))
-            else:
-                tval_disp = str(tval)
+                if curr is None:
+                    curr_disp = "0"
+                elif isinstance(curr, float) and math.isfinite(curr) and curr.is_integer():
+                    curr_disp = str(int(curr))
+                else:
+                    curr_disp = str(curr)
 
-            target_repr = f"{curr_disp} / {tval_disp} {unit}".strip()
+                if tval is None:
+                    tval_disp = "0"
+                elif isinstance(tval, float) and math.isfinite(tval) and tval.is_integer():
+                    tval_disp = str(int(tval))
+                else:
+                    tval_disp = str(tval)
+
+                curr_disp_safe = sanitize_text(curr_disp)
+                tval_disp_safe = sanitize_text(tval_disp)
+                target_parts = [f"{curr_disp_safe} / {tval_disp_safe}"]
+                if unit:
+                    target_parts.append(unit)
+                target_repr = " ".join(target_parts)
 
             updated_dt = parse_datetime(goal.get("updated_at")) or parse_datetime(goal.get("created_at"))
             updated_str = updated_dt.strftime("%Y-%m-%d") if updated_dt else "-"
@@ -464,6 +525,17 @@ def generate_markdown_digest(
 
     lines.append("")
     return "\n".join(lines)
+
+
+def _restore_umask_permissions(path: Path) -> None:
+    """Restore standard non-restrictive umask file permissions after tempfile creation."""
+    try:
+        current_umask = os.umask(0)
+        os.umask(current_umask)
+        expected_mode = 0o666 & ~current_umask
+        os.chmod(path, expected_mode)
+    except Exception:
+        pass
 
 
 def write_digest(content: str, dest_path: str | Path, force: bool = False) -> None:
@@ -497,8 +569,31 @@ def write_digest(content: str, dest_path: str | Path, force: bool = False) -> No
         ) as tf:
             tf.write(content.encode("utf-8"))
             temp_path = Path(tf.name)
-        os.replace(temp_path, dest)
-        temp_path = None
+
+        _restore_umask_permissions(temp_path)
+
+        if force:
+            os.replace(temp_path, dest)
+            temp_path = None
+        else:
+            try:
+                os.link(temp_path, dest)
+                temp_path.unlink()
+                temp_path = None
+            except FileExistsError:
+                raise FileExistsError(
+                    f"Destination file '{dest}' already exists. Use -f / --force to overwrite."
+                )
+            except (AttributeError, NotImplementedError, OSError):
+                # Fallback for environments or filesystems that do not support hard links
+                if dest.exists():
+                    raise FileExistsError(
+                        f"Destination file '{dest}' already exists. Use -f / --force to overwrite."
+                    )
+                os.replace(temp_path, dest)
+                temp_path = None
+
+        _restore_umask_permissions(dest)
     finally:
         if temp_path and temp_path.exists():
             try:

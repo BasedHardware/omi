@@ -82,26 +82,26 @@ python goals_digest.py goals_all.json --type numeric -o metrics_digest.md
 | 🟢 **Active Goals** | `4` | `66.7%` |
 | ✅ **Achieved Goals** | `2` | `33.3%` |
 | ⚪ **Inactive Goals** | `0` | `0.0%` |
-| 📊 **Average Progress** | `[========....] 68.3%` | `68.3%` |
+| 📊 **Average Progress** | `[========....] 66.2%` | `66.2%` |
 
 ## Breakdown by Goal Type
 
 | Goal Type | Total | Achieved | Avg Progress |
 | :--- | :--- | :--- | :--- |
-| `boolean` | 2 | 1 (50.0%) | `[=====.....] 50.0%` |
-| `numeric` | 2 | 1 (50.0%) | `[========..] 78.5%` |
-| `scale` | 2 | 0 (0.0%) | `[=======...] 70.0%` |
+| `boolean` | 2 | 1 (50.0%) | `[====....] 50.0%` |
+| `numeric` | 2 | 1 (50.0%) | `[======..] 78.5%` |
+| `scale` | 2 | 0 (0.0%) | `[======..] 70.0%` |
 
 ## Goal Details
 
 | Status | Title | Type | Progress | Target | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🟢 Active | Daily 10k steps | `scale` | `[========..] 85.0%` | 8500 / 10000 steps | 2026-09-30 |
-| 🟢 Active | Weekly meditation hours | `scale` | `[======....] 55.0%` | 5.5 / 10 hours | 2026-09-27 |
-| 🟢 Active | Marathon training distance | `numeric` | `[======....] 57.0%` | 57 / 100 km | 2026-09-29 |
-| 🟢 Active | Learn conversational Spanish | `boolean` | `[..........] 0.0%` | 0 / 1 | 2026-09-20 |
-| ✅ Achieved | Read 20 books | `numeric` | `[==========] 100.0%` | 20 / 20 books | 2026-09-28 |
-| ✅ Achieved | Complete annual health check | `boolean` | `[==========] 100.0%` | 1 / 1 | 2026-09-15 |
+| 🟢 Active | Daily 10k steps | `scale` | `[=======.] 85.0%` | 8500 / 10000 steps | 2026-09-30 |
+| 🟢 Active | Weekly meditation hours | `scale` | `[====....] 55.0%` | 5.5 / 10 hours | 2026-09-27 |
+| 🟢 Active | Marathon training distance | `numeric` | `[=====...] 57.0%` | 57 / 100 km | 2026-09-29 |
+| 🟢 Active | Learn conversational Spanish | `boolean` | `[........] 0.0%` | 0 / 1 | 2026-09-20 |
+| ✅ Achieved | Read 20 books | `numeric` | `[========] 100.0%` | 20 / 20 books | 2026-09-28 |
+| ✅ Achieved | Complete annual health check | `boolean` | `[========] 100.0%` | 1 / 1 | 2026-09-15 |
 ```
 
 ## Command line options
