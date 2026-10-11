@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-ordering-sentinel-outranks-available-record-time",
+  "violated_contract": "A sentinel that keeps a chronological sort total (datetime.min, year 0001, -inf) is a last resort for a record that carries no usable time at all, never a substitute for a time the record does carry under another field. A record normally stamped by one field (started_at) may legitimately lack it while still holding a sibling (created_at, finished_at); sorting it by the sentinel instead of that sibling places it first whatever its real time. Nothing raises: the sort succeeds, the record becomes the origin of whatever is derived from the first element (transcript offsets, the merged created_at), and the error is visible only as a transcript or timeline that reads out of order.",
+  "canonical_prevention": "Define the ordering time once, as a function of the record that tries every field that can carry its time in precedence order and returns the sentinel only when all are absent, and use that one key at every sort site over the same records. A regression test orders a record lacking the primary field against an earlier record that has it and asserts both the resulting order and the first-element-derived values; a second test pins that records with no time at all keep their given order.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_merge_order_without_started_at.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/merge_conversations.py",
+    "backend/utils/conversations/smart_merge.py"
+  ],
+  "status": "open"
+}
