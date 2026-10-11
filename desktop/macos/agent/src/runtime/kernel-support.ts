@@ -43,6 +43,9 @@ export function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
+/** The MCP server entry for Omi's own tools server (omi-tools-stdio). */
+export const OMI_TOOLS_MCP_SERVER_NAME = "omi-tools";
+
 const VOLATILE_MCP_ENV_KEYS = new Set([
   "OMI_BRIDGE_PIPE",
   "OMI_CONTEXT_FILE",
@@ -644,9 +647,15 @@ export function mcpServersForBinding(
       return server;
     }
     const normalized: Record<string, unknown> = { ...server };
+    const isOmiToolsServer = normalized.name === OMI_TOOLS_MCP_SERVER_NAME;
     const env = (Array.isArray(normalized.env) ? normalized.env : []).filter((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return true;
       const name = (entry as Record<string, unknown>).name;
+      // The relay socket lives as long as this runtime process, so a binding
+      // may carry it (it stays out of the binding hash). An adapter that
+      // launches omi-tools from this config has no other way to find it. It
+      // is the tool relay capability, so only Omi's own tools server keeps it.
+      if (name === "OMI_BRIDGE_PIPE") return isOmiToolsServer;
       return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
     });
     const bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));

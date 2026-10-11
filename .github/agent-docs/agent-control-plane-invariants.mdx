@@ -249,9 +249,16 @@ the hash reflects what the adapter actually saw.
 Guard surface:
 
 - `stableMcpServerConfig` strips request-scoped MCP env keys before hashing.
+- `mcpServersForBinding` strips request-scoped env from the MCP servers a
+  binding receives, but keeps the process-scoped tool relay socket
+  (`OMI_BRIDGE_PIPE`) on Omi's own `omi-tools` server, and only there:
+  external adapters launch that server from the binding's config. No other
+  server entry in a binding carries it.
 - `RuntimeAdapter.effectiveMcpServers` documents adapter mutation behavior.
-- `run-attempt-lifecycle.test.ts` covers request-scoped env changes and
-  adapter-stripped MCP sets.
+- `run-attempt-lifecycle.test.ts` covers request-scoped env changes,
+  adapter-stripped MCP sets, and the relay socket reaching only `omi-tools`;
+  `runtime-stdio-contract.test.ts` covers an external adapter calling an Omi
+  tool through the server it launched.
 
 ### Process-local bindings are pinned or stale
 

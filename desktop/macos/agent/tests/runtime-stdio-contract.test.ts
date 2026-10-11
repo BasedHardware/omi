@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,11 +20,12 @@ class RuntimeProcessFixture {
   readonly lines: CapturedLine[] = [];
   private waiters: Array<() => void> = [];
 
-  constructor() {
+  constructor(extraEnv: Record<string, string> = {}) {
     const here = dirname(fileURLToPath(import.meta.url));
     this.child = spawn(process.execPath, [join(here, "../dist/index.js")], {
       env: {
         ...process.env,
+        ...extraEnv,
         HARNESS_MODE: "piMono",
         OMI_AGENT_ALLOW_CONTROL_ONLY: "1",
         OMI_AUTH_TOKEN: "",
@@ -294,6 +295,97 @@ describe("runtime stdio contract", () => {
     store.close();
   });
 
+  it("relays an external ACP adapter's Omi tool call through the tools server it launched", async () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const work = mkdtempSync(join(tmpdir(), "omi-external-adapter-"));
+    const outputPath = join(work, "report.json");
+    const localMcpPath = join(work, "mcp.json");
+    writeFileSync(localMcpPath, JSON.stringify({
+      mcpServers: {
+        notes: { command: process.execPath, args: ["notes.js"], env: { OMI_TEST_MARKER: "user-server" } },
+      },
+    }));
+    const agent = join(here, "fixtures", "fake-external-acp-agent.mjs");
+    try {
+      fixture = new RuntimeProcessFixture({
+        OMI_HERMES_ADAPTER_COMMAND: `"${process.execPath}" "${agent}" "${outputPath}"`,
+        OMI_LOCAL_MCP_FILE: localMcpPath,
+      });
+      await fixture.waitForMessage((message) => message.type === "init");
+      fixture.send({ type: "refresh_owner", ownerId: "owner-external" });
+      fixture.send({
+        type: "resolve_surface_session",
+        protocolVersion: PROTOCOL_VERSION,
+        requestId: "resolve-external",
+        clientId: "contract-smoke",
+        ownerId: "owner-external",
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: "contract-external",
+        creationProfile: { adapterId: "hermes", modelProfile: null, workingDirectory: work },
+      });
+      const resolved = await fixture.waitForMessage(
+        (message) => message.type === "surface_session_resolved" && message.requestId === "resolve-external",
+      );
+      if (resolved.type !== "surface_session_resolved") throw new Error("missing chat session receipt");
+
+      fixture.send({
+        type: "query",
+        protocolVersion: PROTOCOL_VERSION,
+        requestId: "query-external",
+        clientId: "contract-smoke",
+        ownerId: "owner-external",
+        sessionId: resolved.sessionId,
+        surfaceKind: "main_chat",
+        prompt: "How many rows?",
+        mode: "act",
+      });
+      // Before the fix the tool call never reaches the runtime, so wait for
+      // whichever comes first: Swift's execution request or the agent's report.
+      const executionOrReport = await Promise.race([
+        fixture.waitForMessage(
+          (message) => message.type === "authorized_tool_execution" && message.toolName === "execute_sql",
+        ).catch(() => undefined),
+        waitForFile(outputPath).then(() => undefined, () => undefined),
+      ]);
+      if (executionOrReport?.type === "authorized_tool_execution") {
+        const execution = executionOrReport;
+        fixture.send({
+          type: "authorized_tool_execution_result",
+          protocolVersion: PROTOCOL_VERSION,
+          invocationId: execution.invocationId,
+          ownerId: execution.ownerId,
+          sessionId: execution.sessionId,
+          runId: execution.runId,
+          attemptId: execution.attemptId,
+          profileGeneration: execution.profileGeneration,
+          manifestVersion: execution.manifestVersion,
+          manifestDigest: execution.manifestDigest,
+          daemonBootEpoch: execution.daemonBootEpoch,
+          executionGeneration: execution.executionGeneration,
+          inputHash: execution.inputHash,
+          outcome: "succeeded",
+          result: "1 row",
+        });
+      }
+      await waitForFile(outputPath);
+      const report = JSON.parse(readFileSync(outputPath, "utf8")) as {
+        servers: Array<{ name: string; envNames: string[] }>;
+        toolResponse: { result?: { content: Array<{ type: string; text: string }> }; error?: unknown };
+        omiToolsStderr: string;
+      };
+      expect(report.omiToolsStderr).not.toContain("No OMI_BRIDGE_PIPE set");
+      expect(report.toolResponse.result?.content[0]?.text).toContain("1 row");
+      // The relay socket is a capability: only Omi's own tools server gets it.
+      const byName = new Map(report.servers.map((server) => [server.name, server.envNames]));
+      expect(byName.get("omi-tools")).toContain("OMI_BRIDGE_PIPE");
+      expect(byName.get("notes")).toEqual(expect.arrayContaining(["OMI_TEST_MARKER"]));
+      expect(byName.get("notes")).not.toContain("OMI_BRIDGE_PIPE");
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("accepts typed appendEvidence through the journal update RPC", async () => {
     fixture = new RuntimeProcessFixture();
     await fixture.waitForMessage((message) => message.type === "init");
@@ -367,3 +459,11 @@ describe("runtime stdio contract", () => {
     });
   });
 });
+
+async function waitForFile(path: string, timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path)) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${path}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
