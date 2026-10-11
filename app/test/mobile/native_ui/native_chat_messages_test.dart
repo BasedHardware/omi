@@ -100,6 +100,13 @@ class _Tasks extends ActionItemsProvider {
 
 /// The real provider over a loaded transcript, without its history and chat-app reads.
 class _PageMessages extends MessageProvider {
+  int classicLoadingReads = 0;
+  @override
+  String get firstTimeLoadingText {
+    classicLoadingReads++;
+    return super.firstTimeLoadingText;
+  }
+
   @override
   Future<void> fetchChatApps() async {}
 
@@ -674,7 +681,7 @@ void main() {
   });
 
   group('ChatPage', () {
-    Future<(NativeTestHost, MessageProvider)> pumpPage(WidgetTester tester) async {
+    Future<(NativeTestHost, MessageProvider)> pumpPage(WidgetTester tester, {bool loading = false}) async {
       _mockPackageInfo();
       final host = NativeTestHost.install();
       final provider = _PageMessages()
@@ -692,6 +699,7 @@ void main() {
         };
       provider.addMessageLocally('hello');
       await provider.sendMessageStreamToServer('hello');
+      provider.isLoadingMessages = loading;
       final memories = MemoriesProvider(
         fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
             const GetMemoriesResult([], true),
@@ -740,6 +748,22 @@ void main() {
           for (final row in (section as Map)['rows'] as List) (row as Map)['id'] as String,
       ];
     }
+
+    testWidgets('native chat defers classic construction until the host rejects a snapshot', (tester) async {
+      final (host, messages) = await pumpPage(tester, loading: true);
+      final provider = messages as _PageMessages;
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(provider.classicLoadingReads, 0, reason: 'even the unmounted loading subtree stays lazy');
+      host.answer = (_, call) async {
+        if (call.method == 'update') throw PlatformException(code: 'invalid_native_snapshot');
+        return null;
+      };
+      provider.notifyListeners();
+      await NativeTestHost.settle(tester);
+      expect(find.byType(ChatHeader), findsOneWidget);
+      expect(provider.classicLoadingReads, greaterThan(0));
+      expect(find.byType(UiKitView), findsNothing);
+    });
 
     testWidgets('structured replies stay native: the page publishes them instead of its fallback', (tester) async {
       final (host, provider) = await pumpPage(tester);

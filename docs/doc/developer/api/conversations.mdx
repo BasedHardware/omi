@@ -333,11 +333,22 @@ Memories and action items are extracted asynchronously. Use the GET endpoints to
   Create from structured transcript with speaker diarization
 </Card>
 
+When a conversation created with a stable client session ID is deleted, retries return HTTP 200
+with the same `id`, `status: "deleted"`, and `discarded: true`, without recreating or processing
+content. Clients should resolve the upload and purge its local transcript rather than retrying
+or fetching the deleted conversation. Requests without a client session ID create a fresh random
+identity and cannot be linked to an earlier deleted upload.
+
+Deletion intent is retained as content-free metadata under the account and is removed by account
+deletion. It commits before derived-data cleanup; a failed delete remains retryable while this
+intent prevents backlog recreation. No automatic tombstone expiry is currently configured.
+
 <AccordionGroup>
   <Accordion title="Request Body" icon="code" defaultOpen={true}>
     | Parameter | Type | Required | Description |
     |-----------|------|----------|-------------|
     | `transcript_segments` | array | **Yes** | List of transcript segments (1-500 segments) |
+    | `client_session_id` | string | No | Stable upload identity (aliases: `client_conversation_id`, `session_id`, `client_id`); retries return the same conversation ID |
     | `source` | string | No | Source of conversation (default: `phone`); segments use transcript processing for every source |
     | `started_at` | datetime | No | When conversation started (defaults to now) |
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |

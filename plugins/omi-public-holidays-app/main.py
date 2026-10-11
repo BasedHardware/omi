@@ -6,6 +6,7 @@ supported country codes through the public Nager.Date API.
 """
 
 import json
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -19,6 +20,44 @@ from pydantic import BaseModel, Field, field_validator
 NAGER_BASE_URL = "https://date.nager.at/api/v3"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_ITEMS = 20
+
+
+def _current_utc_year() -> int:
+    return datetime.now(timezone.utc).year
+
+
+def _normalize_year(value: Any) -> int:
+    if value is None or value == "":
+        return _current_utc_year()
+    if isinstance(value, bool):
+        raise ValueError("year must be an integer, not a boolean")
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return _current_utc_year()
+        if not value.lstrip("-").isdigit():
+            raise ValueError("year must be an integer")
+        value = int(value)
+    if not isinstance(value, int):
+        raise ValueError("year must be an integer")
+    return value
+
+
+def _normalize_limit(value: Any) -> int:
+    if value is None or value == "":
+        return MAX_ITEMS
+    if isinstance(value, bool):
+        raise ValueError("limit must be an integer, not a boolean")
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return MAX_ITEMS
+        if not value.isdigit():
+            raise ValueError("limit must be a positive integer")
+        value = int(value)
+    if not isinstance(value, int):
+        raise ValueError("limit must be an integer")
+    return value
 
 
 @asynccontextmanager
@@ -45,35 +84,60 @@ class ChatToolResponse(BaseModel):
 
 class HolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: int = Field(default=None, ge=1970, le=2100, validate_default=True)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value)
+
+NEXT_HOLIDAY_DEFAULT_LIMIT = 8
 
 
 class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    limit: int = Field(default=8, ge=1, le=MAX_ITEMS)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value)
 
 class LongWeekendRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: int = Field(default=None, ge=1970, le=2100, validate_default=True)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value)
 
 def _normalize_country_code(value: Any) -> str:
     if not isinstance(value, str):
@@ -291,7 +355,18 @@ async def list_supported_countries() -> ChatToolResponse:
             return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            if not isinstance(item, dict):
+                continue
+            code = item.get("countryCode")
+            name = item.get("name")
+            if not isinstance(code, str) or not code.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            lines.append(f"- {code}: {name}")
+        if len(lines) == 1:
+            return ChatToolResponse(error="country list request returned no valid entries")
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
+

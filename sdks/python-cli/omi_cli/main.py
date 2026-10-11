@@ -28,6 +28,7 @@ from omi_cli import config as cfg
 from omi_cli.auth.api_key import validate_api_key_format
 from omi_cli.client import OmiClient
 from omi_cli.commands import action_item as action_item_cmd
+from omi_cli.commands import app as app_cmd
 from omi_cli.commands import auth as auth_cmd
 from omi_cli.commands import chat as chat_cmd
 from omi_cli.commands import config as config_cmd
@@ -229,6 +230,7 @@ app.add_typer(conversation_cmd.app, name="conversation", help="Conversations —
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
 app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
+app.add_typer(app_cmd.app, name="app", help="Build and test Omi apps: webhook events, samples, local receiver.")
 
 
 # ---------------------------------------------------------------------------

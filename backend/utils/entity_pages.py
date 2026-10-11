@@ -344,6 +344,8 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
             )
     pending = None
     for proposal in store.list_proposals(uid):
+        if proposal['item']['kind'] == 'agent_proposal':
+            continue
         item = ReviewItem.model_validate(proposal['item'])
         if item.same_person and {item.same_person.left.entity_id, item.same_person.right.entity_id}.intersection(
             identities

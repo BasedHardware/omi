@@ -311,15 +311,31 @@ omi
 │       ├── search <query> [--include-completed]
 │       ├── complete <id>
 │       └── delete <id> [-y]
-└── goal
-    ├── list [--limit N] [--include-inactive]
-    ├── get <id>
-    ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [--unit ... | --clear-unit] [...]
-    ├── progress <id> <value>
-    ├── history <id> [--days N]
-    └── delete <id> [-y]
+├── goal
+│   ├── list [--limit N] [--include-inactive]
+│   ├── get <id>
+│   ├── create <title> --target N [--type ...] [--current N] [--unit ...]
+│   ├── update <id> [--unit ... | --clear-unit] [...]
+│   ├── progress <id> <value>
+│   ├── history <id> [--days N]
+│   └── delete <id> [-y]
+└── app
+    ├── events
+    ├── payload <event> [--uid UID]
+    ├── send <event> --to URL [--uid UID] [--payload-file FILE] [--idempotency-key K] [--timeout S]
+    ├── verify --to URL [--event EVENT] [--uid UID]
+    └── serve [--port N] [--host H] [--status N] [--reply JSON] [--requests N]
 ```
+
+`omi app` is the local test harness for an Omi app. `omi app serve` receives
+deliveries and prints them, `omi app send` posts a sample event the way the
+backend posts it: same query parameters, content type, and `Idempotency-Key`
+header. `send` exits non-zero unless the receiver answers 2xx, and says what
+Omi would do next, including whether a `realtime_transcript` reply was long
+enough to reach the user as a notification. `omi app verify` posts every event
+to one URL and reports whether that endpoint would work in production: a
+private or loopback host, a redirect, or a response slower than 30 seconds all
+fail, because that is what the backend's delivery client does with them.
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.

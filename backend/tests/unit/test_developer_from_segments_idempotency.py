@@ -144,6 +144,7 @@ from database.firestore_read_metrics import FirestoreReadSite  # noqa: E402
 import routers.developer as developer  # noqa: E402
 import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
+from models.structured import Structured  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 from utils.conversations.meeting_treatment import meeting_treatment_verdict  # noqa: E402
 
@@ -157,6 +158,7 @@ def _passthrough_resolve_geolocation(monkeypatch):
     # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
     # through unchanged, matching production for the None / already-resolved cases these tests exercise.
     monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: False)
 
     def record_receipt(uid, conversation, **_kwargs):
         external_data = (
@@ -888,3 +890,122 @@ def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_i
     )
     developer._create_conversation_from_segments('uid1', oversized)
     assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'overflow'
+
+
+def test_deleted_session_ack_skips_existing_row_and_processing(monkeypatch):
+    cid = developer._from_segments_conversation_id('uid1', 'deleted-session')
+    lookup = MagicMock(return_value=True)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='deleted-session'))
+    assert response.model_dump() == {
+        'id': cid,
+        'status': 'deleted',
+        'discarded': True,
+        'meeting_treatment_eligible': False,
+    }
+    lookup.assert_called_once_with('uid1', cid)
+    read.assert_not_called()
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+def test_deleted_ack_through_both_http_entrypoints(monkeypatch, path):
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: True)
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    payload = _request(client_session_id='deleted-session').model_dump(mode='json')
+    for _ in range(2):
+        response = TestClient(app).post(path, json=payload)
+        assert response.status_code == 200
+        assert response.json()['status'] == 'deleted'
+        assert response.json()['id'] == developer._from_segments_conversation_id('uid1', 'deleted-session')
+    process.assert_not_called()
+
+
+def test_deleted_ack_also_matches_raw_session_id_tombstone(monkeypatch):
+    """A live conversation deleted elsewhere is tombstoned under its raw ws doc id
+    (== client_conversation_id alias), not the derived uuid5 — the create guard
+    must check both identities."""
+    seen = []
+
+    def lookup(uid, key):
+        seen.append(key)
+        return key == 'raw-ws-doc-id'
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='raw-ws-doc-id'))
+    assert response.status == 'deleted'
+    assert response.id == developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id')
+    assert 'raw-ws-doc-id' in seen and developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id') in seen
+    read.assert_not_called()
+    process.assert_not_called()
+
+
+def test_pre_persist_tombstone_check_suppresses_delete_race_winner(monkeypatch):
+    """A delete committing while processing runs must win: the final persist is
+    preceded by a re-check (both identities), and a hit returns the deleted ack,
+    purges the processing row, and never reaches the final persist."""
+    cid = developer._from_segments_conversation_id('uid1', 'race-session')
+    # The tombstone appears only AFTER processing started (the delete committed
+    # in that window), so admission passes and the pre-persist re-check fires.
+    tombstoned = {'after_process': False}
+
+    def lookup(uid, key):
+        return tombstoned['after_process'] and key in (cid, 'race-session')
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    persisted = MagicMock()
+    purged = []
+
+    def fake_process(uid, language, obj, **kwargs):
+        # The delete commits while processing runs.
+        tombstoned['after_process'] = True
+        conv = Conversation(
+            id=cid,
+            created_at=obj.created_at,
+            started_at=obj.started_at,
+            finished_at=obj.finished_at,
+            language=obj.language,
+            source=obj.source,
+            structured=Structured(),
+        )
+        return conv
+
+    monkeypatch.setattr(developer, 'process_conversation', fake_process)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
+    # The admission path's create-if-absent must stay hermetic: stub the whole
+    # admission so the race window is simulated without Firestore.
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', lambda uid, key: purged.append(key))
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='race-session'))
+    assert response.status == 'deleted'
+    persisted.assert_not_called()
+    assert purged == [cid]
+
+
+def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
+    monkeypatch.setattr(
+        developer.conversation_tombstones, 'is_deleted', MagicMock(side_effect=RuntimeError('unavailable'))
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    with pytest.raises(RuntimeError, match='unavailable'):
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='session'))
+    process.assert_not_called()

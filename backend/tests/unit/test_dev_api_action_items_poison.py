@@ -221,6 +221,8 @@ def test_developer_patch_explicit_null_clears_due_date_and_reminder():
         description='Original task',
         completed=False,
         due_at=None,
+        status=None,
+        deleted=False,
     )
     assert response.json()['due_at'] is None
 
@@ -312,3 +314,31 @@ def test_update_action_item_request_null_description_means_unchanged():
     request = developer_module.UpdateActionItemRequest.model_validate({'description': None, 'completed': True})
     assert request.description is None
     assert request.completed is True
+
+
+@pytest.mark.parametrize('status,deleted', [('cancelled', False), ('superseded', False), ('active', True)])
+def test_developer_due_edit_passes_saved_terminal_state(status, deleted):
+    existing, due = _update_fixture()
+    saved = {**existing, 'status': status, 'deleted': deleted}
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, saved]),
+        patch.object(action_items_db, 'update_action_item', return_value=True),
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        developer_module.update_action_item('a1', developer_module.UpdateActionItemRequest(due_at=due), uid='uid1')
+    assert sync.call_args.kwargs['status'] == status
+    assert sync.call_args.kwargs['deleted'] is deleted
+
+
+def test_developer_reopen_passes_saved_active_state_not_prior_cancelled_state():
+    existing, _ = _update_fixture()
+    existing['status'] = 'cancelled'
+    saved = {**existing, 'status': 'active'}
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, saved]),
+        patch.object(action_items_db, 'update_action_item', return_value=True),
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        developer_module.update_action_item('a1', developer_module.UpdateActionItemRequest(completed=False), uid='uid1')
+    assert sync.call_args.kwargs['completed'] is False
+    assert sync.call_args.kwargs['status'] == 'active'

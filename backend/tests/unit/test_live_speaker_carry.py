@@ -251,6 +251,8 @@ class _CarryHarness:
 
     async def call(self, fn, *args, **kwargs):
         name = fn.__name__
+        if name == 'authority_snapshot':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
             _uid, _sid, proposed = args
             return dict(

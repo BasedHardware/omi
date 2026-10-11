@@ -21,13 +21,17 @@ import pytest  # noqa: E402
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment  # noqa: E402
 from routers.listen.transcripts import TranscriptProcessor  # noqa: E402
+from utils.observability.owner_recognition import LIVE_SPEAKER_DECISIONS  # noqa: E402
 from utils.stt.speaker_match import (  # noqa: E402
+    OWNER_NEAR_MISS_THRESHOLD,
     SPEAKER_MATCH_MARGIN,
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     SPEAKER_MATCH_THRESHOLD,
+    SpeakerMatchDecision,
     arbitrate_owner_matches,
     mean_embedding,
+    owner_near_miss,
     select_speaker_match,
 )
 
@@ -90,6 +94,46 @@ class TestSelectSpeakerMatch:
     def test_custom_threshold_and_margin(self):
         assert select_speaker_match({'user': 0.5}, threshold=0.45).accepted is False
         assert select_speaker_match({'user': 0.3, 'sarah': 0.35}, margin=0.0).person_id == 'user'
+
+
+@pytest.mark.parametrize(
+    'distance,pending',
+    [
+        (math.nextafter(SPEAKER_MATCH_THRESHOLD, -math.inf), False),
+        (SPEAKER_MATCH_THRESHOLD, True),
+        (math.nextafter(OWNER_NEAR_MISS_THRESHOLD, -math.inf), True),
+        (OWNER_NEAR_MISS_THRESHOLD, False),
+        (0.737, False),
+        (math.inf, False),
+        (math.nan, False),
+    ],
+)
+def test_owner_near_miss_distance_boundaries(distance, pending):
+    decision = select_speaker_match({'user': distance})
+    assert owner_near_miss(decision) is pending
+    assert decision.accepted is (distance < SPEAKER_MATCH_THRESHOLD)
+
+
+@pytest.mark.parametrize('runner_up,pending', [(0.75, False), (math.nextafter(0.75, math.inf), True)])
+def test_owner_near_miss_uses_the_incumbent_margin_boundary(runner_up, pending):
+    # The exact subtraction matters: 0.75 - 0.65 rounds below 0.10.
+    decision = select_speaker_match({'user': 0.65, 'peer': runner_up})
+    assert owner_near_miss(decision) is pending
+    assert not decision.accepted
+
+
+@pytest.mark.parametrize(
+    'decision',
+    [
+        SpeakerMatchDecision('user', 'user', 0.67, math.inf),
+        SpeakerMatchDecision(None, 'peer', 0.67, math.inf),
+        SpeakerMatchDecision(None, None, math.inf, math.inf),
+        SpeakerMatchDecision(None, 'user', 0.67, math.inf, owner_contended=True),
+        SpeakerMatchDecision(None, 'user', 0.67, 0.70),
+    ],
+)
+def test_owner_near_miss_never_overrides_accepts_people_or_contention(decision):
+    assert not owner_near_miss(decision)
 
 
 class TestMeanEmbedding:
@@ -173,6 +217,41 @@ def test_one_long_clip_decides_immediately(monkeypatch):
     assert matcher.speaker_to_person[2] == ('p1', 'Sarah')
     assert matcher.segment_identity_status['s1'] == SpeakerIdentityStatus.not_user
     assert emitted == [(2, 'p1', 'Sarah', 's1')]
+
+
+def test_live_owner_near_miss_stays_pending_then_accepts_fresh_evidence(monkeypatch):
+    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
+    matcher, _host, emitted = _live_matcher(monkeypatch, [_cold_start_vector(0.67), _cold_start_vector(0.40)])
+    matcher.person_embeddings.pop('p1')
+    pending_counter = LIVE_SPEAKER_DECISIONS.labels(target='owner', decision='pending')._value
+    rejected_counter = LIVE_SPEAKER_DECISIONS.labels(target='owner', decision='rejected')._value
+    pending_before, rejected_before = pending_counter.get(), rejected_counter.get()
+
+    asyncio.run(matcher.match(1, _segment('near', 0, 5)))
+    assert 1 not in matcher.speaker_to_person
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.unknown
+    assert matcher.segment_identity_status['near'] == SpeakerIdentityStatus.unknown
+    assert matcher.match_scores[0]['status'] == 'unknown'
+    assert matcher.match_scores[0]['decision'] == 'pending'
+    assert matcher.match_scores[0]['accepted_person_id'] is None
+    assert emitted == []
+    assert pending_counter.get() == pending_before + 1
+    assert rejected_counter.get() == rejected_before
+
+    asyncio.run(matcher.match(1, _segment('fresh', 6, 5)))
+    assert matcher.speaker_to_person[1] == ('user', 'User')
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.user
+    assert matcher.match_scores[0]['decision'] == 'accepted'
+    assert emitted == [(1, 'user', 'User', 'fresh')]
+
+
+def test_live_owner_outside_calibrated_band_remains_no_match(monkeypatch):
+    matcher, _host, emitted = _live_matcher(monkeypatch, [_cold_start_vector(0.737)])
+    matcher.person_embeddings.pop('p1')
+    asyncio.run(matcher.match(1, _segment('far', 0, 10)))
+    assert matcher.voice_identity_status[1] == SpeakerIdentityStatus.no_match
+    assert 1 not in matcher.speaker_to_person
+    assert emitted == []
 
 
 def test_provider_failover_reconciles_one_owner_across_epoch_ids(monkeypatch):
@@ -492,7 +571,9 @@ def test_cold_start_arbitrates_voices_without_retuning_recall(scores, owner):
         assert all(d.owner_contended for d in decisions.values())
 
 
-@pytest.mark.parametrize('status', [SpeakerIdentityStatus.no_match, SpeakerIdentityStatus.ambiguous])
+@pytest.mark.parametrize(
+    'status', [SpeakerIdentityStatus.no_match, SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.unknown]
+)
 @pytest.mark.parametrize(
     'source,match_source,clear',
     [

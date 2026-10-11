@@ -99,7 +99,7 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
   }
 
   /// The full sentence status the one-line title cannot hold, the recovery prompt, the
-  /// unsynced-audio indicator and the carried-speaker note, as the classic page shows them above the
+  /// unsynced-audio indicator as the classic page shows it above the
   /// transcript.
   List<NativeRow> _nativeStatusRows(
     CaptureProvider provider,
@@ -110,7 +110,6 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
   }) {
     final l10n = context.l10n;
     final episode = wedge.visiblePrompt;
-    final carried = _carriedSpeaker(provider);
     return [
       if (statusText != null) NativeRow('capture_state', statusText, kind: 'label', symbol: 'exclamationmark.circle'),
       if (episode != null)
@@ -135,14 +134,6 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
                 : wal.retrying
                     ? 'arrow.clockwise.icloud'
                     : 'internaldrive'),
-      if (carried != null) ...[
-        NativeRow('capture_carried', l10n.speakerLabelText('carried', carried.person.name),
-            kind: 'label', symbol: 'arrow.uturn.forward'),
-        NativeRow('capture_carried_change', l10n.speakerLabelText('change', ''),
-            action: (_) => _editSegmentSpeaker(carried.segment, provider)),
-        NativeRow('capture_carried_close', l10n.close,
-            symbol: 'xmark', action: (_) => _nativeRebuild(() => _closedCarriedSpeakers.add(carried.key))),
-      ],
     ];
   }
 

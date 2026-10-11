@@ -38,6 +38,7 @@ Person _person(String id, String name) => Person(
 GeneratedSpeakerTagPrompt _ownerCheck() => GeneratedSpeakerTagPrompt(
       id: 'prompt-owner',
       kind: 'owner_check',
+      evidenceId: 'evidence-owner',
       origin: 'unnamed',
       conversationId: 'c1',
       conversationTitle: 'Coffee chat',
@@ -72,13 +73,15 @@ void main() {
       final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
       final prompts = SpeakerTagPromptsProvider(
         fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: [_ownerCheck()])),
-        markShown: (_) async => const ApiSuccess(false),
+        markShown: (_, {bool setShown = true}) async => const ApiSuccess(false),
         dismiss: () async => const ApiSuccess<void>(null),
         submitAnswer: (request) async {
           answers.add(request);
           return const ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'skipped'));
         },
-        loadClip: (_) async => ApiSuccess(Uint8List(0)),
+        // Synthetic samples and injected playback completion keep this host scenario hermetic.
+        loadClip: (_) async => ApiSuccess(Uint8List(8044)),
+        playClip: (_, __) async => true,
         emit: (_) {},
         answeredHold: Duration.zero,
       );
@@ -98,7 +101,10 @@ void main() {
       await checkNativeHost(tester, 'native-speaker-review-voice-matches-review-dark');
       expect(find.byType(NativeSpeakerReview), findsOneWidget);
       expect(nativeProjectedRow(tester, 'speaker_review_close').symbol, 'xmark');
-      expect(nativeProjectedRow(tester, 'speaker_review_answer:not_a_person').enabled, isTrue);
+      expect(nativeProjectedRow(tester, 'speaker_review_answer:me').enabled, isFalse);
+      await nativeProjectedRow(tester, 'speaker_review_play').action!(null);
+      await tester.pump();
+      expect(nativeProjectedRow(tester, 'speaker_review_answer:me').enabled, isTrue);
       expect(NativeFeedbackHost.active, isTrue, reason: 'toasts present natively once the renderer is confirmed');
 
       await nativeProjectedRow(tester, 'speaker_review_answer:me').action!(null);

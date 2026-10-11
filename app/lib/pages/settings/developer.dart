@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -35,8 +36,8 @@ part 'developer_native.dart';
 /// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
 /// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
 ///
-/// Every switch applies when flipped. The webhook URL fields are the one editor on the page: they
-/// wait for Save, and leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
+/// Every switch applies when flipped. Webhook URLs and the custom backend URL wait for Save, and
+/// leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
 class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -75,7 +76,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
-  /// Asks before throwing away unsaved webhook edits. Resolves whether the page may close.
+  /// Asks before throwing away unsaved webhook or backend URL edits. Resolves whether the page may close.
   Future<bool> _confirmDiscard(DeveloperModeProvider provider) async {
     final l10n = context.l10n;
     final discard = await showOmiConfirm(
@@ -219,6 +220,22 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               ],
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildCustomBackendUrl(DeveloperModeProvider provider) {
+    return OmiSettingsGroup(
+      header: context.l10n.customBackendUrlTitle,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: _DeveloperTextField(
+            controller: provider.customBackendUrl,
+            label: context.l10n.backendUrlLabel,
+            hint: 'https://omi.example.com/',
+          ),
+        ),
       ],
     );
   }
@@ -387,6 +404,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   const SizedBox(height: OmiSpacing.xxl),
                   const DeveloperMcpSection(),
                   const SizedBox(height: OmiSpacing.xxl),
+                  if (!kReleaseMode) ...[_buildCustomBackendUrl(provider), const SizedBox(height: OmiSpacing.xxl)],
                   _buildWebhooks(provider),
                   const SizedBox(height: OmiSpacing.xxl),
                   _buildExperimental(provider),
@@ -423,10 +441,11 @@ Future<({File? file})?> chooseDebugLogFileNatively(BuildContext context, List<Fi
 }
 
 class _DeveloperTextField extends StatelessWidget {
-  const _DeveloperTextField({required this.controller, required this.label, this.keyboardType});
+  const _DeveloperTextField({required this.controller, required this.label, this.hint, this.keyboardType});
 
   final TextEditingController controller;
   final String label;
+  final String? hint;
   final TextInputType? keyboardType;
 
   @override
@@ -439,6 +458,7 @@ class _DeveloperTextField extends StatelessWidget {
       style: OmiType.subhead,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         labelStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
         filled: true,
         fillColor: OmiColors.surface2,

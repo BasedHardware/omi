@@ -898,9 +898,9 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  // level
-  //   1 - play 20ms
-  //   2 - play 50ms
+  // CV1 haptic mapping (omi/firmware/omi/src/haptic.c)
+  //   1 - play 100ms
+  //   2 - play 300ms
   //   3 - play 500ms
   @override
   Future<bool> performPlayToSpeakerHaptic(int level) async {

@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -72,6 +73,26 @@ def _record(proposal, index):
         account_generation=3,
         idempotency_key=f'idem-{index}',
         created_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
+    )
+
+
+def _mock_saved_batch(monkeypatch, create):
+    """The reminder read sees the synthetic rows this test's write actually persisted."""
+    saved = {}
+
+    def persist(uid, rows, **kwargs):
+        ids = create(uid, rows, **kwargs)
+        for task_id, row in zip(ids, rows):
+            saved[(uid, task_id)] = process_conversation.action_items_db.prepare_action_item_for_read(
+                deepcopy({**row, 'id': task_id})
+            )
+        return ids
+
+    monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', persist)
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'get_action_items_by_ids',
+        lambda uid, ids: [deepcopy(saved[(uid, task_id)]) for task_id in ids if (uid, task_id) in saved],
     )
 
 
@@ -685,7 +706,7 @@ def test_non_desktop_conversation_writes_tasks_and_never_proposes(monkeypatch, s
         written.extend(action_items_data)
         return [f'action-item-{index}' for index, _ in enumerate(action_items_data)]
 
-    monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', create_batch)
+    _mock_saved_batch(monkeypatch, create_batch)
 
     process_conversation._save_action_items(
         'user-1',
@@ -717,11 +738,7 @@ def test_non_desktop_reprocess_replaces_the_conversations_previous_tasks(monkeyp
     monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
     monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
-    monkeypatch.setattr(
-        process_conversation.action_items_db,
-        'create_action_items_batch',
-        lambda uid, data, **kw: ['action-item-0'],
-    )
+    _mock_saved_batch(monkeypatch, lambda uid, data, **kw: ['action-item-0'])
 
     process_conversation._save_action_items(
         'user-1',

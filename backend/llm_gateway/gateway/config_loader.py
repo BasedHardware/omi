@@ -364,7 +364,12 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'rollout': {'stage': 'active', 'percent': 100},
                 'credential_policy': _reserved_credential_policy(),
                 'fallback_policy': {
-                    'fallback_on': ['reserved_capacity_unavailable', 'timeout_before_output', 'provider_5xx_omi_paid'],
+                    'fallback_on': [
+                        'reserved_capacity_unavailable',
+                        'timeout_before_output',
+                        'provider_5xx_omi_paid',
+                        'provider_invalid_request',
+                    ],
                     'never_fallback_on': [
                         'byok_auth',
                         'byok_quota',
@@ -372,7 +377,6 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                         'byok_unsupported_provider',
                         'missing_byok_key',
                         'capability_mismatch',
-                        'provider_invalid_request',
                         'invalid_config',
                     ],
                 },
@@ -582,7 +586,9 @@ def _reserved_credential_policy() -> dict[str, Any]:
         'reserved_capacity_unavailable',
         'timeout_before_output',
         'provider_5xx_omi_paid',
+        'provider_invalid_request',
     ]
+    policy['never_fallback_failure_classes'].remove('provider_invalid_request')
     return policy
 
 

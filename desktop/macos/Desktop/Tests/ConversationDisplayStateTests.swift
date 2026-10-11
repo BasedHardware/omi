@@ -232,7 +232,7 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(ConversationProcessingProgress.untitledRecoverableBadgeText, "Title didn't generate")
     XCTAssertEqual(
       ConversationProcessingProgress.untitledRecoverableBadgeHelp,
-      "The transcript was captured but the title pass didn't produce one. Try Reprocess."
+      "The transcript was saved, but Omi couldn't write a title. Try Reprocess."
     )
     XCTAssertFalse(
       ConversationProcessingProgress.untitledRecoverableBadgeText.localizedCaseInsensitiveContains("needs reprocess")

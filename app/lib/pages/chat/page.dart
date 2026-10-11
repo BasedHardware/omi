@@ -272,66 +272,69 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       child: Consumer2<MessageProvider, ConnectivityProvider>(
         builder: (context, provider, connectivityProvider, child) {
           _observeMessagesForAutoScroll(provider);
-          // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
-          // is a transcript it turns solid so long answers stay readable.
-          final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
-          final classic = AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOut,
-            color: isGlass ? Colors.transparent : OmiColors.surface0,
-            child: Scaffold(
-              key: scaffoldKey,
-              backgroundColor: Colors.transparent,
-              appBar: ChatHeader(provider: provider),
-              endDrawer: _chatAppsDrawer(),
-              onEndDrawerChanged: (isOpened) {
-                if (isOpened) {
-                  // Unfocus text field when drawer opens
-                  textFieldFocusNode.unfocus();
-                }
-              },
-              body: GestureDetector(
-                onTap: () {
-                  // Hide keyboard when tapping outside textfield
-                  FocusScope.of(context).unfocus();
+          // Build the classic transcript/composer only when the renderer needs its fallback.
+          final classic = Builder(builder: (context) {
+            // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
+            // is a transcript it turns solid so long answers stay readable.
+            final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOut,
+              color: isGlass ? Colors.transparent : OmiColors.surface0,
+              child: Scaffold(
+                key: scaffoldKey,
+                backgroundColor: Colors.transparent,
+                appBar: ChatHeader(provider: provider),
+                endDrawer: _chatAppsDrawer(),
+                onEndDrawerChanged: (isOpened) {
+                  if (isOpened) {
+                    // Unfocus text field when drawer opens
+                    textFieldFocusNode.unfocus();
+                  }
                 },
-                child: Column(
-                  children: [
-                    if (provider.historyProblem != null)
-                      OmiErrorState(
-                        message: context.l10n.somethingWentWrong,
-                        onRetry: provider.refreshMessages,
+                body: GestureDetector(
+                  onTap: () {
+                    // Hide keyboard when tapping outside textfield
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: Column(
+                    children: [
+                      if (provider.historyProblem != null)
+                        OmiErrorState(
+                          message: context.l10n.somethingWentWrong,
+                          onRetry: provider.refreshMessages,
+                        ),
+                      if (provider.hasOlderMessages)
+                        TextButton(
+                          key: const Key('chat_load_older'),
+                          onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
+                              ? null
+                              : () => _loadOlderMessages(provider),
+                          child: provider.loadingOlderMessages
+                              ? const OmiSpinner(size: OmiSpinnerSize.small)
+                              : Text(context.l10n.showMore),
+                        ),
+                      // Messages area - takes up remaining space
+                      Expanded(
+                        child: provider.isLoadingMessages && !provider.hasCachedMessages
+                            ? OmiLoadingState(
+                                label: provider.firstTimeLoadingText,
+                              )
+                            : provider.isClearingChat
+                                ? OmiLoadingState(
+                                    label: context.l10n.deletingMessages,
+                                  )
+                                : (provider.messages.isEmpty)
+                                    ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
+                                    : _buildTranscript(provider),
                       ),
-                    if (provider.hasOlderMessages)
-                      TextButton(
-                        key: const Key('chat_load_older'),
-                        onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
-                            ? null
-                            : () => _loadOlderMessages(provider),
-                        child: provider.loadingOlderMessages
-                            ? const OmiSpinner(size: OmiSpinnerSize.small)
-                            : Text(context.l10n.showMore),
-                      ),
-                    // Messages area - takes up remaining space
-                    Expanded(
-                      child: provider.isLoadingMessages && !provider.hasCachedMessages
-                          ? OmiLoadingState(
-                              label: provider.firstTimeLoadingText,
-                            )
-                          : provider.isClearingChat
-                              ? OmiLoadingState(
-                                  label: context.l10n.deletingMessages,
-                                )
-                              : (provider.messages.isEmpty)
-                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
-                                  : _buildTranscript(provider),
-                    ),
-                    _buildComposer(context, provider, connectivityProvider),
-                  ],
+                      _buildComposer(context, provider, connectivityProvider),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
+            );
+          });
           if (!nativePresentationEnabled) return classic;
           // Native rows, and the provider reads they watch, exist only once the renderer is supported.
           return FutureBuilder<bool>(

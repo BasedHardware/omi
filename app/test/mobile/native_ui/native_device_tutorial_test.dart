@@ -19,6 +19,8 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboa
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/onboarding_sync_service.dart';
 import 'package:omi/services/voice_playback/voice_output_route.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -106,13 +108,31 @@ Widget _app(Widget child, {required CaptureProvider capture, MessageProvider? me
       child: NativeTestHost.app(child),
     );
 
-/// A launcher route, so the tutorial is pushed and popped the way Device Settings opens it.
-Widget _launcher() => Builder(
-    builder: (context) => Scaffold(
-        body: TextButton(
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true))),
-            child: const Text('open tutorial'))));
+/// The production outbox with an isolated disk and no network, one per widget test's async zone.
+/// The launcher pushes/pops the tutorial the way Device Settings opens it.
+Widget _launcher({Future<bool> Function()? saveCompletion}) {
+  final disk = <String, String>{};
+  final session = AuthService.instance.captureSessionSnapshot()!;
+  final outbox = OnboardingSyncService(
+    read: (owner) => disk[owner] ?? '',
+    write: (owner, value) async {
+      disk[owner] = value;
+      return true;
+    },
+    send: (_, __) async => false,
+    isCurrent: AuthService.instance.isSessionSnapshotCurrent,
+  )..setActive(false);
+  addTearDown(outbox.dispose);
+  return Builder(
+      builder: (context) => Scaffold(
+          body: TextButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => InteractiveDeviceOnboardingWrapper(
+                      allowExit: true,
+                      saveCompletion:
+                          saveCompletion ?? () => outbox.enqueue(session, deviceOnboardingCompleted: true)))),
+              child: const Text('open tutorial'))));
+}
 
 Future<void> _openTutorial(WidgetTester tester) async {
   await tester.tap(find.text('open tutorial'));
@@ -290,9 +310,40 @@ void main() {
     expect(find.byType(UiKitView), findsNothing);
 
     await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+    // Completion now waits for the account-owned outbox write before leaving the route.
+    await NativeTestHost.settle(tester);
     await tester.pump(const Duration(seconds: 1));
     expect(SharedPreferencesUtil().deviceOnboardingCompleted, isTrue);
   });
+
+  for (final accepted in [true, false]) {
+    testWidgets('completion waits for a successful durable save with native host accepted=$accepted', (tester) async {
+      final host = NativeTestHost.install(answer: (_, call) async {
+        if (!accepted && call.method == 'update') throw PlatformException(code: 'invalid_native_snapshot');
+        return null;
+      });
+      var canSave = false;
+      await tester.pumpWidget(_app(_launcher(saveCompletion: () async => canSave), capture: _FakeCapture()));
+      await _openTutorial(tester);
+      Future<void> close() async {
+        if (accepted) {
+          await _tap(tester, host, 'device_tutorial_close');
+        } else {
+          await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+          await NativeTestHost.settle(tester);
+        }
+      }
+
+      await close();
+      expect(SharedPreferencesUtil().deviceOnboardingCompleted, isFalse);
+      expect(find.byType(InteractiveDeviceOnboardingWrapper), findsOneWidget);
+      canSave = true;
+      await close();
+      await tester.pump(const Duration(seconds: 1));
+      expect(SharedPreferencesUtil().deviceOnboardingCompleted, isTrue);
+      expect(find.byType(InteractiveDeviceOnboardingWrapper), findsNothing);
+    });
+  }
 
   testWidgets('voice reply previews through the route, persists the mode and Off stays silent', (tester) async {
     final host = NativeTestHost.install();
@@ -409,6 +460,7 @@ void main() {
 
   testWidgets('without the native host the tutorial keeps its classic presentation', (tester) async {
     expect(nativePresentationEnabled, isFalse);
+    NativeTestHost.installOwner();
     await tester.pumpWidget(_app(_launcher(), capture: _FakeCapture()));
     await _openTutorial(tester);
     expect(find.byType(IosNativeSurface), findsNothing);

@@ -89,6 +89,18 @@ extension _NativeDeveloperPresentation on _DeveloperSettingsPageState {
                     action: (_) => docs('https://docs.omi.me/doc/developer/apps/Introduction', 'Webhooks'))
               ],
               title: l10n.webhooks),
+          if (!kReleaseMode)
+            NativeSection(
+                'developer_backend',
+                [
+                  NativeRow('developer_backend_url', l10n.backendUrlLabel,
+                      kind: 'text',
+                      keyboard: 'url',
+                      value: provider.customBackendUrl.text,
+                      enabled: !provider.savingSettingsLoading,
+                      action: (value) => provider.customBackendUrl.text = value as String),
+                ],
+                title: l10n.customBackendUrlTitle),
           webhook(
               'developer_conversation',
               l10n.conversationEvents,

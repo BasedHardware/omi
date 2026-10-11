@@ -139,6 +139,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           if (provider.questionSent)
             NativeRow('dev_tut_press_state', l10n.deviceOnboardingProcessingQuestion,
                 kind: 'label', symbol: 'ellipsis.bubble', subtitle: l10n.deviceOnboardingAskQuestionSubtitle)
+          else if (provider.questionFailed)
+            NativeRow('dev_tut_press_state', l10n.voiceQuestionNoSpeech,
+                kind: 'label', symbol: 'exclamationmark.bubble')
           else if (provider.voiceSessionActive)
             NativeRow('dev_tut_press_state', l10n.deviceOnboardingListening,
                 kind: 'label', symbol: 'waveform', subtitle: l10n.deviceOnboardingAskQuestionSubtitle)
@@ -233,6 +236,22 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             ],
           ],
         ),
+      );
+    }
+
+    // Dropped empty or came back with no speech detected — invite a retry
+    // instead of leaving the user stuck on "Processing" forever.
+    if (provider.questionFailed) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            context.l10n.voiceQuestionNoSpeech,
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       );
     }
 

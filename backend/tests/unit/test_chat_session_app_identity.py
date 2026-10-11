@@ -25,6 +25,7 @@ from fastapi import HTTPException
 
 import routers.chat as chat_router
 import utils.chat_session_target as chat_target
+import utils.chat_turn as chat_turn
 from starlette.requests import Request
 
 APP_SESSION = {
@@ -157,7 +158,7 @@ def test_over_quota_turn_in_a_named_session_carries_session_and_app(monkeypatch,
             detail={'error': 'quota_exceeded', 'plan': 'Free', 'unit': 'questions', 'limit': 30},
         )
 
-    monkeypatch.setattr(chat_router, 'enforce_chat_quota', _enforce)
+    monkeypatch.setattr(chat_turn, 'enforce_chat_quota', _enforce)
     monkeypatch.setattr(chat_router.chat_db, 'add_message', lambda uid, msg: added.append(msg))
     monkeypatch.setattr(
         chat_router.chat_db,

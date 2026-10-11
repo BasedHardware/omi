@@ -2,13 +2,10 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from models.review import ReviewItem
-
-
-class Strict(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+from models.dream_edit import Edit, Term, Strict
 
 
 class Cluster(Strict):
@@ -20,23 +17,6 @@ class Triage(Strict):
     clusters: list[Cluster] = Field(default_factory=list, max_length=12)
 
 
-class Edit(Strict):
-    kind: Literal['spelling', 'memory', 'merge_people', 'entity_summary', 'close_task', 'retire_task', 'merge_memories']
-    target: str
-    other: str = ''
-    before: str = ''
-    after: str = ''
-    reason: str = Field(min_length=1, max_length=1000)
-    evidence: list[str] = Field(min_length=1, max_length=10)
-
-
-class Term(Strict):
-    kind: Literal['person', 'organization', 'project', 'jargon']
-    spelling: str = Field(min_length=1, max_length=50)
-    aliases: list[str] = Field(default_factory=list, max_length=5)
-    evidence: list[str] = Field(min_length=1, max_length=10)
-
-
 class FrameQuestion(Strict):
     screen_ref: str
     question: str = Field(min_length=1, max_length=500)
@@ -44,7 +24,9 @@ class FrameQuestion(Strict):
 
 class Feedback(Strict):
     component: Literal['transcription', 'notes', 'memory', 'people', 'entities', 'tasks', 'dream']
-    failure_class: Literal['spelling', 'duplicate', 'missing_evidence', 'stale_state', 'routing', 'budget', 'success']
+    failure_class: Literal[
+        'spelling', 'duplicate', 'missing_evidence', 'stale_state', 'routing', 'budget', 'success', 'none', 'ok'
+    ]
     severity: Literal['info', 'warning', 'error']
     count: int = Field(ge=1, le=10000)
     latency_ms: float = Field(ge=0, le=3600000, allow_inf_nan=False)

@@ -18,6 +18,10 @@ const _captureAudioSilenceResubscribeLimit = 1;
 /// Native owns the connection lifecycle (retry, reconnect, bonding).
 /// This transport is long-lived
 class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionErrors {
+  /// Installed by capture. Counts audio notifications as they arrive so a
+  /// silent GATT link is distinct from a socket that sent nothing.
+  static void Function(String deviceId, int byteCount)? ingressByteObserver;
+
   final String _peripheralUuid;
   final bool requiresBond;
   final BleHostApi _hostApi;
@@ -422,6 +426,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     if (isBleAudioCharacteristicUuid(characteristicUuid) && value.isNotEmpty) {
       _audioSilenceResubscribes = 0;
       _audioLivenessTimer?.cancel();
+      ingressByteObserver?.call(deviceId, value.length);
     }
     _addToStream(serviceUuid, characteristicUuid, value);
   }

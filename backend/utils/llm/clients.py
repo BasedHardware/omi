@@ -28,6 +28,8 @@ from utils.byok import get_byok_key
 from utils.llm.byok_errors import handle_llm_error, handle_llm_error_async
 from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
+    BYOK_GEMINI_MODEL,
+    BYOK_OPENAI_MODEL,
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
     _OPENROUTER_TEMPERATURES,
@@ -627,8 +629,10 @@ def _effective_byok_provider(model: str, provider: str) -> str:
 
 def _byok_fallback_model(provider: str) -> str:
     if provider == 'openai':
-        return 'gpt-4o-mini'
-    if provider in {'gemini', 'openrouter'}:
+        return BYOK_OPENAI_MODEL
+    if provider == 'gemini':
+        return BYOK_GEMINI_MODEL
+    if provider == 'openrouter':
         return 'gemini-2.5-flash-lite'
     if provider == 'anthropic':
         return 'claude-sonnet-4-6'

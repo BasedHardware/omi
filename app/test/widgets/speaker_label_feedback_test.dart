@@ -14,7 +14,6 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/conversation_capturing/widgets/carried_speaker_banner.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
@@ -470,29 +469,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byKey(const Key('voice_match_c1_2')), findsOneWidget);
       await tester.pump(const Duration(seconds: 9));
-    });
-  });
-
-  group('carried label', () {
-    test('one banner per carried person, in order of appearance', () {
-      final carried = carriedSpeakerSegments([
-        _line('a', 0, isUser: true, source: 'carried'),
-        _line('b', 1, personId: 'maya', source: 'carried'),
-        _line('c', 1, personId: 'maya', source: 'carried'),
-        _line('d', 2, personId: 'jordan', source: 'manual'),
-      ]);
-      expect(carried.map((s) => s.id), ['b']);
-    });
-
-    testWidgets('names who was carried over and offers Change', (tester) async {
-      var changed = 0, closed = 0;
-      await tester.pumpWidget(
-        _app(CarriedSpeakerBanner(name: 'Maya', onChange: () => changed++, onClose: () => closed++)),
-      );
-      expect(find.text('Still Maya. Carried over from your last conversation.'), findsOneWidget);
-      await tester.tap(find.text('Change'));
-      await tester.tap(find.byIcon(Icons.close));
-      expect((changed, closed), (1, 1));
     });
   });
 }

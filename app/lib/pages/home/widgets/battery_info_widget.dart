@@ -1,3 +1,4 @@
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -111,7 +112,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   ],
                 ],
               );
-              if (!isMemoriesPage) return batteryPill;
+              if (!isMemoriesPage || !PhoneCallsFeature.visible) return batteryPill;
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -264,6 +265,7 @@ class HomeRecordButtonState extends State<HomeRecordButton> {
 
   /// Once, after the first recording stops: say that holding the button offers more ways to record.
   void _maybeShowOptionsTip(BuildContext context) {
+    if (!PhoneCallsFeature.visible) return;
     final prefs = SharedPreferencesUtil();
     if (prefs.getBool(_optionsTipKey)) return;
     prefs.saveBool(_optionsTipKey, true);
@@ -294,10 +296,12 @@ class HomeRecordButtonState extends State<HomeRecordButton> {
             Navigator.pop(sheetContext);
             _startPhoneRecording(context);
           },
-          onPhoneCall: () {
-            Navigator.pop(sheetContext);
-            if (context.mounted) routeToPage(context, const PhoneCallsPage());
-          },
+          onPhoneCall: PhoneCallsFeature.visible
+              ? () {
+                  Navigator.pop(sheetContext);
+                  if (context.mounted) routeToPage(context, const PhoneCallsPage());
+                }
+              : null,
           onKeepPendant: () => Navigator.pop(sheetContext),
         );
     final title = context.read<CaptureProvider>().pendantCaptureVerified
@@ -373,7 +377,8 @@ class HomeRecordButtonState extends State<HomeRecordButton> {
         // The phone recording is this button's own (live or paused); anything else is idle here.
         final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        final canShowOptions = !isRecording && !isInitialising;
+        // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
+        final canShowOptions = PhoneCallsFeature.visible && !isRecording && !isInitialising;
         final l10n = context.l10n;
         final circle = Semantics(
           button: true,
@@ -677,7 +682,9 @@ class PendantListeningSheet extends StatelessWidget {
   });
 
   final VoidCallback onRecordWithPhone;
-  final VoidCallback onPhoneCall;
+
+  /// Null hides the phone-call option.
+  final VoidCallback? onPhoneCall;
   final VoidCallback onKeepPendant;
 
   /// Set when the sheet is presented natively, as for [RecordOptionsSheet.nativeTitle].
@@ -702,8 +709,9 @@ class PendantListeningSheet extends StatelessWidget {
                 subtitle: l10n.pendantPausesUntilYouFinish,
                 symbol: 'iphone',
                 action: (_) => _picked(onRecordWithPhone)),
-            NativeRow('pendant_phone_call', l10n.phoneCall,
-                subtitle: l10n.pendantPausesDuringCall, symbol: 'phone', action: (_) => _picked(onPhoneCall)),
+            if (onPhoneCall != null)
+              NativeRow('pendant_phone_call', l10n.phoneCall,
+                  subtitle: l10n.pendantPausesDuringCall, symbol: 'phone', action: (_) => _picked(onPhoneCall!)),
             NativeRow('pendant_keep', l10n.keepUsingPendant, action: (_) => onKeepPendant()),
           ]),
         ],
@@ -723,13 +731,15 @@ class PendantListeningSheet extends StatelessWidget {
             subtitle: l10n.pendantPausesUntilYouFinish,
             onTap: onRecordWithPhone,
           ),
-          const SizedBox(height: 10),
-          _RecordOption(
-            icon: Icons.call_rounded,
-            title: l10n.phoneCall,
-            subtitle: l10n.pendantPausesDuringCall,
-            onTap: onPhoneCall,
-          ),
+          if (onPhoneCall != null) ...[
+            const SizedBox(height: 10),
+            _RecordOption(
+              icon: Icons.call_rounded,
+              title: l10n.phoneCall,
+              subtitle: l10n.pendantPausesDuringCall,
+              onTap: onPhoneCall!,
+            ),
+          ],
           const SizedBox(height: OmiSpacing.md),
           OmiButton.secondary(label: l10n.keepUsingPendant, onPressed: onKeepPendant),
         ],

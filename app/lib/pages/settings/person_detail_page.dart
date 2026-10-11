@@ -221,7 +221,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                 OmiSettingsRow.toggle(
                   key: const Key('person_pin_switch'),
                   title: l10n.pinAction,
-                  subtitle: l10n.pinPersonHonestLine,
+                  subtitle: l10n.pinPersonDescription,
                   value: person.pinned,
                   onChanged: (_) => togglePersonPinned(context, provider, person),
                 ),
@@ -308,7 +308,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
         ]),
         NativeSection('person_pinning', [
           NativeRow('person_pin', l10n.pinAction,
-              subtitle: l10n.pinPersonHonestLine,
+              subtitle: l10n.pinPersonDescription,
               kind: 'toggle',
               value: person.pinned,
               action: (_) => togglePersonPinned(context, provider, person)),

@@ -632,7 +632,7 @@ class TranscriptProcessor:
             if candidates is not None and not segment.is_user and not segment.person_id:
                 segment.voice_candidates = candidates
             if status is not None:
-                if status in (SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.no_match):
+                if status not in (SpeakerIdentityStatus.user, SpeakerIdentityStatus.not_user):
                     # Clear an earlier automatic accept on *every* segment of
                     # this voice, retaining manual/carried and channel labels.
                     automatic_live = segment.speaker_label_source in (None, 'auto') and (

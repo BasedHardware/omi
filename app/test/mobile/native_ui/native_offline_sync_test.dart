@@ -692,6 +692,23 @@ void main() {
   });
 
   group('AutoSyncPage', () {
+    testWidgets('continuous files become one recording with the worst status and retry only failed files',
+        (tester) async {
+      final older = _wal(0, status: WalStatus.synced);
+      final newer = _wal(0)..timerStart = older.timerStart + 75;
+      newer.retryCount = walMaxAutoRetries;
+      final sync = _Sync()..wals = [newer, older];
+      addTearDown(sync.dispose);
+      final host = await _pump(tester, const AutoSyncPage(), sync);
+      final blocks = _rowIds(tester).where((id) => id.startsWith('offline_block:') && !id.endsWith(':retry')).toList();
+      expect(blocks, hasLength(1));
+      expect(_rowIds(tester).where((id) => id.startsWith('offline_wal:')), isEmpty);
+      expect(nativeProjectedRow(tester, blocks.single).subtitle, _l10n.syncStatusFailed);
+      await _send(tester, host, '${blocks.single}:retry');
+      expect(sync.calls, contains('sync ${newer.id}'));
+      expect(sync.calls, isNot(contains('sync ${older.id}')));
+    });
+
     testWidgets('projects 200 recordings, then more as the end comes into view', (tester) async {
       final sync = _Sync()..wals = [for (var i = 0; i < 450; i++) _wal(i, status: WalStatus.synced)];
       addTearDown(sync.dispose);

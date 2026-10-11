@@ -39,9 +39,15 @@ export function parseDeviceHealthDays(raw: string | null): number {
   return Math.min(parsed, DEVICE_HEALTH_MAX_DAYS);
 }
 
+// Watch firmware leaks in from connected non-pendant devices: the stored
+// label is a watchOS version (26.6, 27.0, 27.0.1). Pendant majors are a
+// single digit (1, 2, 3), so a two-digit major is not a pendant. 1.0.4
+// stays — it is the original Friend pendant, and the label names it.
 export function pendantHealthQuery(days: number): string {
   return `
-    SELECT properties.firmware AS firmware,
+    SELECT trim(properties.firmware) AS firmware,
+           coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
+           any(properties.device_model) AS device_model,
            count() AS events,
            uniqExact(person_id) AS users,
            countIf(toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100) AS n_valid_drain,
@@ -51,50 +57,92 @@ export function pendantHealthQuery(days: number): string {
            countIf(toFloat(properties.cliff_count) > 0) AS n_with_cliffs
     FROM events
     WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
-    GROUP BY firmware ORDER BY events DESC LIMIT 15
+      AND nullIf(trim(properties.firmware),'') IS NOT NULL
+      AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
+      AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
+    GROUP BY firmware, os
+    HAVING uniqExact(person_id) >= 20
+    ORDER BY users DESC
   `;
 }
 
 // PostHog rejects a window function in WHERE (the drain CTE's second
 // lagInFrame over pairs) and cannot see person_id unless that CTE projects
 // it. Both lags are computed once in `pairs`; the aggregate stays outside.
-// The timestamp predicate is repeated on the outer query so the scan stays
-// bounded — a filter that exists only inside the CTE 504s.
-// Unknown charging counts as drain on either endpoint; only an explicit
-// true excludes the interval. `!= true` drops NULL and would hide those pairs.
+// v2 presence is per OS/build, including invalid v2 baselines: once a build
+// emits v2, stale v1 pairs cannot contaminate its quantiles. Both candidate
+// counts remain visible during migration. Delivery timestamps only serve v1.
+// Equal-weight per-interval quantiles; the pooled sum(drops)/sum(hours)
+// estimator is tracked in the watchdog analysis, not this route.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (
       SELECT person_id,
              coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
-             coalesce(properties.$app_build, properties.app_build) AS build,
+             if(toInt(properties.schema_version) = 2,
+                properties.battery_observation_build,
+                coalesce(properties.$app_build, properties.app_build)) AS build,
+             coalesce(nullIf(properties.$app_version,''), nullIf(properties.app_version,''), '') AS app_version,
              timestamp,
+             coalesce(toInt(properties.schema_version), 1) AS schema_version,
              toFloat(properties.battery_level) AS level,
-             properties.battery_charging AS charging
+             properties.battery_charging AS charging,
+             toFloat(properties.previous_battery_level) AS previous_level,
+             properties.previous_battery_charging AS previous_charging,
+             toFloat(properties.battery_interval_seconds) AS interval_s,
+             properties.battery_interval_validity AS validity,
+             properties.charging_observed_in_interval AS charging_observed
       FROM events
       WHERE event = 'Phone Battery Sample'
         AND timestamp >= now() - INTERVAL ${days} DAY
         AND coalesce(nullIf(properties.$os_name,''), properties.platform) IN ('Android','iOS')
     ),
+    build_presence AS (
+      SELECT os, build, countIf(schema_version = 2) > 0 AS has_v2
+      FROM samples
+      GROUP BY os, build
+    ),
     pairs AS (
-      SELECT os, build, person_id, timestamp, level, charging,
+      SELECT os, build, app_version, person_id, timestamp, level, charging,
              dateDiff('second', lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY person_id ORDER BY timestamp), timestamp) AS elapsed_s,
              lagInFrame(level, 1, level) OVER (PARTITION BY person_id ORDER BY timestamp) - level AS level_drop,
              lagInFrame(charging, 1, charging) OVER (PARTITION BY person_id ORDER BY timestamp) AS prev_charging
       FROM samples
+      WHERE schema_version = 1
+    ),
+    intervals AS (
+      SELECT os, build, app_version, person_id, elapsed_s, level_drop, 1 AS interval_schema
+      FROM pairs
+      WHERE timestamp >= now() - INTERVAL ${days} DAY
+        AND elapsed_s BETWEEN 900 AND 7200
+        AND level_drop > 0
+        AND (charging = false OR isNull(charging))
+        AND (prev_charging = false OR isNull(prev_charging))
+      UNION ALL
+      SELECT os, build, app_version, person_id, interval_s AS elapsed_s,
+             previous_level - level AS level_drop, 2 AS interval_schema
+      FROM samples
+      WHERE timestamp >= now() - INTERVAL ${days} DAY
+        AND schema_version = 2
+        AND validity = 'same_build'
+        AND interval_s BETWEEN 900 AND 7200
+        AND level BETWEEN 0 AND 100 AND previous_level BETWEEN 0 AND 100
+        AND previous_level - level >= 0
+        AND charging = false AND previous_charging = false
+        AND (charging_observed = false OR isNull(charging_observed))
     )
-    SELECT os, build,
-           count() AS n_pairs,
-           uniqExact(person_id) AS users,
-           round(quantile(0.5)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p50_drain_per_hour,
-           round(quantile(0.9)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p90_drain_per_hour
-    FROM pairs
-    WHERE timestamp >= now() - INTERVAL ${days} DAY
-      AND elapsed_s BETWEEN 900 AND 7200
-      AND level_drop > 0
-      AND (charging = false OR isNull(charging))
-      AND (prev_charging = false OR isNull(prev_charging))
+    SELECT intervals.os AS os, intervals.build AS build,
+           max(app_version) AS app_version,
+           countIf(if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS n_pairs,
+           uniqExactIf(person_id, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS users,
+           round(quantileIf(0.5)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p50_drain_per_hour,
+           round(quantileIf(0.9)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p90_drain_per_hour,
+           countIf(interval_schema = 1) AS n_v1_pairs,
+           countIf(interval_schema = 2) AS n_v2_intervals
+    FROM intervals
+    INNER JOIN build_presence ON intervals.os = build_presence.os AND intervals.build = build_presence.build
     GROUP BY os, build
+    HAVING n_pairs > 0
     ORDER BY os, build
   `;
 }
@@ -113,6 +161,9 @@ export function phoneEventCountQuery(days: number): string {
 
 export interface PendantHealthRow {
   firmware: string;
+  os: string;
+  device_model: string;
+  firmware_label: string;
   events: number;
   users: number;
   n_valid_drain: number;
@@ -125,8 +176,11 @@ export interface PendantHealthRow {
 export interface PhoneHealthRow {
   os: string;
   build: string;
+  app_version: string;
   label: string;
   n_pairs: number;
+  n_v1_pairs: number;
+  n_v2_intervals: number;
   users: number;
   p50_drain_per_hour: number | null;
   p90_drain_per_hour: number | null;
@@ -186,33 +240,66 @@ function asRows(results: unknown[]): unknown[][] {
   return results.filter((row): row is unknown[] => Array.isArray(row));
 }
 
+function firmwareLabel(
+  firmware: string,
+  os: string,
+  deviceModel: string
+): string {
+  // 1.0.4 is the original Friend pendant. Name it so the bar is not read as
+  // a current Omi build. device_model is on the row; a blank any() still
+  // means Friend v1 because that firmware is the hardware.
+  const model = deviceModel.trim();
+  const friendV1 =
+    firmware === "1.0.4" && (model.length === 0 || /^friend\b/i.test(model));
+  const version = friendV1 ? `${firmware} (Friend v1)` : firmware;
+  const platform = os.trim();
+  return platform.length > 0 ? `${version} · ${platform}` : version;
+}
+
+function phoneLabel(os: string, build: string, appVersion: string): string {
+  const version = appVersion.trim();
+  const buildPart = build.length > 0 ? `(${build})` : "";
+  const parts = [os, version, buildPart].filter((part) => part.length > 0);
+  return parts.join(" ") || "unknown";
+}
+
 function mapPendant(rows: unknown[][]): PendantHealthRow[] {
-  return rows.map((row) => ({
-    firmware: text(row[0]) || "unknown",
-    events: count(row[1]),
-    users: count(row[2]),
-    n_valid_drain: count(row[3]),
-    p50_drain_valid: finiteNumber(row[4]),
-    p90_drain_valid: finiteNumber(row[5]),
-    avg_connected_frac: finiteNumber(row[6]),
-    n_with_cliffs: count(row[7]),
-  }));
+  return rows.map((row) => {
+    const firmware = text(row[0]) || "unknown";
+    const os = text(row[1]);
+    const deviceModel = text(row[2]);
+    return {
+      firmware,
+      os,
+      device_model: deviceModel,
+      firmware_label: firmwareLabel(firmware, os, deviceModel),
+      events: count(row[3]),
+      users: count(row[4]),
+      n_valid_drain: count(row[5]),
+      p50_drain_valid: finiteNumber(row[6]),
+      p90_drain_valid: finiteNumber(row[7]),
+      avg_connected_frac: finiteNumber(row[8]),
+      n_with_cliffs: count(row[9]),
+    };
+  });
 }
 
 function mapPhone(rows: unknown[][]): PhoneHealthRow[] {
   return rows.map((row) => {
     const os = text(row[0]);
     const build = text(row[1]);
-    const label =
-      [os, build].filter((part) => part.length > 0).join(" ") || "unknown";
+    const appVersion = text(row[2]);
     return {
       os,
       build,
-      label,
-      n_pairs: count(row[2]),
-      users: count(row[3]),
-      p50_drain_per_hour: finiteNumber(row[4]),
-      p90_drain_per_hour: finiteNumber(row[5]),
+      app_version: appVersion,
+      label: phoneLabel(os, build, appVersion),
+      n_pairs: count(row[3]),
+      n_v1_pairs: count(row[7]),
+      n_v2_intervals: count(row[8]),
+      users: count(row[4]),
+      p50_drain_per_hour: finiteNumber(row[5]),
+      p90_drain_per_hour: finiteNumber(row[6]),
     };
   });
 }

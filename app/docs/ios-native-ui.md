@@ -5,7 +5,7 @@ Route coverage and remaining completion checks: [parity ledger](ios-native-ui-pa
 
 ## Native preview
 
-Enable `--dart-define=OMI_IOS_SWIFTUI=true` on iOS 16+. The default build and unsupported
+`OMI_IOS_SWIFTUI` defaults to **false**. Enable `--dart-define=OMI_IOS_SWIFTUI=true` on iOS 16+. The default build and unsupported
 systems keep the current complete app. This switch is temporary and must stay until the
 remaining feature parity checks are complete. iOS 26+ uses Apple's `GlassEffectContainer`,
 `.glassEffect` and `.buttonStyle(.glass)` for controls. Earlier systems use standard native
@@ -202,12 +202,25 @@ containment. Both Runner targets compile the same renderer.
 The presentation contract can support Kotlin later without changing backend wire schemas or
 moving service ownership into the platform UI. Android presentation is outside this iOS change.
 
+## Rollout after the October 11 main integration
+
+The branch integrates pinned main `789de5136cd124991e9956f9ff72891b3ad4416d` with a regular
+merge. Native projections retain its grouped offline recordings, speaker-labeling session
+(Select, Cancel, Undo and Done), Chat Apps entry, onboarding retry state and developer backend
+editor. Phone-call entry points follow `PhoneCallsFeature.visible`; the native Home also removes
+the retired sync shortcut and capture removes the retired carried-speaker banner. Chat constructs
+its classic subtree only when selected or when the native renderer refuses a snapshot.
+
+Keep the preview opt-in until maintainers accept migration direction and the remaining parity,
+live-backend and real-hardware checks in the ledger pass. A later rollout/removal change must
+carry that evidence; this repair does not enable the switch or claim hardware acceptance.
+
 ## Verification
 
 From `app/`:
 
 ```sh
-flutter test test/mobile/native_ui test/parity/conversation_summary_selection_test.dart
+flutter test --concurrency=2 test/mobile/native_ui test/parity/conversation_summary_selection_test.dart
 ruby ios/test/native_home_contract_test.rb
 ruby ios/test/native_surface_contract_test.rb
 flutter drive --driver integration_test/native_ui_host_driver.dart \
@@ -217,6 +230,13 @@ xcodebuild -project ios/test/native_ui_preview/Preview.xcodeproj -scheme Preview
   -destination 'platform=iOS Simulator,id=<simulator-id>' \
   -derivedDataPath ~/Library/Developer/Xcode/DerivedData/omi-native-ui-preview test
 ```
+
+`ios-native-home-contract` and `ios-native-surface-contract` are registered in
+`.github/checks-manifest.yaml` for both `local` and `ci`, on macOS. They compile and execute the
+production Swift decoders. Mobile App Checks runs them through its existing iOS Compile Check
+manifest step (`--lane ci --platform macos --exclusive-platform`). Fork policy still gates that
+job: a maintainer must authorize `ci:full` and rerun the latest jobs. A manifest selection or a
+policy-skipped job is not a CI pass.
 
 Each migrated area also has its own host target, `integration_test/native_<area>_host_test.dart`
 (21 targets), run with the same driver and defines; their projection and owner tests live in

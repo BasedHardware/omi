@@ -25,7 +25,7 @@ Existing service owners remain authoritative.
 | Billing | Plan selection/management, downgrade and annual-switch confirmations, cancel-subscription and delete-account flows, usage/freemium sheets | Checkout/customer-portal web view keeps its navigation owner; dormant training-data opt-in |
 | Devices | Discovery/pairing, Apple Watch and Ray-Ban Meta setup, connection guide, Bluetooth guidance, device settings with level controls, diagnostics and support tickets, firmware update/pre-flight/OTA/flash, Offline Sync pages, storage sheets and confirmations, synced conversations | Physical pairing, OTA and transfer confirmation |
 | First run | Auth, consent, name, language, acquisition survey, permissions, guided voice, knowledge graph step, interactive device tutorial, step navigation and completion, announcements, feature screens, What's New, upgrade/rating prompts, permissions interstitial, language sheet | Signed-out welcome video; decorative tutorial animations |
-| Calls | Setup disclosure, country/phone entry, verification status/retry, verified caller-ID management, contacts/search/permission states, dialer/DTMF and active-call controls/transcript/audio routes; existing native call engine retained | Physical call/audio-route verification |
+| Calls | Setup disclosure, country/phone entry, verification status/retry, verified caller-ID management, contacts/search/permission states, dialer/DTMF and active-call controls/transcript/audio routes; existing native call engine retained | Upstream hides phone-call entry points; physical call/audio-route verification remains pending |
 | Shared feedback | System confirmations/action menus, guarded input sheets, presentation outcomes and dismiss signals, blocking activity HUD, toasts, one-time secret sheet | Crash and startup-failure screens |
 
 ## Completion checks
@@ -36,17 +36,17 @@ Existing service owners remain authoritative.
 - [x] Account-session changes invalidate native private content, temporary sheets, toasts, activity and secret sheets.
 - [x] Invalid rows, rejected snapshots and unsupported controls restore the complete existing surface, including onboarding navigation.
 - [x] Every route in the migration plan has native presentation with its existing actions reachable; intentional exclusions are listed above and in [the native UI guide](ios-native-ui.md).
-- [ ] Screens merged from upstream on October 8 (Review entry, Review questions, Recent changes, entity pages) have native presentation.
+- [ ] Screens merged from upstream (Review entry/questions, Recent changes, entity pages, Dream report, Chat Apps screens and the speaker quick picker) have native presentation; their existing Flutter routes remain reachable.
 - [x] Simulator production-host checks cover conversation playback/read/edit ownership, speaker selection, media paging/cleanup and advanced form validation.
 - [ ] The 21 per-area host targets pass together on a Simulator against the integrated head.
 - [ ] Physical playback, pairing/OTA, transfer and call/audio-route checks.
-- [x] A signed Release-prod build of the integrated head is installed over the existing iPhone identity; saved account, appearance, onboarding and pendant pairing passed fresh preservation checks.
+- [ ] A signed Release-prod build of the October 11 integrated head is installed and verified. The October 9 build passed saved-account, appearance, onboarding and pairing preservation checks; that evidence does not cover this head. Device installs are coordinated separately.
 - [ ] Physical screenshots verify the final main flows and accessibility settings on the connected phone (deferred at the user's request; Simulator UI evidence is used).
 - [ ] Maintainer migration-direction review and full upstream mobile CI are complete.
 
 Verification commands and containment/session rules are in [the native UI guide](ios-native-ui.md).
 
-October 9 integration: all eight bridge primitives and 21 area batches with their review fixes,
+Historical October 9 integration: all eight bridge primitives and 21 area batches with their review fixes,
 upstream main from October 8, Tasks project grouping and two presentation polish passes. Before the
 upstream merge the full hermetic Flutter suite passed 5,559 tests (14 declared skips) plus 138
 startup checks, and the analyzer ratchet found nothing new. After it, the native UI tests and every

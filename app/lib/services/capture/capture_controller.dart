@@ -58,6 +58,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -118,6 +119,7 @@ class CaptureController extends ChangeNotifier
   final ValueListenable<PhoneCallState>? _omiCallState;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
+  void Function(String deviceId, int byteCount)? _ingressByteObserver;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
   bool _sessionGeolocationPublishedToWal = false;
@@ -353,6 +355,7 @@ class CaptureController extends ChangeNotifier
       _syncCalendarGapTimer();
     }
     _syncCaptureHealthTimer(null);
+    _installIngressByteObserver();
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -1722,6 +1725,9 @@ class CaptureController extends ChangeNotifier
     }
     if (data.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
+      if (deviceOnboardingProvider?.isOnboardingActive == true) {
+        deviceOnboardingProvider!.onVoiceQuestionFailed();
+      }
       return;
     }
 
@@ -1754,7 +1760,12 @@ class CaptureController extends ChangeNotifier
       // Device-button voice → speak the reply aloud (BG/lock-screen safe).
       // Gated by _preferences.voiceResponseEnabled inside the service.
       playResponseAudio: true,
-      onNoSpeech: () => _playVoiceQuestionFailureHaptic(deviceId),
+      onNoSpeech: () async {
+        await _playVoiceQuestionFailureHaptic(deviceId);
+        if (deviceOnboardingProvider?.isOnboardingActive == true) {
+          deviceOnboardingProvider!.onVoiceQuestionFailed();
+        }
+      },
     );
   }
 
@@ -2531,8 +2542,24 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  void _installIngressByteObserver() {
+    _ingressByteObserver = (deviceId, byteCount) {
+      if (_captureControllerDisposed) return;
+      _wedgeMonitor.onBleIngressBytes(deviceId, byteCount);
+    };
+    NativeBleTransport.ingressByteObserver = _ingressByteObserver;
+  }
+
+  void _clearIngressByteObserver() {
+    if (identical(NativeBleTransport.ingressByteObserver, _ingressByteObserver)) {
+      NativeBleTransport.ingressByteObserver = null;
+    }
+    _ingressByteObserver = null;
+  }
+
   @override
   void dispose() {
+    _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
     _captureHealthTimer?.cancel();

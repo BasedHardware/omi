@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
@@ -30,8 +30,11 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
   /// Whether this device can render the SwiftUI presentation; injectable for tests.
   final Future<bool> Function() nativeSupport;
 
+  /// Completion persistence can be owned by an isolated outbox in hermetic tests.
+  final Future<bool> Function()? saveCompletion;
+
   const InteractiveDeviceOnboardingWrapper(
-      {super.key, this.allowExit = false, this.nativeSupport = supportsNativePresentation});
+      {super.key, this.allowExit = false, this.nativeSupport = supportsNativePresentation, this.saveCompletion});
 
   @override
   State<InteractiveDeviceOnboardingWrapper> createState() => _InteractiveDeviceOnboardingWrapperState();
@@ -45,6 +48,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   bool _completed = false;
   // Parent rebuilds must not unmount the active step while a fresh platform-support reply is pending.
   late final Future<bool> _nativeSupported = widget.nativeSupport();
+  bool _saving = false;
 
   @override
   void initState() {
@@ -134,22 +138,33 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     }
   }
 
-  void _completeOnboarding() {
+  Future<bool> _saveCompletion() async {
+    if (_saving) return false;
+    _saving = true;
+    final saved =
+        await (widget.saveCompletion?.call() ?? OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true));
+    _saving = false;
+    if (!mounted) return false;
+    if (!saved) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    return saved;
+  }
+
+  Future<void> _completeOnboarding() async {
+    if (!await _saveCompletion() || !mounted) return;
     _completed = true;
     AnalyticsManager().deviceOnboardingCompleted();
     AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    updateUserOnboardingState(deviceOnboardingCompleted: true);
     Navigator.of(context).pop();
   }
 
   /// Leave the tutorial from any point. Persists completion so the forced
   /// first-run never re-fires (redo anytime via Settings → Device Tutorial);
   /// dispose() records the abandoned step for analytics.
-  void _skipOnboarding() {
+  Future<void> _skipOnboarding() async {
+    if (!await _saveCompletion() || !mounted) return;
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    updateUserOnboardingState(deviceOnboardingCompleted: true);
     Navigator.of(context).pop();
   }
 

@@ -49,6 +49,7 @@ GeneratedSpeakerTagPrompt _prompt(String id, String kind, {List<GeneratedSpeaker
     GeneratedSpeakerTagPrompt(
       id: id,
       kind: kind,
+      evidenceId: kind == 'owner_check' ? 'evidence-$id' : null,
       origin: kind == 'confirm_person' ? 'auto_person' : 'unnamed',
       conversationId: 'c1',
       conversationTitle: 'Coffee chat',
@@ -130,7 +131,7 @@ Future<_Review> _pumpReview(
   final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
   final provider = SpeakerTagPromptsProvider(
     fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: prompts, firstTime: firstTime)),
-    markShown: (_) async => ApiSuccess(firstTime),
+    markShown: (_, {bool setShown = true}) async => ApiSuccess(firstTime),
     dismiss: () async => const ApiSuccess<void>(null),
     submitAnswer: (request) async {
       answers.add(request);
@@ -186,7 +187,7 @@ void main() {
       for (final (kind, expected) in [
         ('confirm_person', ['yes', 'someone', 'skip']),
         ('identify', ['someone', 'skip']),
-        ('owner_check', ['me', 'not_me', 'not_a_person', 'skip']),
+        ('owner_check', ['me', 'not_me', 'skip']),
       ]) {
         await _pumpReview(tester, [_prompt('q-$kind', kind)], people: [_person('p1', 'Sam')]);
         expect(find.byType(UiKitView), findsOneWidget, reason: '$kind renders natively');
@@ -194,6 +195,22 @@ void main() {
         expect(_rows(tester).every((row) => row.valid), isTrue);
         await tester.pumpWidget(const SizedBox());
       }
+    });
+
+    testWidgets('owner checks require playback and keep excerpt-only copy without the voice-save toggle',
+        (tester) async {
+      final review = await _pumpReview(tester, [_prompt('owner', 'owner_check')], firstTime: true);
+      NativeRow row(String id) => _rows(tester).singleWhere((row) => row.id == id);
+      expect(row('speaker_review_answer:me').enabled, isFalse);
+      expect(row('speaker_review_answer:not_me').enabled, isFalse);
+      expect(row('speaker_review_answer:skip').enabled, isTrue);
+      expect(_ids(tester, 'speaker_review_save_voices'), isEmpty);
+      await _send(tester, review.host, 'speaker_review_play');
+      await NativeTestHost.settle(tester);
+      expect(row('speaker_review_answer:me').enabled, isTrue);
+      review.provider.stage(SpeakerTagAnswer.me);
+      await NativeTestHost.settle(tester);
+      expect(row('speaker_review_answered').title, _l10n.speakerTagPromptExcerptSaved);
     });
 
     testWidgets('the waveform is absent until the clip plays, then carries 40 valid bars', (tester) async {
@@ -218,14 +235,19 @@ void main() {
       for (final (kind, id, wire) in [
         ('confirm_person', 'yes', 'person'),
         ('owner_check', 'not_me', 'not_me'),
-        ('owner_check', 'not_a_person', 'not_a_person'),
         ('identify', 'skip', 'skip'),
       ]) {
         final review = await _pumpReview(tester, [_prompt('q-$id', kind)], people: [_person('p1', 'Sam')]);
+        if (kind == 'owner_check') {
+          expect(await _send(tester, review.host, 'speaker_review_answer:$id'), isFalse);
+          await _send(tester, review.host, 'speaker_review_play');
+          await NativeTestHost.settle(tester);
+        }
         expect(await _send(tester, review.host, 'speaker_review_answer:$id'), isTrue);
         await NativeTestHost.settle(tester);
         await tester.pumpAndSettle();
         expect(review.answers.single.answer, wire, reason: id);
+        if (kind == 'owner_check') expect(review.answers.single.evidenceId, 'evidence-q-$id');
         if (id == 'yes') expect(review.answers.single.personId, 'p1');
         await tester.pumpWidget(const SizedBox());
       }
@@ -270,6 +292,8 @@ void main() {
       addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
       final config = _Config.install()..toastOutcome = 'action';
       final review = await _pumpReview(tester, [_prompt('q1', 'owner_check')]);
+      await _send(tester, review.host, 'speaker_review_play');
+      await NativeTestHost.settle(tester);
 
       expect(await _send(tester, review.host, 'speaker_review_answer:me'), isTrue);
       await NativeTestHost.settle(tester);
@@ -285,6 +309,8 @@ void main() {
       addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
       final config = _Config.install();
       final review = await _pumpReview(tester, [_prompt('q1', 'owner_check'), _prompt('q2', 'identify')]);
+      await _send(tester, review.host, 'speaker_review_play');
+      await NativeTestHost.settle(tester);
       final question = _rows(tester);
       NativeRow row(String id) => question.firstWhere((row) => row.id == 'speaker_review_answer:$id');
 
@@ -319,7 +345,7 @@ void main() {
       _Config.install();
       final review = await _pumpReview(tester, [_prompt('q1', 'confirm_person'), _prompt('q2', 'identify')],
           people: [_person('p1', 'Sam', confidence: 'confirmed')], firstTime: true);
-      expect(_rows(tester).firstWhere((row) => row.id == 'speaker_review_header').subtitle, '1 of 2');
+      expect(_rows(tester).firstWhere((row) => row.id == 'speaker_review_header:q1').subtitle, '1 of 2');
       expect(_ids(tester, 'speaker_review_save_voices'), hasLength(1));
 
       review.provider.stage(SpeakerTagAnswer.person, personId: 'p1', displayName: 'Sam');
@@ -580,7 +606,7 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: TranscriptWidgets(onNativePresentation: (value) => sections = value)),
+          home: Scaffold(body: TranscriptWidgets(onNativePresentation: (value) => published = sections = value)),
         ),
       ));
       await tester.pumpAndSettle();
@@ -593,6 +619,30 @@ void main() {
             find.descendant(of: find.byKey(const Key('conversation_transcript_heading')), matching: find.byType(Text)))
         .map((text) => text.data ?? '')
         .join();
+
+    testWidgets('native speaker selection cancels and finishes through the shared labeling session', (tester) async {
+      await project(tester, const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [1, 2]));
+      NativeRow row(String id) => published.expand((section) => section.rows).singleWhere((row) => row.id == id);
+      final detail =
+          Provider.of<ConversationDetailProvider>(tester.element(find.byType(TranscriptWidgets)), listen: false);
+      row('detail_speaker_select').action!(null);
+      await tester.pumpAndSettle();
+      expect(detail.speakerLabelingSessionActive, isTrue);
+      expect(row('detail_segment:a').kind, 'toggle');
+      expect(row('detail_segment:a').valid, isTrue);
+      expect(row('detail_speaker_assign').enabled, isFalse);
+      row('detail_segment:a').action!(true);
+      row('detail_segment:a').action!(true);
+      await tester.pumpAndSettle();
+      expect(row('detail_segment:a').value, isTrue);
+      expect(row('detail_speaker_assign').enabled, isTrue);
+      row('detail_speaker_cancel_selection').action!(null);
+      await tester.pumpAndSettle();
+      expect(row('detail_segment:a').kind, 'transcript');
+      row('detail_speaker_done').action!(null);
+      await tester.pumpAndSettle();
+      expect(detail.speakerLabelingSessionActive, isFalse);
+    });
 
     testWidgets('the heading matches the Flutter heading and its count', (tester) async {
       final rows = await project(tester, const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [1, 2]));
@@ -651,8 +701,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets("'record' marks the options tip shown before the primary action; 'record_options' opens the options",
-        (tester) async {
+    testWidgets("'record' preserves its owner and hides call options while phone calls are disabled", (tester) async {
       final home = GlobalKey();
       await tester.pumpWidget(_app(SizedBox.expand(key: home)));
       final calls = <String>[];
@@ -665,15 +714,14 @@ void main() {
           },
           options: () => calls.add('options'));
 
-      expect(actions().map((action) => action.id), ['record', 'record_options']);
+      expect(actions().map((action) => action.id), ['record']);
       expect(actions(phoneRecording: true).map((action) => action.id), ['record'],
           reason: 'options are offered only while the phone is not recording');
       expect(actions(phoneRecording: true).single.symbol, 'stop.fill');
       expect(SharedPreferencesUtil().getBool('v2/homeRecordOptionsTipShown'), isNot(true));
 
       await actions().first.perform();
-      await actions().last.perform();
-      expect(calls, ['primary tip=true', 'options']);
+      expect(calls, ['primary tip=true']);
     });
   });
 

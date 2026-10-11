@@ -24,12 +24,22 @@ IMAGE_RE = re.compile(
     rf"(?P<ordinal>[0-9]{{3}})-(?P<platform>{PLATFORMS})-(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)\.png"
 )
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".tif", ".tiff", ".avif", ".heic"}
+# GitHub does not render repo-relative image paths in a PR description, so a
+# reference may also be an absolute URL pinned to a commit SHA (branch names are
+# rejected: they move, and the image would silently change or disappear).
+COMMIT_URL_PREFIX = (
+    r"https://raw\.githubusercontent\.com/[\w.-]+/[\w.-]+/[0-9a-f]{7,40}/"
+    r"|https://github\.com/[\w.-]+/[\w.-]+/(?:raw|blob)/[0-9a-f]{7,40}/"
+)
 BODY_IMAGE_RE = re.compile(
-    r"(?<![\w./-])\.?/?(\.agent-artifacts/ui-evidence/[^\s<>\"'`()\[\]]+\.png)(?=$|[\s<>\"'`()\[\]?#.,])"
+    rf"(?:(?<![\w./-])\.?/?|(?:{COMMIT_URL_PREFIX}))"
+    r"(\.agent-artifacts/ui-evidence/[^\s<>\"'`()\[\]?#]+\.png)(?=$|[\s<>\"'`()\[\]?#.,])"
 )
 ESCAPE_RE = re.compile(r"UI-Evidence: none(?: -- \S[^\r\n]*)?")
 CONTRACT = """UI evidence contract:
 - Added/modified UI source requires at least one PR-body image reference that exists in git at HEAD.
+- A reference is a repo-relative path or a commit-pinned URL to it. Only the URL renders on GitHub:
+  https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/.agent-artifacts/ui-evidence/...png
 - Store tracked screenshots in .agent-artifacts/ui-evidence/<pr-number-or-branch-slug>/.
 - Filename: <NNN>-<platform>-<slug>.png; NNN is a zero-padded 3-digit ordinal starting at 001.
 - Platforms: mobile-android, mobile-ios, desktop-macos, desktop-windows, web.
@@ -42,7 +52,9 @@ CONTRACT = """UI evidence contract:
 Remediation:
 1. Save a screenshot with the filename above and add its entry to the sibling evidence.json.
 2. git add .agent-artifacts/ui-evidence/<pr-number-or-branch-slug>/ and commit the evidence.
-3. Add ![Chat home](.agent-artifacts/ui-evidence/<pr-number-or-branch-slug>/001-desktop-macos-chat-home.png) to the PR body.
+3. Add the image to the PR body pinned to a commit that contains it, so it renders on GitHub:
+   ![Chat home](https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/.agent-artifacts/ui-evidence/<pr-number-or-branch-slug>/001-desktop-macos-chat-home.png)
+   (A bare repo-relative path also satisfies this gate, but GitHub shows it as a broken image.)
 4. If evidence genuinely does not apply, add an exact line: UI-Evidence: none
    Optionally explain: UI-Evidence: none -- <reason>
    This escape waives the body reference only; added images still require valid filenames/manifests.

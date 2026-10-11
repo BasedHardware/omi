@@ -5,6 +5,7 @@ import 'package:in_app_review/in_app_review.dart';
 
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -151,6 +152,8 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
     _promptClosed!.complete();
     if (answer == null) return;
     const TypedEvents().emit(OnboardingSetupRatingPromptAnswered(answer: answer));
+    SharedPreferencesUtil().ratingAskAnswer =
+        answer == OnboardingSetupRatingPromptAnsweredAnswer.support ? 'yes' : 'no';
     if (answer == OnboardingSetupRatingPromptAnsweredAnswer.support) {
       OmiHaptics.success();
       try {

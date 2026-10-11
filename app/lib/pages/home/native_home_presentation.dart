@@ -7,9 +7,7 @@ extension _NativeHomePresentation on _HomePageState {
     final capture = context.watch<CaptureProvider>();
     final home = context.watch<HomeProvider>();
     final prompts = context.watch<SpeakerTagPromptsProvider>();
-    final sync = context.watch<SyncProvider>();
     final wedge = CaptureWedgeMonitor.instance;
-    final pending = sync.missingWalsOnDevice.length + sync.pendingLocalTranscriptionWals.length;
     final phoneRecording = capture.recordingState == RecordingState.record || capture.isPhoneMicPaused;
     final deviceLabel = device.isConnected
         ? device.batteryLevel > 0
@@ -36,13 +34,9 @@ extension _NativeHomePresentation on _HomePageState {
                       await routeToPage(
                           context, device.pairedDevice == null ? const ConnectDevicePage() : const ConnectedDevice());
                     }),
-                    NativeHomeAction('calls', l10n.phoneCallsWithOmi, 'phone', () async {
-                      await routeToPage(context, const PhoneCallsPage());
-                    }),
-                    if (device.pairedDevice != null || pending > 0)
-                      NativeHomeAction('sync', pending > 0 ? '${l10n.sync} ($pending)' : l10n.sync, 'icloud', () async {
-                        await routeToPage(
-                            context, device.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
+                    if (PhoneCallsFeature.visible)
+                      NativeHomeAction('calls', l10n.phoneCallsWithOmi, 'phone', () async {
+                        await routeToPage(context, const PhoneCallsPage());
                       }),
                     NativeHomeAction('search', l10n.search, 'magnifyingglass', _openSearch),
                     NativeHomeAction('settings', l10n.settings, 'gearshape', _openSettings),
@@ -117,7 +111,7 @@ List<NativeHomeAction> nativeHomeRecordActions(BuildContext context,
       SharedPreferencesUtil().saveBool('v2/homeRecordOptionsTipShown', true);
       await primary();
     }, enabled: enabled),
-    if (!phoneRecording)
+    if (PhoneCallsFeature.visible && !phoneRecording)
       NativeHomeAction('record_options', l10n.moreOptions, 'ellipsis.circle', options, enabled: enabled),
   ];
 }

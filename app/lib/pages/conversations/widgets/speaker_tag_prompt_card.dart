@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/widgets/speaker_review_native.dart';
 import 'package:omi/pages/settings/widgets/person_avatar.dart';
 import 'package:omi/pages/settings/widgets/person_confidence.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -52,7 +53,7 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
           return const SizedBox.shrink();
         }
         return VisibilityDetector(
-          key: const Key('speaker_tag_prompt_card_visibility'),
+          key: ValueKey('speaker_tag_prompt_card_visibility_${provider.current?.id}'),
           onVisibilityChanged: (info) {
             if (info.visibleFraction > 0.5) provider.reportShown();
           },
@@ -80,7 +81,7 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
                             : _Question(key: ValueKey('question_${provider.current!.id}'), provider: provider),
                   ),
                 ),
-                if (provider.firstTime) ...[
+                if (provider.firstTime && provider.current?.kind != 'owner_check') ...[
                   const SizedBox(height: OmiSpacing.sm),
                   Divider(color: OmiColors.border, height: 1),
                   const SizedBox(height: OmiSpacing.xs),
@@ -139,7 +140,16 @@ class _Finished extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(context.l10n.speakerTagPromptThanks, style: OmiType.subhead)),
+        Expanded(
+          child: Text(
+            provider.lastAnswer?.conversationId != null
+                ? provider.lastAnswer?.qualityOutcome == 'skipped'
+                    ? context.l10n.done
+                    : context.l10n.speakerTagPromptExcerptSaved
+                : context.l10n.speakerTagPromptThanks,
+            style: OmiType.subhead,
+          ),
+        ),
         OmiButton.tertiary(
           key: const Key('speaker_tag_prompt_done'),
           label: context.l10n.done,
@@ -185,15 +195,18 @@ Future<void> giveSpeakerTagAnswer(
   final people = host.read<PeopleProvider?>();
   OmiHaptics.light();
   provider.stage(answer, personId: personId, name: name, displayName: displayName);
-  final message = switch (answer) {
-    SpeakerTagAnswer.me => l10n.speakerTagPromptLabeledYouToast,
-    SpeakerTagAnswer.notAPerson => l10n.speakerTagPromptNotAPersonToast,
-    SpeakerTagAnswer.person ||
-    SpeakerTagAnswer.newPerson ||
-    SpeakerTagAnswer.someoneElse when displayName != null =>
-      l10n.speakerTagPromptLabeledToast(displayName),
-    _ => l10n.speakerTagPromptRejectedToast,
-  };
+  final excerptOnly = provider.current?.kind == 'owner_check';
+  final message = excerptOnly
+      ? l10n.speakerTagPromptExcerptSaved
+      : switch (answer) {
+          SpeakerTagAnswer.me => l10n.speakerTagPromptLabeledYouToast,
+          SpeakerTagAnswer.notAPerson => l10n.speakerTagPromptNotAPersonToast,
+          SpeakerTagAnswer.person ||
+          SpeakerTagAnswer.newPerson ||
+          SpeakerTagAnswer.someoneElse when displayName != null =>
+            l10n.speakerTagPromptLabeledToast(displayName),
+          _ => l10n.speakerTagPromptRejectedToast,
+        };
   final undone = await OmiFeedback.undo(
     host,
     message,
@@ -203,6 +216,10 @@ Future<void> giveSpeakerTagAnswer(
   if (undone) return;
   final saved = await provider.commitPending(
     onSaved: (id) async {
+      final result = provider.lastAnswer;
+      if (result?.conversationId != null) {
+        host.read<ConversationProvider?>()?.applySpeakerPromptIdentities(result!);
+      }
       if (id != null) OmiHaptics.success();
       if (id != null && people != null) await people.refresh();
     },
@@ -255,6 +272,7 @@ class _Question extends StatelessWidget {
     final people = context.watch<PeopleProvider?>()?.people ?? const <Person>[];
     final candidates = speakerTagCandidates(prompt, people);
     final enabled = !provider.submitting;
+    final ownerReady = enabled && provider.hasPlayed(prompt.id) && provider.playingPromptId == null;
     final suggested = people.firstWhereOrNull((p) => p.id == prompt.suggestedPersonId);
     final suggestedName = prompt.suggestedPersonName ?? suggested?.name;
     void give(SpeakerTagAnswer answer, {String? personId, String? name, String? displayName}) {
@@ -286,16 +304,16 @@ class _Question extends StatelessWidget {
       if (prompt.kind == 'owner_check')
         _AnswerChip(
           key: const Key('speaker_tag_prompt_answer_me'),
-          label: l10n.speakerTagPromptThatsMeAction,
+          label: l10n.yes,
           icon: Icons.check,
           primary: true,
-          onPressed: enabled ? () => give(SpeakerTagAnswer.me) : null,
+          onPressed: ownerReady ? () => give(SpeakerTagAnswer.me) : null,
         ),
       if (prompt.kind == 'owner_check')
         _AnswerChip(
           key: const Key('speaker_tag_prompt_answer_not_me'),
-          label: l10n.speakerTagPromptNotMeAction,
-          onPressed: enabled ? () => give(SpeakerTagAnswer.notMe) : null,
+          label: l10n.no,
+          onPressed: ownerReady ? () => give(SpeakerTagAnswer.notMe) : null,
         )
       else
         // Yes or No… on a named guess; Someone Else… when Omi only asks who it is.
@@ -305,16 +323,9 @@ class _Question extends StatelessWidget {
           icon: confirmsGuess ? null : Icons.search,
           onPressed: enabled ? someoneElse : null,
         ),
-      if (prompt.kind == 'owner_check')
-        _AnswerChip(
-          key: const Key('speaker_tag_prompt_answer_not_a_person'),
-          label: l10n.speakerTagPromptNotAPerson,
-          icon: Icons.tv_outlined,
-          onPressed: enabled ? () => give(SpeakerTagAnswer.notAPerson) : null,
-        ),
       _AnswerChip(
         key: const Key('speaker_tag_prompt_answer_skip'),
-        label: l10n.speakerTagPromptNotSureAction,
+        label: prompt.kind == 'owner_check' ? l10n.skip : l10n.speakerTagPromptNotSureAction,
         onPressed: enabled ? () => give(SpeakerTagAnswer.skip) : null,
       ),
     ];
@@ -676,12 +687,17 @@ class _Answered extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final person = context.watch<PeopleProvider?>()?.people.firstWhereOrNull((p) => p.id == pending.personId);
-    final (IconData icon, String text) = switch (pending.answer) {
-      SpeakerTagAnswer.me => (Icons.person_outline, l10n.speakerTagPromptSavedAsYou),
-      SpeakerTagAnswer.notAPerson => (Icons.tv_outlined, l10n.speakerTagPromptIgnoredNote),
-      _ when pending.displayName != null => (Icons.person_outline, l10n.speakerTagPromptSavedAs(pending.displayName!)),
-      _ => (Icons.person_off_outlined, l10n.speakerTagPromptRejectedToast),
-    };
+    final (IconData icon, String text) = pending.excerptOnly
+        ? (Icons.person_outline, l10n.speakerTagPromptExcerptSaved)
+        : switch (pending.answer) {
+            SpeakerTagAnswer.me => (Icons.person_outline, l10n.speakerTagPromptSavedAsYou),
+            SpeakerTagAnswer.notAPerson => (Icons.tv_outlined, l10n.speakerTagPromptIgnoredNote),
+            _ when pending.displayName != null => (
+                Icons.person_outline,
+                l10n.speakerTagPromptSavedAs(pending.displayName!)
+              ),
+            _ => (Icons.person_off_outlined, l10n.speakerTagPromptRejectedToast),
+          };
     return Container(
       key: const Key('speaker_tag_prompt_answered'),
       margin: const EdgeInsets.only(top: OmiSpacing.sm),

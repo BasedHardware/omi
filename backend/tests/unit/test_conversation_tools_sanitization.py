@@ -25,7 +25,7 @@ def _pkg(name):
     mod = sys.modules.get(name)
     if mod is None or not hasattr(mod, "__path__"):
         mod = types.ModuleType(name)
-        mod.__path__ = []
+        mod.__path__ = [str(BACKEND_DIR / name.replace('.', '/'))] if name.startswith('utils') else []
         sys.modules[name] = mod
     return mod
 

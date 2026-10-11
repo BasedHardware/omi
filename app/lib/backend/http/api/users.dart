@@ -892,6 +892,7 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
 }
 
 Future<bool> updateUserOnboardingState({
+  required AuthSessionSnapshot session,
   bool? completed,
   String? acquisitionSource,
   bool? deviceOnboardingCompleted,
@@ -907,17 +908,20 @@ Future<bool> updateUserOnboardingState({
     body['device_onboarding_completed'] = deviceOnboardingCompleted;
   }
 
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/onboarding',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode(body),
-  );
-  if (response == null) return false;
-  Logger.debug('updateUserOnboardingState response: ${response.body}');
-  if (response.statusCode != 200) return false;
-  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  return data.status == 'ok';
+  try {
+    final response = await sendUncaughtApiCall(
+      url: '${Env.apiBaseUrl}v1/users/onboarding',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode(body),
+      canSend: () => AuthService.instance.isSessionSnapshotCurrent(session),
+    );
+    if (!AuthService.instance.isSessionSnapshotCurrent(session) || response.statusCode != 200) return false;
+    final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (_) {
+    return false;
+  }
 }
 
 // Mentor Notification Settings

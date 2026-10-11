@@ -95,7 +95,7 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
     final sections = <NativeSection>[
       if (visible) ...[
         NativeSection('speaker_review_top', [
-          NativeRow('speaker_review_header', l10n.speakerTagPromptTitle,
+          NativeRow('speaker_review_header:${provider.current?.id ?? 'finished'}', l10n.speakerTagPromptTitle,
               kind: 'label',
               symbol: 'person.wave.2',
               subtitle: provider.prompts.length > 1 && !provider.finished
@@ -106,15 +106,22 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
         ]),
         if (provider.finished)
           NativeSection('speaker_review_done', [
-            NativeRow('speaker_review_finished', l10n.speakerTagPromptThanks,
-                kind: 'label', symbol: 'checkmark.circle.fill'),
+            NativeRow(
+                'speaker_review_finished',
+                provider.lastAnswer?.conversationId != null
+                    ? provider.lastAnswer?.qualityOutcome == 'skipped'
+                        ? l10n.done
+                        : l10n.speakerTagPromptExcerptSaved
+                    : l10n.speakerTagPromptThanks,
+                kind: 'label',
+                symbol: 'checkmark.circle.fill'),
             NativeRow('speaker_review_done_button', l10n.done, action: (_) => _close(provider)),
           ])
         else if (provider.pending != null)
           NativeSection('speaker_review_answer', [_answered(context, provider.pending!, people)])
         else
           ..._question(context, provider, provider.current!, people),
-        if (provider.firstTime)
+        if (provider.firstTime && provider.current?.kind != 'owner_check')
           NativeSection('speaker_review_settings', [
             NativeRow('speaker_review_save_voices', l10n.speakerTagPromptSaveVoicesTitle,
                 kind: 'toggle',
@@ -136,12 +143,14 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
   NativeRow _answered(BuildContext context, PendingSpeakerTagAnswer pending, List<Person> people) {
     final l10n = context.l10n;
     final person = people.firstWhereOrNull((p) => p.id == pending.personId);
-    final (String symbol, String text) = switch (pending.answer) {
-      SpeakerTagAnswer.me => ('person', l10n.speakerTagPromptSavedAsYou),
-      SpeakerTagAnswer.notAPerson => ('tv', l10n.speakerTagPromptIgnoredNote),
-      _ when pending.displayName != null => ('person', l10n.speakerTagPromptSavedAs(pending.displayName!)),
-      _ => ('person.slash', l10n.speakerTagPromptRejectedToast),
-    };
+    final (String symbol, String text) = pending.excerptOnly
+        ? ('person', l10n.speakerTagPromptExcerptSaved)
+        : switch (pending.answer) {
+            SpeakerTagAnswer.me => ('person', l10n.speakerTagPromptSavedAsYou),
+            SpeakerTagAnswer.notAPerson => ('tv', l10n.speakerTagPromptIgnoredNote),
+            _ when pending.displayName != null => ('person', l10n.speakerTagPromptSavedAs(pending.displayName!)),
+            _ => ('person.slash', l10n.speakerTagPromptRejectedToast),
+          };
     return NativeRow('speaker_review_answered', text,
         kind: 'label',
         subtitle: person == null ? '' : confidenceLabel(context, person.confidence),
@@ -161,6 +170,9 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
       // A staged answer is still in its Undo window: a second tap before the answered snapshot
       // arrives would otherwise drop it.
       if (!mounted || provider.submitting || provider.pending != null || provider.current?.id != prompt.id) return;
+      if (prompt.kind == 'owner_check' &&
+          answer != SpeakerTagAnswer.skip &&
+          (!provider.hasPlayed(prompt.id) || provider.playingPromptId != null)) return;
       unawaited(
           giveSpeakerTagAnswer(context, provider, answer, personId: personId, name: name, displayName: displayName));
     }
@@ -190,7 +202,12 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
     final owner = prompt.kind == 'owner_check';
     NativeRow answer(String id, String title, SpeakerTagAnswer? given, {String? symbol, VoidCallback? custom}) =>
         NativeRow('speaker_review_answer:$id', title,
-            symbol: symbol, enabled: enabled, action: (_) => custom != null ? custom() : give(given!));
+            symbol: symbol,
+            enabled: enabled &&
+                (!owner ||
+                    given == SpeakerTagAnswer.skip ||
+                    provider.hasPlayed(prompt.id) && provider.playingPromptId == null),
+            action: (_) => custom != null ? custom() : give(given!));
     final hint = switch (prompt.kind) {
       'confirm_person' when suggestedName != null => null,
       'owner_check' => l10n.speakerTagPromptHintOwner,
@@ -241,18 +258,16 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
                   symbol: 'checkmark',
                   custom: () =>
                       give(SpeakerTagAnswer.person, personId: prompt.suggestedPersonId, displayName: suggestedName)),
-            if (owner) answer('me', l10n.speakerTagPromptThatsMeAction, SpeakerTagAnswer.me, symbol: 'checkmark'),
+            if (owner) answer('me', l10n.yes, SpeakerTagAnswer.me, symbol: 'checkmark'),
             if (owner)
-              answer('not_me', l10n.speakerTagPromptNotMeAction, SpeakerTagAnswer.notMe)
+              answer('not_me', l10n.no, SpeakerTagAnswer.notMe)
             else
               answer('someone', confirmsGuess ? l10n.speakerTagPromptNoAction : l10n.speakerTagPromptSomeoneElse, null,
                   symbol: confirmsGuess ? null : 'magnifyingglass', custom: () {
                 if (!mounted || provider.pending != null || provider.current?.id != prompt.id) return;
                 unawaited(answerSpeakerTagWithPicker(context, prompt, candidates, people, give));
               }),
-            if (owner)
-              answer('not_a_person', l10n.speakerTagPromptNotAPerson, SpeakerTagAnswer.notAPerson, symbol: 'tv'),
-            answer('skip', l10n.speakerTagPromptNotSureAction, SpeakerTagAnswer.skip),
+            answer('skip', owner ? l10n.skip : l10n.speakerTagPromptNotSureAction, SpeakerTagAnswer.skip),
             if (provider.answerFailed)
               NativeRow('speaker_review_answer_failed', l10n.speakerTagPromptAnswerFailed,
                   kind: 'label', symbol: 'exclamationmark.circle'),

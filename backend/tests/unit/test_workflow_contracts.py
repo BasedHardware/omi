@@ -535,6 +535,17 @@ def test_backend_hermetic_fork_deferral_stays_neutral_and_requires_skipped_jobs(
     assert '[[ "$SYNC_CLOUD_TASKS_RESULT" == "$sync_required" ]]' in gate
 
 
+def test_python_cli_fork_deferral_uses_the_standard_notice():
+    # #19729 standardized the heavy-CI deferral surface across the ci-tier workflows;
+    # python-cli-ci kept the pre-refactor summary line with no annotation.
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/python-cli-ci.yml").read_text(encoding="utf-8")
+
+    assert "::notice title=Heavy CI deferred::$notice" in workflow
+    assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
+    assert "deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs" not in workflow
+
+
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
@@ -1812,7 +1823,13 @@ def _composite_control_root(tmp_path: Path) -> Path:
     backend = BACKEND_DIR
     for name in ('reconcile_firestore_indexes.py', 'firestore_field_indexes.py'):
         (scripts_dir / name).write_text((backend / 'scripts' / name).read_text(encoding='utf-8'), encoding='utf-8')
-    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py', 'review_queries.py'):
+    for name in (
+        '__init__.py',
+        'firestore_index_registry.py',
+        'firestore_query_types.py',
+        'review_queries.py',
+        'messaging_queries.py',
+    ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
     return control
@@ -1971,3 +1988,23 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1
     assert 'Firestore source mismatch' in check.stdout
+
+
+def test_notifications_job_deploy_restores_singleton_before_action_and_reattaches():
+    workflow = yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_notifications_job.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    deploy_index = next(i for i, step in enumerate(steps) if step.get('id') == 'deploy')
+    deploy = steps[deploy_index]
+    assert deploy['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+    assert deploy['with']['job'] == '${{ env.SERVICE }}'
+    assert deploy['with']['env_vars'] == '${{ steps.runtime-env.outputs.notifications_job_env_vars }}'
+    assert deploy['with']['secrets'] == '${{ steps.runtime-env.outputs.notifications_job_secrets }}'
+    assert '--container' not in deploy['with']['flags']
+    detach = steps[deploy_index - 1]
+    attach = steps[deploy_index + 1]
+    assert 'attach_cloud_run_gmp_sidecar.py' in detach['run']
+    assert '--job --detach' in detach['run']
+    assert 'attach_cloud_run_gmp_sidecar.py' in attach['run']
+    assert '--job' in attach['run'] and '--detach' not in attach['run']
+    assert 'if' not in detach and 'if' not in attach
+    assert workflow['concurrency']['cancel-in-progress'] is False

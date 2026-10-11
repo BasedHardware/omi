@@ -476,7 +476,7 @@ void main() {
     expect(find.byType(MediaViewerPage), findsOneWidget);
   });
 
-  testWidgets('the carried-speaker note keeps Change and Close', (tester) async {
+  testWidgets('carried speakers keep their name without the retired standalone banner', (tester) async {
     await pumpCapture(tester, seed: (capture) {
       final segment = _segment('a', 'Hello')
         ..personId = 'maya'
@@ -487,9 +487,8 @@ void main() {
     people.people = [Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
     people.notifyListeners();
     await NativeTestHost.settle(tester);
-    expect(row(tester, 'capture_carried')!.title, _l10n.speakerLabelText('carried', 'Maya'));
-    await send(tester, 'capture_carried_close');
-    await NativeTestHost.settle(tester);
+    expect(row(tester, 'capture_segment:0')!.subtitle, contains('Maya'));
+    expect(row(tester, 'capture_segment:0')!.options, contains('identify'));
     expect(row(tester, 'capture_carried'), isNull);
   });
 

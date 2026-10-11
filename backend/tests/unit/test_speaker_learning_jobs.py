@@ -23,7 +23,8 @@ NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def clear_in_flight():
+def clear_in_flight(monkeypatch):
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     jobs._in_flight_retries.clear()
     yield
     jobs._in_flight_retries.clear()

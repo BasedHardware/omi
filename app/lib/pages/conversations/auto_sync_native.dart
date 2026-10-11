@@ -115,6 +115,7 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
     if (!nativePresentationEnabled) return classic;
     final l = context.l10n;
     final s = owner.syncState;
+    final blocks = groupRecordingBlocks(wals);
     final status = _offlineStatus(owner, s);
     final ring = WalSyncs.isRingBufferFirmware(device.currentFirmwareVersion) ? device.ringStatus : null;
     final used = (ring?.usedBytes ?? 0).clamp(0, 1 << 53);
@@ -218,15 +219,36 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
                       _ => l.noRecordingsYet,
                     },
                     kind: 'label'),
-              for (var i = 0; i < wals.length && i < _nativeWalWindow; i++) ..._nativeWalRows(owner, wals[i], i),
+              for (var i = 0; i < blocks.length && i < _nativeWalWindow; i++) ..._nativeBlockRows(owner, blocks[i], i),
               // Reaching the end of the window projects the next page; nothing is loaded or synced.
-              if (wals.length > _nativeWalWindow)
+              if (blocks.length > _nativeWalWindow)
                 NativeRow('offline_more', l.loading,
                     kind: 'label',
                     onVisible: (_) => _updateNativeSync(() => _nativeWalWindow += _AutoSyncPageState._nativeWalPage)),
             ],
-            title: '${l.recordings} (${wals.length})'),
+            title: l.recordings),
     ]));
+  }
+
+  List<NativeRow> _nativeBlockRows(SyncProvider owner, RecordingBlock block, int index) {
+    if (block.wals.length == 1) return _nativeWalRows(owner, block.wals.single, index);
+    final l = context.l10n;
+    final id = 'offline_block:${block.oldest.id}:$index';
+    return [
+      NativeRow(id, _blockTitle(block),
+          kind: 'navigation', subtitle: _rowLabel(block.representative).$2, action: (_) => _showBlockFiles(block)),
+      if (block.state == WalSyncDisplayState.failed || block.state == WalSyncDisplayState.retrying)
+        NativeRow('$id:retry', l.tryAgain, action: (_) async {
+          for (final wal in block.wals) {
+            if (wal.syncDisplayState == WalSyncDisplayState.failed ||
+                wal.syncDisplayState == WalSyncDisplayState.retrying) {
+              await owner.syncWal(wal);
+            }
+          }
+        }),
+      if (block.wals.every((wal) => _AutoSyncPageState._isUnsyncableState(wal.syncDisplayState)))
+        NativeRow('$id:delete', l.delete, destructive: true, action: (_) => _confirmDeleteWals(block.wals)),
+    ];
   }
 
   List<NativeRow> _nativeWalRows(SyncProvider owner, Wal wal, int index) {
@@ -234,12 +256,7 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
     final date = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     final dates = OmiDateFormat.of(context);
     final state = wal.syncDisplayState;
-    final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
-    final label = state == WalSyncDisplayState.waiting && onDevice
-        ? owner.syncState.phase == SyncPhase.downloadingFromDevice
-            ? l.syncStatusDownloadingFromDevice
-            : l.syncStatusOnDevice
-        : _rowVisual(state).$3;
+    final label = _rowLabel(wal).$2;
     final id = 'offline_wal:${wal.id}:$index';
     final progress = _rowDownloadFraction(wal);
     return [
