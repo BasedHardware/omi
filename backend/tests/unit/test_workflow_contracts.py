@@ -1,4 +1,5 @@
 import importlib.util
+from fnmatch import fnmatchcase
 import json
 import os
 import re
@@ -360,6 +361,15 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     # so the shard variable must be named anything else.
     assert "(NR - 1) % total == shard - 1" in runner
     assert "awk -v index=" not in runner
+
+
+def test_repo_checks_cover_dream_stack_bases_and_metadata_events():
+    workflow = yaml.load((BACKEND_DIR.parent / '.github/workflows/repo-checks.yml').read_text(), Loader=yaml.BaseLoader)
+    pull_request = workflow['on']['pull_request']
+    for branch in ('main', 'lane/dream-neighbourhood', 'lane/dream-grounding', 'lane/dream-cleanup'):
+        assert any(fnmatchcase(branch, pattern) for pattern in pull_request['branches']), branch
+    assert {'synchronize', 'edited', 'labeled', 'unlabeled'} <= set(pull_request['types'])
+    assert '--metadata-only' in workflow['jobs']['metadata-preflight']['steps'][-1]['run']
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
