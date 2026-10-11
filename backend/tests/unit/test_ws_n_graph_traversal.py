@@ -165,7 +165,7 @@ def canonical_graph_context():
             return_value=MemorySystem.CANONICAL,
         ),
         patch(
-            "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items",
+            "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items_by_ids",
             return_value=items,
         ),
         patch("database.knowledge_graph.get_knowledge_graph", return_value=graph),
@@ -216,7 +216,7 @@ def test_user_rejected_memory_cannot_reappear_through_graph_traversal(canonical_
         for item in _canonical_items()
     ]
     with patch(
-        "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items",
+        "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items_by_ids",
         return_value=rejected_items,
     ):
         result = traverse_knowledge_graph(
@@ -318,3 +318,70 @@ def test_canonical_formatted_neighbors(canonical_graph_context):
     assert "works_at" in output
     assert "located_in" in output
     assert "Seattle" in output
+
+
+def test_traversal_reads_only_graph_references_and_returned_citations() -> None:
+    """An 18k-item corpus must never be enumerated for a four-reference graph."""
+    items = {item.memory_id: item for item in _canonical_items()}
+    items.update({f"unrelated-{i}": _long_term_item(f"unrelated-{i}", "Unrelated") for i in range(18_000)})
+    items["mem-bob-alice"] = items["mem-bob-alice"].model_copy(update={"promotion": {"user_review": False}})
+    db = MagicMock()
+    db.collection.side_effect = AssertionError("Traversal must not scan memory_items")
+    db.document.side_effect = lambda path: path
+
+    def get_all(refs: list[str]) -> list[MagicMock]:
+        snapshots: list[MagicMock] = []
+        for ref in refs:
+            memory_id = ref.rsplit("/", 1)[-1]
+            item = items.get(memory_id)
+            snapshot = MagicMock(id=memory_id, exists=item is not None)
+            snapshot.to_dict.return_value = item.model_dump(mode="python") if item else {}
+            snapshots.append(snapshot)
+        return snapshots
+
+    db.get_all.side_effect = get_all
+    result = traverse_knowledge_graph(CANONICAL_UID, "Alice", hops=1, graph=_sample_graph(), db_client=db)
+    assert [triple.memory_ids for triple in result.triples] == [("mem-alice-omi",), ("mem-hop3-only",)]
+    assert result.memory_citations == [
+        {"memory_id": "mem-alice-omi", "content": "Alice works at Omi."},
+        {"memory_id": "mem-hop3-only", "content": "Alice knows Bob."},
+    ]
+    requested = [[ref.rsplit("/", 1)[-1] for ref in call.args[0]] for call in db.get_all.call_args_list]
+    assert set(requested[0]) == set(item.memory_id for item in _canonical_items())
+    assert requested[1] == ["mem-alice-omi", "mem-hop3-only"]
+    assert sum(map(len, requested)) == 6
+    db.collection.assert_not_called()
+
+
+def test_graph_reference_batches_preserve_every_id_beyond_500() -> None:
+    from utils.memory.kg_graph_traversal import _graph_memory_items
+
+    ids = [f"memory-{i}" for i in range(1_201)]
+    items = {memory_id: _long_term_item(memory_id, memory_id) for memory_id in ids}
+    db = MagicMock()
+    # Exercise the real owner/document-checked batch seam, not a mocked reader.
+    db.document.side_effect = lambda path: path
+
+    def get_all(refs: list[str]) -> list[MagicMock]:
+        assert 1 <= len(refs) <= 500
+        snapshots: list[MagicMock] = []
+        for ref in refs:
+            memory_id = ref.rsplit("/", 1)[-1]
+            snapshot = MagicMock(id=memory_id, exists=True)
+            snapshot.to_dict.return_value = items[memory_id].model_dump(mode="python")
+            snapshots.append(snapshot)
+        return snapshots
+
+    db.get_all.side_effect = get_all
+    result = _graph_memory_items(CANONICAL_UID, ids + ids[:10], db_client=db)
+    assert [item.memory_id for item in result] == ids
+    assert [len(call.args[0]) for call in db.get_all.call_args_list] == [500, 500, 201]
+    db.collection.assert_not_called()
+
+
+def test_unmatched_graph_seed_does_not_read_memories() -> None:
+    db = MagicMock()
+    result = traverse_knowledge_graph(CANONICAL_UID, "unknown", graph=_sample_graph(), db_client=db)
+    assert result.seed_node_ids == []
+    db.get_all.assert_not_called()
+    db.collection.assert_not_called()
