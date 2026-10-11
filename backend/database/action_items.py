@@ -973,6 +973,13 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     """
     # Prepare data
     update_data = _prepare_action_item_for_write(update_data, partial=True)
+    # A device reports a finished export through this single-item route (the
+    # iOS Apple Reminders handler). The sync request is satisfied by that
+    # export, exactly as batch_sync_update_action_items already records; left
+    # set, every exported row stays a "pending" candidate and the bounded
+    # pending-sync query fills up with rows it then discards.
+    if update_data.get('exported') is True and 'sync_requested' not in update_data:
+        update_data['sync_requested'] = False
 
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
@@ -1341,6 +1348,10 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     for doc in pending_docs:
         data: Dict[str, Any] = typed_doc(doc)
         if data.get('exported') is True:
+            # A row exported before single-item exports cleared the flag. Settle
+            # it now so it stops occupying one of the 50 slots ahead of a task
+            # whose push was missed; the next read sees only real candidates.
+            doc.reference.update({'sync_requested': False})
             continue
         data['id'] = doc.id
         pending_export.append(prepare_action_item_for_read(data))
