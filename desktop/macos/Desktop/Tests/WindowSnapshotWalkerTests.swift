@@ -275,7 +275,11 @@ final class WindowSnapshotWalkerTests: XCTestCase {
 
     XCTAssertTrue(lines.contains { $0.hasPrefix("n:AXButton:\"Send\" ") }, "\(lines)")
     XCTAssertTrue(lines.contains { $0.hasPrefix("n:AXButton:\"Caption\" ") }, "\(lines)")
-    XCTAssertFalse(lines.joined().unicodeScalars.contains { InvisibleFormatMarks.isHarmless($0) })
+    // The right-to-left and Arabic letter marks are bidirectional controls, and snapshot lines drop those too.
+    XCTAssertFalse(
+      lines.joined().unicodeScalars.contains {
+        InvisibleFormatMarks.isHarmless($0) || InvisibleFormatMarks.isBidiControl($0)
+      })
   }
 
   /// Catalyst messaging apps answer with buttons inside groups and static

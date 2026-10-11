@@ -145,14 +145,14 @@ struct DesktopToolApprovalRequest: Equatable, Sendable {
   /// line of letters, digits, spaces and plain punctuation. Every other
   /// scalar, including look-alike separators (`·`, `•`, `∙`, `⋅`, `‧`, `・`)
   /// and invisible format characters, becomes a space, so the name cannot
-  /// fake the bundle id shown beside it. The harmless invisible marks some
-  /// apps put in their own name (WhatsApp's display name starts with U+200E)
-  /// are dropped; bidirectional controls are first shown as their code
-  /// point, as everywhere on the card.
+  /// fake the bundle id shown beside it. The left-to-right mark an app may
+  /// start its own name with (WhatsApp's display name does) is dropped; every
+  /// other invisible or bidirectional character is first shown as its code
+  /// point, as everywhere on the card, so a look-alike name cannot hide one.
   static func cardAppName(_ name: String) -> String {
     let allowedPunctuation = Set("-_.&'()+,!:⟨⟩".unicodeScalars)
     var scalars = String.UnicodeScalarView()
-    for scalar in displaySafe(InvisibleFormatMarks.strippingHarmless(name)).unicodeScalars {
+    for scalar in displaySafe(InvisibleFormatMarks.strippingLeftToRightMarks(name)).unicodeScalars {
       switch scalar.properties.generalCategory {
       case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
         .nonspacingMark, .spacingMark, .enclosingMark, .decimalNumber, .letterNumber, .otherNumber:
