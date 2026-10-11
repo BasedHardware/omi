@@ -1740,6 +1740,19 @@ calls `/reprocess`. `recovery_structure_unavailable` never sets it, because the
 model ran and a retry gives the same answer. Enrichment and the free-tier
 terminal persist clear the marker with an explicit null.
 
+User-requested `POST /v1/conversations/{id}/reprocess-transcription` separately
+replays stored audio through prerecorded STT and then `USER_REPROCESS`
+enrichment. The owner-scoped route shares the summary-reprocess rate budget and
+rejects soft-deleted conversations. Before replacing segments, it requires a
+nonempty transcript. Missing/empty audio returns HTTP 400 with
+`detail.code=no_audio`; no detected speech returns `no_speech`. Storage listing,
+merge or download exceptions and STT failures return HTTP 502 with
+`detail.code=failed`, preserving the previous transcript. Replay opts into
+strict chunk-download failure propagation after submitted jobs settle, so a
+partial download outage cannot publish a partial transcript. Existing playback
+callers retain best-effort merging; missing chunks and decode fallbacks retain
+their existing semantics. This route is synchronous, with no transcript undo.
+
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
 minute. Session opening writes the binding and the conversation's bound

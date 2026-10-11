@@ -1027,11 +1027,14 @@ def download_audio_chunks_and_merge(
     *,
     listed_chunks: Optional[List[Dict[str, Any]]] = None,
     chunk_loader: Optional[Callable[[str], bytes | None]] = None,
+    raise_on_download_error: bool = False,
 ) -> bytes:
     """Merge selected timestamps with main's format priority and gap semantics.
 
     Batch ranges resolve selected timestamps. A supplied listing avoids repeated
     I/O; a supplied loader owns the shared semaphore and invocation budget.
+    Strict callers can reject partial results after a download exception; the
+    default retains best-effort playback behavior. All submitted jobs settle first.
     """
 
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
@@ -1147,6 +1150,7 @@ def download_audio_chunks_and_merge(
         if len(pending) >= _CHUNK_WINDOW_SIZE:
             break
 
+    download_error: Exception | None = None
     while pending:
         done, _ = wait(pending.keys(), return_when=FIRST_COMPLETED)
         for future in done:
@@ -1163,12 +1167,17 @@ def download_audio_chunks_and_merge(
                         chunk_results[batch_info['timestamp']] = pcm_data
             except Exception as e:
                 logger.warning(f"Chunk download failed ({kind}={key}): {e}")
+                if raise_on_download_error and download_error is None:
+                    download_error = e
 
         for job in job_iter:
             finfo = _submit_job(job)
             pending[finfo[0]] = finfo
             if len(pending) >= _CHUNK_WINDOW_SIZE:
                 break
+
+    if download_error is not None:
+        raise download_error
 
     # Merge chunks
     merged_data = bytearray()

@@ -85,7 +85,7 @@ def transcribe_stored_conversation_audio(
         timestamps = collect_conversation_audio_timestamps(uid, conversation)
         if not timestamps:
             raise StoredAudioUnavailableError('No stored audio available to retranscribe')
-        pcm_bytes = download_audio_chunks_and_merge(uid, conversation_id, timestamps)
+        pcm_bytes = download_audio_chunks_and_merge(uid, conversation_id, timestamps, raise_on_download_error=True)
     except StoredAudioUnavailableError:
         raise
     except FileNotFoundError:

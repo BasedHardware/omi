@@ -202,7 +202,9 @@ and background processing.
   Missing/empty audio returns HTTP 400 with `detail.code=no_audio`; empty STT
   uses `no_speech`. Storage/list/merge outages and STT failures return HTTP 502
   with `detail.code=failed`, preserving the previous transcript. The app reads
-  these codes independently of the human-readable `detail.message`.
+  these codes independently of the human-readable `detail.message`. Retranscription
+  opts into strict chunk-download errors so an outage cannot publish a partial
+  replacement transcript; other merger callers keep best-effort behavior.
   It merges stored chunks and runs the same prerecorded STT helper the sync
   pipeline uses, then the route hands the new segments to
   `process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)`. It is not a processing-queue

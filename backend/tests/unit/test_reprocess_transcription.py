@@ -6,6 +6,7 @@ reuse ``process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)``.
 Soft-deleted tombstones stay rejected; discarded conversations stay revivable.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -23,6 +24,7 @@ from utils.conversations.reprocess_transcription import (
     collect_conversation_audio_timestamps,
     transcribe_stored_conversation_audio,
 )
+from utils.other import storage
 
 
 def _segment(text: str = 'hello from stored audio') -> TranscriptSegment:
@@ -54,6 +56,40 @@ class TestCollectConversationAudioTimestamps:
 
 
 class TestTranscribeStoredConversationAudio:
+    @pytest.mark.parametrize('batch', [False, True])
+    @pytest.mark.parametrize('partial_audio', [False, True])
+    def test_real_chunk_merger_outage_preserves_failure(self, monkeypatch, batch, partial_audio):
+        def download(path):
+            if partial_audio and '/2.000.' in path:
+                if path.endswith('.bin'):
+                    return b'\x00\x01'
+                raise storage.NotFound('format absent')
+            raise ConnectionError('storage unavailable')
+
+        bucket = SimpleNamespace(blob=lambda path: SimpleNamespace(download_as_bytes=lambda: download(path)))
+        monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
+        chunks = [{'timestamp': 1.0}]
+        if batch:
+            chunks[0].update(is_batch=True, path='chunks/u1/c1/1.000-1.100.batch.enc')
+        monkeypatch.setattr(storage, 'list_audio_chunks', lambda *args: chunks)
+        timestamps = [1.0, 2.0] if partial_audio else [1.0]
+        conversation = SimpleNamespace(id='c1', audio_files=[{'chunk_timestamps': timestamps}], language='en')
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            monkeypatch.setattr(storage, 'storage_executor', executor)
+            # Existing playback callers keep their best-effort contract.
+            if partial_audio:
+                # One second of existing gap-fill precedes the surviving chunk.
+                expected = bytes(16000 * 2) + b'\x00\x01'
+                assert storage.download_audio_chunks_and_merge('u1', 'c1', timestamps) == expected
+            else:
+                with pytest.raises(FileNotFoundError):
+                    storage.download_audio_chunks_and_merge('u1', 'c1', timestamps)
+            # Exercise the real merger, including its individual/batch futures.
+            with patch('utils.conversations.reprocess_transcription.prerecorded_from_bytes') as stt:
+                with pytest.raises(StoredAudioTranscriptionFailedError):
+                    transcribe_stored_conversation_audio('u1', conversation, 'en')
+            stt.assert_not_called()
+
     @pytest.mark.parametrize('operation', ['list_audio_chunks', 'download_audio_chunks_and_merge'])
     def test_storage_outage_is_not_missing_audio(self, operation):
         conversation = SimpleNamespace(id='c1', audio_files=[], language='en')
