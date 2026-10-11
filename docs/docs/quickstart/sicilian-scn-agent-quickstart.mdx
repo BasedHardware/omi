@@ -1,0 +1,81 @@
+---
+title: Sicilian (scn) AI Agent Quickstart
+description: Get the Omi Python CLI agent running and responding in Sicilian (scn)
+sidebar_position: 12
+---
+
+# Sicilian (scn) AI Agent Quickstart
+
+This guide walks you through running the Omi **Python CLI agent** and configuring it
+to converse in **Sicilian (`scn`)** — a Romance language spoken in Sicily. The agent
+uses a system-prompt persona plus a language hint so replies come back in `scn`
+rather than the default English.
+
+> **Prerequisites:** Python 3.10+, `pip`, and a valid Omi API key
+> (`OMI_API_KEY`). Optionally a microphone for voice mode.
+
+## 1. Install the Python CLI
+
+```bash
+git clone https://github.com/BasedHardware/omi.git
+cd omi/backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 2. Configure the environment
+
+Create a `.env` file in `backend/`:
+
+```dotenv
+OMI_API_KEY=your_api_key_here
+# Force the agent to answer in Sicilian
+OMI_AGENT_LANGUAGE=scn
+OMI_AGENT_PERSONA="You are a helpful assistant that always replies in Sicilian (scn)."
+```
+
+## 3. Run the agent
+
+```bash
+python -m omi.agent --language scn --persona "Rispunni sempri 'n sicilianu (scn)."
+```
+
+The `--language scn` flag sets the BCP-47 language tag used for both the
+system prompt and any text-to-speech voice selection. The `--persona` flag
+overrides the default system prompt.
+
+## 4. Verify it works
+
+```bash
+python -m omi.agent --language scn --once "Comu si? Chi tempu fa oggi?"
+```
+
+Expected output (Sicilian):
+
+```
+Bongiornu! Sugu bonu, grazii. Oggi lu tempu è beddu e suligghiatu.
+```
+
+## 5. Voice mode (optional)
+
+If you have a microphone configured, drop `--once` and the agent enters an
+interactive loop, transcribing speech, replying in Sicilian, and (if a `scn`
+voice exists in your TTS provider) speaking the reply aloud.
+
+```bash
+python -m omi.agent --language scn
+```
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| Replies come back in English | Ensure `OMI_AGENT_LANGUAGE=scn` is exported in the same shell, or pass `--language scn`. |
+| `ModuleNotFoundError: omi` | Activate the venv and run from the `backend/` directory. |
+| No `scn` TTS voice | Fall back to text-only by adding `--no-tts`. |
+
+## Notes on language coverage
+
+Sicilian is a low-resource language; model quality varies by provider. If the
+default model drifts back to Italian, strengthen the persona:
+`"Rispunni SEMPRE 'n sicilianu, mai 'n talianu."`
