@@ -9784,6 +9784,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chatBlockMemory => 'Minne';
 
   @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Ångrat';
+
+  @override
+  String get chatBlockUndoFailed => 'Det gick inte att ångra ändringen';
+
+  @override
   String get chatBlockQuestion => 'Fråga';
 
   @override

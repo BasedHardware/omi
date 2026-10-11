@@ -9785,6 +9785,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chatBlockMemory => 'Muisto';
 
   @override
+  String get chatBlockPerson => 'Henkilö';
+
+  @override
+  String get chatBlockUndone => 'Kumottu';
+
+  @override
+  String get chatBlockUndoFailed => 'Muutosta ei voitu kumota';
+
+  @override
   String get chatBlockQuestion => 'Kysymys';
 
   @override

@@ -9614,6 +9614,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatBlockMemory => '记忆';
 
   @override
+  String get chatBlockPerson => '人物';
+
+  @override
+  String get chatBlockUndone => '已撤销';
+
+  @override
+  String get chatBlockUndoFailed => '无法撤销此更改';
+
+  @override
   String get chatBlockQuestion => '问题';
 
   @override

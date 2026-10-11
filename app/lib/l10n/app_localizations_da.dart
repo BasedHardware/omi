@@ -9770,6 +9770,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get chatBlockMemory => 'Minde';
 
   @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Fortrudt';
+
+  @override
+  String get chatBlockUndoFailed => 'Ændringen kunne ikke fortrydes';
+
+  @override
   String get chatBlockQuestion => 'Spørgsmål';
 
   @override

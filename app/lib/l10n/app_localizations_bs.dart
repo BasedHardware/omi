@@ -9808,6 +9808,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatBlockMemory => 'Sjećanje';
 
   @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Poništeno';
+
+  @override
+  String get chatBlockUndoFailed => 'Ova promjena se nije mogla poništiti';
+
+  @override
   String get chatBlockQuestion => 'Pitanje';
 
   @override

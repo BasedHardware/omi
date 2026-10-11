@@ -9,6 +9,7 @@ import 'package:omi/widgets/text_selection_controls.dart';
 import 'agent_run_blocks.dart';
 import 'conversation_link_blocks.dart';
 import 'discovery_card_block.dart';
+import 'edit_receipt_block.dart';
 import 'goal_link_block.dart';
 import 'memory_link_block.dart';
 import 'question_card_block.dart';
@@ -51,6 +52,7 @@ class ChatContentBlockList extends StatelessWidget {
         block is CaptureLinkContentBlock ||
         block is ConversationLinkContentBlock ||
         block is MemoryLinkContentBlock ||
+        block is EditReceiptContentBlock ||
         block is QuestionCardContentBlock ||
         block is DiscoveryCardContentBlock ||
         block is AgentSpawnContentBlock ||
@@ -69,6 +71,8 @@ class ChatContentBlockList extends StatelessWidget {
         return ConversationLinkBlock(block: block, fetchConversation: fetchConversation);
       case MemoryLinkContentBlock():
         return MemoryLinkBlock(block: block);
+      case EditReceiptContentBlock():
+        return EditReceiptBlock(block: block, fetchConversation: fetchConversation);
       case QuestionCardContentBlock():
         return QuestionCardBlock(block: block, sendMessage: sendMessage);
       case DiscoveryCardContentBlock():

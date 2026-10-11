@@ -9803,6 +9803,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chatBlockMemory => 'Memori';
 
   @override
+  String get chatBlockPerson => 'Orang';
+
+  @override
+  String get chatBlockUndone => 'Dibatalkan';
+
+  @override
+  String get chatBlockUndoFailed => 'Tidak dapat membatalkan perubahan itu';
+
+  @override
   String get chatBlockQuestion => 'Soalan';
 
   @override

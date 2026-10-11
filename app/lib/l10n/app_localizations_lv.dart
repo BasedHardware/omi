@@ -9808,6 +9808,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatBlockMemory => 'Atmiņa';
 
   @override
+  String get chatBlockPerson => 'Persona';
+
+  @override
+  String get chatBlockUndone => 'Atsaukts';
+
+  @override
+  String get chatBlockUndoFailed => 'Šīs izmaiņas neizdevās atsaukt';
+
+  @override
   String get chatBlockQuestion => 'Jautājums';
 
   @override

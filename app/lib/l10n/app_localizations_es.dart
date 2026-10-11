@@ -9810,6 +9810,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatBlockMemory => 'Recuerdo';
 
   @override
+  String get chatBlockPerson => 'Persona';
+
+  @override
+  String get chatBlockUndone => 'Deshecho';
+
+  @override
+  String get chatBlockUndoFailed => 'No se pudo deshacer este cambio';
+
+  @override
   String get chatBlockQuestion => 'Pregunta';
 
   @override
