@@ -104,12 +104,39 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
     XCTAssertTrue(MeetingMemoryBriefComposer.statesOpenQuestion("No decision was made on hosting."))
     XCTAssertTrue(MeetingMemoryBriefComposer.statesDecision("The team agreed to ship on Thursday."))
 
+    for unsettled in [
+      "We have not yet decided on pricing.", "We haven't decided on pricing.", "We haven\u{2019}t agreed on scope.",
+      "Nobody has decided who owns hosting.", "They never reached a decision on hosting.",
+    ] {
+      XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(unsettled), unsettled)
+      XCTAssertTrue(MeetingMemoryBriefComposer.statesOpenQuestion(unsettled), unsettled)
+    }
+    // A decision phrased with a later negation is shown under neither label, never the wrong one.
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("They agreed not to ship the beta."))
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesOpenQuestion("They agreed not to ship the beta."))
+
     let facts = MeetingMemoryBriefComposer.facts(
       from: conversation(sections: [
         SummarySection(
           heading: "Pricing", bodyMarkdown: "- Sara disagreed with the rollout date.", sourceSegmentIDs: ["s1"])
       ]))
     XCTAssertTrue(facts.isEmpty)
+  }
+
+  func testADecisionsHeadingSkipsUnsettledLines() {
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Decisions",
+          bodyMarkdown: """
+            - We have not yet decided on pricing.
+            - Ship the smaller pilot first.
+            """,
+          sourceSegmentIDs: ["s1"])
+      ]))
+
+    XCTAssertEqual(facts.first { $0.kind == .decision }?.text, "Ship the smaller pilot first.")
+    XCTAssertEqual(facts.first { $0.kind == .openQuestion }?.text, "We have not yet decided on pricing.")
   }
 
   func testAHeadingStillWinsAndUncitedBodiesNeverCount() {

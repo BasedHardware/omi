@@ -147,11 +147,12 @@ enum MeetingMemoryBriefComposer {
     // A "Decisions" heading is the strongest signal. Summaries usually title sections by
     // topic instead, so otherwise take the first cited line that states the outcome itself.
     func appendSection(
-      _ kind: MeetingMemoryBriefFact.Kind, heading words: [String], line states: (String) -> Bool
+      _ kind: MeetingMemoryBriefFact.Kind, heading words: [String], headingLine accepts: (String) -> Bool,
+      line states: (String) -> Bool
     ) {
       let cited = sections.filter { !$0.sourceSegmentIDs.isEmpty }
       let byHeading = cited.first { section in words.contains(where: section.heading.lowercased().contains) }
-        .flatMap { section in cleanedLines(section.bodyMarkdown).first.map { (section, $0) } }
+        .flatMap { section in cleanedLines(section.bodyMarkdown).first(where: accepts).map { (section, $0) } }
       let byLine = cited.compactMap { section in
         cleanedLines(section.bodyMarkdown).first(where: states).map { (section, $0) }
       }.first
@@ -162,7 +163,9 @@ enum MeetingMemoryBriefComposer {
           sourceSegmentIDs: section.sourceSegmentIDs))
     }
 
-    appendSection(.decision, heading: ["decision", "agreed"], line: statesDecision)
+    // Under a "Decisions" heading an unsettled line is still not a decision.
+    appendSection(
+      .decision, heading: ["decision", "agreed"], headingLine: { !statesOpenQuestion($0) }, line: statesDecision)
     if let action = conversation.structured.actionItems.first(where: {
       !$0.completed && !$0.deleted && $0.captureOwner == "user" && !$0.sourceSegmentIDs.isEmpty
     }), let text = firstLine(action.description) {
@@ -171,26 +174,44 @@ enum MeetingMemoryBriefComposer {
           kind: .followUp, text: text, sourceConversationID: conversation.id,
           sourceSegmentIDs: action.sourceSegmentIDs))
     }
-    appendSection(.openQuestion, heading: ["open question", "unresolved"], line: statesOpenQuestion)
+    appendSection(
+      .openQuestion, heading: ["open question", "unresolved"], headingLine: { _ in true }, line: statesOpenQuestion)
 
     return Array(facts.prefix(3))
   }
 
-  private static let openQuestionPhrases = [
-    "open question", "unresolved", "undecided", "not decided", "haven't decided", "hasn't decided",
-    "no decision", "left open", "still open", "not agreed", "not yet agreed",
+  private static let openQuestionPhrases = ["open question", "unresolved", "undecided", "left open", "still open"]
+  private static let outcomeWords = ["decided", "agreed", "decision"]
+  private static let negations: Set<String> = [
+    "not", "no", "never", "nothing", "nobody", "none", "neither", "nor", "without",
   ]
 
-  /// "They have not decided how to measure it" is an open question, never a decision.
-  static func statesOpenQuestion(_ line: String) -> Bool {
-    let lower = line.lowercased()
-    return openQuestionPhrases.contains(where: lower.contains)
+  private static func words(_ line: String) -> [String] {
+    line.lowercased().split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "\u{2019}" }).map(String.init)
   }
 
+  private static func isNegation(_ word: String) -> Bool {
+    negations.contains(word) || word.hasSuffix("n't") || word.hasSuffix("n\u{2019}t")
+  }
+
+  /// "We have not yet decided on pricing" and "No decision on hosting" are open questions:
+  /// a negation before the outcome word. "They agreed not to ship" is neither, so it is
+  /// never shown under the wrong label.
+  static func statesOpenQuestion(_ line: String) -> Bool {
+    if openQuestionPhrases.contains(where: line.lowercased().contains) { return true }
+    let tokens = words(line)
+    guard let outcome = tokens.firstIndex(where: { word in outcomeWords.contains(where: word.hasPrefix) }) else {
+      return false
+    }
+    return tokens[..<outcome].contains(where: isNegation)
+  }
+
+  /// A settled outcome only: any negation, "disagree", or open-question wording disqualifies it.
   static func statesDecision(_ line: String) -> Bool {
-    let lower = line.lowercased()
-    return ["decided", "agreed", "decision"].contains(where: lower.contains)
-      && !lower.contains("disagree") && !statesOpenQuestion(lower)
+    let tokens = words(line)
+    return tokens.contains(where: { word in outcomeWords.contains(where: word.hasPrefix) })
+      && !tokens.contains(where: isNegation) && !line.lowercased().contains("disagree")
+      && !statesOpenQuestion(line)
   }
 
   private static func cleanedLines(_ text: String) -> [String] {
