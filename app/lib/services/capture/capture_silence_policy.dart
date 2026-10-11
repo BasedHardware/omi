@@ -52,6 +52,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
     [
       const PolicyWrite(false),
       MintRecording(sessionKey: key, telemetrySource: 'pendant_live'),
+      const RunStage(ResolveDeviceMuteStage()),
       const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
     ],
   );

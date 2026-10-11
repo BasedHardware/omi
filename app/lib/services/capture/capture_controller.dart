@@ -3039,9 +3039,6 @@ class CaptureController extends ChangeNotifier
     }
     _sessionRecordingDevice = _recordingDevice;
 
-    // Apply device mute before _resetState so streamAudioToWs admission sees it.
-    await applyReconnectMute(deviceMuted: await _readDeviceMute());
-
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
     // when the grant/fix lands and stamps the recording-owned WAL snapshot.
@@ -4071,6 +4068,9 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<DeviceMuteResolved> _resolveDeviceMute() async =>
+      DeviceMuteResolved(await applyReconnectMute(deviceMuted: await _readDeviceMute()));
+
   Future<bool?> _readDeviceMute() async {
     final device = _recordingDevice;
     if (device == null) return null;
@@ -4244,6 +4244,7 @@ class CaptureController extends ChangeNotifier
       ? Future<Object?>.value(null)
       : switch (stage) {
           UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
+          ResolveDeviceMuteStage() => _resolveDeviceMute(),
           StartDeviceSessionStage() => _startDeviceSessionBody(
               deviceRequested: stage.deviceRequested,
               promptLocation: stage.promptLocation,

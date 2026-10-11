@@ -897,7 +897,18 @@ class UpdateRecordingDeviceStage extends CaptureStage {
   final BtDevice? device;
 }
 
-/// `streamDeviceRecording` after the owner check: session roll, location,
+/// Read and apply device mute before the staged session opens transport.
+class ResolveDeviceMuteStage extends CaptureStage {
+  const ResolveDeviceMuteStage();
+}
+
+/// The confirmed reconnect policy, resolved before capture admission opens.
+class DeviceMuteResolved {
+  const DeviceMuteResolved(this.paused);
+  final bool paused;
+}
+
+/// `streamDeviceRecording` after mute resolution: session roll, location,
 /// reset and streaming init. [promptLocation] mirrors the old
 /// `promptIfDenied: device != null`.
 class StartDeviceSessionStage extends CaptureStage {
@@ -1507,6 +1518,12 @@ class CaptureCoordinator {
           } else if (value is _MintedRecordingId) {
             working = _foldMintedId(working, value);
             _staged = working;
+          } else if (value is DeviceMuteResolved) {
+            final active = working.active;
+            if (working.pendantOwns && active != null) {
+              working = working.copyWith(phase: _pendantResumePhase(active.mode, value.paused));
+              _staged = working;
+            }
           } else if (value is PolicyWriteOutcome) {
             if (value.superseded) {
               // A confirmed pendant write prepares admission; it has not
@@ -1935,6 +1952,7 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
           sessionKey: key,
           telemetrySource: debt.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
         ),
+        const RunStage(ResolveDeviceMuteStage()),
         const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
       ],
     );
@@ -2021,6 +2039,7 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
           telemetrySource: pendantSuspension.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
         ),
       )
+      ..add(const RunStage(ResolveDeviceMuteStage()))
       ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)));
     return CaptureTransition(
       state.copyWith(
@@ -2104,6 +2123,7 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
           telemetrySource: debt.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
         ),
       )
+      ..add(const RunStage(ResolveDeviceMuteStage()))
       ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)));
     return CaptureTransition(
       state.copyWith(
@@ -2187,6 +2207,7 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
           telemetrySource: pendantSuspension.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
         ),
       )
+      ..add(const RunStage(ResolveDeviceMuteStage()))
       ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)));
     return CaptureTransition(
       state.copyWith(
@@ -2419,7 +2440,9 @@ CaptureTransition _reduceDeviceStart(
     // Check-only call with nothing connected: still runs the reset tail.
     return CaptureTransition(
       state,
-      effects..add(const RunStage(StartDeviceSessionStage(deviceRequested: false, promptLocation: false))),
+      effects
+        ..add(const RunStage(ResolveDeviceMuteStage()))
+        ..add(const RunStage(StartDeviceSessionStage(deviceRequested: false, promptLocation: false))),
     );
   }
 
@@ -2467,6 +2490,7 @@ CaptureTransition _reduceDeviceStart(
   effects.add(
     MintRecording(sessionKey: key, telemetrySource: mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live'),
   );
+  effects.add(const RunStage(ResolveDeviceMuteStage()));
   effects.add(RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: device != null)));
 
   return CaptureTransition(
@@ -2676,6 +2700,7 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
           telemetrySource: entry.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
         ),
       )
+      ..add(const RunStage(ResolveDeviceMuteStage()))
       ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)));
     return CaptureTransition(
       state.copyWith(

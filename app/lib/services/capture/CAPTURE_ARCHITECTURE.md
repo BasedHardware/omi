@@ -471,6 +471,11 @@ dispatches simply sanitizes again next launch.
   else — no `ResumeDeviceTailStage`, no socket, no BLE open. An offline
   unmute changes admission, never ownership. With a connected pendant, hardware
   confirmation precedes the policy write but still starts no local capture.
+- Every fresh device session resolves the pendant mute before its transport
+  stage. `DeviceMuteResolved` folds the effective policy into both the staged
+  and committed pendant phase, preserving the active session and live/batch
+  mode. A check-only start without an owner stays idle; a preserved call
+  suspension continues to use its recorded resume intent.
 - A device start admitted under a muted policy is a legitimate paused
   capture: telemetry marks it started, not `failStart`. Any other failed
   start stage fails the transition closed rather than committing a session
