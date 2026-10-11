@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12947,4 +12948,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'एक बार दबाएं';
+
+  @override
+  String get singlePressAction => 'एक बार दबाने पर क्रिया';
+
+  @override
+  String get triplePress => 'तीन बार दबाएं';
+
+  @override
+  String get triplePressAction => 'तीन बार दबाने पर क्रिया';
+
+  @override
+  String get longPress => 'देर तक दबाएं';
+
+  @override
+  String get longPressFixedNotice => 'डिवाइस हार्डवेयर में निश्चित';
+
+  @override
+  String get turnOnOff => 'चालू / बंद करें';
+
+  @override
+  String get buttonActionNone => 'कोई नहीं';
 }

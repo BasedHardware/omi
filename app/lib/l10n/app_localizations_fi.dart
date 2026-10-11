@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12971,4 +12972,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Yksi painallus';
+
+  @override
+  String get singlePressAction => 'Yhden painalluksen toiminto';
+
+  @override
+  String get triplePress => 'Kolmoispainallus';
+
+  @override
+  String get triplePressAction => 'Kolmoispainalluksen toiminto';
+
+  @override
+  String get longPress => 'Pitkä painallus';
+
+  @override
+  String get longPressFixedNotice => 'Kiinteä laitteistossa';
+
+  @override
+  String get turnOnOff => 'Kytke päälle / pois';
+
+  @override
+  String get buttonActionNone => 'Ei mitään';
 }

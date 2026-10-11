@@ -4025,5 +4025,13 @@
     "chatAppsIMessageTo": "Кому: Omi · {address}",
     "chatAppsInsightsSubtitle": "Разрешите Omi присылать вам здесь сводки и полезные наблюдения.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ждём, пока вы нажмёте «Запустить» в Telegram…"
+    "chatAppsTelegramWaiting": "Ждём, пока вы нажмёте «Запустить» в Telegram…",
+    "singlePress": "Одинарное нажатие",
+    "singlePressAction": "Действие при одинарном нажатии",
+    "triplePress": "Тройное нажатие",
+    "triplePressAction": "Действие при тройном нажатии",
+    "longPress": "Долгое нажатие",
+    "longPressFixedNotice": "Закреплено в оборудовании устройства",
+    "turnOnOff": "Включение / выключение",
+    "buttonActionNone": "Нет"
 }

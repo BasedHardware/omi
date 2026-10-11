@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "إلى: Omi · {address}",
     "chatAppsInsightsSubtitle": "دع Omi يرسل لك ملخصًا أو رؤية هنا.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "بانتظار أن تضغط على «ابدأ» في Telegram…"
+    "chatAppsTelegramWaiting": "بانتظار أن تضغط على «ابدأ» في Telegram…",
+    "singlePress": "ضغط مفرد",
+    "singlePressAction": "إجراء الضغط المفرد",
+    "triplePress": "ضغط ثلاثي",
+    "triplePressAction": "إجراء الضغط الثلاثي",
+    "longPress": "ضغط مطول",
+    "longPressFixedNotice": "ثابت في عتاد الجهاز",
+    "turnOnOff": "تشغيل / إيقاف",
+    "buttonActionNone": "لا شيء"
 }

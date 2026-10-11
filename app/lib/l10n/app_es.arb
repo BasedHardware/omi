@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Para: Omi · {address}",
     "chatAppsInsightsSubtitle": "Deja que Omi te envíe aquí un resumen o una idea.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Esperando a que toques Iniciar en Telegram…"
+    "chatAppsTelegramWaiting": "Esperando a que toques Iniciar en Telegram…",
+    "singlePress": "Pulsación única",
+    "singlePressAction": "Acción de pulsación única",
+    "triplePress": "Triple pulsación",
+    "triplePressAction": "Acción de triple pulsación",
+    "longPress": "Pulsación larga",
+    "longPressFixedNotice": "Fijo en el hardware del dispositivo",
+    "turnOnOff": "Encender / Apagar",
+    "buttonActionNone": "Ninguno"
 }

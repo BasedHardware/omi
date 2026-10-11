@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -13018,4 +13019,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Egyszeri megnyomás';
+
+  @override
+  String get singlePressAction => 'Egyszeri megnyomás művelete';
+
+  @override
+  String get triplePress => 'Háromszori megnyomás';
+
+  @override
+  String get triplePressAction => 'Háromszori megnyomás művelete';
+
+  @override
+  String get longPress => 'Hosszú megnyomás';
+
+  @override
+  String get longPressFixedNotice => 'Eszköz hardverében rögzítve';
+
+  @override
+  String get turnOnOff => 'Bekapcsolás / Kikapcsolás';
+
+  @override
+  String get buttonActionNone => 'Nincs';
 }

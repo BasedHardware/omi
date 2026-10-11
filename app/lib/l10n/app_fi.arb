@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Vastaanottaja: Omi · {address}",
     "chatAppsInsightsSubtitle": "Anna Omin lähettää sinulle yhteenveto tai oivallus tänne.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…"
+    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…",
+    "singlePress": "Yksi painallus",
+    "singlePressAction": "Yhden painalluksen toiminto",
+    "triplePress": "Kolmoispainallus",
+    "triplePressAction": "Kolmoispainalluksen toiminto",
+    "longPress": "Pitkä painallus",
+    "longPressFixedNotice": "Kiinteä laitteistossa",
+    "turnOnOff": "Kytke päälle / pois",
+    "buttonActionNone": "Ei mitään"
 }

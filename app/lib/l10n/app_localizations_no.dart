@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12967,4 +12968,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Enkelttrykk';
+
+  @override
+  String get singlePressAction => 'Handling for enkelttrykk';
+
+  @override
+  String get triplePress => 'Trippeltrykk';
+
+  @override
+  String get triplePressAction => 'Handling for trippeltrykk';
+
+  @override
+  String get longPress => 'Langt trykk';
+
+  @override
+  String get longPressFixedNotice => 'Fast i enhetens maskinvare';
+
+  @override
+  String get turnOnOff => 'Slå på / av';
+
+  @override
+  String get buttonActionNone => 'Ingen';
 }

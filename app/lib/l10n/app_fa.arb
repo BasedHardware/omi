@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "باز نشد؟ این را به {address} پیامک کنید",
     "chatAppsLinkExpired": "آن پیوند منقضی شد. برای دریافت پیوند جدید روی باز کردن Telegram ضربه بزنید.",
     "chatAppsIMessageTo": "به: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "یک بار فشار دادن",
+    "singlePressAction": "اقدام یک بار فشار دادن",
+    "triplePress": "سه بار فشار دادن",
+    "triplePressAction": "اقدام سه بار فشار دادن",
+    "longPress": "فشار طولانی",
+    "longPressFixedNotice": "ثابت در سخت‌افزار دستگاه",
+    "turnOnOff": "روشن / خاموش کردن",
+    "buttonActionNone": "هیچ‌کدام"
 }

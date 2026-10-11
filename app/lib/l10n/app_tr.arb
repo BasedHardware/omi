@@ -4025,5 +4025,13 @@
     "chatAppsIMessageTo": "Kime: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi'nin sana buradan bir özet veya içgörü göndermesine izin ver.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…"
+    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…",
+    "singlePress": "Tek basma",
+    "singlePressAction": "Tek basma eylemi",
+    "triplePress": "Üç kez basma",
+    "triplePressAction": "Üç kez basma eylemi",
+    "longPress": "Uzun basma",
+    "longPressFixedNotice": "Cihaz donanımında sabit",
+    "turnOnOff": "Aç / Kapat",
+    "buttonActionNone": "Hiçbiri"
 }

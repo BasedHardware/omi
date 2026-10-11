@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12968,4 +12969,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Jedno stisknutí';
+
+  @override
+  String get singlePressAction => 'Akce jednoho stisknutí';
+
+  @override
+  String get triplePress => 'Trojité stisknutí';
+
+  @override
+  String get triplePressAction => 'Akce trojitého stisknutí';
+
+  @override
+  String get longPress => 'Dlouhé stisknutí';
+
+  @override
+  String get longPressFixedNotice => 'Pevně v hardwaru zařízení';
+
+  @override
+  String get turnOnOff => 'Zapnout / Vypnout';
+
+  @override
+  String get buttonActionNone => 'Žádná';
 }

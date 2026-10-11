@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Kellele: Omi · {address}",
     "chatAppsInsightsSubtitle": "Luba Omil saata sulle siia kokkuvõte või ülevaade.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…"
+    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…",
+    "singlePress": "Ühekordne vajutus",
+    "singlePressAction": "Ühekordse vajutuse toiming",
+    "triplePress": "Kolmekordne vajutus",
+    "triplePressAction": "Kolmekordse vajutuse toiming",
+    "longPress": "Pikk vajutus",
+    "longPressFixedNotice": "Fikseeritud seadme riistvaras",
+    "turnOnOff": "Lülita sisse / välja",
+    "buttonActionNone": "Puudub"
 }

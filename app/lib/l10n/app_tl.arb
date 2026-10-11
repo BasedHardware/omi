@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "Hindi nagbukas? I-text ito sa {address}",
     "chatAppsLinkExpired": "Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.",
     "chatAppsIMessageTo": "Para kay: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "Isang pindot",
+    "singlePressAction": "Aksyon sa isang pindot",
+    "triplePress": "Tatlong pindot",
+    "triplePressAction": "Aksyon sa tatlong pindot",
+    "longPress": "Pindutin nang matagal",
+    "longPressFixedNotice": "Nakaayos sa hardware ng device",
+    "turnOnOff": "I-on / I-off",
+    "buttonActionNone": "Wala"
 }

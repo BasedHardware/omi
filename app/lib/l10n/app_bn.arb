@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "খোলেনি? এটি {address} নম্বরে টেক্সট করুন",
     "chatAppsLinkExpired": "লিংকটির মেয়াদ শেষ। নতুন লিংকের জন্য Open Telegram-এ ট্যাপ করুন।",
     "chatAppsIMessageTo": "প্রাপক: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "একবার চাপুন",
+    "singlePressAction": "একবার চাপার কাজ",
+    "triplePress": "তিনবার চাপুন",
+    "triplePressAction": "তিনবার চাপার কাজ",
+    "longPress": "দীর্ঘক্ষণ চেপে রাখুন",
+    "longPressFixedNotice": "ডিভাইস হার্ডওয়্যারে নির্দিষ্ট",
+    "turnOnOff": "চালু / বন্ধ করুন",
+    "buttonActionNone": "কিছুই নয়"
 }

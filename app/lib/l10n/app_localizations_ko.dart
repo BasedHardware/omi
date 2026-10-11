@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12785,4 +12786,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => '한 번 누르기';
+
+  @override
+  String get singlePressAction => '한 번 누르기 동작';
+
+  @override
+  String get triplePress => '세 번 누르기';
+
+  @override
+  String get triplePressAction => '세 번 누르기 동작';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get longPressFixedNotice => '기기 하드웨어에 고정됨';
+
+  @override
+  String get turnOnOff => '전원 켜기 / 끄기';
+
+  @override
+  String get buttonActionNone => '없음';
 }

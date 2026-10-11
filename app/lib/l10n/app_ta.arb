@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "திறக்கவில்லையா? இதை {address} எண்ணுக்கு அனுப்புங்கள்",
     "chatAppsLinkExpired": "அந்த இணைப்பு காலாவதியாகிவிட்டது. புதியதைப் பெற Telegram-ஐத் திற என்பதைத் தட்டுங்கள்.",
     "chatAppsIMessageTo": "பெறுநர்: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "ஒருமுறை அழுத்துக",
+    "singlePressAction": "ஒருமுறை அழுத்துவதற்கான செயல்",
+    "triplePress": "மூன்று முறை அழுத்துக",
+    "triplePressAction": "மூன்று முறை அழுத்துவதற்கான செயல்",
+    "longPress": "நீண்ட நேரம் அழுத்துக",
+    "longPressFixedNotice": "சாதன வன்பொருளில் நிலையானது",
+    "turnOnOff": "இயக்கு / அணை",
+    "buttonActionNone": "எதுவுமில்லை"
 }

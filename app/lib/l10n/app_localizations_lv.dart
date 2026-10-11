@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12995,4 +12996,28 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Viens nospiešana';
+
+  @override
+  String get singlePressAction => 'Viena nospieduma darbība';
+
+  @override
+  String get triplePress => 'Trīskāršs nospiešana';
+
+  @override
+  String get triplePressAction => 'Trīskārša nospieduma darbība';
+
+  @override
+  String get longPress => 'Ilgs nospiedums';
+
+  @override
+  String get longPressFixedNotice => 'Fiksēts ierīces aparatūrā';
+
+  @override
+  String get turnOnOff => 'Ieslēgt / Izslēgt';
+
+  @override
+  String get buttonActionNone => 'Nav';
 }

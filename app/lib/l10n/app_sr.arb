@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "Није се отворило? Пошаљите ово на {address}",
     "chatAppsLinkExpired": "Та веза је истекла. Додирните Отвори Telegram за нову.",
     "chatAppsIMessageTo": "За: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "Један притисак",
+    "singlePressAction": "Радња једног притиска",
+    "triplePress": "Троструки притисак",
+    "triplePressAction": "Радња троструког притиска",
+    "longPress": "Дуги притисак",
+    "longPressFixedNotice": "Фиксирано у хардверу уређаја",
+    "turnOnOff": "Укључи / Искључи",
+    "buttonActionNone": "Ништа"
 }

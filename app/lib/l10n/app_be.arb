@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "Не адкрылася? Адпраў гэта на {address}",
     "chatAppsLinkExpired": "Тэрмін дзеяння спасылкі скончыўся. Націсні «Адкрыць Telegram», каб атрымаць новую.",
     "chatAppsIMessageTo": "Каму: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "Адзіночнае націсканне",
+    "singlePressAction": "Дзеянне пры адзіночным націсканні",
+    "triplePress": "Трайное націсканне",
+    "triplePressAction": "Дзеянне пры трайным націсканні",
+    "longPress": "Доўгае націсканне",
+    "longPressFixedNotice": "Фіксавана ў апаратнай частцы прылады",
+    "turnOnOff": "Уключэнне / выключэнне",
+    "buttonActionNone": "Няма"
 }

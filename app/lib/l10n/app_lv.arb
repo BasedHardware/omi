@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Ļaujiet Omi šeit nosūtīt kopsavilkumu vai ieskatu.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…"
+    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…",
+    "singlePress": "Viens nospiešana",
+    "singlePressAction": "Viena nospieduma darbība",
+    "triplePress": "Trīskāršs nospiešana",
+    "triplePressAction": "Trīskārša nospieduma darbība",
+    "longPress": "Ilgs nospiedums",
+    "longPressFixedNotice": "Fiksēts ierīces aparatūrā",
+    "turnOnOff": "Ieslēgt / Izslēgt",
+    "buttonActionNone": "Nav"
 }

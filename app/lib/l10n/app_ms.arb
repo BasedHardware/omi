@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Kepada: Omi · {address}",
     "chatAppsInsightsSubtitle": "Benarkan Omi menghantar rumusan atau pandangan kepada anda di sini.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…"
+    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…",
+    "singlePress": "Tekan sekali",
+    "singlePressAction": "Tindakan tekan sekali",
+    "triplePress": "Tekan tiga kali",
+    "triplePressAction": "Tindakan tekan tiga kali",
+    "longPress": "Tekan lama",
+    "longPressFixedNotice": "Tetap dalam perkakasan peranti",
+    "turnOnOff": "Hidupkan / Matikan",
+    "buttonActionNone": "Tiada"
 }

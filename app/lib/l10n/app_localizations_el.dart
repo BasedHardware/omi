@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -13049,4 +13050,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Μονό πάτημα';
+
+  @override
+  String get singlePressAction => 'Ενέργεια μονού πατήματος';
+
+  @override
+  String get triplePress => 'Τριπλό πάτημα';
+
+  @override
+  String get triplePressAction => 'Ενέργεια τριπλού πατήματος';
+
+  @override
+  String get longPress => 'Παρατεταμένο πάτημα';
+
+  @override
+  String get longPressFixedNotice => 'Σταθερό στο υλικό της συσκευής';
+
+  @override
+  String get turnOnOff => 'Ενεργοποίηση / Απενεργοποίηση';
+
+  @override
+  String get buttonActionNone => 'Κανένα';
 }

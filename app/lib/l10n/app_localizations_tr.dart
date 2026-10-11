@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12979,4 +12980,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Tek basma';
+
+  @override
+  String get singlePressAction => 'Tek basma eylemi';
+
+  @override
+  String get triplePress => 'Üç kez basma';
+
+  @override
+  String get triplePressAction => 'Üç kez basma eylemi';
+
+  @override
+  String get longPress => 'Uzun basma';
+
+  @override
+  String get longPressFixedNotice => 'Cihaz donanımında sabit';
+
+  @override
+  String get turnOnOff => 'Aç / Kapat';
+
+  @override
+  String get buttonActionNone => 'Hiçbiri';
 }

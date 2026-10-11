@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Til: Omi · {address}",
     "chatAppsInsightsSubtitle": "La Omi sende deg en oppsummering eller innsikt her.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Venter på at du trykker Start i Telegram…"
+    "chatAppsTelegramWaiting": "Venter på at du trykker Start i Telegram…",
+    "singlePress": "Enkelttrykk",
+    "singlePressAction": "Handling for enkelttrykk",
+    "triplePress": "Trippeltrykk",
+    "triplePressAction": "Handling for trippeltrykk",
+    "longPress": "Langt trykk",
+    "longPressFixedNotice": "Fast i enhetens maskinvare",
+    "turnOnOff": "Slå på / av",
+    "buttonActionNone": "Ingen"
 }

@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Кому: Omi · {address}",
     "chatAppsInsightsSubtitle": "Дозвольте Omi надсилати вам тут підсумок або інсайт.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…"
+    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…",
+    "singlePress": "Одинарне натискання",
+    "singlePressAction": "Дія при одинарному натисканні",
+    "triplePress": "Потрійне натискання",
+    "triplePressAction": "Дія при потрійному натисканні",
+    "longPress": "Довге натискання",
+    "longPressFixedNotice": "Фіксовано в обладнанні пристрою",
+    "turnOnOff": "Увімкнення / вимкнення",
+    "buttonActionNone": "Немає"
 }

@@ -23132,6 +23132,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OMI PRO'**
   String get chatAppsOmiPro;
+
+  /// Label for single press button gesture
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press'**
+  String get singlePress;
+
+  /// Single press action picker title
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press Action'**
+  String get singlePressAction;
+
+  /// Label for triple press button gesture
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press'**
+  String get triplePress;
+
+  /// Triple press action picker title
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press Action'**
+  String get triplePressAction;
+
+  /// Label for long press button gesture
+  ///
+  /// In en, this message translates to:
+  /// **'Long Press'**
+  String get longPress;
+
+  /// Notice indicating long press action is hardware fixed
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed in device hardware'**
+  String get longPressFixedNotice;
+
+  /// Power on and off action description
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On / Off'**
+  String get turnOnOff;
+
+  /// None option for button action selection
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get buttonActionNone;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

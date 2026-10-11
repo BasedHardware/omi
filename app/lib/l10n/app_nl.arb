@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Aan: Omi · {address}",
     "chatAppsInsightsSubtitle": "Laat Omi je hier een samenvatting of inzicht sturen.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…"
+    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…",
+    "singlePress": "Enkele druk",
+    "singlePressAction": "Actie voor enkele druk",
+    "triplePress": "Drievoudige druk",
+    "triplePressAction": "Actie voor drievoudige druk",
+    "longPress": "Lang indrukken",
+    "longPressFixedNotice": "Vast in apparaathardware",
+    "turnOnOff": "In- / uitschakelen",
+    "buttonActionNone": "Geen"
 }

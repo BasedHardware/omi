@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "宛先: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omiからここにまとめやインサイトを送ってもらえます。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…"
+    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…",
+    "singlePress": "シングルプレス",
+    "singlePressAction": "シングルプレスアクション",
+    "triplePress": "トリプルプレス",
+    "triplePressAction": "トリプルプレスアクション",
+    "longPress": "長押し",
+    "longPressFixedNotice": "デバイスハードウェアで固定",
+    "turnOnOff": "オン / オフの切り替え",
+    "buttonActionNone": "なし"
 }

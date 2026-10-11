@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "לא נפתח? שלחו את זה אל {address}",
     "chatAppsLinkExpired": "הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.",
     "chatAppsIMessageTo": "אל: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "לחיצה אחת",
+    "singlePressAction": "פעולת לחיצה אחת",
+    "triplePress": "לחיצה משולשת",
+    "triplePressAction": "פעולת לחיצה משולשת",
+    "longPress": "לחיצה ארוכה",
+    "longPressFixedNotice": "קבוע בחומרת המכשיר",
+    "turnOnOff": "הפעלה / כיבוי",
+    "buttonActionNone": "ללא"
 }

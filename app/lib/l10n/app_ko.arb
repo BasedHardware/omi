@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "받는 사람: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi가 요약이나 인사이트를 여기로 보내도록 허용하세요.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…"
+    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…",
+    "singlePress": "한 번 누르기",
+    "singlePressAction": "한 번 누르기 동작",
+    "triplePress": "세 번 누르기",
+    "triplePressAction": "세 번 누르기 동작",
+    "longPress": "길게 누르기",
+    "longPressFixedNotice": "기기 하드웨어에 고정됨",
+    "turnOnOff": "전원 켜기 / 끄기",
+    "buttonActionNone": "없음"
 }

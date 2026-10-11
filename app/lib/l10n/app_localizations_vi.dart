@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12964,4 +12965,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => 'Nhấn một lần';
+
+  @override
+  String get singlePressAction => 'Hành động nhấn một lần';
+
+  @override
+  String get triplePress => 'Nhấn ba lần';
+
+  @override
+  String get triplePressAction => 'Hành động nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get longPressFixedNotice => 'Cố định trong phần cứng thiết bị';
+
+  @override
+  String get turnOnOff => 'Bật / Tắt';
+
+  @override
+  String get buttonActionNone => 'Không có';
 }

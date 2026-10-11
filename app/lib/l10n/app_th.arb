@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "ถึง: Omi · {address}",
     "chatAppsInsightsSubtitle": "ให้ Omi ส่งสรุปหรือข้อมูลเชิงลึกมาให้คุณที่นี่",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…"
+    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…",
+    "singlePress": "กดครั้งเดียว",
+    "singlePressAction": "การทำงานเมื่อกดครั้งเดียว",
+    "triplePress": "กดสามครั้ง",
+    "triplePressAction": "การทำงานเมื่อกดสามครั้ง",
+    "longPress": "กดค้าง",
+    "longPressFixedNotice": "กำหนดตายตัวในฮาร์ดแวร์ของอุปกรณ์",
+    "turnOnOff": "เปิด / ปิดเครื่อง",
+    "buttonActionNone": "ไม่มี"
 }

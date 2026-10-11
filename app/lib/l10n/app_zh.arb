@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "收件人：Omi · {address}",
     "chatAppsInsightsSubtitle": "允许 Omi 在这里向你发送回顾或洞察。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…"
+    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…",
+    "singlePress": "单击",
+    "singlePressAction": "单击操作",
+    "triplePress": "三击",
+    "triplePressAction": "三击操作",
+    "longPress": "长按",
+    "longPressFixedNotice": "硬件固定功能",
+    "turnOnOff": "开关机",
+    "buttonActionNone": "无"
 }

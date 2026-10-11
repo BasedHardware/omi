@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Leiskite Omi čia atsiųsti apibendrinimą ar įžvalgą.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…"
+    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…",
+    "singlePress": "Vienas paspaudimas",
+    "singlePressAction": "Vieno paspaudimo veiksmas",
+    "triplePress": "Trigubas paspaudimas",
+    "triplePressAction": "Trigubo paspaudimo veiksmas",
+    "longPress": "Ilgas paspaudimas",
+    "longPressFixedNotice": "Fiksuota įrenginio aparatinėje įrangoje",
+    "turnOnOff": "Įjungti / Išjungti",
+    "buttonActionNone": "Nėra"
 }

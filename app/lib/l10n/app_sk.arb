@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Komu: Omi · {address}",
     "chatAppsInsightsSubtitle": "Nechajte Omi, aby vám tu poslala zhrnutie alebo postreh.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Čakáme, kým v Telegrame klepnete na Spustiť…"
+    "chatAppsTelegramWaiting": "Čakáme, kým v Telegrame klepnete na Spustiť…",
+    "singlePress": "Jedno stlačenie",
+    "singlePressAction": "Akcia jedného stlačenia",
+    "triplePress": "Trojité stlačenie",
+    "triplePressAction": "Akcia trojitého stlačenia",
+    "longPress": "Dlhé stlačenie",
+    "longPressFixedNotice": "Pevné v hardvéri zariadenia",
+    "turnOnOff": "Zapnúť / Vypnúť",
+    "buttonActionNone": "Žiadna"
 }

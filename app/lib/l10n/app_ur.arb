@@ -11427,5 +11427,13 @@
     "chatAppsTextThisTo": "نہیں کھلا؟ یہ {address} کو ٹیکسٹ کریں",
     "chatAppsLinkExpired": "وہ لنک ختم ہو گیا۔ نئے کے لیے Telegram کھولیں پر ٹیپ کریں۔",
     "chatAppsIMessageTo": "بنام: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "singlePress": "ایک بار دبائیں",
+    "singlePressAction": "ایک بار دبانے کا عمل",
+    "triplePress": "تین بار دبائیں",
+    "triplePressAction": "تین بار دبانے کا عمل",
+    "longPress": "دیر تک دبائیں",
+    "longPressFixedNotice": "ڈیوائس ہارڈ ویئر میں مقرر",
+    "turnOnOff": "آن / آف کریں",
+    "buttonActionNone": "کوئی نہیں"
 }

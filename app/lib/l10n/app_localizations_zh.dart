@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12761,4 +12762,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get singlePress => '单击';
+
+  @override
+  String get singlePressAction => '单击操作';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get triplePressAction => '三击操作';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get longPressFixedNotice => '硬件固定功能';
+
+  @override
+  String get turnOnOff => '开关机';
+
+  @override
+  String get buttonActionNone => '无';
 }

@@ -3990,5 +3990,13 @@
     "chatAppsIMessageTo": "Đến: Omi · {address}",
     "chatAppsInsightsSubtitle": "Cho phép Omi gửi bản tóm tắt hoặc thông tin chi tiết cho bạn tại đây.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…"
+    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…",
+    "singlePress": "Nhấn một lần",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "longPressFixedNotice": "Cố định trong phần cứng thiết bị",
+    "turnOnOff": "Bật / Tắt",
+    "buttonActionNone": "Không có"
 }
