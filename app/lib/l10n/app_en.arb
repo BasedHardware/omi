@@ -664,6 +664,10 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Double Tap",
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Single tap row title"
+    },
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -758,6 +762,12 @@
     "doubleTapAction": "Double Tap Action",
     "@doubleTapAction": {
         "description": "Double tap action setting"
+    },
+    "tripleTap": "Triple Tap",
+    "tripleTapAction": "Triple Tap Action",
+    "singleTapAction": "Single Tap Action",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
     },
     "endAndProcess": "End & Process Conversation",
     "@endAndProcess": {
@@ -15688,5 +15698,11 @@
     "@chatAppsIncludedWithPro": {
         "description": "Small all-caps tag: chat apps come with the Omi Pro plan"
     },
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "@tripleTap": {
+        "description": "Triple tap row title"
+    },
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -26,14 +26,57 @@ String _micGainDescription(BuildContext context, int level) {
   return level >= 0 && level < descriptions.length ? descriptions[level] : '';
 }
 
-/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
-/// (0 end and process, 1 mute/unmute, 2 star), or null when dismissed.
-Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current}) {
+/// Lets the reader pick what a single tap on the device does. Resolves to the chosen action
+/// (0 ask a question, 1 end and process, 2 mute/unmute, 3 star), or null when dismissed.
+Future<int?> showSingleTapActionSheet(BuildContext context, {required int current}) {
   final l10n = context.l10n;
-  final options = [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing];
+  return _showTapActionSheet(
+    context,
+    title: l10n.singleTapAction,
+    options: [
+      l10n.deviceOnboardingAskQuestionTitle,
+      l10n.endAndProcess,
+      l10n.deviceOnboardingMuteUnmute,
+      l10n.starOngoing,
+    ],
+    current: current,
+  );
+}
+
+/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
+/// (0 end and process, 1 mute/unmute, 2 star, and 3 off when [allowOff]), or null when dismissed.
+Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current, bool allowOff = false}) {
+  final l10n = context.l10n;
+  return _showTapActionSheet(
+    context,
+    title: l10n.doubleTapAction,
+    options: [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing, if (allowOff) l10n.off],
+    current: current,
+  );
+}
+
+/// Lets the reader pick what a triple tap on the device does. Resolves to the chosen action
+/// (0 end and process, 1 mute/unmute, 2 star, 3 off), or null when dismissed.
+Future<int?> showTripleTapActionSheet(BuildContext context, {required int current}) {
+  final l10n = context.l10n;
+  return _showTapActionSheet(
+    context,
+    title: l10n.tripleTapAction,
+    options: [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing, l10n.off],
+    current: current,
+  );
+}
+
+/// One row per option; an option's position in [options] is the value it stores.
+Future<int?> _showTapActionSheet(
+  BuildContext context, {
+  required String title,
+  required List<String> options,
+  required int current,
+}) {
   return showOmiSheet<int>(
     context: context,
-    title: l10n.doubleTapAction,
+    title: title,
     padding: const EdgeInsets.only(bottom: OmiSpacing.md),
     builder: (sheetContext) => Column(
       mainAxisSize: MainAxisSize.min,

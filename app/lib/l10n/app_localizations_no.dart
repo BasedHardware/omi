@@ -507,6 +507,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get doubleTap => 'Dobbelttrykk';
 
   @override
+  String get singleTap => 'Enkelttrykk';
+
+  @override
   String get ledBrightness => 'LED-lysstyrke';
 
   @override
@@ -578,6 +581,15 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dobbelttrykk-handling';
+
+  @override
+  String get tripleTap => 'Trippeltrykk';
+
+  @override
+  String get tripleTapAction => 'Trippeltrykk-handling';
+
+  @override
+  String get singleTapAction => 'Enkelttrykk-handling';
 
   @override
   String get endAndProcess => 'Avslutt og behandle samtale';

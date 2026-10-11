@@ -506,6 +506,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get doubleTap => 'Ketuk Ganda';
 
   @override
+  String get singleTap => 'Ketuk Tunggal';
+
+  @override
   String get ledBrightness => 'Kecerahan LED';
 
   @override
@@ -577,6 +580,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Aksi Ketuk Ganda';
+
+  @override
+  String get tripleTap => 'Ketuk Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Aksi Ketuk Tiga Kali';
+
+  @override
+  String get singleTapAction => 'Aksi Ketuk Tunggal';
 
   @override
   String get endAndProcess => 'Akhiri & Proses Percakapan';

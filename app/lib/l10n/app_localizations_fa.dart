@@ -507,6 +507,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get doubleTap => 'دو ضربه';
 
   @override
+  String get singleTap => 'تک ضربه';
+
+  @override
   String get ledBrightness => 'روشنایی LED';
 
   @override
@@ -578,6 +581,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'عمل دو ضربه';
+
+  @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
+
+  @override
+  String get singleTapAction => 'عمل تک ضربه';
 
   @override
   String get endAndProcess => 'پایان‌دادن و پردازش گفتگو';

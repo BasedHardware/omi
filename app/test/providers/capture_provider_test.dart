@@ -21,15 +21,18 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/button_action.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
 
+import '../support/capture/scripted_device_connection.dart';
 import '../support/crashlytics_recorder.dart';
 
 /// Fake external actions that tracks people-refresh calls.
@@ -2069,6 +2072,153 @@ void main() {
 
         provider.dispose();
       });
+    });
+  });
+
+  group('button tap sequence', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 3;
+      SharedPreferencesUtil().doubleTapAction = 3;
+      SharedPreferencesUtil().tripleTapAction = 3;
+    });
+
+    test('a mapped tap runs on the tap itself when no longer tap is mapped', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a tap does nothing on an Omi while Omi button actions are turned off', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = false;
+      addTearDown(() => SharedPreferencesUtil().omiButtonActionsEnabled = true);
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      provider.handleButtonTapsForTesting('device', [2, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+
+    test('a tap still runs on an Omi while Omi button actions are turned on', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = true;
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('the Omi button actions switch does not silence a non-Omi device', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = false;
+      addTearDown(() => SharedPreferencesUtil().omiButtonActionsEnabled = true);
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.openglass));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a mapped tap waits for the sequence end while a longer tap is mapped', () {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [2, 1]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a sequence end that arrives without its taps runs nothing', () {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [2, 2]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+
+    test('a triple tap runs on the third tap and the sequence end does not repeat it', () {
+      SharedPreferencesUtil().singleTapAction = 1;
+      SharedPreferencesUtil().tripleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      provider.handleButtonTapsForTesting('device', [1, 2]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [1, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      provider.handleButtonTapsForTesting('device', [2, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a truncated notification is ignored', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+  });
+
+  group('legacy button stream', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 0;
+      SharedPreferencesUtil().doubleTapAction = 0;
+      SharedPreferencesUtil().tripleTapAction = 0;
+    });
+
+    test('a remapped single tap runs its action instead of starting a question', () {
+      SharedPreferencesUtil().singleTapAction = 3;
+      final provider = CaptureProvider();
+
+      provider.handleButtonEventForTesting('device', 1);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+      expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    });
+
+    test('a double tap set to Off does nothing', () {
+      SharedPreferencesUtil().doubleTapAction = 3;
+      final provider = CaptureProvider();
+
+      provider.handleButtonEventForTesting('device', 2);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+
+    test('a device that reports tap counts is handled once, by the tap stream', () async {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      SharedPreferencesUtil().tripleTapAction = 3;
+      final connection = ScriptedDeviceConnection()..features = OmiFeatures.buttonTaps;
+      final provider = CaptureProvider(deviceConnectionLoader: (_) async => connection);
+      await provider.streamButton('device');
+
+      provider.handleButtonEventForTesting('device', 2);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      connection.emitTaps([1, 1]);
+      connection.emitTaps([1, 2]);
+      connection.emitTaps([2, 2]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('firmware without tap counts keeps the legacy stream', () async {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final connection = ScriptedDeviceConnection();
+      final provider = CaptureProvider(deviceConnectionLoader: (_) async => connection);
+      await provider.streamButton('device');
+
+      provider.handleButtonEventForTesting('device', 2);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
     });
   });
 }

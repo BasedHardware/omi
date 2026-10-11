@@ -505,6 +505,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get doubleTap => 'Kaksoisnapautus';
 
   @override
+  String get singleTap => 'Kertanapautus';
+
+  @override
   String get ledBrightness => 'LED-kirkkaus';
 
   @override
@@ -575,6 +578,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Kaksoisnapaututstoiminto';
+
+  @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautustoiminto';
+
+  @override
+  String get singleTapAction => 'Kertanapautustoiminto';
 
   @override
   String get endAndProcess => 'Lopeta ja käsittele keskustelu';

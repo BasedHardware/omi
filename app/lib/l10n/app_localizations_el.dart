@@ -510,6 +510,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doubleTap => 'Διπλό Πάτημα';
 
   @override
+  String get singleTap => 'Απλό Πάτημα';
+
+  @override
   String get ledBrightness => 'Φωτεινότητα LED';
 
   @override
@@ -581,6 +584,15 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Ενέργεια Διπλού Πατήματος';
+
+  @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
+
+  @override
+  String get singleTapAction => 'Ενέργεια Απλού Πατήματος';
 
   @override
   String get endAndProcess => 'Τερματισμός & Επεξεργασία Συνομιλίας';
