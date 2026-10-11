@@ -7,7 +7,12 @@ import 'package:omi/services/devices/models.dart';
 void main() {
   group('NativeBluetoothDiscoverer PLAUD and NotePin S discovery (#14376)', () {
     test('identifies classic PLAUD NOTE device by prefix', () {
-      final peripheral = BlePeripheral(uuid: '0000-1111-2222', name: 'PLAUD NOTE', rssi: -55, serviceUuids: []);
+      final peripheral = BlePeripheral(
+        uuid: '0000-1111-2222',
+        name: 'PLAUD NOTE',
+        rssi: -55,
+        serviceUuids: [],
+      );
 
       expect(NativeBluetoothDiscoverer.isPlaud(peripheral), isTrue);
       expect(NativeBluetoothDiscoverer.isSupportedPeripheral(peripheral), isTrue);
@@ -19,7 +24,12 @@ void main() {
     });
 
     test('identifies PLAUD NotePin S device (#14376)', () {
-      final peripheral = BlePeripheral(uuid: '0000-2222-3333', name: 'NotePin S', rssi: -62, serviceUuids: []);
+      final peripheral = BlePeripheral(
+        uuid: '0000-2222-3333',
+        name: 'NotePin S',
+        rssi: -62,
+        serviceUuids: [],
+      );
 
       expect(NativeBluetoothDiscoverer.isPlaud(peripheral), isTrue);
       expect(NativeBluetoothDiscoverer.isSupportedPeripheral(peripheral), isTrue);
@@ -30,7 +40,12 @@ void main() {
     });
 
     test('identifies uppercase NOTEPIN with suffix identifier', () {
-      final peripheral = BlePeripheral(uuid: '0000-3333-4444', name: 'NOTEPIN-B892', rssi: -48, serviceUuids: []);
+      final peripheral = BlePeripheral(
+        uuid: '0000-3333-4444',
+        name: 'NOTEPIN-B892',
+        rssi: -48,
+        serviceUuids: [],
+      );
 
       expect(NativeBluetoothDiscoverer.isPlaud(peripheral), isTrue);
       expect(NativeBluetoothDiscoverer.isSupportedPeripheral(peripheral), isTrue);
@@ -83,7 +98,12 @@ void main() {
     });
 
     test('does not conflict with other supported peripherals', () {
-      final beeDevice = BlePeripheral(uuid: '0000-8888-1111', name: 'Bee Device', rssi: -50, serviceUuids: []);
+      final beeDevice = BlePeripheral(
+        uuid: '0000-8888-1111',
+        name: 'Bee Device',
+        rssi: -50,
+        serviceUuids: [],
+      );
 
       expect(NativeBluetoothDiscoverer.isPlaud(beeDevice), isFalse);
       expect(NativeBluetoothDiscoverer.isSupportedPeripheral(beeDevice), isTrue);

@@ -67,9 +67,9 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
   String _selectedCountryName(PaymentMethodProvider provider) {
     if (provider.selectedCountryId?.isEmpty ?? true) return context.l10n.selectYourCountry;
     // Not filteredCountries: that still carries the picker's last search.
-    final name =
-        provider.supportedCountries.firstWhereOrNull((country) => country['id'] == provider.selectedCountryId)?['name']
-            as String?;
+    final name = provider.supportedCountries.firstWhereOrNull(
+      (country) => country['id'] == provider.selectedCountryId,
+    )?['name'] as String?;
     return name?.decodeString ?? context.l10n.selectYourCountry;
   }
 
@@ -230,10 +230,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
         expand: true,
         onPressed: _canConnect(provider)
             ? () => _connect(
-                provider,
-                event: 'Stripe Connect Started',
-                errorMessage: context.l10n.errorConnectingToStripe,
-              )
+                  provider,
+                  event: 'Stripe Connect Started',
+                  errorMessage: context.l10n.errorConnectingToStripe,
+                )
             : null,
       ),
     ];
@@ -279,8 +279,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       OmiButton(
         label: context.l10n.failedTryAgain,
         expand: true,
-        onPressed: () =>
-            _connect(provider, event: 'Stripe Connect Retry', errorMessage: context.l10n.errorConnectingToStripe),
+        onPressed: () => _connect(
+          provider,
+          event: 'Stripe Connect Retry',
+          errorMessage: context.l10n.errorConnectingToStripe,
+        ),
       ),
       const SizedBox(height: OmiSpacing.xs),
       OmiButton.tertiary(
@@ -331,8 +334,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       OmiButton(
         label: context.l10n.updateStripeDetails,
         expand: true,
-        onPressed: () =>
-            _connect(provider, event: 'Stripe Connect Update', errorMessage: context.l10n.errorUpdatingStripeDetails),
+        onPressed: () => _connect(
+          provider,
+          event: 'Stripe Connect Update',
+          errorMessage: context.l10n.errorUpdatingStripeDetails,
+        ),
       ),
       const SizedBox(height: OmiSpacing.xs),
       OmiButton.tertiary(

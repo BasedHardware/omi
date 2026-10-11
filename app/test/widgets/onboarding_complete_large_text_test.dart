@@ -37,16 +37,13 @@ Future<void> _pumpComplete(WidgetTester tester, {required bool showSiriHint}) as
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(
-    _host(
+  await tester.pumpWidget(_host(
       OnboardingCompleteScreen(
         onComplete: () {},
         showSiriHint: showSiriHint,
         appShortcutsAvailabilityProbe: () async => true,
       ),
-      textScale: 1.0,
-    ),
-  );
+      textScale: 1.0));
   // Settle the delayed entrance animation (200 ms delay + 800 ms run).
   await tester.pump(const Duration(seconds: 1));
 }

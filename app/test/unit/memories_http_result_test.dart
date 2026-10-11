@@ -22,7 +22,12 @@ void main() {
   });
 
   test('an empty filtered page still preserves the server continuation cursor', () {
-    final result = memoriesResultFromHttp(statusCode: 200, body: '[]', nextCursor: 'cursor-2', beliefEnabled: true);
+    final result = memoriesResultFromHttp(
+      statusCode: 200,
+      body: '[]',
+      nextCursor: 'cursor-2',
+      beliefEnabled: true,
+    );
 
     expect(result.ok, isTrue);
     expect(result.memories, isEmpty);
@@ -52,7 +57,13 @@ void main() {
   });
 
   test('ledger history URL uses offset paging for the initial request', () {
-    final uri = Uri.parse(buildLedgerHistoryUrl(baseUrl: 'https://example.test/', limit: 500, offset: 500));
+    final uri = Uri.parse(
+      buildLedgerHistoryUrl(
+        baseUrl: 'https://example.test/',
+        limit: 500,
+        offset: 500,
+      ),
+    );
 
     expect(uri.path, '/v3/memories/ledger-history');
     expect(uri.queryParameters, {'limit': '500', 'offset': '500'});
@@ -61,7 +72,12 @@ void main() {
 
   test('ledger history uses a server cursor when the route returns one', () {
     final uri = Uri.parse(
-      buildLedgerHistoryUrl(baseUrl: 'https://example.test/', limit: 500, offset: 500, cursor: 'history-2'),
+      buildLedgerHistoryUrl(
+        baseUrl: 'https://example.test/',
+        limit: 500,
+        offset: 500,
+        cursor: 'history-2',
+      ),
     );
 
     expect(uri.path, '/v3/memories/ledger-history');

@@ -158,35 +158,32 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     Widget content;
 
     Widget pulsingRow(String label) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedBuilder(
-          animation: _pulseAnimation,
-          builder: (_, __) => Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: OmiColors.textPrimary.withValues(alpha: _pulseAnimation.value),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (_, __) => Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OmiColors.textPrimary.withValues(alpha: _pulseAnimation.value),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: OmiSpacing.xs),
-        Text(label, style: OmiType.footnote),
-      ],
-    );
+            const SizedBox(width: OmiSpacing.xs),
+            Text(label, style: OmiType.footnote),
+          ],
+        );
 
     Widget iconRow(IconData icon, String label, Color color) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 16),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500),
-        ),
-      ],
-    );
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500)),
+          ],
+        );
 
     switch (_status) {
       case _VerifyStatus.calling:

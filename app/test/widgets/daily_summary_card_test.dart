@@ -131,11 +131,8 @@ void main() {
       // The headline's box is the room above the map; the lines it may show must fit in it.
       final room = tester.getSize(find.textContaining('Rewrite, equity')).height;
       expect(headline.maxLines, inInclusiveRange(1, 2), reason: 'at ${scale}x');
-      expect(
-        headline.maxLines! * lineHeight,
-        lessThanOrEqualTo(room + 0.5),
-        reason: 'the headline shows whole lines only at ${scale}x',
-      );
+      expect(headline.maxLines! * lineHeight, lessThanOrEqualTo(room + 0.5),
+          reason: 'the headline shows whole lines only at ${scale}x');
       if (scale == 1.0) expect(headline.maxLines, 2, reason: 'two headline lines fit at the default size');
     }
   });
@@ -144,10 +141,8 @@ void main() {
 Future<void> _pumpCard(WidgetTester tester, DailySummary summary, {double textScale = 1.0}) async {
   await tester.pumpWidget(
     MaterialApp(
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
-        child: child!,
-      ),
+      builder: (context, child) =>
+          MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(

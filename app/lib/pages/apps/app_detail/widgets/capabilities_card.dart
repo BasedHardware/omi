@@ -50,7 +50,10 @@ class CapabilitiesCard extends StatelessWidget {
         top: 12,
         bottom: 6,
       ),
-      decoration: BoxDecoration(color: OmiColors.surface1.withValues(alpha: 0.8), borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(
+        color: OmiColors.surface1.withValues(alpha: 0.8),
+        borderRadius: OmiRadius.lgAll,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

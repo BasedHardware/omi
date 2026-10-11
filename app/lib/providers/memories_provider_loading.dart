@@ -161,8 +161,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
             continue;
           }
           Logger.warning(
-            'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols',
-          );
+              'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols');
           break;
         }
         // Scope belongs to the successful current-page response. The separate

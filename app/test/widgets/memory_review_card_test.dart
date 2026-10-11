@@ -407,7 +407,10 @@ void main() {
   });
 
   testWidgets('a failed review on an unresolved row reverts and shows the error line', (tester) async {
-    final provider = _provider(rows: const [], reviewMemoryRequest: (id, value) async => false);
+    final provider = _provider(
+      rows: const [],
+      reviewMemoryRequest: (id, value) async => false,
+    );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
@@ -477,12 +480,8 @@ void main() {
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
         fetches++;
         if (fetches == 1) {
-          return const GetMemoriesResult(
-            [],
-            true,
-            statusCode: 503,
-            failureReason: MemoriesFetchFailureReason.httpError,
-          );
+          return const GetMemoriesResult([], true,
+              statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
         }
         return GetMemoriesResult([_memory(id: 'mem-flaky')], true);
       },

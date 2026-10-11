@@ -137,10 +137,10 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
 
   Widget _buildShimmerList() {
     Widget bar({required double height, double? width}) => Container(
-      height: height,
-      width: width ?? double.infinity,
-      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.smAll),
-    );
+          height: height,
+          width: width ?? double.infinity,
+          decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.smAll),
+        );
     return Shimmer.fromColors(
       baseColor: OmiColors.surface2,
       highlightColor: OmiColors.surface3,
@@ -350,7 +350,13 @@ class _ActionRow extends StatelessWidget {
   final Color? color;
   final bool loading;
 
-  const _ActionRow({required this.icon, required this.label, this.onTap, this.color, this.loading = false});
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.color,
+    this.loading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -369,9 +375,7 @@ class _ActionRow extends StatelessWidget {
                     ? OmiSpinner(size: OmiSpinnerSize.small, color: color ?? OmiColors.textPrimary)
                     : Icon(icon, size: 20, color: color ?? OmiColors.textPrimary),
                 const SizedBox(width: OmiSpacing.sm),
-                Expanded(
-                  child: Text(label, style: OmiType.subhead.copyWith(color: color ?? OmiColors.textPrimary)),
-                ),
+                Expanded(child: Text(label, style: OmiType.subhead.copyWith(color: color ?? OmiColors.textPrimary))),
               ],
             ),
           ),

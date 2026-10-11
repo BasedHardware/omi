@@ -175,7 +175,8 @@ class _SuccessfulResponse extends Stream<List<int>> implements HttpClientRespons
     Function? onError,
     void Function()? onDone,
     bool? cancelOnError,
-  }) => const Stream<List<int>>.empty().listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  }) =>
+      const Stream<List<int>>.empty().listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
 
   @override
   HttpHeaders get headers => _EmptyHeaders();

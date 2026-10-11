@@ -17,11 +17,11 @@ List<int> intField(int fieldNum, int value) => [...varint((fieldNum << 3) | 0), 
 List<int> bytesField(int fieldNum, List<int> data) => [...varint((fieldNum << 3) | 2), ...varint(data.length), ...data];
 
 List<int> bleWrapper(int index, int seq, int numFrags, List<int> payload) => [
-  ...intField(1, index),
-  ...intField(2, seq),
-  ...intField(3, numFrags),
-  ...bytesField(4, payload),
-];
+      ...intField(1, index),
+      ...intField(2, seq),
+      ...intField(3, numFrags),
+      ...bytesField(4, payload),
+    ];
 
 void main() {
   group('Type-8 pendant clock parse', () {

@@ -16,28 +16,23 @@ void main() {
   setUp(() => known = ValueNotifier(CalendarMeetingSnapshot(owner: 'uid', windows: [meeting])));
   tearDown(() => known.dispose());
 
-  Future<void> check(CalendarCaptureGapMonitor monitor, DateTime at, {bool owns = false}) => monitor.check(
-    at,
-    captureOwns: () => owns,
-    gapReason: () => owns ? null : 'not_capturing',
-    phase: () => owns ? 'phoneLive' : 'idle',
-  );
-  CalendarCaptureGapMonitor monitor({
-    required Future<List<CalendarCaptureWindow>?> Function(DateTime, DateTime) load,
-    void Function(Map<String, Object?>)? emit,
-    String Function()? owner,
-  }) =>
+  Future<void> check(CalendarCaptureGapMonitor monitor, DateTime at, {bool owns = false}) => monitor.check(at,
+      captureOwns: () => owns,
+      gapReason: () => owns ? null : 'not_capturing',
+      phase: () => owns ? 'phoneLive' : 'idle');
+  CalendarCaptureGapMonitor monitor(
+          {required Future<List<CalendarCaptureWindow>?> Function(DateTime, DateTime) load,
+          void Function(Map<String, Object?>)? emit,
+          String Function()? owner}) =>
       CalendarCaptureGapMonitor(localMeetings: known, load: load, ownerKey: owner ?? () => 'uid', emit: emit ?? (_) {});
 
   test('no upcoming meeting means no fetches or scheduled checks across a day', () async {
     known.value = const CalendarMeetingSnapshot(owner: 'uid', windows: []);
     var fetches = 0;
-    final gap = monitor(
-      load: (_, __) async {
-        fetches++;
-        return [];
-      },
-    );
+    final gap = monitor(load: (_, __) async {
+      fetches++;
+      return [];
+    });
     for (var second = 0; second < 86400; second += 15) {
       final at = now.add(Duration(seconds: second));
       expect(gap.nextCheckAt(at, captureOwns: false), isNull);
@@ -47,12 +42,10 @@ void main() {
   });
   test('active meeting and live capture never fetch or schedule a calendar check', () async {
     var fetches = 0;
-    final gap = monitor(
-      load: (_, __) async {
-        fetches++;
-        return [meeting];
-      },
-    );
+    final gap = monitor(load: (_, __) async {
+      fetches++;
+      return [meeting];
+    });
     for (var second = 0; second < 4200; second += 15) {
       final at = now.add(Duration(seconds: second));
       expect(gap.nextCheckAt(at, captureOwns: true), isNull);
@@ -65,14 +58,13 @@ void main() {
     var at = now.subtract(const Duration(minutes: 5));
     final events = <Map<String, Object?>>[];
     final gap = monitor(
-      load: (start, end) async {
-        expect(start, meeting.start);
-        expect(end, meeting.end);
-        times.add(at);
-        return [meeting];
-      },
-      emit: events.add,
-    );
+        load: (start, end) async {
+          expect(start, meeting.start);
+          expect(end, meeting.end);
+          times.add(at);
+          return [meeting];
+        },
+        emit: events.add);
     expect(gap.nextCheckAt(at, captureOwns: false), now);
     await check(gap, at);
     expect(times, isEmpty);
@@ -95,21 +87,18 @@ void main() {
     var fetches = 0;
     final events = <Map<String, Object?>>[];
     final gap = monitor(
-      load: (_, __) async {
-        fetches++;
-        throw StateError('unavailable');
-      },
-      emit: events.add,
-    );
+        load: (_, __) async {
+          fetches++;
+          throw StateError('unavailable');
+        },
+        emit: events.add);
     await check(gap, now);
     await check(gap, now.add(const Duration(seconds: 59)));
     expect(fetches, 1);
     await check(gap, now.add(const Duration(seconds: 60)));
     expect(fetches, 2);
-    expect(
-      gap.nextCheckAt(now.add(const Duration(seconds: 61)), captureOwns: false),
-      now.add(const Duration(seconds: 180)),
-    );
+    expect(gap.nextCheckAt(now.add(const Duration(seconds: 61)), captureOwns: false),
+        now.add(const Duration(seconds: 180)));
     expect(events, isEmpty);
   });
   test('owning capture after fetch and retired accounts cannot publish', () async {
@@ -117,12 +106,8 @@ void main() {
     final pending = Completer<List<CalendarCaptureWindow>?>();
     final events = <Map<String, Object?>>[];
     final gap = monitor(load: (_, __) => pending.future, emit: events.add);
-    final pass = gap.check(
-      now.add(const Duration(minutes: 1)),
-      captureOwns: () => owns,
-      gapReason: () => 'not_capturing',
-      phase: () => 'idle',
-    );
+    final pass = gap.check(now.add(const Duration(minutes: 1)),
+        captureOwns: () => owns, gapReason: () => 'not_capturing', phase: () => 'idle');
     owns = true;
     pending.complete([meeting]);
     await pass;
@@ -156,25 +141,20 @@ void main() {
     await pass;
     expect(events, isEmpty);
     expect(
-      gap.nextCheckAt(now.add(const Duration(minutes: 1)), captureOwns: false),
-      now.add(const Duration(minutes: 1)),
-    );
+        gap.nextCheckAt(now.add(const Duration(minutes: 1)), captureOwns: false), now.add(const Duration(minutes: 1)));
   });
 
   test('local cache is bounded, title-free and account scoped', () {
-    GoogleCalendarService.rememberMeetings('uid', [
-      meeting,
-      CalendarCaptureWindow('ended', now.subtract(const Duration(hours: 2)), now),
-    ], now: now);
+    GoogleCalendarService.rememberMeetings(
+        'uid', [meeting, CalendarCaptureWindow('ended', now.subtract(const Duration(hours: 2)), now)],
+        now: now);
     expect(GoogleCalendarService.knownMeetings.value.windows, [meeting]);
     GoogleCalendarService.rememberMeetings('other', [], now: now);
     expect(GoogleCalendarService.knownMeetings.value.owner, 'other');
     expect(GoogleCalendarService.knownMeetings.value.windows, isEmpty);
     GoogleCalendarService.rememberMeetings(
-      'other',
-      List.generate(100, (i) => CalendarCaptureWindow('$i', now, meeting.end)),
-      now: now,
-    );
+        'other', List.generate(100, (i) => CalendarCaptureWindow('$i', now, meeting.end)),
+        now: now);
     expect(GoogleCalendarService.knownMeetings.value.windows, hasLength(64));
     GoogleCalendarService.knownMeetings.value = const CalendarMeetingSnapshot(owner: '', windows: []);
   });
@@ -183,12 +163,10 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     known.value = const CalendarMeetingSnapshot(owner: 'uid', windows: []);
     var fetches = 0;
-    final gap = monitor(
-      load: (_, __) async {
-        fetches++;
-        return [meeting];
-      },
-    );
+    final gap = monitor(load: (_, __) async {
+      fetches++;
+      return [meeting];
+    });
     final world = await CaptureReplayWorld.boot(tempDir: dir, startTime: now, calendarGapMonitor: gap);
     addTearDown(world.dispose);
     expect(world.scheduler.pendingTimerLabels.where((l) => l == 'periodic(0:00:15.000000)'), isEmpty);

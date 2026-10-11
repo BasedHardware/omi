@@ -16,21 +16,19 @@ void main() {
 
     testWidgets('step title, subtitle and Continue follow the $name palette', (tester) async {
       OmiColors.active = palette;
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            backgroundColor: palette.surface0,
-            body: OnboardingStepScaffold(
-              title: 'Step title',
-              subtitle: 'Step subtitle',
-              content: const SizedBox.shrink(),
-              bottomAction: OnboardingContinueButton(onPressed: () {}),
-            ),
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          backgroundColor: palette.surface0,
+          body: OnboardingStepScaffold(
+            title: 'Step title',
+            subtitle: 'Step subtitle',
+            content: const SizedBox.shrink(),
+            bottomAction: OnboardingContinueButton(onPressed: () {}),
           ),
         ),
-      );
+      ));
 
       final title = tester.widget<Text>(find.text('Step title'));
       expect(title.style!.color, palette.textPrimary);

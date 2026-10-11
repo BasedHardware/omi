@@ -36,23 +36,15 @@ class _CapturingSource extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async {
+  Future<ConversationSearchResult> conversations(String query,
+      {String? speakerId, DateTime? startDate, DateTime? endDate}) async {
     conversationCapture
       ..query = query
       ..start = startDate
       ..end = endDate;
     conversationCapture.calls++;
     return ConversationSearchResult(
-      items: rows,
-      currentPage: 1,
-      totalPages: 1,
-      outcome: ConversationSearchResultOutcome.success,
-    );
+        items: rows, currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
   }
 
   @override
@@ -88,28 +80,26 @@ class _CapturingSource extends GlobalSearchSource {
 }
 
 ServerConversation _conversation(String id, String title, DateTime started) => ServerConversation.fromJson({
-  'id': id,
-  'created_at': started.toUtc().toIso8601String(),
-  'started_at': started.toUtc().toIso8601String(),
-  'finished_at': started.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
-  'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
-  'status': 'completed',
-  'transcript_segments': [],
-});
+      'id': id,
+      'created_at': started.toUtc().toIso8601String(),
+      'started_at': started.toUtc().toIso8601String(),
+      'finished_at': started.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
+      'structured': {'title': title, 'overview': '', 'emoji': '', 'category': 'work'},
+      'status': 'completed',
+      'transcript_segments': [],
+    });
 
 Future<void> _pumpSearch(WidgetTester tester, GlobalSearchSource source, {String? initialQuery}) {
-  return tester.pumpWidget(
-    MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[]))],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: GlobalSearchPage(initialQuery: initialQuery, source: source),
-        ),
-      ),
+  return tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: GlobalSearchPage(initialQuery: initialQuery, source: source)),
     ),
-  );
+  ));
 }
 
 void main() {
@@ -171,8 +161,7 @@ void main() {
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsNothing);
     expect(find.byKey(const ValueKey('global_search_field')), findsOneWidget);
     final field = tester.widget<TextField>(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)));
     expect(field.controller!.text, 'bluetooth');
   });
 
@@ -182,9 +171,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      'bluetooth',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooth');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
 
@@ -218,8 +206,7 @@ void main() {
     expect(source.conversationCapture.end, DateTime(2026, 7, 4).subtract(const Duration(microseconds: 1)));
     expect(source.otherKindCalls, 6);
     final field = tester.widget<TextField>(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)));
     expect(field.controller!.text, 'bluetooth');
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
   });
@@ -234,9 +221,7 @@ void main() {
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      '',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)), '');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
@@ -256,20 +241,16 @@ void main() {
     expect(source.conversationCapture.start, DateTime(2026, 7, 1));
 
     await tester.enterText(
-      find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
-      'bluetooth today',
-    );
+        find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+        'bluetooth today');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
 
     final now = DateTime.now();
     expect(source.conversationCapture.query, 'bluetooth');
-    expect(
-      source.conversationCapture.start,
-      DateTime(now.year, now.month, now.day),
-      reason: 'the newly parsed phrase wins over the picked range',
-    );
+    expect(source.conversationCapture.start, DateTime(now.year, now.month, now.day),
+        reason: 'the newly parsed phrase wins over the picked range');
     expect(source.otherKindCalls, greaterThan(3), reason: 'date phrases retain the other result kinds');
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsOneWidget);
 

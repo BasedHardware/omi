@@ -89,9 +89,7 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> {
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
-                  Expanded(
-                    child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
-                  ),
+                  Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600))),
                   Icon(Icons.chevron_right, color: OmiColors.textTertiary),
                 ],
               ),

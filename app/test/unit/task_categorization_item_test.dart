@@ -6,12 +6,12 @@ import 'package:omi/pages/action_items/task_categorization.dart';
 final _now = DateTime(2026, 9, 21, 10);
 
 ActionItemWithMetadata _task({required bool completed, DateTime? dueAt, DateTime? createdAt}) => ActionItemWithMetadata(
-  id: 'task-1',
-  description: 'Send the budget',
-  completed: completed,
-  dueAt: dueAt,
-  createdAt: createdAt,
-);
+      id: 'task-1',
+      description: 'Send the budget',
+      completed: completed,
+      dueAt: dueAt,
+      createdAt: createdAt,
+    );
 
 void main() {
   group('categoryForItem', () {

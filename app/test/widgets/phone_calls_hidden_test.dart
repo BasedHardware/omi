@@ -8,15 +8,13 @@ import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 // Phone calls are hidden from the mobile app for now. The pendant "one source at a time" sheet
 // offers a call only when given one; callers pass null while PhoneCallsFeature.visible is false.
 void main() {
-  Future<void> pump(WidgetTester tester, {VoidCallback? onPhoneCall}) => tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: PendantListeningSheet(onRecordWithPhone: () {}, onPhoneCall: onPhoneCall, onKeepPendant: () {}),
-      ),
-    ),
-  );
+  Future<void> pump(WidgetTester tester, {VoidCallback? onPhoneCall}) => tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: PendantListeningSheet(onRecordWithPhone: () {}, onPhoneCall: onPhoneCall, onKeepPendant: () {}),
+        ),
+      ));
 
   test('phone calls are switched off', () => expect(PhoneCallsFeature.visible, isFalse));
 

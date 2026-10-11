@@ -8,15 +8,11 @@ import 'package:flutter/painting.dart';
 const _w = 1280.0;
 const _h = 800.0;
 
-void _text(
-  Canvas c,
-  String text,
-  Offset at, {
-  double size = 22,
-  Color color = const Color(0xFFFFFFFF),
-  FontWeight weight = FontWeight.w400,
-  double maxWidth = 900,
-}) {
+void _text(Canvas c, String text, Offset at,
+    {double size = 22,
+    Color color = const Color(0xFFFFFFFF),
+    FontWeight weight = FontWeight.w400,
+    double maxWidth = 900}) {
   final builder = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: 'Roboto', fontSize: size, fontWeight: weight))
     ..pushStyle(ui.TextStyle(color: color))
     ..addText(text);
@@ -45,12 +41,11 @@ void _videoCall(Canvas c) {
     _text(c, name, Offset(x + 18, y + tileH - 42), size: 22, weight: FontWeight.w500);
     if (i == 0) {
       c.drawRRect(
-        _rr(x, y, tileW, tileH, 14),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4
-          ..color = const Color(0xFF8AB4F8),
-      );
+          _rr(x, y, tileW, tileH, 14),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4
+            ..color = const Color(0xFF8AB4F8));
     }
   }
   // Control bar.
@@ -64,14 +59,8 @@ void _videoCall(Canvas c) {
 void _slide(Canvas c) {
   c.drawRect(const Rect.fromLTWH(0, 0, _w, _h), Paint()..color = const Color(0xFFF4F1EA));
   c.drawRect(const Rect.fromLTWH(0, 0, 18, _h), Paint()..color = const Color(0xFFD9653B));
-  _text(
-    c,
-    'Q4 onboarding roadmap',
-    const Offset(90, 90),
-    size: 56,
-    color: const Color(0xFF1F1F1F),
-    weight: FontWeight.w700,
-  );
+  _text(c, 'Q4 onboarding roadmap', const Offset(90, 90),
+      size: 56, color: const Color(0xFF1F1F1F), weight: FontWeight.w700);
   const bullets = [
     'Week 1 — simplify the first recording',
     'Week 3 — memories you can find again',
@@ -95,13 +84,9 @@ void _editor(Canvas c) {
   c.drawRect(const Rect.fromLTWH(240, 0, _w - 240, 44), Paint()..color = const Color(0xFF2D2D2D));
   _text(c, 'onboarding_flow.dart', const Offset(262, 10), size: 18, color: const Color(0xFFCCCCCC));
   for (var i = 0; i < 9; i++) {
-    _text(
-      c,
-      ['lib', 'pages', 'onboarding', 'widgets', 'services', 'test', 'pubspec.yaml', 'README.md', 'l10n'][i],
-      Offset(28, 70.0 + i * 34),
-      size: 17,
-      color: const Color(0xFFBBBBBB),
-    );
+    _text(c, ['lib', 'pages', 'onboarding', 'widgets', 'services', 'test', 'pubspec.yaml', 'README.md', 'l10n'][i],
+        Offset(28, 70.0 + i * 34),
+        size: 17, color: const Color(0xFFBBBBBB));
   }
   const lines = [
     ('class OnboardingFlow extends StatefulWidget {', Color(0xFF569CD6)),
@@ -126,28 +111,21 @@ void _doc(Canvas c) {
   c.drawRRect(_rr(200, 12, 880, 36, 18), Paint()..color = const Color(0xFFF1F3F4));
   _text(c, 'docs.example.com/launch-checklist', const Offset(230, 19), size: 18, color: const Color(0xFF5F6368));
   c.drawRect(const Rect.fromLTWH(240, 90, 800, 710), Paint()..color = const Color(0xFFFFFFFF));
-  _text(
-    c,
-    'Launch checklist',
-    const Offset(300, 140),
-    size: 44,
-    color: const Color(0xFF202124),
-    weight: FontWeight.w700,
-  );
+  _text(c, 'Launch checklist', const Offset(300, 140),
+      size: 44, color: const Color(0xFF202124), weight: FontWeight.w700);
   const items = [
     'Release notes drafted',
     'Support macros updated',
     'Rollout at 10%, then 50%',
-    'Dashboard alert owners',
+    'Dashboard alert owners'
   ];
   for (var i = 0; i < items.length; i++) {
     c.drawRRect(
-      _rr(300, 238.0 + i * 70, 26, 26, 5),
-      Paint()
-        ..style = i < 2 ? PaintingStyle.fill : PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..color = const Color(0xFF1A73E8),
-    );
+        _rr(300, 238.0 + i * 70, 26, 26, 5),
+        Paint()
+          ..style = i < 2 ? PaintingStyle.fill : PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = const Color(0xFF1A73E8));
     _text(c, items[i], Offset(346, 236.0 + i * 70), size: 26, color: const Color(0xFF3C4043));
   }
 }
@@ -173,30 +151,24 @@ Future<Map<String, Uint8List>> renderScreenFrameFixtures() async {
 }
 
 /// One frame of a `ConversationScreenFrameSet`, in wire shape.
-Map<String, dynamic> screenFrameJson(
-  String baseUrl,
-  String id,
-  String image, {
-  required String role,
-  required int rank,
-  required String caption,
-  String? badge,
-}) => {
-  'id': id,
-  'captured_at': '2026-09-30T10:${(10 + rank * 7).toString().padLeft(2, '0')}:00Z',
-  'role': role,
-  'rank': rank,
-  'caption': caption,
-  'labels': <String>[],
-  'source_badge': badge,
-  'focal_region': null,
-  'width': _w.toInt(),
-  'height': _h.toInt(),
-  'content_url': '${baseUrl}fixture-images/$image',
-  'thumbnail_url': '${baseUrl}fixture-images/$image',
-  'url_expires_at': DateTime.now().toUtc().add(const Duration(minutes: 60)).toIso8601String(),
-  'ground': {
-    'stops': ['#3B5B7A', '#202124'],
-    'is_neutral': false,
-  },
-};
+Map<String, dynamic> screenFrameJson(String baseUrl, String id, String image,
+        {required String role, required int rank, required String caption, String? badge}) =>
+    {
+      'id': id,
+      'captured_at': '2026-09-30T10:${(10 + rank * 7).toString().padLeft(2, '0')}:00Z',
+      'role': role,
+      'rank': rank,
+      'caption': caption,
+      'labels': <String>[],
+      'source_badge': badge,
+      'focal_region': null,
+      'width': _w.toInt(),
+      'height': _h.toInt(),
+      'content_url': '${baseUrl}fixture-images/$image',
+      'thumbnail_url': '${baseUrl}fixture-images/$image',
+      'url_expires_at': DateTime.now().toUtc().add(const Duration(minutes: 60)).toIso8601String(),
+      'ground': {
+        'stops': ['#3B5B7A', '#202124'],
+        'is_neutral': false
+      },
+    };

@@ -37,9 +37,9 @@ class FeedbackPromptPolicy {
     DateTime Function()? now,
     String? Function()? ownerKey,
     this.sampleFraction = defaultSampleFraction,
-  }) : _preferencesLoader = preferencesLoader ?? SharedPreferences.getInstance,
-       _now = now ?? DateTime.now,
-       _ownerKey = ownerKey ?? (() => AnalyticsManager.currentIdentity) {
+  })  : _preferencesLoader = preferencesLoader ?? SharedPreferences.getInstance,
+        _now = now ?? DateTime.now,
+        _ownerKey = ownerKey ?? (() => AnalyticsManager.currentIdentity) {
     if (sampleFraction < 0 || sampleFraction > 1) {
       throw ArgumentError.value(sampleFraction, 'sampleFraction', 'must be between 0 and 1');
     }

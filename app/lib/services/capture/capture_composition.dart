@@ -77,44 +77,44 @@ class CaptureDependencies {
 /// forwards every seam CaptureController already accepts. The app tree
 /// constructs capture only through [composeProductionCaptureProvider].
 CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => CaptureProvider(
-  walService: dependencies.wal,
-  phoneMicRecorder: dependencies.phoneMic,
-  phoneMicBatchSupported: dependencies.batchSupported,
-  authBoundary: dependencies.auth,
-  connectivity: dependencies.connectivity,
-  now: dependencies.now,
-  scheduling: dependencies.scheduling,
-  preferences: dependencies.preferences,
-  bleListeners: dependencies.ble,
-  openSocket:
-      dependencies.openConversationSocket ??
-      ({
-        required codec,
-        required sampleRate,
-        required language,
-        required force,
-        source,
-        clientConversationId,
-        customSttConfig,
-        geolocation,
-      }) => dependencies.openSocket(
-        codec: codec,
-        sampleRate: sampleRate,
-        language: language,
-        force: force,
-        source: source,
-        clientConversationId: clientConversationId,
-        customSttConfig: customSttConfig,
-      ),
-  sessionOwner: dependencies.owner,
-  conversationLocationCapture: dependencies.location,
-  inProgressConversationLoader: dependencies.refreshConversation,
-  audioCodecLoader: dependencies.codec,
-  microphonePermissionRequester: dependencies.microphonePermission,
-  recordingTelemetry: dependencies.telemetry,
-  localSegmentStore: dependencies.localSegments,
-  deviceConnectionLoader: dependencies.ensureDeviceConnection,
-);
+      walService: dependencies.wal,
+      phoneMicRecorder: dependencies.phoneMic,
+      phoneMicBatchSupported: dependencies.batchSupported,
+      authBoundary: dependencies.auth,
+      connectivity: dependencies.connectivity,
+      now: dependencies.now,
+      scheduling: dependencies.scheduling,
+      preferences: dependencies.preferences,
+      bleListeners: dependencies.ble,
+      openSocket: dependencies.openConversationSocket ??
+          ({
+            required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation,
+          }) =>
+              dependencies.openSocket(
+                codec: codec,
+                sampleRate: sampleRate,
+                language: language,
+                force: force,
+                source: source,
+                clientConversationId: clientConversationId,
+                customSttConfig: customSttConfig,
+              ),
+      sessionOwner: dependencies.owner,
+      conversationLocationCapture: dependencies.location,
+      inProgressConversationLoader: dependencies.refreshConversation,
+      audioCodecLoader: dependencies.codec,
+      microphonePermissionRequester: dependencies.microphonePermission,
+      recordingTelemetry: dependencies.telemetry,
+      localSegmentStore: dependencies.localSegments,
+      deviceConnectionLoader: dependencies.ensureDeviceConnection,
+    );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
 /// ONLY here, after refusing FLUTTER_TEST; no static/eager default evaluation.
@@ -130,8 +130,8 @@ CaptureProvider composeProductionCaptureProvider({
       localMeetings: GoogleCalendarService.knownMeetings,
       ownerKey: () =>
           SharedPreferencesUtil().getBool('google_calendar_connected') && SharedPreferencesUtil().uid.isNotEmpty
-          ? GoogleCalendarService.meetingCacheOwner
-          : '',
+              ? GoogleCalendarService.meetingCacheOwner
+              : '',
       load: (start, end) async => switch (await fetchCalendarCaptureWindows(start, end)) {
         ApiSuccess(:final data) => data,
         ApiFailure() => null, // Unavailable evidence is never an empty-success claim.

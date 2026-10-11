@@ -123,13 +123,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
     visible: _whenDeviceConnected,
   ),
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
-  SettingsSearchEntry(
-    'phoneCalls',
-    (l) => l.phoneCalls,
-    SettingsDestination.phoneCalls,
-    _groups,
-    visible: (_) => PhoneCallsFeature.visible,
-  ),
+  SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups,
+      visible: (_) => PhoneCallsFeature.visible),
   SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
   SettingsSearchEntry('device', (l) => l.device, SettingsDestination.deviceGroup, _drawer),
 

@@ -30,8 +30,12 @@ Future<void> showEarlierVoiceMatchesSheet(
   return showOmiSheet<void>(
     context: context,
     title: context.l10n.speakerLabelText('alsoTitle', personName),
-    builder: (_) =>
-        EarlierVoiceMatchesList(personName: personName, matches: matches, onAnswer: onAnswer, playClip: playClip),
+    builder: (_) => EarlierVoiceMatchesList(
+      personName: personName,
+      matches: matches,
+      onAnswer: onAnswer,
+      playClip: playClip,
+    ),
   );
 }
 
@@ -96,14 +100,20 @@ class _EarlierVoiceMatchesListState extends State<EarlierVoiceMatchesList> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(l10n.speakerLabelText('alsoBody', ''), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+          Text(
+            l10n.speakerLabelText('alsoBody', ''),
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+          ),
           const SizedBox(height: OmiSpacing.sm),
           for (final match in _open)
             Container(
               key: Key('voice_match_${match.conversationId}_${match.speakerId}'),
               margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
               padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.xs, OmiSpacing.sm, OmiSpacing.xs),
-              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(
+                color: OmiColors.surface2,
+                borderRadius: OmiRadius.mdAll,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

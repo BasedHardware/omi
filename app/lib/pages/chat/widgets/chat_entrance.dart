@@ -104,18 +104,13 @@ class ChatRise extends StatelessWidget {
 
 /// Animates the existing composer as one stable subtree; its text/focus/voice owners do not change.
 class ChatComposerEntrance extends StatelessWidget {
-  const ChatComposerEntrance({
-    super.key,
-    required this.child,
-    this.bottom = false,
-    this.maintainBottomViewPadding = false,
-  });
+  const ChatComposerEntrance(
+      {super.key, required this.child, this.bottom = false, this.maintainBottomViewPadding = false});
   final Widget child;
   final bool bottom;
   final bool maintainBottomViewPadding;
   @override
   Widget build(BuildContext context) => ChatRise(
-    interval: ChatIntro.composer,
-    child: SafeArea(bottom: bottom, maintainBottomViewPadding: maintainBottomViewPadding, child: child),
-  );
+      interval: ChatIntro.composer,
+      child: SafeArea(bottom: bottom, maintainBottomViewPadding: maintainBottomViewPadding, child: child));
 }

@@ -9,14 +9,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// title with a status dot (or a spinner while processing). The state is announced when it
 /// changes.
 class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ConversationStateAppBar({
-    super.key,
-    required this.state,
-    this.backKey,
-    this.bufferingFor,
-    this.sourceLabel,
-    this.showStatus = true,
-  });
+  const ConversationStateAppBar(
+      {super.key, required this.state, this.backKey, this.bufferingFor, this.sourceLabel, this.showStatus = true});
 
   /// What is recording ("Pendant", "Phone mic"), shown after the state: "Listening · Pendant".
   final String? sourceLabel;
@@ -50,10 +44,13 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
     final Widget indicator = switch (state) {
       CaptureDisplayState.processing => const OmiSpinner(size: OmiSpinnerSize.small),
       _ => Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: _isLive(state) ? OmiColors.danger : OmiColors.warning),
-      ),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _isLive(state) ? OmiColors.danger : OmiColors.warning,
+          ),
+        ),
     };
     final sentenceStatus = _isSentenceStatus(state);
     return AppBar(
@@ -77,14 +74,12 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
                       sourceLabel == null || sentenceStatus
                           ? captureStateLabel(context.l10n, state, bufferingFor: bufferingFor)
                           : context.l10n.captureStatusWithSource(
-                              captureStateLabel(context.l10n, state, bufferingFor: bufferingFor),
-                              sourceLabel!,
-                            ),
+                              captureStateLabel(context.l10n, state, bufferingFor: bufferingFor), sourceLabel!),
                       style: sentenceStatus
                           ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
                           : sourceLabel == null
-                          ? OmiType.headline
-                          : OmiType.headline.copyWith(height: 1.15),
+                              ? OmiType.headline
+                              : OmiType.headline.copyWith(height: 1.15),
                       maxLines: sentenceStatus ? 3 : (sourceLabel == null ? 1 : 2),
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,

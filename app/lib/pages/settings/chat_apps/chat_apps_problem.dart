@@ -19,11 +19,11 @@ enum ChatAppsProblem {
   failed;
 
   static ChatAppsProblem fromApi(ApiProblem problem) => switch (problem.kind) {
-    ApiProblemKind.transport => offline,
-    ApiProblemKind.forbidden || ApiProblemKind.paymentRequired || ApiProblemKind.notFound => unavailable,
-    ApiProblemKind.rateLimited => rateLimited,
-    _ => failed,
-  };
+        ApiProblemKind.transport => offline,
+        ApiProblemKind.forbidden || ApiProblemKind.paymentRequired || ApiProblemKind.notFound => unavailable,
+        ApiProblemKind.rateLimited => rateLimited,
+        _ => failed,
+      };
 
   /// Retrying cannot help until something changes outside this screen.
   bool get blocksRetry => this == unavailable;
@@ -56,8 +56,7 @@ class ChatAppsProblemLine extends StatelessWidget {
           ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 18, color: OmiColors.danger)),
           const SizedBox(width: OmiSpacing.xs),
           Expanded(
-            child: Text(problem.message(context), style: OmiType.footnote.copyWith(color: OmiColors.textPrimary)),
-          ),
+              child: Text(problem.message(context), style: OmiType.footnote.copyWith(color: OmiColors.textPrimary))),
         ],
       ),
     );

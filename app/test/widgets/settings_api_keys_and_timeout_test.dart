@@ -107,8 +107,10 @@ void main() {
     await tester.pumpWidget(
       _app(
         Builder(
-          builder: (context) =>
-              TextButton(onPressed: () => ConversationTimeoutDialog.show(context), child: const Text('open')),
+          builder: (context) => TextButton(
+            onPressed: () => ConversationTimeoutDialog.show(context),
+            child: const Text('open'),
+          ),
         ),
       ),
     );

@@ -174,9 +174,9 @@ class _EntityPageState extends State<EntityPage> {
       ],
       if (page.openTasks.isNotEmpty) ...[
         ReviewSectionLabel(
-          label: isProject ? l10n.entityOpenTasks : l10n.entityOpenThreads,
-          trailing: Text('${page.openTasks.length}', style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        ),
+            label: isProject ? l10n.entityOpenTasks : l10n.entityOpenThreads,
+            trailing:
+                Text('${page.openTasks.length}', style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
         for (final task in page.openTasks)
           _ListRow(
             leading: Icon(Icons.radio_button_unchecked, size: 20, color: OmiColors.textTertiary),
@@ -292,10 +292,7 @@ class _Header extends StatelessWidget {
             children: [
               if (org != null)
                 ReviewLinkChip(
-                  label: org.name,
-                  icon: Icons.apartment_outlined,
-                  onTap: () => openEntityPage(context, org),
-                ),
+                    label: org.name, icon: Icons.apartment_outlined, onTap: () => openEntityPage(context, org)),
               if (page.type == EntityType.person)
                 for (final project in page.projects.take(2))
                   ReviewLinkChip(
@@ -419,9 +416,7 @@ class _LinkRow extends StatelessWidget {
               children: [
                 Icon(icon, size: 20, color: OmiColors.textSecondary),
                 const SizedBox(width: OmiSpacing.sm),
-                Expanded(
-                  child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
-                ),
+                Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600))),
                 Icon(Icons.chevron_right, color: OmiColors.textTertiary),
               ],
             ),
@@ -443,9 +438,7 @@ class _ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: OmiSpacing.xxs),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: OmiColors.border, width: 0.5)),
-      ),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: OmiColors.border, width: 0.5))),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -487,17 +480,13 @@ class _FactRow extends StatelessWidget {
     final label = [fact.sourceLabel, if (fact.at != null) dates.date(fact.at!)].where((s) => s.isNotEmpty).join(' · ');
     return Container(
       padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm, horizontal: OmiSpacing.xxs),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: OmiColors.border, width: 0.5)),
-      ),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: OmiColors.border, width: 0.5))),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(icon, size: 18, color: OmiColors.textSecondary),
-            ),
+                padding: const EdgeInsets.only(top: 2), child: Icon(icon, size: 18, color: OmiColors.textSecondary)),
             const SizedBox(width: OmiSpacing.sm),
           ],
           Expanded(

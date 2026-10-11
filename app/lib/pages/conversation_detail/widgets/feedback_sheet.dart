@@ -11,36 +11,36 @@ import 'package:omi/utils/l10n_extensions.dart';
 enum FeedbackReasonPopulation { summary, recording }
 
 List<MobileFeedbackReason> feedbackReasonsFor(FeedbackReasonPopulation population) => switch (population) {
-  FeedbackReasonPopulation.summary => const [
-    MobileFeedbackReason.summaryInaccurate,
-    MobileFeedbackReason.summaryIncomplete,
-    MobileFeedbackReason.summaryIrrelevant,
-    MobileFeedbackReason.summaryWrongContext,
-    MobileFeedbackReason.summaryOther,
-  ],
-  FeedbackReasonPopulation.recording => const [
-    MobileFeedbackReason.recordingMissingAudio,
-    MobileFeedbackReason.recordingPoorTranscription,
-    MobileFeedbackReason.recordingWrongSpeaker,
-    MobileFeedbackReason.recordingDelayedOrStuck,
-    MobileFeedbackReason.recordingFragmentedOrDuplicated,
-    MobileFeedbackReason.recordingOther,
-  ],
-};
+      FeedbackReasonPopulation.summary => const [
+          MobileFeedbackReason.summaryInaccurate,
+          MobileFeedbackReason.summaryIncomplete,
+          MobileFeedbackReason.summaryIrrelevant,
+          MobileFeedbackReason.summaryWrongContext,
+          MobileFeedbackReason.summaryOther,
+        ],
+      FeedbackReasonPopulation.recording => const [
+          MobileFeedbackReason.recordingMissingAudio,
+          MobileFeedbackReason.recordingPoorTranscription,
+          MobileFeedbackReason.recordingWrongSpeaker,
+          MobileFeedbackReason.recordingDelayedOrStuck,
+          MobileFeedbackReason.recordingFragmentedOrDuplicated,
+          MobileFeedbackReason.recordingOther,
+        ],
+    };
 
 String feedbackReasonLabel(AppLocalizations l10n, MobileFeedbackReason reason) => switch (reason) {
-  MobileFeedbackReason.summaryInaccurate => l10n.feedbackReasonSummaryInaccurate,
-  MobileFeedbackReason.summaryIncomplete => l10n.feedbackReasonSummaryIncomplete,
-  MobileFeedbackReason.summaryIrrelevant => l10n.feedbackReasonSummaryIrrelevant,
-  MobileFeedbackReason.summaryWrongContext => l10n.feedbackReasonSummaryWrongContext,
-  MobileFeedbackReason.summaryOther => l10n.feedbackReasonSummaryOther,
-  MobileFeedbackReason.recordingMissingAudio => l10n.feedbackReasonRecordingMissingAudio,
-  MobileFeedbackReason.recordingPoorTranscription => l10n.feedbackReasonRecordingPoorTranscription,
-  MobileFeedbackReason.recordingWrongSpeaker => l10n.feedbackReasonRecordingWrongSpeaker,
-  MobileFeedbackReason.recordingDelayedOrStuck => l10n.feedbackReasonRecordingDelayedOrStuck,
-  MobileFeedbackReason.recordingFragmentedOrDuplicated => l10n.feedbackReasonRecordingFragmentedOrDuplicated,
-  MobileFeedbackReason.recordingOther => l10n.feedbackReasonRecordingOther,
-};
+      MobileFeedbackReason.summaryInaccurate => l10n.feedbackReasonSummaryInaccurate,
+      MobileFeedbackReason.summaryIncomplete => l10n.feedbackReasonSummaryIncomplete,
+      MobileFeedbackReason.summaryIrrelevant => l10n.feedbackReasonSummaryIrrelevant,
+      MobileFeedbackReason.summaryWrongContext => l10n.feedbackReasonSummaryWrongContext,
+      MobileFeedbackReason.summaryOther => l10n.feedbackReasonSummaryOther,
+      MobileFeedbackReason.recordingMissingAudio => l10n.feedbackReasonRecordingMissingAudio,
+      MobileFeedbackReason.recordingPoorTranscription => l10n.feedbackReasonRecordingPoorTranscription,
+      MobileFeedbackReason.recordingWrongSpeaker => l10n.feedbackReasonRecordingWrongSpeaker,
+      MobileFeedbackReason.recordingDelayedOrStuck => l10n.feedbackReasonRecordingDelayedOrStuck,
+      MobileFeedbackReason.recordingFragmentedOrDuplicated => l10n.feedbackReasonRecordingFragmentedOrDuplicated,
+      MobileFeedbackReason.recordingOther => l10n.feedbackReasonRecordingOther,
+    };
 
 /// The quick feedback sheet behind a prompt's "Give feedback" button.
 ///

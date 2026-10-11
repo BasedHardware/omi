@@ -65,19 +65,9 @@ void main() {
       final seams = _seams(service, statusCode: HttpStatus.forbidden, body: fenceBody);
 
       final first = await sendUncaughtApiCall(
-        url: 'https://api.omi.me/v1/users/language',
-        headers: {},
-        body: '',
-        method: 'GET',
-        execution: seams,
-      );
+          url: 'https://api.omi.me/v1/users/language', headers: {}, body: '', method: 'GET', execution: seams);
       final second = await sendUncaughtApiCall(
-        url: 'https://api.omi.me/v1/users/language',
-        headers: {},
-        body: '{}',
-        method: 'PATCH',
-        execution: seams,
-      );
+          url: 'https://api.omi.me/v1/users/language', headers: {}, body: '{}', method: 'PATCH', execution: seams);
 
       // The caller still sees the 403 it would have seen before the guard.
       expect(first.statusCode, HttpStatus.forbidden);
@@ -96,12 +86,7 @@ void main() {
       final seams = _seams(service, statusCode: HttpStatus.forbidden, body: '{"detail": "Not your conversation"}');
 
       final response = await sendUncaughtApiCall(
-        url: 'https://api.omi.me/v1/conversations/x',
-        headers: {},
-        body: '',
-        method: 'GET',
-        execution: seams,
-      );
+          url: 'https://api.omi.me/v1/conversations/x', headers: {}, body: '', method: 'GET', execution: seams);
 
       expect(response.statusCode, HttpStatus.forbidden);
       expect(events, isEmpty);
@@ -165,10 +150,10 @@ void main() {
 }
 
 ApiExecutionSeams _seams(AuthService auth, {required int statusCode, required String body}) => ApiExecutionSeams(
-  transport: (request) async => http.Response(body, statusCode),
-  headers: (request) async => {'Authorization': 'Bearer t', ...request.headers},
-  auth: auth,
-);
+      transport: (request) async => http.Response(body, statusCode),
+      headers: (request) async => {'Authorization': 'Bearer t', ...request.headers},
+      auth: auth,
+    );
 
 String _tokenWithExpiry(DateTime expiry) {
   final payload = base64Url.encode(utf8.encode(jsonEncode({'exp': expiry.millisecondsSinceEpoch ~/ 1000})));

@@ -45,8 +45,8 @@ bool promptsBlocked({
 /// as soon as the person is free.
 class HomePromptGate {
   HomePromptGate({PromptQueue? queue, ValueListenable<PhoneCallState>? callState})
-    : _queue = queue ?? PromptQueue.instance,
-      _callState = callState ?? PhoneCallProvider.callStateListenable;
+      : _queue = queue ?? PromptQueue.instance,
+        _callState = callState ?? PhoneCallProvider.callStateListenable;
 
   final PromptQueue _queue;
   final ValueListenable<PhoneCallState> _callState;

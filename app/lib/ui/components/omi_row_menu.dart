@@ -7,7 +7,12 @@ import 'package:omi/ui/omi_tokens.dart';
 /// One entry of a row's long-press menu.
 @immutable
 class OmiMenuAction {
-  const OmiMenuAction({required this.icon, required this.label, required this.onSelected, this.isDestructive = false});
+  const OmiMenuAction({
+    required this.icon,
+    required this.label,
+    required this.onSelected,
+    this.isDestructive = false,
+  });
 
   final IconData icon;
 
@@ -33,7 +38,11 @@ class OmiMenuAction {
 ///   OmiMenuAction(icon: Icons.delete_outline, label: l10n.delete, onSelected: _delete, isDestructive: true),
 /// ]);
 /// ```
-Future<void> showOmiRowMenu(BuildContext context, {String? title, required List<OmiMenuAction> actions}) async {
+Future<void> showOmiRowMenu(
+  BuildContext context, {
+  String? title,
+  required List<OmiMenuAction> actions,
+}) async {
   OmiHaptics.medium();
   final chosen = await showOmiSheet<OmiMenuAction>(
     context: context,
@@ -73,9 +82,7 @@ class _OmiMenuRow extends StatelessWidget {
               children: [
                 Icon(action.icon, size: 22, color: color),
                 const SizedBox(width: OmiSpacing.md),
-                Expanded(
-                  child: Text(action.label, style: OmiType.body.copyWith(color: color)),
-                ),
+                Expanded(child: Text(action.label, style: OmiType.body.copyWith(color: color))),
               ],
             ),
           ),

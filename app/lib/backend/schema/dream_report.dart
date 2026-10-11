@@ -7,12 +7,12 @@ import 'gen/dream_wire.g.dart' as wire;
 enum DreamRunStatus { complete, failed, deadline, idle, other }
 
 DreamRunStatus _status(String value) => switch (value) {
-  'complete' => DreamRunStatus.complete,
-  'failed' => DreamRunStatus.failed,
-  'deadline' => DreamRunStatus.deadline,
-  'idle' => DreamRunStatus.idle,
-  _ => DreamRunStatus.other,
-};
+      'complete' => DreamRunStatus.complete,
+      'failed' => DreamRunStatus.failed,
+      'deadline' => DreamRunStatus.deadline,
+      'idle' => DreamRunStatus.idle,
+      _ => DreamRunStatus.other,
+    };
 
 /// What the agent proposed for one record. In shadow mode [outcome] is `shadow`: nothing changed.
 class DreamEdit {
@@ -40,18 +40,22 @@ class DreamEdit {
       DreamEdit.fromGenerated(wire.GeneratedDreamReportEdit.fromJson(json));
 
   factory DreamEdit.fromGenerated(wire.GeneratedDreamReportEdit value) => DreamEdit(
-    kind: value.kind,
-    targetLabel: value.targetLabel,
-    before: value.before,
-    after: value.after,
-    reason: value.reason,
-    evidenceCount: value.evidenceCount,
-    outcome: value.outcome,
-  );
+        kind: value.kind,
+        targetLabel: value.targetLabel,
+        before: value.before,
+        after: value.after,
+        reason: value.reason,
+        evidenceCount: value.evidenceCount,
+        outcome: value.outcome,
+      );
 }
 
 class DreamTerm {
-  const DreamTerm({required this.kind, required this.spelling, required this.aliases});
+  const DreamTerm({
+    required this.kind,
+    required this.spelling,
+    required this.aliases,
+  });
 
   final String kind;
   final String spelling;
@@ -60,8 +64,11 @@ class DreamTerm {
   static DreamTerm fromJson(Map<String, dynamic> json) =>
       DreamTerm.fromGenerated(wire.GeneratedDreamReportTerm.fromJson(json));
 
-  factory DreamTerm.fromGenerated(wire.GeneratedDreamReportTerm value) =>
-      DreamTerm(kind: value.kind, spelling: value.spelling, aliases: value.aliases);
+  factory DreamTerm.fromGenerated(wire.GeneratedDreamReportTerm value) => DreamTerm(
+        kind: value.kind,
+        spelling: value.spelling,
+        aliases: value.aliases,
+      );
 }
 
 class DreamFeedback {
@@ -77,15 +84,19 @@ class DreamFeedback {
   final String severity;
   final int count;
 
-  static DreamFeedback fromJson(Map<String, dynamic> json) =>
-      DreamFeedback.fromGenerated(wire.GeneratedDreamReportFeedback.fromJson(json));
+  static DreamFeedback fromJson(Map<String, dynamic> json) => DreamFeedback.fromGenerated(
+        wire.GeneratedDreamReportFeedback.fromJson(json),
+      );
 
-  factory DreamFeedback.fromGenerated(wire.GeneratedDreamReportFeedback value) => DreamFeedback(
-    component: value.component,
-    failureClass: value.failureClass,
-    severity: value.severity,
-    count: value.count,
-  );
+  factory DreamFeedback.fromGenerated(
+    wire.GeneratedDreamReportFeedback value,
+  ) =>
+      DreamFeedback(
+        component: value.component,
+        failureClass: value.failureClass,
+        severity: value.severity,
+        count: value.count,
+      );
 }
 
 class DreamRun {
@@ -205,14 +216,14 @@ class DreamReport {
   }
 
   factory DreamReport.fromGenerated(wire.GeneratedDreamRunsResponse value) => DreamReport(
-    live: value.mode == 'on',
-    passesToday: value.passesToday,
-    passesLimit: value.passesLimit,
-    manualRunsToday: value.manualRunsToday,
-    manualRunsLimit: value.manualRunsLimit,
-    queuedChanges: value.queuedChanges,
-    runs: value.runs.map(DreamRun.fromGenerated).whereType<DreamRun>().toList(growable: false),
-  );
+        live: value.mode == 'on',
+        passesToday: value.passesToday,
+        passesLimit: value.passesLimit,
+        manualRunsToday: value.manualRunsToday,
+        manualRunsLimit: value.manualRunsLimit,
+        queuedChanges: value.queuedChanges,
+        runs: value.runs.map(DreamRun.fromGenerated).whereType<DreamRun>().toList(growable: false),
+      );
 }
 
 /// Why a run-now request did not produce a run.

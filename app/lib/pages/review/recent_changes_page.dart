@@ -111,20 +111,16 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
           lastHeader = header;
           rows.add(_DayHeader(label: header));
         }
-        rows.add(
-          _ChangeRow(
-            change: change,
-            busy: _busy.contains(change.changeId),
-            onToggle: () => _setUndone(change, !change.undone),
-          ),
-        );
+        rows.add(_ChangeRow(
+          change: change,
+          busy: _busy.contains(change.changeId),
+          onToggle: () => _setUndone(change, !change.undone),
+        ));
       }
       if (_cursor != null) {
-        rows.add(
-          Center(
-            child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
-          ),
-        );
+        rows.add(Center(
+          child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
+        ));
       }
       body = RefreshIndicator(
         onRefresh: _refresh,
@@ -156,11 +152,8 @@ class _DayHeader extends StatelessWidget {
         header: true,
         child: Text(
           label.toUpperCase(),
-          style: OmiType.footnote.copyWith(
-            fontWeight: FontWeight.w600,
-            color: OmiColors.textSecondary,
-            letterSpacing: 0.4,
-          ),
+          style: OmiType.footnote
+              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
         ),
       ),
     );
@@ -168,14 +161,14 @@ class _DayHeader extends StatelessWidget {
 }
 
 IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
-  ReviewChangeKind.rename => Icons.spellcheck,
-  ReviewChangeKind.mergeMemories => Icons.call_merge,
-  ReviewChangeKind.updatePerson => Icons.person_outline,
-  ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
-  ReviewChangeKind.titleConversation => Icons.edit_outlined,
-  ReviewChangeKind.closeTask => Icons.task_alt,
-  ReviewChangeKind.other => Icons.auto_fix_high_outlined,
-};
+      ReviewChangeKind.rename => Icons.spellcheck,
+      ReviewChangeKind.mergeMemories => Icons.call_merge,
+      ReviewChangeKind.updatePerson => Icons.person_outline,
+      ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
+      ReviewChangeKind.titleConversation => Icons.edit_outlined,
+      ReviewChangeKind.closeTask => Icons.task_alt,
+      ReviewChangeKind.other => Icons.auto_fix_high_outlined,
+    };
 
 class _ChangeRow extends StatelessWidget {
   const _ChangeRow({required this.change, required this.busy, required this.onToggle});

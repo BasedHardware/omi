@@ -292,12 +292,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 speakerId: match.speakerId,
               )
             : await rejectConversationSpeaker(
-                    match.conversationId,
-                    match.speakerId,
-                    SpeakerRejection.notPerson,
-                    personId: outcome.personId,
-                  )
-                  is ApiSuccess<ServerConversation>;
+                match.conversationId,
+                match.speakerId,
+                SpeakerRejection.notPerson,
+                personId: outcome.personId,
+              ) is ApiSuccess<ServerConversation>;
         if (saved) _outcome.removeMatch(match);
         return saved;
       },
@@ -491,10 +490,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                     : () => _beginSelection(provider),
               ),
             if (segments.isNotEmpty && reviewQuestion != null)
-              ReviewQuestionCard(
-                item: reviewQuestion,
-                margin: const EdgeInsets.only(bottom: OmiSpacing.md),
-              ),
+              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
           ],
           leadingItemIds: [
             if (segments.isNotEmpty) 'transcript-heading',

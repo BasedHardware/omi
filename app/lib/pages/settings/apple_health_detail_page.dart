@@ -57,11 +57,8 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
       PlatformManager.instance.analytics.integrationConnectFailed(integrationName: 'Apple Health');
       if (result == AppleHealthResult.permissionDenied) {
         unawaited(
-          showOmiAlert(
-            context,
-            title: context.l10n.appleHealthDeniedTitle,
-            message: context.l10n.appleHealthDeniedBody,
-          ),
+          showOmiAlert(context,
+              title: context.l10n.appleHealthDeniedTitle, message: context.l10n.appleHealthDeniedBody),
         );
       } else {
         OmiFeedback.error(context, result.message);
@@ -225,7 +222,10 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: _healthPink.withValues(alpha: 0.12), borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(
+            color: _healthPink.withValues(alpha: 0.12),
+            borderRadius: OmiRadius.smAll,
+          ),
           child: Icon(icon, color: _healthPink, size: 22),
         ),
         const SizedBox(width: OmiSpacing.md),

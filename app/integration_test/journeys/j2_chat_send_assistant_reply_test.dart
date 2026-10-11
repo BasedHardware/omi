@@ -56,11 +56,8 @@ void main() {
     await tester.pump();
 
     final send = find.byKey(const ValueKey('omi.chat.send'));
-    evidence.record(
-      'chat-send-button-present',
-      ok: send.evaluate().isNotEmpty,
-      invariant: 'the send button is reachable by its stable key',
-    );
+    evidence.record('chat-send-button-present',
+        ok: send.evaluate().isNotEmpty, invariant: 'the send button is reachable by its stable key');
     expect(send, findsOneWidget);
 
     final sendsBefore = server.countOf('POST', '/v2/messages');
@@ -70,25 +67,17 @@ void main() {
     final provider = tester.element(find.byType(ChatPage)).read<MessageProvider>();
 
     // 1. The send reached the server through the real HTTP path.
-    evidence.record(
-      'send-reached-server',
-      ok: server.countOf('POST', '/v2/messages') == sendsBefore + 1,
-      invariant: 'a sent user message reaches the server and is echoed into the conversation',
-      detail: 'POST /v2/messages count ${server.countOf('POST', '/v2/messages')}',
-    );
-    expect(
-      server.countOf('POST', '/v2/messages'),
-      sendsBefore + 1,
-      reason: 'send request must reach the fixture backend',
-    );
+    evidence.record('send-reached-server',
+        ok: server.countOf('POST', '/v2/messages') == sendsBefore + 1,
+        invariant: 'a sent user message reaches the server and is echoed into the conversation',
+        detail: 'POST /v2/messages count ${server.countOf('POST', '/v2/messages')}');
+    expect(server.countOf('POST', '/v2/messages'), sendsBefore + 1,
+        reason: 'send request must reach the fixture backend');
 
     // 2. User message rendered from the local-echo path.
     final userRendered = find.text(prompt).evaluate().isNotEmpty;
-    evidence.record(
-      'user-message-rendered',
-      ok: userRendered,
-      invariant: 'the sent prompt is visible in the transcript',
-    );
+    evidence.record('user-message-rendered',
+        ok: userRendered, invariant: 'the sent prompt is visible in the transcript');
     expect(userRendered, isTrue);
 
     // 3. Distinct assistant-role reply through the real API path.
@@ -104,12 +93,8 @@ void main() {
 
     final replyText = aiMessages.firstWhere((m) => m.id.startsWith('srv-reply-')).text;
     final replyRendered = find.textContaining(server.assistantReplyText).evaluate().isNotEmpty;
-    evidence.record(
-      'assistant-reply-rendered',
-      ok: replyRendered,
-      invariant: 'the assistant reply is visible in the transcript',
-      detail: replyText,
-    );
+    evidence.record('assistant-reply-rendered',
+        ok: replyRendered, invariant: 'the assistant reply is visible in the transcript', detail: replyText);
     expect(replyRendered, isTrue);
 
     evidence.stateAfter = SemanticControls.instance.state().toJson();
@@ -160,10 +145,8 @@ void main() {
   });
 
   testWidgets('negative: suppress-assistant-reply must fail naming the reply invariant', (tester) async {
-    final evidence = JourneyEvidence.begin(
-      journeyId: 'j2_chat_send_assistant_reply.suppress-assistant-reply',
-      lane: journeyLane,
-    );
+    final evidence =
+        JourneyEvidence.begin(journeyId: 'j2_chat_send_assistant_reply.suppress-assistant-reply', lane: journeyLane);
     final server = await JourneyHermeticBoot.start();
     addTearDown(JourneyHermeticBoot.stop);
     server.arm(JourneyFault.suppressAssistantReply);
@@ -180,12 +163,10 @@ void main() {
     final aiReply = provider.messages.any((m) => m.sender.name == 'ai' && m.id.startsWith('srv-reply-'));
 
     final invariantAbsent = sendArrived && !aiReply;
-    evidence.record(
-      'fault-exposes-missing-invariant',
-      ok: invariantAbsent,
-      invariant: JourneyFault.suppressAssistantReply.invariant,
-      detail: 'send arrived: $sendArrived; distinct reply present: $aiReply',
-    );
+    evidence.record('fault-exposes-missing-invariant',
+        ok: invariantAbsent,
+        invariant: JourneyFault.suppressAssistantReply.invariant,
+        detail: 'send arrived: $sendArrived; distinct reply present: $aiReply');
     if (!invariantAbsent) {
       await evidence.write();
       fail('oracle cannot detect a suppressed assistant reply');
@@ -202,10 +183,8 @@ void main() {
   });
 
   testWidgets('negative: wrong-owner-session must fail naming the ownership invariant', (tester) async {
-    final evidence = JourneyEvidence.begin(
-      journeyId: 'j2_chat_send_assistant_reply.wrong-owner-session',
-      lane: journeyLane,
-    );
+    final evidence =
+        JourneyEvidence.begin(journeyId: 'j2_chat_send_assistant_reply.wrong-owner-session', lane: journeyLane);
     final server = await JourneyHermeticBoot.start();
     addTearDown(JourneyHermeticBoot.stop);
     JourneyFaultGate.instance.arm(JourneyFault.wrongOwnerSession);
@@ -218,25 +197,19 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 5));
 
     final provider = tester.element(find.byType(ChatPage)).read<MessageProvider>();
-    final ownershipRejected =
-        server.requestLog.any((r) => r['path'] == '/v2/messages' && '$r'.contains('403')) ||
+    final ownershipRejected = server.requestLog.any((r) => r['path'] == '/v2/messages' && '$r'.contains('403')) ||
         !provider.messages.any((m) => m.sender.name == 'ai' && m.id.startsWith('srv-reply-'));
 
     // The server must refuse the wrong-owner bearer; the positive outcome
     // must be unattainable. Track rejections structurally: the fixture
     // records the swapped bearer in its journal.
     final sawWrongOwner = server.requestLog.any((r) => r['bearer'] == JourneyFixtureBackend.wrongOwnerBearer);
-    evidence.record(
-      'wrong-owner-bearer-observed',
-      ok: sawWrongOwner,
-      invariant: JourneyFault.wrongOwnerSession.invariant,
-      detail: server.requestLog.map((r) => '${r['path']} bearer=${r['bearer']}').toList(),
-    );
-    evidence.record(
-      'no-reply-under-wrong-owner',
-      ok: ownershipRejected,
-      invariant: JourneyFault.wrongOwnerSession.invariant,
-    );
+    evidence.record('wrong-owner-bearer-observed',
+        ok: sawWrongOwner,
+        invariant: JourneyFault.wrongOwnerSession.invariant,
+        detail: server.requestLog.map((r) => '${r['path']} bearer=${r['bearer']}').toList());
+    evidence.record('no-reply-under-wrong-owner',
+        ok: ownershipRejected, invariant: JourneyFault.wrongOwnerSession.invariant);
     if (!sawWrongOwner || !ownershipRejected) {
       await evidence.write();
       fail('oracle cannot detect wrong-owner session (sawWrongOwner=$sawWrongOwner rejected=$ownershipRejected)');

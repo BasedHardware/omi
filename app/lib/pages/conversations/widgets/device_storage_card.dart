@@ -39,7 +39,10 @@ class DeviceStorageCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(l.deviceStorageTitle, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+                child: Text(
+                  l.deviceStorageTitle,
+                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                ),
               ),
               Text(
                 l.deviceStoragePercentFull(percent),

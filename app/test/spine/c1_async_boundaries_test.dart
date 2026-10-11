@@ -72,29 +72,25 @@ void main() {
       var refreshes = 0;
       var opens = 0;
       final d = dependencies(
-        world: w,
-        preferences: SharedPreferencesUtil(),
-        auth: CaptureAuthBoundary(
-          isSignedIn: () => true,
-          refreshIdToken: () {
-            refreshes++;
-            return refresh.future;
-          },
-        ),
-        open:
-            ({
-              required codec,
+          world: w,
+          preferences: SharedPreferencesUtil(),
+          auth: CaptureAuthBoundary(
+              isSignedIn: () => true,
+              refreshIdToken: () {
+                refreshes++;
+                return refresh.future;
+              }),
+          open: (
+              {required codec,
               required sampleRate,
               required language,
               required force,
               source,
               clientConversationId,
-              customSttConfig,
-            }) async {
-              opens++;
-              return null;
-            },
-      );
+              customSttConfig}) async {
+            opens++;
+            return null;
+          });
       final p = composeCaptureProvider(d);
       p.updateRecordingState(RecordingState.systemAudioRecord);
       p.onClosed(4001);

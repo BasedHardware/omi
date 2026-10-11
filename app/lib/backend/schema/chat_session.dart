@@ -2,15 +2,14 @@ import 'package:omi/backend/schema/gen/chat_sessions_wire.g.dart' as wire;
 
 /// A server-owned chat thread. This is a list projection, not a second transcript store.
 class ChatSessionSummary {
-  const ChatSessionSummary({
-    required this.id,
-    required this.title,
-    required this.updatedAt,
-    this.preview = '',
-    this.messageCount = 0,
-    this.channel,
-    this.channelLinkId,
-  });
+  const ChatSessionSummary(
+      {required this.id,
+      required this.title,
+      required this.updatedAt,
+      this.preview = '',
+      this.messageCount = 0,
+      this.channel,
+      this.channelLinkId});
 
   final String id;
   final String title;
@@ -31,11 +30,8 @@ class ChatSessionSummary {
   bool get hasContent => messageCount > 0 || hasTitle || preview.trim().isNotEmpty;
 
   /// The app's view of a generated `ChatSessionResponse`. Times are shown in the reader's zone.
-  factory ChatSessionSummary.fromGenerated(
-    wire.GeneratedChatSessionResponse generated, {
-    String? channel,
-    String? channelLinkId,
-  }) {
+  factory ChatSessionSummary.fromGenerated(wire.GeneratedChatSessionResponse generated,
+      {String? channel, String? channelLinkId}) {
     return ChatSessionSummary(
       id: generated.id,
       title: generated.title,

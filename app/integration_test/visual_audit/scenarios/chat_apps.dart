@@ -24,26 +24,23 @@ import '../harness.dart';
 
 const _linkTelegram = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-const _config = ChatAppsConfig(
-  enabled: true,
-  endpoints: {
-    ChatChannel.telegram: ChatChannelEndpoint(provider: 'telegram', address: 'OmiBot'),
-    ChatChannel.imessage: ChatChannelEndpoint(provider: 'imessage', address: '+1 415 555 0100'),
-  },
-);
+const _config = ChatAppsConfig(enabled: true, endpoints: {
+  ChatChannel.telegram: ChatChannelEndpoint(provider: 'telegram', address: 'OmiBot'),
+  ChatChannel.imessage: ChatChannelEndpoint(provider: 'imessage', address: '+1 415 555 0100'),
+});
 
 /// The `/v1/messaging/*` routes in memory; links can be added mid-scenario.
 class _Messaging {
   final links = <Map<String, Object?>>[];
 
   void link(String channel, String externalId, {bool visible = false}) => links.add({
-    'id': channel == 'telegram' ? _linkTelegram : 'b' * 64,
-    'channel': channel,
-    'provider': channel,
-    'external_id': externalId,
-    'visible_in_app': visible,
-    'linked_at': '2026-10-10T12:00:00Z',
-  });
+        'id': channel == 'telegram' ? _linkTelegram : 'b' * 64,
+        'channel': channel,
+        'provider': channel,
+        'external_id': externalId,
+        'visible_in_app': visible,
+        'linked_at': '2026-10-10T12:00:00Z',
+      });
 
   Future<http.Response> send(ApiRequest request) async {
     final path = Uri.parse(request.url).path;
@@ -64,10 +61,8 @@ class _Messaging {
     return http.Response('{"status":"updated"}', 200);
   }
 
-  MessagingChannelsProvider provider({ChatAppsConfig config = _config}) => MessagingChannelsProvider(
-    api: MessagingChannelsApi(send: send),
-    readConfig: () async => config,
-  );
+  MessagingChannelsProvider provider({ChatAppsConfig config = _config}) =>
+      MessagingChannelsProvider(api: MessagingChannelsApi(send: send), readConfig: () async => config);
 }
 
 class _Online extends ChangeNotifier implements ConnectivityProvider {
@@ -107,69 +102,66 @@ Future<_Messaging> _pumpChatApps(
   seed?.call(messaging);
   final provider = messaging.provider(config: config);
   await a.tester.runAsync(provider.load);
-  await a.pump(
-    page ?? const ChatAppsPage(),
-    providers: [
-      ChangeNotifierProvider<MessagingChannelsProvider>.value(value: provider),
-      ChangeNotifierProvider<UsageProvider>.value(value: _usage(plan)),
-      ChangeNotifierProvider<ConnectivityProvider>.value(value: _Online(online)),
-    ],
-  );
+  await a.pump(page ?? const ChatAppsPage(), providers: [
+    ChangeNotifierProvider<MessagingChannelsProvider>.value(value: provider),
+    ChangeNotifierProvider<UsageProvider>.value(value: _usage(plan)),
+    ChangeNotifierProvider<ConnectivityProvider>.value(value: _Online(online)),
+  ]);
   return messaging;
 }
 
 ChatSessionsApi _sessionsApi() => ChatSessionsApi(
-  fallback: (_) {},
-  send: (request) async {
-    final path = Uri.parse(request.url).path;
-    if (path.endsWith('/v2/chat-sessions')) {
-      return http.Response(
-        jsonEncode([
-          for (final (id, title, preview) in [
-            ('s1', 'Offsite planning', 'Added "Draft offsite agenda", due Friday.'),
-            ('s2', 'Sam is vegetarian', 'Saved to your memories: Sam is vegetarian.'),
-          ])
-            {
-              'id': id,
-              'title': title,
-              'preview': preview,
-              'created_at': '2026-10-10T18:00:00Z',
-              'updated_at': '2026-10-10T18:04:00Z',
-              'message_count': 4,
-              'channel': 'telegram',
-              'channel_link_id': _linkTelegram,
-            },
-          {
-            'id': 'app',
-            'title': 'Ask Omi chat',
-            'created_at': '2026-10-10T09:00:00Z',
-            'updated_at': '2026-10-10T09:00:00Z',
-            'message_count': 2,
-          },
-        ]),
-        200,
-      );
-    }
-    final rows = [
-      ('m4', 'ai', 'Added "Draft offsite agenda", due Friday.'),
-      ('m3', 'human', 'add that as a task for friday'),
-      (
-        'm2',
-        'ai',
-        'From your chat in the Omi app this morning: Lisbon, the week of Nov 9. '
-            'You said you would draft the agenda.',
-      ),
-      ('m1', 'human', 'what did we land on for the offsite'),
-    ];
-    return http.Response(
-      jsonEncode([
-        for (final (id, sender, text) in rows)
-          {'id': id, 'created_at': '2026-10-10T18:0${id[1]}:00Z', 'text': text, 'sender': sender, 'type': 'text'},
-      ]),
-      200,
+      fallback: (_) {},
+      send: (request) async {
+        final path = Uri.parse(request.url).path;
+        if (path.endsWith('/v2/chat-sessions')) {
+          return http.Response(
+            jsonEncode([
+              for (final (id, title, preview) in [
+                ('s1', 'Offsite planning', 'Added "Draft offsite agenda", due Friday.'),
+                ('s2', 'Sam is vegetarian', 'Saved to your memories: Sam is vegetarian.'),
+              ])
+                {
+                  'id': id,
+                  'title': title,
+                  'preview': preview,
+                  'created_at': '2026-10-10T18:00:00Z',
+                  'updated_at': '2026-10-10T18:04:00Z',
+                  'message_count': 4,
+                  'channel': 'telegram',
+                  'channel_link_id': _linkTelegram,
+                },
+              {
+                'id': 'app',
+                'title': 'Ask Omi chat',
+                'created_at': '2026-10-10T09:00:00Z',
+                'updated_at': '2026-10-10T09:00:00Z',
+                'message_count': 2,
+              },
+            ]),
+            200,
+          );
+        }
+        final rows = [
+          ('m4', 'ai', 'Added "Draft offsite agenda", due Friday.'),
+          ('m3', 'human', 'add that as a task for friday'),
+          (
+            'm2',
+            'ai',
+            'From your chat in the Omi app this morning: Lisbon, the week of Nov 9. '
+                'You said you would draft the agenda.'
+          ),
+          ('m1', 'human', 'what did we land on for the offsite'),
+        ];
+        return http.Response(
+          jsonEncode([
+            for (final (id, sender, text) in rows)
+              {'id': id, 'created_at': '2026-10-10T18:0${id[1]}:00Z', 'text': text, 'sender': sender, 'type': 'text'},
+          ]),
+          200,
+        );
+      },
     );
-  },
-);
 
 const _state = 'Pro (Architect) account; mobile-chat-apps on with Telegram and iMessage addresses';
 

@@ -25,7 +25,7 @@ class ProgressiveTtsTransferResult {
   const ProgressiveTtsTransferResult.cancelled() : this._(ProgressiveTtsTransferState.cancelled);
 
   const ProgressiveTtsTransferResult.failed(Object error, StackTrace stackTrace)
-    : this._(ProgressiveTtsTransferState.failed, error: error, stackTrace: stackTrace);
+      : this._(ProgressiveTtsTransferState.failed, error: error, stackTrace: stackTrace);
 }
 
 class ProgressiveTtsStallException implements Exception {
@@ -246,7 +246,10 @@ class ProgressiveTtsPcmPlayer {
 
   ProgressiveTtsPcmPlayer(this.player, {this.decodeStepBytes = 32 * 1024});
 
-  Future<ProgressiveTtsPlaybackResult> play(ProgressiveTtsAudioSource source, {void Function()? onStarted}) async {
+  Future<ProgressiveTtsPlaybackResult> play(
+    ProgressiveTtsAudioSource source, {
+    void Function()? onStarted,
+  }) async {
     await source.ready;
     if (source.receivedBytes == 0) {
       return ProgressiveTtsPlaybackResult(started: false, position: Duration.zero, transfer: await source.settled);

@@ -89,7 +89,10 @@ ThemeData buildOmiTheme({Brightness brightness = Brightness.dark}) {
       selectionColor: palette.accent.withValues(alpha: 0.24),
       selectionHandleColor: palette.accent,
     ),
-    cupertinoOverrideTheme: CupertinoThemeData(brightness: brightness, primaryColor: palette.accent),
+    cupertinoOverrideTheme: CupertinoThemeData(
+      brightness: brightness,
+      primaryColor: palette.accent,
+    ),
   );
 }
 

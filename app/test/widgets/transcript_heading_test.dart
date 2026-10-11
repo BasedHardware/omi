@@ -31,17 +31,18 @@ TranscriptSegment _seg(
   bool isUser = false,
   String? personId,
   String text = 'speech',
-}) => TranscriptSegment(
-  id: id,
-  text: text,
-  speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-  speakerId: speakerId,
-  isUser: isUser,
-  personId: personId,
-  start: start,
-  end: start + 5,
-  translations: const [],
-);
+}) =>
+    TranscriptSegment(
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: start,
+      end: start + 5,
+      translations: const [],
+    );
 
 Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));

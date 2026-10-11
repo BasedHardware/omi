@@ -19,19 +19,17 @@ void main() {
   Future<(List<String>, List<String>)> pump(WidgetTester tester) async {
     final yes = <String>[];
     final other = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: SpeakerSuggestionChip(
-            person: maya,
-            onYes: () => yes.add('yes'),
-            onSomeoneElse: () => other.add('other'),
-          ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: SpeakerSuggestionChip(
+          person: maya,
+          onYes: () => yes.add('yes'),
+          onSomeoneElse: () => other.add('other'),
         ),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
     return (yes, other);
   }

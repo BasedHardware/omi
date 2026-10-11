@@ -20,14 +20,11 @@ void main() {
     F.env = Environment.dev;
     final handlers = <String, developer.ServiceExtensionHandler>{};
     expect(
-      () => SemanticControls.instance.installIfEligible(
-        register: (name, handler) {
-          developer.registerExtension(name, handler);
-          handlers[name] = handler;
-        },
-      ),
-      returnsNormally,
-    );
+        () => SemanticControls.instance.installIfEligible(register: (name, handler) {
+              developer.registerExtension(name, handler);
+              handlers[name] = handler;
+            }),
+        returnsNormally);
     final capability = handlers['ext.omi.controls.capabilities']!;
     final legacy = jsonDecode((await capability('ext.omi.controls.capabilities', {})).result!) as Map;
     expect(legacy['contract_version'], 'semantic-controls/v1');
@@ -38,29 +35,24 @@ void main() {
     expect((v2['capabilities'] as List).map((x) => 'ext.omi.controls.$x').toSet(), handlers.keys.toSet());
     final unknown = await capability('ext.omi.controls.capabilities', {'version': 'semantic-controls/v99'});
     expect(unknown.isError(), isTrue);
-    final state =
-        jsonDecode(
-              (await handlers['ext.omi.controls.state']!('ext.omi.controls.state', {
-                'version': 'semantic-controls/v2',
-              })).result!,
-            )
-            as Map;
+    final state = jsonDecode(
+        (await handlers['ext.omi.controls.state']!('ext.omi.controls.state', {'version': 'semantic-controls/v2'}))
+            .result!) as Map;
     expect(
-      state.keys,
-      unorderedEquals([
-        'contract_version',
-        'route',
-        'auth',
-        'capture',
-        'ble',
-        'wal',
-        'wal_pending',
-        'providers',
-        'flags',
-        'flags_hydrated',
-        'readiness',
-      ]),
-    );
+        state.keys,
+        unorderedEquals([
+          'contract_version',
+          'route',
+          'auth',
+          'capture',
+          'ble',
+          'wal',
+          'wal_pending',
+          'providers',
+          'flags',
+          'flags_hydrated',
+          'readiness'
+        ]));
     expect((state['readiness'] as Map)['appReady'], isFalse, reason: 'no app/provider scope is mounted in this test');
   });
 }

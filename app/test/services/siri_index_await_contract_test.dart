@@ -9,19 +9,15 @@ void main() {
       multiLine: true,
     );
     final offenders = <String>[];
-    for (final file in Directory(
-      'lib',
-    ).listSync(recursive: true).whereType<File>().where((file) => file.path.endsWith('.dart'))) {
+    for (final file
+        in Directory('lib').listSync(recursive: true).whereType<File>().where((file) => file.path.endsWith('.dart'))) {
       final source = file.readAsStringSync();
       for (final match in calls.allMatches(source)) {
         final line = '\n'.allMatches(source.substring(0, match.start)).length + 1;
         offenders.add('${file.path}:$line');
       }
     }
-    expect(
-      offenders,
-      isEmpty,
-      reason: 'UI state must use the ordered Siri queue and finish independently of Spotlight.',
-    );
+    expect(offenders, isEmpty,
+        reason: 'UI state must use the ordered Siri queue and finish independently of Spotlight.');
   });
 }

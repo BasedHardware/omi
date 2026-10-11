@@ -16,11 +16,7 @@ void main() {
     final scheduler = ManualScheduler(clock: clock);
     var pauses = 0;
     final timer = UplinkSilenceTimer(
-      scheduling: scheduler,
-      now: clock.now,
-      timeout: () => const Duration(seconds: 120),
-      onTimeout: () => pauses++,
-    );
+        scheduling: scheduler, now: clock.now, timeout: () => const Duration(seconds: 120), onTimeout: () => pauses++);
     timer.speechOrStart();
     scheduler.elapse(const Duration(seconds: 119));
     timer.speechOrStart();

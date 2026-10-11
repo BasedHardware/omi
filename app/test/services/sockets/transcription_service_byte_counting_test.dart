@@ -65,15 +65,13 @@ void main() {
     test('versioned source control precedes its binary frame', () {
       final socket = _FakeSocket();
       final service = serviceFor(socket);
-      service.sendEvidenceFrame(
-        WalFrame(
-          payload: [1, 2, 3],
-          syncKey: FrameSyncKey([1]),
-          captureRoot: '12345678-1234-4234-8234-123456789abc',
-          sourceFramePosition: 7,
-          sourceClockEpoch: 2,
-        ),
-      );
+      service.sendEvidenceFrame(WalFrame(
+        payload: [1, 2, 3],
+        syncKey: FrameSyncKey([1]),
+        captureRoot: '12345678-1234-4234-8234-123456789abc',
+        sourceFramePosition: 7,
+        sourceClockEpoch: 2,
+      ));
       final control = jsonDecode(socket.sent.first as String) as Map<String, dynamic>;
       expect(control['type'], 'capture_evidence_frame');
       expect(control['version'], 1);

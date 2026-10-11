@@ -66,7 +66,10 @@ void main() {
     );
   }
 
-  DeviceProvider makeProvider(CaptureWedgeMonitor monitor, {List<String>? diagnosticsCalls}) {
+  DeviceProvider makeProvider(
+    CaptureWedgeMonitor monitor, {
+    List<String>? diagnosticsCalls,
+  }) {
     return DeviceProvider(
       captureWedgeMonitor: monitor,
       bleDiagnosticsLoader: (deviceId) async {
@@ -83,8 +86,13 @@ void main() {
     );
   }
 
-  BtDevice pendant() =>
-      BtDevice(id: 'AA:BB:CC:DD:EE:01', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.0.20');
+  BtDevice pendant() => BtDevice(
+        id: 'AA:BB:CC:DD:EE:01',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -50,
+        firmwareRevision: '3.0.20',
+      );
 
   Future<void> flap(DeviceProvider provider, BtDevice device, {int times = 3}) async {
     for (var i = 0; i < times; i++) {

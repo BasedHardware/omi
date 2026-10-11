@@ -41,14 +41,14 @@ class SpeakerQuickPicker extends StatefulWidget {
       if (!segment.isUser && personId != null) lines.update(personId, (count) => count + 1, ifAbsent: () => 1);
     }
     return [...people.where((person) => person.name.trim().isNotEmpty)]..sort((a, b) {
-      final inA = lines[a.id] ?? 0;
-      final inB = lines[b.id] ?? 0;
-      if (inA != inB) return inB.compareTo(inA);
-      final usedA = lastUsedMs[a.id] ?? 0;
-      final usedB = lastUsedMs[b.id] ?? 0;
-      if (usedA != usedB) return usedB.compareTo(usedA);
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+        final inA = lines[a.id] ?? 0;
+        final inB = lines[b.id] ?? 0;
+        if (inA != inB) return inB.compareTo(inA);
+        final usedA = lastUsedMs[a.id] ?? 0;
+        final usedB = lastUsedMs[b.id] ?? 0;
+        if (usedA != usedB) return usedB.compareTo(usedA);
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
   }
 
   @override
@@ -145,10 +145,8 @@ class _SpeakerQuickPickerState extends State<SpeakerQuickPicker> {
               TextField(
                 controller: _search,
                 onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: l10n.searchPeople,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                ),
+                decoration:
+                    InputDecoration(hintText: l10n.searchPeople, prefixIcon: const Icon(Icons.search, size: 18)),
               ),
               const SizedBox(height: OmiSpacing.sm),
             ],

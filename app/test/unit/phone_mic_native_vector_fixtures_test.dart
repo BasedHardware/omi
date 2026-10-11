@@ -13,9 +13,12 @@ void main() {
   final fixturesDir = Directory('${Directory.current.path}/test/fixtures/phone_mic_native_events');
 
   test('fixture directory holds the canonical vector set', () {
-    final ids =
-        fixturesDir.listSync().whereType<File>().map((f) => f.uri.pathSegments.last.replaceFirst('.json', '')).toList()
-          ..sort();
+    final ids = fixturesDir
+        .listSync()
+        .whereType<File>()
+        .map((f) => f.uri.pathSegments.last.replaceFirst('.json', ''))
+        .toList()
+      ..sort();
     expect(ids, [
       'phone-mic-idle-stop',
       'phone-mic-interruption-resume',
@@ -33,7 +36,9 @@ void main() {
     var totalFrames = 0;
     for (final file in files) {
       var frameIndex = 0;
-      final vector = NativeEventVector.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);
+      final vector = NativeEventVector.fromJson(
+        jsonDecode(file.readAsStringSync()) as Map<String, dynamic>,
+      );
       expect(vector.schemaVersion, nativeEventVectorSchemaVersion);
       expect(vector.id, file.uri.pathSegments.last.replaceFirst('.json', ''));
       expect(vector.events, isNotEmpty);
@@ -46,17 +51,11 @@ void main() {
           ? {vector.startSessionId, vector.startSessionId + 16}
           : {vector.startSessionId};
       for (final event in vector.events) {
-        expect(
-          allowedSessionIds.contains(event.sessionId),
-          isTrue,
-          reason: '${vector.id}: unexpected session id ${event.sessionId}',
-        );
+        expect(allowedSessionIds.contains(event.sessionId), isTrue,
+            reason: '${vector.id}: unexpected session id ${event.sessionId}');
         if (event.kind == NativeCaptureEventKind.audioFrame) {
-          expect(
-            event.pcmFrame,
-            NativeEventVector.synthesizePcmFrame(frameIndex),
-            reason: '${vector.id} frame $frameIndex must be the deterministic LCG frame',
-          );
+          expect(event.pcmFrame, NativeEventVector.synthesizePcmFrame(frameIndex),
+              reason: '${vector.id} frame $frameIndex must be the deterministic LCG frame');
           frameIndex++;
           totalFrames++;
         }
@@ -81,10 +80,8 @@ void main() {
       final vector = NativeEventVector.fromJson(
         jsonDecode(File('${fixturesDir.path}/$name.json').readAsStringSync()) as Map<String, dynamic>,
       );
-      expect(vector.events.map((e) => e.state).whereType<String>().toList(), [
-        'starting',
-        'idle',
-      ], reason: '$name: failed start resolves idle');
+      expect(vector.events.map((e) => e.state).whereType<String>().toList(), ['starting', 'idle'],
+          reason: '$name: failed start resolves idle');
       expect(vector.events.any((e) => e.kind == NativeCaptureEventKind.audioFrame), isFalse);
     }
   });

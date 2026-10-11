@@ -8,17 +8,11 @@ void main() {
   testWidgets('IndexedStack finders distinguish hidden from removed and preserve state', (tester) async {
     final counterKey = GlobalKey<_CounterState>();
     Widget shell(int index) => MaterialApp(
-      home: IndexedStack(
-        index: index,
-        children: [
-          SizedBox(
-            key: const ValueKey('home'),
-            child: _Counter(key: counterKey),
-          ),
-          const SizedBox(key: ValueKey('conversations')),
-        ],
-      ),
-    );
+          home: IndexedStack(index: index, children: [
+            SizedBox(key: const ValueKey('home'), child: _Counter(key: counterKey)),
+            const SizedBox(key: ValueKey('conversations')),
+          ]),
+        );
     await tester.pumpWidget(shell(0));
     counterKey.currentState!.count = 7;
     final state = counterKey.currentState;

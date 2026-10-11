@@ -20,23 +20,18 @@ class MemoryCheckpoint implements BackgroundCheckpointStore {
 
 void main() {
   const snapshot = BackgroundResourceSnapshot(
-    bleBytesReceived: 0,
-    websocketBytesSent: 0,
-    recordingState: 'record',
-    deviceConnected: false,
-    deviceType: 'phone',
-    batchModeEnabled: true,
-  );
+      bleBytesReceived: 0,
+      websocketBytesSent: 0,
+      recordingState: 'record',
+      deviceConnected: false,
+      deviceType: 'phone',
+      batchModeEnabled: true);
   test('unobserved process interruption reconciles once without claiming lost audio', () async {
     final store = MemoryCheckpoint();
     var now = DateTime.utc(2026, 9, 22);
     final events = <Map<String, dynamic>>[];
     BackgroundResourceTelemetry create(String owner) => BackgroundResourceTelemetry(
-      emit: (_, p) => events.add(p),
-      checkpointStore: store,
-      now: () => now,
-      ownerKey: () => owner,
-    );
+        emit: (_, p) => events.add(p), checkpointStore: store, now: () => now, ownerKey: () => owner);
     final first = create('alice');
     first.onPaused(snapshot);
     // Await serialization without completing the background interval.
@@ -61,12 +56,11 @@ void main() {
     final store = MemoryCheckpoint();
     final events = <Map<String, dynamic>>[];
     final telemetry = BackgroundResourceTelemetry(
-      emit: (_, props) => events.add(props),
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      identityEpoch: () => epoch,
-      now: () => now,
-    );
+        emit: (_, props) => events.add(props),
+        checkpointStore: store,
+        ownerKey: () => 'alice',
+        identityEpoch: () => epoch,
+        now: () => now);
     telemetry.onPaused(snapshot);
     await Future<void>.delayed(Duration.zero);
     now = now.add(const Duration(minutes: 2));
@@ -95,12 +89,11 @@ void main() {
       };
     final events = <Map<String, dynamic>>[];
     final telemetry = BackgroundResourceTelemetry(
-      emit: (_, props) => events.add(props),
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      identityEpoch: () => epoch,
-      now: () => DateTime.utc(2026, 9, 22, 1),
-    );
+        emit: (_, props) => events.add(props),
+        checkpointStore: store,
+        ownerKey: () => 'alice',
+        identityEpoch: () => epoch,
+        now: () => DateTime.utc(2026, 9, 22, 1));
     final recovered = telemetry.recoverInterrupted();
     await store.started.future;
     epoch += 2;
@@ -116,12 +109,11 @@ void main() {
     final store = MemoryCheckpoint();
     final events = <Map<String, dynamic>>[];
     final telemetry = BackgroundResourceTelemetry(
-      emit: (_, props) => events.add(props),
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      enabled: () => enabled,
-      now: () => now,
-    );
+        emit: (_, props) => events.add(props),
+        checkpointStore: store,
+        ownerKey: () => 'alice',
+        enabled: () => enabled,
+        now: () => now);
     telemetry.onPaused(snapshot);
     enabled = false;
     await Future<void>.delayed(Duration.zero);
@@ -141,12 +133,11 @@ void main() {
     var epoch = 1;
     final store = DelayedWriteCheckpoint();
     final telemetry = BackgroundResourceTelemetry(
-      emit: (_, __) {},
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      enabled: () => enabled,
-      identityEpoch: () => epoch,
-    );
+        emit: (_, __) {},
+        checkpointStore: store,
+        ownerKey: () => 'alice',
+        enabled: () => enabled,
+        identityEpoch: () => epoch);
     telemetry.onPaused(snapshot);
     await store.started.future;
     enabled = false;
@@ -163,11 +154,10 @@ void main() {
     var now = DateTime.utc(2026, 9, 22);
     final store = MemoryCheckpoint();
     final telemetry = BackgroundResourceTelemetry(
-      emit: (_, __) => throw StateError('synthetic failure'),
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      now: () => now,
-    );
+        emit: (_, __) => throw StateError('synthetic failure'),
+        checkpointStore: store,
+        ownerKey: () => 'alice',
+        now: () => now);
     telemetry.onPaused(snapshot);
     await Future<void>.delayed(Duration.zero);
     now = now.add(const Duration(minutes: 2));
@@ -204,14 +194,14 @@ void main() {
     var now = DateTime.utc(2026, 10, 9);
     final events = <Map<String, dynamic>>[];
     BackgroundResourceTelemetry create() => BackgroundResourceTelemetry(
-      emit: (_, props) => events.add(props),
-      checkpointStore: store,
-      ownerKey: () => 'alice',
-      now: () => now,
-      sessionIdFactory: () => 'session-origin',
-      currentBuild: () => build,
-      currentGitSha: () => 'abc123def',
-    );
+          emit: (_, props) => events.add(props),
+          checkpointStore: store,
+          ownerKey: () => 'alice',
+          now: () => now,
+          sessionIdFactory: () => 'session-origin',
+          currentBuild: () => build,
+          currentGitSha: () => 'abc123def',
+        );
     final writer = create();
     writer.onPaused(snapshot);
     await writer.pendingCheckpointWrites;
@@ -291,7 +281,10 @@ void main() {
     await writer.pendingCheckpointWrites;
     expect(store.value, isNot(contains('origin_build')));
     expect(store.value, isNot(contains('origin_git_sha')));
-    store.value = {...?store.value, 'origin_build': 'unknown'};
+    store.value = {
+      ...?store.value,
+      'origin_build': 'unknown',
+    };
     now = now.add(const Duration(minutes: 3));
     await writer.recoverInterrupted();
     expect(events.single.containsKey('interrupt_origin_build'), isFalse);
@@ -329,8 +322,14 @@ void main() {
       classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.peek()),
       'resume',
     );
-    expect(classifyBackgroundInterruptLaunch(processAlreadyObserved: false, osStateRestored: true), 'restored');
-    expect(classifyBackgroundInterruptLaunch(processAlreadyObserved: true, osStateRestored: true), 'restored');
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: false, osStateRestored: true),
+      'restored',
+    );
+    expect(
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: true, osStateRestored: true),
+      'restored',
+    );
     expect(classifyBackgroundInterruptLaunch(processAlreadyObserved: null), isNull);
     expect(normalizeBackgroundInterruptLaunchContext(null), isNull);
     expect(normalizeBackgroundInterruptLaunchContext('force_quit'), isNull);

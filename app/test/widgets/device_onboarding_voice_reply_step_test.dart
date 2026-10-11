@@ -37,10 +37,7 @@ Widget _app({required DeviceOnboardingProvider provider, required Widget child})
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        body: SafeArea(child: child),
-      ),
+      home: Scaffold(backgroundColor: OmiColors.surface0, body: SafeArea(child: child)),
     ),
   );
 }
@@ -62,20 +59,18 @@ void main() {
     final analyticsModes = <int>[];
     addTearDown(routes.close);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: VoiceReplyStep(
-          firstRun: true,
-          previewText: null,
-          outputRouteSource: routes,
-          playPreview: (_) async {},
-          stopPreview: () async {},
-          onModeAnalytics: analyticsModes.add,
-          onComplete: () {},
-        ),
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: true,
+        previewText: null,
+        outputRouteSource: routes,
+        playPreview: (_) async {},
+        stopPreview: () async {},
+        onModeAnalytics: analyticsModes.add,
+        onComplete: () {},
       ),
-    );
+    ));
 
     expect(provider.selectedVoiceResponseMode, 0);
     expect(SharedPreferencesUtil().voiceResponseMode, 0);
@@ -98,18 +93,16 @@ void main() {
     final routes = _FakeRouteSource();
     addTearDown(routes.close);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: VoiceReplyStep(
-          firstRun: false,
-          outputRouteSource: routes,
-          playPreview: (_) async {},
-          stopPreview: () async {},
-          onComplete: () {},
-        ),
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: false,
+        outputRouteSource: routes,
+        playPreview: (_) async {},
+        stopPreview: () async {},
+        onComplete: () {},
       ),
-    );
+    ));
 
     expect(provider.selectedVoiceResponseMode, 2);
     expect(SharedPreferencesUtil().voiceResponseMode, 2);
@@ -125,18 +118,16 @@ void main() {
     final routes = _FakeRouteSource();
     addTearDown(routes.close);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: VoiceReplyStep(
-          firstRun: false,
-          outputRouteSource: routes,
-          playPreview: (_) async {},
-          stopPreview: () async {},
-          onComplete: () {},
-        ),
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: false,
+        outputRouteSource: routes,
+        playPreview: (_) async {},
+        stopPreview: () async {},
+        onComplete: () {},
       ),
-    );
+    ));
 
     routes.emit(const VoiceOutputRoute.headphones('AirPods Pro'));
     await tester.pump();
@@ -172,18 +163,16 @@ void main() {
     final routes = _FakeRouteSource();
     addTearDown(routes.close);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: VoiceReplyStep(
-          firstRun: true,
-          outputRouteSource: routes,
-          playPreview: (_) async {},
-          stopPreview: () async {},
-          onComplete: () {},
-        ),
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: true,
+        outputRouteSource: routes,
+        playPreview: (_) async {},
+        stopPreview: () async {},
+        onComplete: () {},
       ),
-    );
+    ));
     routes.emit(const VoiceOutputRoute.headphones('AirPods Pro'));
     await tester.pump();
 
@@ -206,18 +195,16 @@ void main() {
     var stopCalls = 0;
     addTearDown(routes.close);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: VoiceReplyStep(
-          firstRun: true,
-          outputRouteSource: routes,
-          playPreview: (_) => previewCompleter.future,
-          stopPreview: () async => stopCalls++,
-          onComplete: () {},
-        ),
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: true,
+        outputRouteSource: routes,
+        playPreview: (_) => previewCompleter.future,
+        stopPreview: () async => stopCalls++,
+        onComplete: () {},
       ),
-    );
+    ));
 
     await tester.tap(find.byKey(const Key('voice_reply_preview_button')));
     await tester.pump();
@@ -239,17 +226,15 @@ void main() {
       ..startOnboarding()
       ..goToStep(DeviceOnboardingProvider.allSetStep);
 
-    await tester.pumpWidget(
-      _app(
-        provider: provider,
-        child: AllSetStep(onComplete: () {}),
-      ),
-    );
+    await tester.pumpWidget(_app(provider: provider, child: AllSetStep(onComplete: () {})));
 
     expect(find.text("You're All Set"), findsOneWidget);
     expect(find.text('Headphones only'), findsOneWidget);
     expect(find.text('Star Ongoing Conversation'), findsOneWidget);
-    expect(find.text('Replay this tour anytime in Settings › Device Settings › How to Use Your Omi'), findsOneWidget);
+    expect(
+      find.text('Replay this tour anytime in Settings › Device Settings › How to Use Your Omi'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('all_set_press_once')), findsOneWidget);
     expect(find.byKey(const Key('all_set_voice_reply')), findsOneWidget);
     expect(find.byKey(const Key('all_set_double_tap')), findsOneWidget);

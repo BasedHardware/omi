@@ -8,27 +8,24 @@ void main() {
     final expected = [
       [
         'event',
-        {'enabled': true, 'count': 1},
-      ],
+        {'enabled': true, 'count': 1}
+      ]
     ];
     expect(
-      emissionPayloads([
-        ('event', {'enabled': true, 'count': 1}),
-      ]),
-      expected,
-    );
+        emissionPayloads([
+          ('event', {'enabled': true, 'count': 1})
+        ]),
+        expected);
     expect(
-      emissionPayloads([
-        ('event', {'enabled': false, 'count': 1}),
-      ]),
-      isNot(expected),
-    );
+        emissionPayloads([
+          ('event', {'enabled': false, 'count': 1})
+        ]),
+        isNot(expected));
     expect(
-      emissionPayloads([
-        ('wrong name', {'enabled': true, 'count': 1}),
-      ]),
-      isNot(expected),
-    );
+        emissionPayloads([
+          ('wrong name', {'enabled': true, 'count': 1})
+        ]),
+        isNot(expected));
   });
   test('C7 generated properties reject free values and cannot carry a mutated property bag', () {
     dynamic construct = TranscribeLaterToggled.new;

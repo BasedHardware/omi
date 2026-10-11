@@ -54,13 +54,12 @@ class FriendPendantDeviceConnection extends DeviceConnection {
     return transport
         .getCharacteristicStream(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid)
         .expand<List<int>>((data) {
-          final payload = _processAudioPacket(data);
-          if (payload == null) return const <List<int>>[];
-          return [
-            for (var i = 0; i + lc3FrameSize <= payload.length; i += lc3FrameSize) payload.sublist(i, i + lc3FrameSize),
-          ];
-        })
-        .listen(onAudioBytesReceived);
+      final payload = _processAudioPacket(data);
+      if (payload == null) return const <List<int>>[];
+      return [
+        for (var i = 0; i + lc3FrameSize <= payload.length; i += lc3FrameSize) payload.sublist(i, i + lc3FrameSize),
+      ];
+    }).listen(onAudioBytesReceived);
   }
 
   @override
@@ -69,7 +68,8 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -83,7 +83,8 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

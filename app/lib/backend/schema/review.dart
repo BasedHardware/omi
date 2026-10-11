@@ -20,22 +20,22 @@ Map<String, dynamic>? _map(Object? v) => v is Map<String, dynamic> ? v : null;
 enum ReviewItemKind { speaker, task, samePerson, spelling, agentProposal }
 
 ReviewItemKind? _kind(Object? v) => switch (v) {
-  'speaker' => ReviewItemKind.speaker,
-  'task' => ReviewItemKind.task,
-  'same_person' => ReviewItemKind.samePerson,
-  'spelling' => ReviewItemKind.spelling,
-  'agent_proposal' => ReviewItemKind.agentProposal,
-  _ => null,
-};
+      'speaker' => ReviewItemKind.speaker,
+      'task' => ReviewItemKind.task,
+      'same_person' => ReviewItemKind.samePerson,
+      'spelling' => ReviewItemKind.spelling,
+      'agent_proposal' => ReviewItemKind.agentProposal,
+      _ => null,
+    };
 
 enum EntityType { person, organization, project }
 
 EntityType? entityTypeFromWire(Object? v) => switch (v) {
-  'person' => EntityType.person,
-  'organization' => EntityType.organization,
-  'project' => EntityType.project,
-  _ => null,
-};
+      'person' => EntityType.person,
+      'organization' => EntityType.organization,
+      'project' => EntityType.project,
+      _ => null,
+    };
 
 class EntityRef {
   const EntityRef({required this.entityId, required this.type, required this.name});
@@ -346,9 +346,9 @@ class ReviewItemsResponse {
   final int remainingToday;
 
   static ReviewItemsResponse fromJson(Map<String, dynamic> json) => ReviewItemsResponse(
-    items: _maps(json['items']).map(ReviewItem.fromJson).whereType<ReviewItem>().toList(growable: false),
-    remainingToday: _int(json['remaining_today']),
-  );
+        items: _maps(json['items']).map(ReviewItem.fromJson).whereType<ReviewItem>().toList(growable: false),
+        remainingToday: _int(json['remaining_today']),
+      );
 }
 
 enum TaskDismissReason { alreadyDone, notMine, notUseful }
@@ -371,9 +371,9 @@ class ReviewAnswer {
   });
 
   const ReviewAnswer.speaker({String? personId, String? newName, bool isMe = false})
-    : this._(speakerPersonId: personId, speakerNewName: newName, speakerIsMe: isMe);
+      : this._(speakerPersonId: personId, speakerNewName: newName, speakerIsMe: isMe);
   const ReviewAnswer.acceptTask({String? description, DateTime? dueAt, String? workstreamId})
-    : this._(taskAccept: true, taskDescription: description, taskDueAt: dueAt, taskWorkstreamId: workstreamId);
+      : this._(taskAccept: true, taskDescription: description, taskDueAt: dueAt, taskWorkstreamId: workstreamId);
   const ReviewAnswer.dismissTask([TaskDismissReason? reason]) : this._(taskAccept: false, taskDismissReason: reason);
   const ReviewAnswer.samePerson(bool same) : this._(samePerson: same);
   const ReviewAnswer.spelling(String value) : this._(spelling: value);
@@ -398,36 +398,36 @@ class ReviewAnswer {
     if (notSure) return {'not_sure': true};
     return switch (kind) {
       ReviewItemKind.speaker => {
-        'speaker': {'person_id': speakerPersonId, 'new_person_name': speakerNewName, 'is_me': speakerIsMe},
-        'not_sure': false,
-      },
-      ReviewItemKind.task => {
-        'task': {
-          'decision': taskAccept == true ? 'accept' : 'dismiss',
-          'dismiss_reason': switch (taskDismissReason) {
-            TaskDismissReason.alreadyDone => 'already_done',
-            TaskDismissReason.notMine => 'not_mine',
-            TaskDismissReason.notUseful => 'not_useful',
-            null => null,
-          },
-          'edited_description': taskDescription,
-          'due_at': taskDueAt?.toUtc().toIso8601String(),
-          'workstream_id': taskWorkstreamId,
+          'speaker': {'person_id': speakerPersonId, 'new_person_name': speakerNewName, 'is_me': speakerIsMe},
+          'not_sure': false,
         },
-        'not_sure': false,
-      },
+      ReviewItemKind.task => {
+          'task': {
+            'decision': taskAccept == true ? 'accept' : 'dismiss',
+            'dismiss_reason': switch (taskDismissReason) {
+              TaskDismissReason.alreadyDone => 'already_done',
+              TaskDismissReason.notMine => 'not_mine',
+              TaskDismissReason.notUseful => 'not_useful',
+              null => null,
+            },
+            'edited_description': taskDescription,
+            'due_at': taskDueAt?.toUtc().toIso8601String(),
+            'workstream_id': taskWorkstreamId,
+          },
+          'not_sure': false,
+        },
       ReviewItemKind.samePerson => {
-        'same_person': {'decision': samePerson == true ? 'yes' : 'no'},
-        'not_sure': false,
-      },
+          'same_person': {'decision': samePerson == true ? 'yes' : 'no'},
+          'not_sure': false,
+        },
       ReviewItemKind.spelling => {
-        'spelling': {'value': spelling},
-        'not_sure': false,
-      },
+          'spelling': {'value': spelling},
+          'not_sure': false,
+        },
       ReviewItemKind.agentProposal => {
-        'agent_proposal': {'decision': proposalAccept == true ? 'accept' : 'dismiss'},
-        'not_sure': false,
-      },
+          'agent_proposal': {'decision': proposalAccept == true ? 'accept' : 'dismiss'},
+          'not_sure': false,
+        },
     };
   }
 }
@@ -435,14 +435,14 @@ class ReviewAnswer {
 enum ReviewChangeKind { rename, mergeMemories, updatePerson, labelSpeaker, titleConversation, closeTask, other }
 
 ReviewChangeKind _changeKind(Object? v) => switch (v) {
-  'rename' => ReviewChangeKind.rename,
-  'merge_memories' => ReviewChangeKind.mergeMemories,
-  'update_person' => ReviewChangeKind.updatePerson,
-  'label_speaker' => ReviewChangeKind.labelSpeaker,
-  'title_conversation' => ReviewChangeKind.titleConversation,
-  'close_task' => ReviewChangeKind.closeTask,
-  _ => ReviewChangeKind.other,
-};
+      'rename' => ReviewChangeKind.rename,
+      'merge_memories' => ReviewChangeKind.mergeMemories,
+      'update_person' => ReviewChangeKind.updatePerson,
+      'label_speaker' => ReviewChangeKind.labelSpeaker,
+      'title_conversation' => ReviewChangeKind.titleConversation,
+      'close_task' => ReviewChangeKind.closeTask,
+      _ => ReviewChangeKind.other,
+    };
 
 class ReviewChangeRef {
   const ReviewChangeRef({required this.type, required this.id, required this.label});
@@ -478,15 +478,15 @@ class ReviewChange {
   final bool undone;
 
   ReviewChange copyWith({bool? undone}) => ReviewChange(
-    changeId: changeId,
-    kind: kind,
-    title: title,
-    reason: reason,
-    snippet: snippet,
-    refs: refs,
-    createdAt: createdAt,
-    undone: undone ?? this.undone,
-  );
+        changeId: changeId,
+        kind: kind,
+        title: title,
+        reason: reason,
+        snippet: snippet,
+        refs: refs,
+        createdAt: createdAt,
+        undone: undone ?? this.undone,
+      );
 
   static ReviewChange? fromJson(Map<String, dynamic> json) {
     final id = _str(json['change_id']);
@@ -526,9 +526,9 @@ class ReviewChangesPage {
   final String? nextCursor;
 
   static ReviewChangesPage fromJson(Map<String, dynamic> json) => ReviewChangesPage(
-    changes: _maps(json['changes']).map(ReviewChange.fromJson).whereType<ReviewChange>().toList(growable: false),
-    nextCursor: _str(json['next_cursor']),
-  );
+        changes: _maps(json['changes']).map(ReviewChange.fromJson).whereType<ReviewChange>().toList(growable: false),
+        nextCursor: _str(json['next_cursor']),
+      );
 }
 
 enum FactSourceKind { conversation, chat, screen, user }

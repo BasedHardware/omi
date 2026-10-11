@@ -48,14 +48,14 @@ void main() {
   });
 
   Memory memoryWithId(String id) => Memory(
-    id: id,
-    uid: 'memory-delete-test-user',
-    content: 'Memory $id',
-    category: MemoryCategory.manual,
-    createdAt: DateTime(2026, 1, 1),
-    updatedAt: DateTime(2026, 1, 1),
-    visibility: MemoryVisibility.private,
-  );
+        id: id,
+        uid: 'memory-delete-test-user',
+        content: 'Memory $id',
+        category: MemoryCategory.manual,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        visibility: MemoryVisibility.private,
+      );
 
   test('deleting a second memory inside the undo window still deletes the first', () async {
     final first = memoryWithId('first');

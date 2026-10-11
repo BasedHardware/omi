@@ -74,17 +74,17 @@ class _Syncs {
 /// A hermetic capture whose finish resolves when the test says so.
 class _ControlledCapture extends CaptureProvider {
   _ControlledCapture(this._finish)
-    : super(
-        walService: _WalService(),
-        connectivity: CaptureConnectivityBoundary(
-          initiallyConnected: true,
-          changes: const Stream.empty(),
-          isConnected: () => true,
-        ),
-        bleListeners: _NoopBle(),
-        inProgressConversationLoader: () async {},
-        localSegmentStore: LocalSegmentStore.disabled(),
-      );
+      : super(
+          walService: _WalService(),
+          connectivity: CaptureConnectivityBoundary(
+            initiallyConnected: true,
+            changes: const Stream.empty(),
+            isConnected: () => true,
+          ),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
 
   final Future<void> _finish;
 

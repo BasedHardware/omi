@@ -428,11 +428,8 @@ void main() {
       Object? firstError, laterError;
 
       final outcome = await runInGuardedZone(() async {
-        final first = HttpPoolManager.instance.send(
-          () => http.Request('GET', url),
-          timeout: const Duration(milliseconds: 50),
-          retries: 0,
-        );
+        final first = HttpPoolManager.instance
+            .send(() => http.Request('GET', url), timeout: const Duration(milliseconds: 50), retries: 0);
         final observedFirst = () async {
           try {
             await first;

@@ -38,46 +38,42 @@ void main() {
     contractTest('C3 production request execution preserves 401 refresh/replay: $mode', () async {
       final events = <String>[];
       final auth = FakeApiAuth(
-        mode == 'transient'
-            ? const AuthTokenTransientFailure(failureClass: 'network')
-            : mode == 'terminal'
-            ? const AuthTokenTerminalFailure(code: 'user-disabled')
-            : const AuthTokenSuccess(token: 'new-fixture-token', expirationTime: null),
-        events,
-      );
+          mode == 'transient'
+              ? const AuthTokenTransientFailure(failureClass: 'network')
+              : mode == 'terminal'
+                  ? const AuthTokenTerminalFailure(code: 'user-disabled')
+                  : const AuthTokenSuccess(token: 'new-fixture-token', expirationTime: null),
+          events);
       var sends = 0;
       var decodes = 0;
       final execution = ApiExecutionSeams(
-        auth: auth,
-        headers: (request) async {
-          events.add('headers');
-          return {...request.headers, 'Authorization': 'Bearer ${auth.token}'};
-        },
-        transport: (request) async {
-          sends++;
-          expect(request.url, 'http://127.0.0.1:1/conversations');
-          expect(request.method, 'POST');
-          expect(request.body, 'fixture-body');
-          expect(request.headers['X-Fixture'], 'preserved');
-          final expected = sends == 1 ? 'old-fixture-token' : 'new-fixture-token';
-          expect(request.headers['Authorization'], 'Bearer $expected');
-          events.add('send:$sends');
-          return http.Response('fixture-result', sends == 1 || mode == 'rejected-again' ? 401 : 200);
-        },
-      );
+          auth: auth,
+          headers: (request) async {
+            events.add('headers');
+            return {...request.headers, 'Authorization': 'Bearer ${auth.token}'};
+          },
+          transport: (request) async {
+            sends++;
+            expect(request.url, 'http://127.0.0.1:1/conversations');
+            expect(request.method, 'POST');
+            expect(request.body, 'fixture-body');
+            expect(request.headers['X-Fixture'], 'preserved');
+            final expected = sends == 1 ? 'old-fixture-token' : 'new-fixture-token';
+            expect(request.headers['Authorization'], 'Bearer $expected');
+            events.add('send:$sends');
+            return http.Response('fixture-result', sends == 1 || mode == 'rejected-again' ? 401 : 200);
+          });
       final result = await executeApi<String>(
-        request: const ApiRequest(
-          url: 'http://127.0.0.1:1/conversations',
-          method: 'POST',
-          headers: {'X-Fixture': 'preserved'},
-          body: 'fixture-body',
-        ),
-        execution: execution,
-        decode: (body) {
-          decodes++;
-          return body;
-        },
-      );
+          request: const ApiRequest(
+              url: 'http://127.0.0.1:1/conversations',
+              method: 'POST',
+              headers: {'X-Fixture': 'preserved'},
+              body: 'fixture-body'),
+          execution: execution,
+          decode: (body) {
+            decodes++;
+            return body;
+          });
       final replayed = mode == 'recovered' || mode == 'rejected-again';
       expect(events.where((e) => e == 'refresh'), hasLength(1));
       expect(events.where((e) => e == 'headers'), hasLength(replayed ? 2 : 1));
@@ -89,10 +85,8 @@ void main() {
         expect(auth.expired, isEmpty);
         expect(events.last, 'record:true:refresh_succeeded');
       } else {
-        expect(
-          (result as ApiFailure<String>).problem.kind,
-          mode == 'transient' ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal,
-        );
+        expect((result as ApiFailure<String>).problem.kind,
+            mode == 'transient' ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal);
         expect(decodes, 0);
         expect(auth.expired, hasLength(mode == 'transient' ? 0 : 1));
         if (mode == 'rejected-again') {

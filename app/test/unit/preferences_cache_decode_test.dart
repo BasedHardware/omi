@@ -16,47 +16,47 @@ const _unreadable = ['not-json', '[]', '{"id": 42}'];
 Person _person(String id) => Person(id: id, name: 'Alex', createdAt: DateTime.utc(2026), updatedAt: DateTime.utc(2026));
 
 Memory _memory(String id) => Memory(
-  id: id,
-  uid: 'user-1',
-  content: 'unsynced',
-  category: MemoryCategory.manual,
-  createdAt: DateTime.utc(2026),
-  updatedAt: DateTime.utc(2026),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'user-1',
+      content: 'unsynced',
+      category: MemoryCategory.manual,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      visibility: MemoryVisibility.private,
+    );
 
 ServerConversation _conversation(String id) =>
     ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('Title', 'Overview'));
 
 ServerMessage _message(String id) => ServerMessage(
-  id,
-  DateTime.utc(2026),
-  'hello',
-  MessageSender.ai,
-  MessageType.text,
-  null,
-  false,
-  const [],
-  const [],
-  const [],
-);
+      id,
+      DateTime.utc(2026),
+      'hello',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      const [],
+      const [],
+      const [],
+    );
 
 App _app(String id) => App.fromJson({
-  'id': id,
-  'uid': 'user-1',
-  'name': 'Test App',
-  'author': 'Author',
-  'description': 'Desc',
-  'image': 'https://example.com/icon.png',
-  'capabilities': ['chat'],
-  'status': 'approved',
-  'approved': true,
-  'rating_count': 0,
-  'enabled': true,
-  'deleted': false,
-  'is_paid': false,
-  'category': 'productivity-and-organization',
-});
+      'id': id,
+      'uid': 'user-1',
+      'name': 'Test App',
+      'author': 'Author',
+      'description': 'Desc',
+      'image': 'https://example.com/icon.png',
+      'capabilities': ['chat'],
+      'status': 'approved',
+      'approved': true,
+      'rating_count': 0,
+      'enabled': true,
+      'deleted': false,
+      'is_paid': false,
+      'category': 'productivity-and-organization',
+    });
 
 Future<SharedPreferencesUtil> _prefs([Map<String, Object> values = const {}]) async {
   SharedPreferences.setMockInitialValues(values);
@@ -125,8 +125,14 @@ void main() {
         ),
       ];
       expect(prefs.cachedMemories.single.currencyBand, 'fading');
-      expect(prefs.cachedMemories.single.beliefComputedAt?.toUtc(), DateTime.utc(2026, 9, 13));
-      expect(prefs.cachedMemories.single.asOf?.toUtc(), DateTime.utc(2026, 9, 12));
+      expect(
+        prefs.cachedMemories.single.beliefComputedAt?.toUtc(),
+        DateTime.utc(2026, 9, 13),
+      );
+      expect(
+        prefs.cachedMemories.single.asOf?.toUtc(),
+        DateTime.utc(2026, 9, 12),
+      );
     });
   });
 

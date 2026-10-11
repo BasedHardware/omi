@@ -17,7 +17,8 @@ Future<ActionItemsResponse?> _noItems({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(actionItems: [], hasMore: false);
+}) async =>
+    const ActionItemsResponse(actionItems: [], hasMore: false);
 
 Future<void> _editDescription(WidgetTester tester, ActionItemsProvider provider) async {
   await tester.pumpWidget(

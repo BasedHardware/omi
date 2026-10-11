@@ -26,45 +26,36 @@ final homeScenarios = <AuditScenario>[
       final h = OutcomeHarness();
       addTearDown(h.outbox.dispose);
       await h.bind();
-      await a.pump(
-        SingleChildScrollView(
+      await a.pump(SingleChildScrollView(
           child: HomeDailyRecaps(
-            outbox: h.outbox,
-            load: () async => (
-              items: [
-                DailySummary(
-                  id: 'recap',
-                  date: '2026-10-03',
-                  createdAt: DateTime.utc(2026, 10, 3),
-                  headline: 'A day of progress',
-                  overview: 'Synthetic recap',
-                  stats: DayStats(totalConversations: 3, actionItemsCount: 2),
-                ),
-              ],
-              ok: true,
-            ),
-            loadFeed: (_) async => ApiSuccess(
-              feedResponse(
-                items: [
-                  const GeneratedProactivityFeedItem(
-                    id: 'mentor-item',
-                    producer: 'conversation_mentor_v2',
-                    title: 'A connection worth revisiting',
-                    body: 'Revisit the decision in your conversation.',
-                    createdAt: '2026-10-03T09:00:00Z',
-                    acted: false,
-                    dismissed: false,
-                    feedback: 'none',
-                    target: GeneratedProactivityTarget(kind: 'conversation', id: 'synthetic-conversation'),
-                  ),
-                  feedItem(producer: 'commitment_followup'),
-                ],
-              ),
-            ),
-            openTarget: (_, {canOpen}) async => true,
-          ),
+        outbox: h.outbox,
+        load: () async => (
+          items: [
+            DailySummary(
+                id: 'recap',
+                date: '2026-10-03',
+                createdAt: DateTime.utc(2026, 10, 3),
+                headline: 'A day of progress',
+                overview: 'Synthetic recap',
+                stats: DayStats(totalConversations: 3, actionItemsCount: 2))
+          ],
+          ok: true
         ),
-      );
+        loadFeed: (_) async => ApiSuccess(feedResponse(items: [
+          const GeneratedProactivityFeedItem(
+              id: 'mentor-item',
+              producer: 'conversation_mentor_v2',
+              title: 'A connection worth revisiting',
+              body: 'Revisit the decision in your conversation.',
+              createdAt: '2026-10-03T09:00:00Z',
+              acted: false,
+              dismissed: false,
+              feedback: 'none',
+              target: GeneratedProactivityTarget(kind: 'conversation', id: 'synthetic-conversation')),
+          feedItem(producer: 'commitment_followup'),
+        ])),
+        openTarget: (_, {canOpen}) async => true,
+      )));
       expect(find.text('Daily Recaps'), findsOneWidget);
       expect(find.text('For You'), findsOneWidget);
       expect(find.text('A connection worth revisiting'), findsOneWidget);

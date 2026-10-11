@@ -13,17 +13,26 @@ import 'package:omi/services/siri_integration.dart';
 void main() {
   group('SiriIntegration.appShortcutsAvailable', () {
     test('returns true when the native bridge reports the Siri toolchain', () async {
-      final integration = SiriIntegration.forTest(_AvailabilityHost(true), 'uid-1');
+      final integration = SiriIntegration.forTest(
+        _AvailabilityHost(true),
+        'uid-1',
+      );
       expect(await integration.appShortcutsAvailable(), isTrue);
     });
 
     test('returns false when the stable-compiler bridge reports unavailable', () async {
-      final integration = SiriIntegration.forTest(_AvailabilityHost(false), 'uid-1');
+      final integration = SiriIntegration.forTest(
+        _AvailabilityHost(false),
+        'uid-1',
+      );
       expect(await integration.appShortcutsAvailable(), isFalse);
     });
 
     test('fails closed to false when the native bridge throws', () async {
-      final integration = SiriIntegration.forTest(_AvailabilityHost(null, throwOnProbe: true), 'uid-1');
+      final integration = SiriIntegration.forTest(
+        _AvailabilityHost(null, throwOnProbe: true),
+        'uid-1',
+      );
       expect(await integration.appShortcutsAvailable(), isFalse);
     });
 
@@ -45,8 +54,7 @@ void main() {
       expect(
         RegExp(r'if\s*\(_shortcutsHintSupported\s*&&\s*_appShortcutsAvailable\)\s*\.\.\.\[').hasMatch(source),
         isTrue,
-        reason:
-            'the siri_shortcuts_settings card must be gated on '
+        reason: 'the siri_shortcuts_settings card must be gated on '
             '_shortcutsHintSupported && _appShortcutsAvailable so stable-compiler '
             '(Xcode 26.6) builds never request the unregistered omi/shortcuts_button view',
       );

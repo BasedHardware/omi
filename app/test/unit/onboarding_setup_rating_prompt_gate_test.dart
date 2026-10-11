@@ -17,12 +17,10 @@ void main() {
 
   test('flag off -> disabled', () async {
     final keys = <String>[];
-    final enabled = await OnboardingSetupRatingPromptGate.isEnabled(
-      readFlag: (key) async {
-        keys.add(key);
-        return false;
-      },
-    );
+    final enabled = await OnboardingSetupRatingPromptGate.isEnabled(readFlag: (key) async {
+      keys.add(key);
+      return false;
+    });
     expect(enabled, isFalse);
     expect(keys, ['onboarding-setup-rating-prompt']);
   });
@@ -47,10 +45,7 @@ void main() {
       OnboardingProgressStepsForTest.stepAfterKnowledgeGraph(setupPageEnabled: true),
       OnboardingProgressStepsForTest.setupPage,
     );
-    expect(
-      OnboardingProgressStepsForTest.steps,
-      isNot(contains(OnboardingProgressStepsForTest.setupPage)),
-      reason: 'the setup page is transitional: no progress dot, no back, not a resume point',
-    );
+    expect(OnboardingProgressStepsForTest.steps, isNot(contains(OnboardingProgressStepsForTest.setupPage)),
+        reason: 'the setup page is transitional: no progress dot, no back, not a resume point');
   });
 }

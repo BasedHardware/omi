@@ -3,7 +3,14 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-enum ChatStreamFailureClass { offline, server, timeout, quota, notSignedIn, unknown }
+enum ChatStreamFailureClass {
+  offline,
+  server,
+  timeout,
+  quota,
+  notSignedIn,
+  unknown,
+}
 
 class ChatStreamException implements Exception {
   const ChatStreamException(this.kind, {this.statusCode});
@@ -28,8 +35,7 @@ ChatStreamException classifyChatStreamFailure(Object error) {
   // ClientException message is the only signal available here.
   if (error is http.ClientException) {
     final text = error.message.toLowerCase();
-    final transient =
-        text.contains('connection closed') ||
+    final transient = text.contains('connection closed') ||
         text.contains('connection reset') ||
         text.contains('failed host lookup') ||
         text.contains('network is unreachable') ||

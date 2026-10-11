@@ -179,8 +179,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
     if (success) {
       OmiHaptics.light();
-      final waitingToSync =
-          existingMemory == null &&
+      final waitingToSync = existingMemory == null &&
           SharedPreferencesUtil().pendingMemories.any((memory) => !previousIds.contains(memory.id));
       OmiFeedback.confirm(
         context,

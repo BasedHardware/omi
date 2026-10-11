@@ -6,16 +6,14 @@ import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 void main() {
   group('DeviceToolRequest.tryParse', () {
     test('parses a well-formed request', () {
-      final request = DeviceToolRequest.tryParse(
-        jsonEncode({
-          'call_id': 'abc-123',
-          'tool': 'propose_message',
-          'arguments': {
-            'to': ['+15550100'],
-            'text': 'running late',
-          },
-        }),
-      );
+      final request = DeviceToolRequest.tryParse(jsonEncode({
+        'call_id': 'abc-123',
+        'tool': 'propose_message',
+        'arguments': {
+          'to': ['+15550100'],
+          'text': 'running late',
+        },
+      }));
 
       expect(request, isNotNull);
       expect(request!.callId, 'abc-123');
@@ -25,7 +23,10 @@ void main() {
     });
 
     test('treats missing arguments as empty rather than failing', () {
-      final request = DeviceToolRequest.tryParse(jsonEncode({'call_id': 'abc-123', 'tool': 'search_contacts'}));
+      final request = DeviceToolRequest.tryParse(jsonEncode({
+        'call_id': 'abc-123',
+        'tool': 'search_contacts',
+      }));
 
       expect(request, isNotNull);
       expect(request!.arguments, isEmpty);
@@ -55,16 +56,14 @@ void main() {
       // Message bodies are user text; the base64 SSE frame must round-trip them
       // without the payload being reinterpreted as protocol.
       const body = 'hey {"call_id":"spoofed"}\nsecond line "quoted"';
-      final request = DeviceToolRequest.tryParse(
-        jsonEncode({
-          'call_id': 'real-call',
-          'tool': 'propose_message',
-          'arguments': {
-            'to': ['+15550100'],
-            'text': body,
-          },
-        }),
-      );
+      final request = DeviceToolRequest.tryParse(jsonEncode({
+        'call_id': 'real-call',
+        'tool': 'propose_message',
+        'arguments': {
+          'to': ['+15550100'],
+          'text': body,
+        },
+      }));
 
       expect(request!.callId, 'real-call');
       expect(request.arguments['text'], body);

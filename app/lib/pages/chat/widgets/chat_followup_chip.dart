@@ -8,13 +8,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Tapping sends the chip's words as a normal user message through the existing
 /// chat send path; the chip owns no send logic of its own.
 class ChatFollowUpChip extends StatelessWidget {
-  const ChatFollowUpChip({
-    super.key,
-    required this.question,
-    required this.onSend,
-    this.source = 'chat_block',
-    this.maxLines = 2,
-  });
+  const ChatFollowUpChip(
+      {super.key, required this.question, required this.onSend, this.source = 'chat_block', this.maxLines = 2});
 
   final String question;
   final void Function(String) onSend;

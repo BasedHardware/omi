@@ -41,41 +41,41 @@ Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Futur
 }
 
 ServerConversation _conversation() => ServerConversation(
-  id: 'conversation',
-  createdAt: DateTime(2026),
-  structured: Structured('Title', 'Overview'),
-  transcriptSegments: [
-    TranscriptSegment(
-      id: 'segment',
-      text: 'Hello',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      translations: [],
-      start: 0,
-      end: 1,
-    ),
-  ],
-);
+      id: 'conversation',
+      createdAt: DateTime(2026),
+      structured: Structured('Title', 'Overview'),
+      transcriptSegments: [
+        TranscriptSegment(
+          id: 'segment',
+          text: 'Hello',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 0,
+          end: 1,
+        ),
+      ],
+    );
 
 ServerConversation _syncConversation() => ServerConversation(
-  id: 'abcdefab-1234-5678-90ab-cdefabcdefab',
-  createdAt: DateTime(2026),
-  structured: Structured('Title', 'Overview'),
-  status: ConversationStatus.completed,
-  transcriptSegments: [
-    TranscriptSegment(
-      id: 'segment',
-      text: 'Hello',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      translations: [],
-      start: 0,
-      end: 1,
-    ),
-  ],
-);
+      id: 'abcdefab-1234-5678-90ab-cdefabcdefab',
+      createdAt: DateTime(2026),
+      structured: Structured('Title', 'Overview'),
+      status: ConversationStatus.completed,
+      transcriptSegments: [
+        TranscriptSegment(
+          id: 'segment',
+          text: 'Hello',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 0,
+          end: 1,
+        ),
+      ],
+    );
 
 void _select(ConversationDetailProvider provider, ServerConversation value) {
   provider.selectedDate = value.createdAt;

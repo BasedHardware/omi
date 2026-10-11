@@ -74,7 +74,10 @@ class ChatAppsConfig {
         final provider = row['provider'];
         final address = row['address'];
         if (provider is String && _wireId.hasMatch(provider) && address is String && address.trim().isNotEmpty) {
-          endpoints[channel] = ChatChannelEndpoint(provider: provider, address: address.trim());
+          endpoints[channel] = ChatChannelEndpoint(
+            provider: provider,
+            address: address.trim(),
+          );
         }
       }
     }
@@ -100,11 +103,15 @@ abstract final class ChatAppsGate {
       return ChatAppsConfig.fromPayload(enabled: true, payload: _debugPayload);
     }
     try {
-      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
+      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(
+        enabledFlag,
+      );
       if (!enabled) return ChatAppsConfig.off;
       return ChatAppsConfig.fromPayload(
         enabled: true,
-        payload: await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag),
+        payload: await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(
+          enabledFlag,
+        ),
       );
     } catch (_) {
       return ChatAppsConfig.off;

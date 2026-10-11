@@ -5,8 +5,8 @@ import 'package:uuid/uuid.dart';
 
 class LiveActivityBridge implements CaptureSystemSurfaceSink {
   LiveActivityBridge({MethodChannel? channel, SharedPreferencesUtil? preferences})
-    : channel = channel ?? const MethodChannel(channelName),
-      preferences = preferences ?? SharedPreferencesUtil();
+      : channel = channel ?? const MethodChannel(channelName),
+        preferences = preferences ?? SharedPreferencesUtil();
 
   static const channelName = 'com.omi.ios/liveActivity';
   static LiveActivityBridge? _current;
@@ -27,10 +27,10 @@ class LiveActivityBridge implements CaptureSystemSurfaceSink {
 
   @override
   Future<void> publish(Map<String, Object?> snapshot) => channel.invokeMethod<void>('publish', {
-    ...snapshot,
-    'ownerId': _ownerId,
-    'enabled': preferences.showCaptureLiveActivity,
-  });
+        ...snapshot,
+        'ownerId': _ownerId,
+        'enabled': preferences.showCaptureLiveActivity,
+      });
 
   @override
   Future<void> close() async {

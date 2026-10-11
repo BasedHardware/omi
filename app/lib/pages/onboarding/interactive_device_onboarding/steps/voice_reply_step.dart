@@ -111,100 +111,103 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DeviceOnboardingProvider>(
-      builder: (context, provider, _) {
-        final mode = provider.selectedVoiceResponseMode ?? 0;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-          child: Column(
-            children: [
-              const SizedBox(height: OmiSpacing.lg),
-              Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
-              const SizedBox(height: OmiSpacing.xs),
-              Text(
-                context.l10n.deviceOnboardingVoiceReplySubtitle,
-                style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: OmiSpacing.lg),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _PreviewCard(
-                        playing: _playing,
-                        animation: _waveController,
-                        route: _route,
-                        onPressed: _togglePreview,
+    return Consumer<DeviceOnboardingProvider>(builder: (context, provider, _) {
+      final mode = provider.selectedVoiceResponseMode ?? 0;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+        child: Column(
+          children: [
+            const SizedBox(height: OmiSpacing.lg),
+            Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              context.l10n.deviceOnboardingVoiceReplySubtitle,
+              style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: OmiSpacing.lg),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PreviewCard(
+                      playing: _playing,
+                      animation: _waveController,
+                      route: _route,
+                      onPressed: _togglePreview,
+                    ),
+                    const SizedBox(height: OmiSpacing.lg),
+                    Text(
+                      context.l10n.voiceResponseModeTitle.toUpperCase(),
+                      style: OmiType.footnote.copyWith(
+                        color: OmiColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.6,
                       ),
-                      const SizedBox(height: OmiSpacing.lg),
-                      Text(
-                        context.l10n.voiceResponseModeTitle.toUpperCase(),
-                        style: OmiType.footnote.copyWith(
-                          color: OmiColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _ModeCard(
-                        key: const Key('voice_reply_mode_off'),
-                        selected: mode == 0,
-                        title: context.l10n.voiceResponseOff,
-                        description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
-                        onTap: () => _selectMode(0),
-                      ),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _ModeCard(
-                        key: const Key('voice_reply_mode_headphones'),
-                        selected: mode == 1,
-                        title: context.l10n.voiceResponseHeadphonesOnly,
-                        description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
-                        onTap: () => _selectMode(1),
-                      ),
-                      const SizedBox(height: OmiSpacing.xs),
-                      _ModeCard(
-                        key: const Key('voice_reply_mode_always'),
-                        selected: mode == 2,
-                        title: context.l10n.voiceResponseAlways,
-                        description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
-                        onTap: () => _selectMode(2),
-                      ),
-                      const SizedBox(height: OmiSpacing.sm),
-                      _OutputStatus(mode: mode, route: _route),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
+                    _ModeCard(
+                      key: const Key('voice_reply_mode_off'),
+                      selected: mode == 0,
+                      title: context.l10n.voiceResponseOff,
+                      description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
+                      onTap: () => _selectMode(0),
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
+                    _ModeCard(
+                      key: const Key('voice_reply_mode_headphones'),
+                      selected: mode == 1,
+                      title: context.l10n.voiceResponseHeadphonesOnly,
+                      description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
+                      onTap: () => _selectMode(1),
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
+                    _ModeCard(
+                      key: const Key('voice_reply_mode_always'),
+                      selected: mode == 2,
+                      title: context.l10n.voiceResponseAlways,
+                      description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
+                      onTap: () => _selectMode(2),
+                    ),
+                    const SizedBox(height: OmiSpacing.sm),
+                    _OutputStatus(mode: mode, route: _route),
+                  ],
                 ),
               ),
-              const SizedBox(height: OmiSpacing.sm),
-              Text(
-                context.l10n.deviceOnboardingVoiceReplySettingsHint(
-                  context.l10n.settings,
-                  context.l10n.voiceResponseMode,
-                ),
-                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            Text(
+              context.l10n.deviceOnboardingVoiceReplySettingsHint(
+                context.l10n.settings,
+                context.l10n.voiceResponseMode,
               ),
-              const SizedBox(height: OmiSpacing.sm),
-              OmiButton(
-                key: const Key('voice_reply_continue'),
-                label: context.l10n.deviceOnboardingContinue,
-                onPressed: widget.onComplete,
-                expand: true,
-                labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
-              ),
-              const SizedBox(height: OmiSpacing.lg),
-            ],
-          ),
-        );
-      },
-    );
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            OmiButton(
+              key: const Key('voice_reply_continue'),
+              label: context.l10n.deviceOnboardingContinue,
+              onPressed: widget.onComplete,
+              expand: true,
+              labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
+            ),
+            const SizedBox(height: OmiSpacing.lg),
+          ],
+        ),
+      );
+    });
   }
 }
 
 class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({required this.playing, required this.animation, required this.route, required this.onPressed});
+  const _PreviewCard({
+    required this.playing,
+    required this.animation,
+    required this.route,
+    required this.onPressed,
+  });
 
   final bool playing;
   final Animation<double> animation;
@@ -212,14 +215,14 @@ class _PreviewCard extends StatelessWidget {
   final Future<void> Function() onPressed;
 
   String _routeLabel(BuildContext context) => switch (route.kind) {
-    VoiceOutputRouteKind.headphones => context.l10n.deviceOnboardingVoiceReplyPreviewThroughDevice(
-      route.name == null || route.name!.isEmpty
-          ? context.l10n.deviceOnboardingVoiceReplyGenericHeadphones
-          : route.name!,
-    ),
-    VoiceOutputRouteKind.speaker => context.l10n.deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker,
-    VoiceOutputRouteKind.unknown => context.l10n.deviceOnboardingVoiceReplyPreviewThroughCurrentOutput,
-  };
+        VoiceOutputRouteKind.headphones => context.l10n.deviceOnboardingVoiceReplyPreviewThroughDevice(
+            route.name == null || route.name!.isEmpty
+                ? context.l10n.deviceOnboardingVoiceReplyGenericHeadphones
+                : route.name!,
+          ),
+        VoiceOutputRouteKind.speaker => context.l10n.deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker,
+        VoiceOutputRouteKind.unknown => context.l10n.deviceOnboardingVoiceReplyPreviewThroughCurrentOutput,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +263,10 @@ class _PreviewCard extends StatelessWidget {
                   style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: OmiSpacing.xxs),
-                Text(_routeLabel(context), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                Text(
+                  _routeLabel(context),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
                 const SizedBox(height: OmiSpacing.xs),
                 SizedBox(
                   height: 18,
@@ -383,9 +389,7 @@ class _OutputStatus extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: tone),
             const SizedBox(width: OmiSpacing.xs),
-            Expanded(
-              child: Text(text, style: OmiType.footnote.copyWith(color: tone, height: 1.3)),
-            ),
+            Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: tone, height: 1.3))),
           ],
         ),
       ),
@@ -402,51 +406,50 @@ class _OutputStatus extends StatelessWidget {
       );
     }
 
-    final routeName = route.name == null || route.name!.isEmpty
-        ? context.l10n.voiceResponseHeadphonesOnly
-        : route.name!;
+    final routeName =
+        route.name == null || route.name!.isEmpty ? context.l10n.voiceResponseHeadphonesOnly : route.name!;
     if (mode == 1) {
       return switch (route.kind) {
         VoiceOutputRouteKind.headphones => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesConnected(routeName),
-          tone: OmiColors.success,
-          surface: OmiColors.successSurface,
-          icon: Icons.headphones,
-        ),
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesConnected(routeName),
+            tone: OmiColors.success,
+            surface: OmiColors.successSurface,
+            icon: Icons.headphones,
+          ),
         VoiceOutputRouteKind.speaker => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
-          tone: OmiColors.warning,
-          surface: OmiColors.surface1,
-          icon: Icons.headset_off_outlined,
-        ),
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
+            tone: OmiColors.warning,
+            surface: OmiColors.surface1,
+            icon: Icons.headset_off_outlined,
+          ),
         VoiceOutputRouteKind.unknown => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
-          tone: OmiColors.warning,
-          surface: OmiColors.surface1,
-          icon: Icons.help_outline,
-        ),
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
+            tone: OmiColors.warning,
+            surface: OmiColors.surface1,
+            icon: Icons.help_outline,
+          ),
       };
     }
 
     return switch (route.kind) {
       VoiceOutputRouteKind.headphones => (
-        text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysHeadphones(routeName),
-        tone: OmiColors.success,
-        surface: OmiColors.successSurface,
-        icon: Icons.headphones,
-      ),
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysHeadphones(routeName),
+          tone: OmiColors.success,
+          surface: OmiColors.successSurface,
+          icon: Icons.headphones,
+        ),
       VoiceOutputRouteKind.speaker => (
-        text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
-        tone: OmiColors.warning,
-        surface: OmiColors.surface1,
-        icon: Icons.volume_up_outlined,
-      ),
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
+          tone: OmiColors.warning,
+          surface: OmiColors.surface1,
+          icon: Icons.volume_up_outlined,
+        ),
       VoiceOutputRouteKind.unknown => (
-        text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
-        tone: OmiColors.warning,
-        surface: OmiColors.surface1,
-        icon: Icons.volume_up_outlined,
-      ),
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
+          tone: OmiColors.warning,
+          surface: OmiColors.surface1,
+          icon: Icons.volume_up_outlined,
+        ),
     };
   }
 }

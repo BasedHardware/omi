@@ -112,8 +112,12 @@ Future<ApiResult<ConversationScreenshots>> deleteConversationScreenshot(
   String conversationId,
   String frameId, {
   ApiSend? send,
-}) => executeApi(
-  request: ApiRequest(url: '${_screenshotsUrl(conversationId)}/${Uri.encodeComponent(frameId)}', method: 'DELETE'),
-  send: send,
-  decode: _decodeSet,
-);
+}) =>
+    executeApi(
+      request: ApiRequest(
+        url: '${_screenshotsUrl(conversationId)}/${Uri.encodeComponent(frameId)}',
+        method: 'DELETE',
+      ),
+      send: send,
+      decode: _decodeSet,
+    );

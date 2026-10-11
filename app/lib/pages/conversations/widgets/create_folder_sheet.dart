@@ -148,14 +148,14 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
   }
 
   InputDecoration _fieldDecoration(String hint) => InputDecoration(
-    filled: true,
-    fillColor: OmiColors.surface2,
-    border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    isDense: true,
-    hintText: hint,
-    hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
-  );
+        filled: true,
+        fillColor: OmiColors.surface2,
+        border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        isDense: true,
+        hintText: hint,
+        hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+      );
 
   @override
   Widget build(BuildContext context) {

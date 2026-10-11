@@ -686,11 +686,11 @@ class OmiVoicePlaybackService {
   }
 
   VoiceReplyPlaybackMode _modeFromInt(int mode) => switch (mode) {
-    0 => VoiceReplyPlaybackMode.off,
-    1 => VoiceReplyPlaybackMode.headphonesOnly,
-    2 => VoiceReplyPlaybackMode.always,
-    _ => VoiceReplyPlaybackMode.unknown,
-  };
+        0 => VoiceReplyPlaybackMode.off,
+        1 => VoiceReplyPlaybackMode.headphonesOnly,
+        2 => VoiceReplyPlaybackMode.always,
+        _ => VoiceReplyPlaybackMode.unknown,
+      };
 
   void _openLifecycle({
     required DateTime startedAt,
@@ -723,10 +723,10 @@ class OmiVoicePlaybackService {
   }
 
   VoiceReplyPlaybackFallbackReason _fallbackReasonFromStatus(int statusCode) => switch (statusCode) {
-    429 => VoiceReplyPlaybackFallbackReason.rateLimited429,
-    503 => VoiceReplyPlaybackFallbackReason.unavailable503,
-    _ => VoiceReplyPlaybackFallbackReason.noResponse,
-  };
+        429 => VoiceReplyPlaybackFallbackReason.rateLimited429,
+        503 => VoiceReplyPlaybackFallbackReason.unavailable503,
+        _ => VoiceReplyPlaybackFallbackReason.noResponse,
+      };
 
   void _emitSkip({
     required VoiceReplyPlaybackMode mode,
@@ -962,13 +962,13 @@ class OmiVoicePlaybackService {
   }
 
   int _routeRank(VoiceReplyPlaybackOutputRoute route) => switch (route) {
-    VoiceReplyPlaybackOutputRoute.bluetooth => 0,
-    VoiceReplyPlaybackOutputRoute.wired => 1,
-    VoiceReplyPlaybackOutputRoute.airplay => 2,
-    VoiceReplyPlaybackOutputRoute.usb => 3,
-    VoiceReplyPlaybackOutputRoute.speaker => 4,
-    VoiceReplyPlaybackOutputRoute.unknown => 5,
-  };
+        VoiceReplyPlaybackOutputRoute.bluetooth => 0,
+        VoiceReplyPlaybackOutputRoute.wired => 1,
+        VoiceReplyPlaybackOutputRoute.airplay => 2,
+        VoiceReplyPlaybackOutputRoute.usb => 3,
+        VoiceReplyPlaybackOutputRoute.speaker => 4,
+        VoiceReplyPlaybackOutputRoute.unknown => 5,
+      };
 
   VoiceReplyPlaybackOutputRoute _routeForType(AudioDeviceType type) {
     switch (type.name) {

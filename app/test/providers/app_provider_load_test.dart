@@ -83,19 +83,19 @@ void main() {
 
   test('the catalog loads even when start-up already filled apps from the cache', () async {
     App app(String id, String name) => App.fromJson({
-      'id': id,
-      'name': name,
-      'author': 'Test Author',
-      'description': 'test',
-      'image': '',
-      'capabilities': ['external_integration'],
-      'status': 'approved',
-      'category': 'productivity',
-      'approved': true,
-      'private': false,
-      'enabled': false,
-      'deleted': false,
-    });
+          'id': id,
+          'name': name,
+          'author': 'Test Author',
+          'description': 'test',
+          'image': '',
+          'capabilities': ['external_integration'],
+          'status': 'approved',
+          'category': 'productivity',
+          'approved': true,
+          'private': false,
+          'enabled': false,
+          'deleted': false,
+        });
     SharedPreferencesUtil().appsList = [app('app_journal', 'Journal')];
     final provider = AppProvider();
     addTearDown(provider.dispose);

@@ -17,13 +17,11 @@ void main() {
     for (final reverse in [const Duration(milliseconds: 200), const Duration(milliseconds: 1500)]) {
       testWidgets('B1 dismissal waits for route disposal on $platform, reverse=$reverse', (tester) async {
         final key = GlobalKey<NavigatorState>();
-        await tester.pumpWidget(
-          MaterialApp(
-            navigatorKey: key,
-            theme: ThemeData(platform: platform),
-            home: const Scaffold(body: CircularProgressIndicator()),
-          ),
-        );
+        await tester.pumpWidget(MaterialApp(
+          navigatorKey: key,
+          theme: ThemeData(platform: platform),
+          home: const Scaffold(body: CircularProgressIndicator()),
+        ));
         final route = ModalBottomSheetRoute<void>(
           builder: (_) => const Text('sheet'),
           isScrollControlled: true,
@@ -50,13 +48,7 @@ void main() {
     }
     testWidgets('B1 dismissal rejects a no-op control on $platform', (tester) async {
       final key = GlobalKey<NavigatorState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: key,
-          theme: ThemeData(platform: platform),
-          home: Container(),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(navigatorKey: key, theme: ThemeData(platform: platform), home: Container()));
       final route = ModalBottomSheetRoute<void>(builder: (_) => const Text('sheet'), isScrollControlled: true);
       unawaited(key.currentState!.push(route));
       await tester.pump();
@@ -68,13 +60,7 @@ void main() {
     });
     testWidgets('B1 dismissal rejects absent page without route completion on $platform', (tester) async {
       final key = GlobalKey<NavigatorState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: key,
-          theme: ThemeData(platform: platform),
-          home: Container(),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(navigatorKey: key, theme: ThemeData(platform: platform), home: Container()));
       final route = _NeverCompletedSheet();
       unawaited(key.currentState!.push(route));
       await tester.pump();

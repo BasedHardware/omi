@@ -229,9 +229,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       index == _transcriptTabIndex ? ConversationTab.transcript : ConversationTab.summary;
 
   static int _indexForTab(ConversationTab tab) => switch (tab) {
-    ConversationTab.transcript => _transcriptTabIndex,
-    ConversationTab.summary => _summaryTabIndex,
-  };
+        ConversationTab.transcript => _transcriptTabIndex,
+        ConversationTab.summary => _summaryTabIndex,
+      };
 
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
@@ -830,9 +830,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     final conversation = provider.conversation;
     final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
     final summarySelection = provider.getSummarySelection();
-    final summaryApp = summarySelection.isApp
-        ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull
-        : null;
+    final summaryApp =
+        summarySelection.isApp ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull : null;
     // Grouped, with large dividers between groups: how the summary is written, then organising
     // the conversation, then finding and copying its words; developer tools (when on) sit last
     // before Delete. Star and Share live in the top bar.
@@ -853,9 +852,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         PullDownMenuItem(
           title: l10n.reprocessConversation,
           iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap: provider.loadingReprocessConversation
-              ? null
-              : () => _handleMenuSelection(context, 'reprocess', provider),
+          onTap:
+              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
         ),
       ],
     ];
@@ -1074,8 +1072,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
 
     // The bottom bar (and its backdrop) shows once there is something to play or ask about.
-    final hasBar =
-        conversation.transcriptSegments.isNotEmpty ||
+    final hasBar = conversation.transcriptSegments.isNotEmpty ||
         conversation.photos.isNotEmpty ||
         conversation.externalIntegration != null;
 
@@ -1150,8 +1147,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                         controller: _controller,
                         children: [
                           SummaryTab(
-                            reviewEnabled:
-                                !widget.isFromOnboarding &&
+                            reviewEnabled: !widget.isFromOnboarding &&
                                 widget.initialSeekStart == null &&
                                 selectedTab == ConversationTab.summary &&
                                 !_controller!.indexIsChanging &&

@@ -22,12 +22,8 @@ class CaptureLivenessWatchdog {
     _lastRecoveryAt = null;
   }
 
-  CaptureLivenessFailure? check(
-    CaptureCoordinatorState state,
-    DateTime now, {
-    required bool socketReady,
-    int observationEpoch = 0,
-  }) {
+  CaptureLivenessFailure? check(CaptureCoordinatorState state, DateTime now,
+      {required bool socketReady, int observationEpoch = 0}) {
     if (state.phase != CapturePhase.phoneLive || state.micInterrupted || state.active == null) {
       reset();
       return null;

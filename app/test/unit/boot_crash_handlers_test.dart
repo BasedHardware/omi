@@ -42,12 +42,8 @@ void main() {
         expect(PlatformDispatcher.instance.onError, same(platformHandler));
       });
       final states = (await BootJournal.instance.read()).map((row) => '${row['stage']}:${row['state']}').toList();
-      expect(states, [
-        'crash_reporter:begin',
-        'crash_reporter:completed',
-        'resolve_auth:begin',
-        'resolve_auth:completed',
-      ]);
+      expect(
+          states, ['crash_reporter:begin', 'crash_reporter:completed', 'resolve_auth:begin', 'resolve_auth:completed']);
     } finally {
       FlutterError.onError = previousFlutter;
       PlatformDispatcher.instance.onError = previousPlatform;

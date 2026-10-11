@@ -37,14 +37,14 @@ void main() {
   const uid = 'siri-nonblocking-owner';
 
   Memory row(String id) => Memory(
-    id: id,
-    uid: uid,
-    content: 'Memory $id',
-    category: MemoryCategory.manual,
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-    visibility: MemoryVisibility.private,
-  );
+        id: id,
+        uid: uid,
+        content: 'Memory $id',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private,
+      );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': uid});

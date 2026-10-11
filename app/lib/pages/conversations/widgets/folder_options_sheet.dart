@@ -18,10 +18,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 Future<void> showFolderOptions(BuildContext context, Folder folder) {
   HapticFeedback.mediumImpact();
   PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder.id, folderName: folder.name);
-  return showOmiSheet<void>(
-    context: context,
-    builder: (ctx) => _FolderContextMenu(folder: folder),
-  );
+  return showOmiSheet<void>(context: context, builder: (ctx) => _FolderContextMenu(folder: folder));
 }
 
 /// Context menu for folder actions (Edit/Delete).
@@ -93,10 +90,8 @@ class _FolderContextMenu extends StatelessWidget {
               children: [
                 FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
                 const SizedBox(width: 8),
-                Text(
-                  folder.name,
-                  style: OmiType.callout.copyWith(color: folder.colorValue, fontWeight: FontWeight.w600),
-                ),
+                Text(folder.name,
+                    style: OmiType.callout.copyWith(color: folder.colorValue, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -220,7 +215,10 @@ class _MoveOption extends StatelessWidget {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: OmiRadius.smAll),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: OmiRadius.smAll,
+                  ),
                   child: Center(child: FaIcon(folderIconToFa(icon), size: 18, color: color)),
                 ),
                 const SizedBox(width: 14),
@@ -228,7 +226,10 @@ class _MoveOption extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+                      Text(
+                        name,
+                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                      ),
                       if (description != null && description!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 3),

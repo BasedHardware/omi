@@ -15,10 +15,10 @@ class ListenClientStateSnapshot {
   final bool transcriptVisible;
 
   Map<String, Object> toJson() => {
-    'type': 'client_state',
-    'foreground': foreground,
-    'transcript_visible': transcriptVisible,
-  };
+        'type': 'client_state',
+        'foreground': foreground,
+        'transcript_visible': transcriptVisible,
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -32,7 +32,7 @@ class ListenClientStateSnapshot {
 
 class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
   ListenClientState._()
-    : super(ListenClientStateSnapshot(foreground: _initiallyForeground(), transcriptVisible: false));
+      : super(ListenClientStateSnapshot(foreground: _initiallyForeground(), transcriptVisible: false));
 
   static final ListenClientState instance = ListenClientState._();
 

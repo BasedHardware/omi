@@ -17,9 +17,8 @@ class AllSetStep extends StatelessWidget {
     final provider = context.watch<DeviceOnboardingProvider>();
     final prefs = preferences ?? SharedPreferencesUtil();
     final voiceMode = provider.selectedVoiceResponseMode ?? prefs.voiceResponseMode;
-    final doubleTapAction = provider.selectedDoubleTapAction == -1
-        ? prefs.doubleTapAction
-        : provider.selectedDoubleTapAction;
+    final doubleTapAction =
+        provider.selectedDoubleTapAction == -1 ? prefs.doubleTapAction : provider.selectedDoubleTapAction;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
@@ -97,16 +96,16 @@ class AllSetStep extends StatelessWidget {
   }
 
   String _voiceModeLabel(BuildContext context, int mode) => switch (mode) {
-    0 => context.l10n.voiceResponseOff,
-    2 => context.l10n.voiceResponseAlways,
-    _ => context.l10n.voiceResponseHeadphonesOnly,
-  };
+        0 => context.l10n.voiceResponseOff,
+        2 => context.l10n.voiceResponseAlways,
+        _ => context.l10n.voiceResponseHeadphonesOnly,
+      };
 
   String _doubleTapLabel(BuildContext context, int action) => switch (action) {
-    1 => context.l10n.deviceOnboardingMuteUnmute,
-    2 => context.l10n.deviceOnboardingStarConversation,
-    _ => context.l10n.deviceOnboardingEndConversation,
-  };
+        1 => context.l10n.deviceOnboardingMuteUnmute,
+        2 => context.l10n.deviceOnboardingStarConversation,
+        _ => context.l10n.deviceOnboardingEndConversation,
+      };
 }
 
 class _SummaryRow extends StatelessWidget {

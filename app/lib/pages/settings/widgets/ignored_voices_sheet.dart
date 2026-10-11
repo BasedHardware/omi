@@ -14,11 +14,12 @@ Future<void> showIgnoredVoicesSheet(
   BuildContext context, {
   IgnoredVoicesLoader load = api.getIgnoredVoices,
   IgnoredVoiceRestorer restore = api.restoreIgnoredVoice,
-}) => showOmiSheet<void>(
-  context: context,
-  title: context.l10n.ignoredVoicesTitle,
-  builder: (_) => _IgnoredVoices(load: load, restore: restore),
-);
+}) =>
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.ignoredVoicesTitle,
+      builder: (_) => _IgnoredVoices(load: load, restore: restore),
+    );
 
 class _IgnoredVoices extends StatefulWidget {
   const _IgnoredVoices({required this.load, required this.restore});

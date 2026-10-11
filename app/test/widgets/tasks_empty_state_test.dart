@@ -23,23 +23,19 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       var status = 200;
-      final provider = composeTypedActionItemsProvider(
-        ActionItemsApi(
-          baseUrl: 'http://fixture.invalid/',
-          send: (_) async => http.Response(status == 200 ? '{"action_items":[],"has_more":false}' : '{}', status),
-        ),
-      );
+      final provider = composeTypedActionItemsProvider(ActionItemsApi(
+        baseUrl: 'http://fixture.invalid/',
+        send: (_) async => http.Response(status == 200 ? '{"action_items":[],"has_more":false}' : '{}', status),
+      ));
       addTearDown(provider.dispose);
       final screen = await buildTypedActionItemsScreen(provider) as MaterialApp;
       await provider.ensureLoaded();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: screen.home,
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: screen.home,
+      ));
       await tester.pumpAndSettle();
 
       final l10n = AppLocalizations.of(tester.element(find.byType(ActionItemsPage)));
@@ -89,20 +85,19 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));
 
-      final conversations = composeTypedConversationProvider(
-        ConversationApi(baseUrl: 'http://fixture.invalid/', send: (_) async => http.Response('[]', 200)),
-      );
+      final conversations = composeTypedConversationProvider(ConversationApi(
+        baseUrl: 'http://fixture.invalid/',
+        send: (_) async => http.Response('[]', 200),
+      ));
       addTearDown(conversations.dispose);
       final home = await buildTypedConversationScreen(conversations) as MaterialApp;
       await conversations.forceRefreshConversations();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: home.home,
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: home.home,
+      ));
       await tester.pumpAndSettle();
       final homeTitleRect = tester.getRect(find.text(l10n.noConversationsYet));
       expect(emptyTitleRect.top, homeTitleRect.top);

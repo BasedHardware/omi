@@ -78,7 +78,14 @@ void main() {
     test('decodes valid response on HTTP 200', () async {
       final result = await KnowledgeGraphApi.rebuildKnowledgeGraph(
         apiCaller: ({required url, required headers, required body, required method}) async {
-          return http.Response(jsonEncode({'status': 'rebuilding', 'nodes_count': 12, 'edges_count': 5}), 200);
+          return http.Response(
+            jsonEncode({
+              'status': 'rebuilding',
+              'nodes_count': 12,
+              'edges_count': 5,
+            }),
+            200,
+          );
         },
       );
 
@@ -94,7 +101,13 @@ void main() {
             return http.Response('{"detail":"internal server error"}', 500);
           },
         ),
-        throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains("Couldn't rebuild knowledge graph"))),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains("Couldn't rebuild knowledge graph"),
+          ),
+        ),
       );
     });
   });

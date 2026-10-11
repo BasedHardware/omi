@@ -19,19 +19,19 @@ class _UnreachableApiEnv implements EnvFields {
 }
 
 App _privateApp() => App.fromJson({
-  'id': 'app_journal',
-  'name': 'Journal',
-  'author': 'Test Author',
-  'description': 'test',
-  'image': '',
-  'capabilities': ['memories'],
-  'status': 'approved',
-  'category': 'productivity',
-  'approved': true,
-  'private': true,
-  'enabled': true,
-  'deleted': false,
-});
+      'id': 'app_journal',
+      'name': 'Journal',
+      'author': 'Test Author',
+      'description': 'test',
+      'image': '',
+      'capabilities': ['memories'],
+      'status': 'approved',
+      'category': 'productivity',
+      'approved': true,
+      'private': true,
+      'enabled': true,
+      'deleted': false,
+    });
 
 void main() {
   setUpAll(() {

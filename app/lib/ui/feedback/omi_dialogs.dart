@@ -103,8 +103,8 @@ class OmiAlertDialog extends StatelessWidget {
               foregroundColor: action.isDestructive
                   ? omiDialogDangerColor
                   : (OmiColors.active == OmiPalette.light
-                        ? OmiColors.textPrimary
-                        : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78))),
+                      ? OmiColors.textPrimary
+                      : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78))),
               minimumSize: const Size(64, 44),
             ),
             child: Text(
@@ -122,7 +122,11 @@ class OmiAlertDialog extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: omiUsesCupertinoDialogs(context) ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-      children: [if (message != null) Text(message!), if (message != null) const SizedBox(height: 12), content!],
+      children: [
+        if (message != null) Text(message!),
+        if (message != null) const SizedBox(height: 12),
+        content!,
+      ],
     );
   }
 }
@@ -234,22 +238,11 @@ Future<OmiConfirmResult> showOmiConfirmMenu(
 }) async {
   if (MediaQuery.textScalerOf(context).scale(1) > _OmiConfirmMenu.maxTextScale) {
     if (offerOptOut) {
-      return showOmiConfirmWithOptOut(
-        context,
-        title: title,
-        message: message,
-        confirmLabel: confirmLabel,
-        destructive: true,
-        optOutLabel: optOutLabel,
-      );
+      return showOmiConfirmWithOptOut(context,
+          title: title, message: message, confirmLabel: confirmLabel, destructive: true, optOutLabel: optOutLabel);
     }
-    final confirmed = await showOmiConfirm(
-      context,
-      title: title,
-      message: message,
-      confirmLabel: confirmLabel,
-      destructive: true,
-    );
+    final confirmed =
+        await showOmiConfirm(context, title: title, message: message, confirmLabel: confirmLabel, destructive: true);
     return OmiConfirmResult(confirmed: confirmed, dontAskAgain: false);
   }
   final light = OmiColors.active == OmiPalette.light;
@@ -286,15 +279,10 @@ Future<OmiConfirmResult> showOmiConfirmMenu(
       ),
     ),
     transitionBuilder: (_, animation, __, child) => FadeTransition(
-      opacity: CurvedAnimation(
-        parent: animation,
-        curve: const Interval(0, 0.6, curve: Curves.easeOut),
-      ),
+      opacity: CurvedAnimation(parent: animation, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
       child: ScaleTransition(
-        scale: Tween<double>(
-          begin: 0.5,
-          end: 1,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn)),
+        scale: Tween<double>(begin: 0.5, end: 1)
+            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn)),
         alignment: origin,
         child: child,
       ),
@@ -306,12 +294,8 @@ Future<OmiConfirmResult> showOmiConfirmMenu(
 /// Places the confirm menu against its anchor: trailing edges lined up, 8pt below (or above), and
 /// never closer than 16pt to the screen's edges or the safe area.
 class _OmiConfirmMenuLayout extends SingleChildLayoutDelegate {
-  _OmiConfirmMenuLayout({
-    required this.anchor,
-    required this.below,
-    required this.padding,
-    required this.textDirection,
-  });
+  _OmiConfirmMenuLayout(
+      {required this.anchor, required this.below, required this.padding, required this.textDirection});
 
   final Rect anchor;
   final bool below;
@@ -324,17 +308,14 @@ class _OmiConfirmMenuLayout extends SingleChildLayoutDelegate {
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final width = math.min(_OmiConfirmMenu.width, constraints.maxWidth - 2 * _margin);
-    return BoxConstraints.tightFor(
-      width: width,
-    ).copyWith(maxHeight: math.max(0.0, constraints.maxHeight - padding.vertical - 2 * _margin));
+    return BoxConstraints.tightFor(width: width)
+        .copyWith(maxHeight: math.max(0.0, constraints.maxHeight - padding.vertical - 2 * _margin));
   }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final double x = (textDirection == TextDirection.rtl ? anchor.left : anchor.right - childSize.width).clamp(
-      _margin,
-      math.max(_margin, size.width - _margin - childSize.width),
-    );
+    final double x = (textDirection == TextDirection.rtl ? anchor.left : anchor.right - childSize.width)
+        .clamp(_margin, math.max(_margin, size.width - _margin - childSize.width));
     final top = padding.top + _margin;
     final bottom = size.height - padding.bottom - _margin;
     final fitsBelow = anchor.bottom + _gap + childSize.height <= bottom;
@@ -399,7 +380,7 @@ class _OmiConfirmMenuState extends State<_OmiConfirmMenu> {
         decoration: BoxDecoration(
           borderRadius: OmiRadius.mdAll,
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 44, offset: const Offset(0, 14)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 44, offset: const Offset(0, 14))
           ],
         ),
         child: ClipRRect(
@@ -434,9 +415,8 @@ class _OmiConfirmMenuState extends State<_OmiConfirmMenu> {
                     ],
                     // The destructive action sits in its own group, as in an iOS menu.
                     ColoredBox(
-                      color: OmiColors.textPrimary.withValues(alpha: 0.07),
-                      child: const SizedBox(height: OmiSpacing.xs),
-                    ),
+                        color: OmiColors.textPrimary.withValues(alpha: 0.07),
+                        child: const SizedBox(height: OmiSpacing.xs)),
                     _OmiMenuItem(
                       key: const ValueKey('omi_confirm_menu_confirm'),
                       label: widget.confirmLabel,
@@ -483,18 +463,16 @@ class _OmiMenuItem extends StatelessWidget {
             child: Row(
               children: [
                 if (checked != null) ...[
-                  SizedBox(width: 16, child: checked ? Icon(Icons.check_rounded, size: 18, color: ink) : null),
+                  SizedBox(
+                    width: 16,
+                    child: checked ? Icon(Icons.check_rounded, size: 18, color: ink) : null,
+                  ),
                   const SizedBox(width: OmiSpacing.xs),
                 ],
-                Expanded(
-                  child: Text(label, style: OmiType.body.copyWith(color: ink)),
-                ),
+                Expanded(child: Text(label, style: OmiType.body.copyWith(color: ink))),
                 if (trailing != null) ...[
                   const SizedBox(width: OmiSpacing.xs),
-                  IconTheme(
-                    data: IconThemeData(size: 17, color: ink),
-                    child: trailing!,
-                  ),
+                  IconTheme(data: IconThemeData(size: 17, color: ink), child: trailing!),
                 ],
               ],
             ),
@@ -698,9 +676,9 @@ class _OmiDialogCardButtons extends StatelessWidget {
   static const double _sidePadding = OmiSpacing.md;
 
   TextStyle _style(OmiDialogAction action) => OmiType.body.copyWith(
-    color: action.isDestructive ? OmiColors.danger : OmiColors.textPrimary,
-    fontWeight: action.isDefault ? FontWeight.w600 : FontWeight.w400,
-  );
+        color: action.isDestructive ? OmiColors.danger : OmiColors.textPrimary,
+        fontWeight: action.isDefault ? FontWeight.w600 : FontWeight.w400,
+      );
 
   Widget _button(OmiDialogAction action) {
     final style = _style(action);
@@ -722,52 +700,50 @@ class _OmiDialogCardButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hairline = Divider(height: 1, thickness: 0.5, color: OmiColors.border);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final half = constraints.maxWidth / 2;
-        final textScaler = MediaQuery.textScalerOf(context);
-        final textDirection = Directionality.of(context);
-        // A label fits when it and the button's side padding fit in half the bar.
-        bool fits(OmiDialogAction action) {
-          final painter = TextPainter(
-            text: TextSpan(text: action.label, style: _style(action)),
-            textDirection: textDirection,
-            textScaler: textScaler,
-            maxLines: 1,
-          )..layout();
-          final width = painter.width + 2 * _sidePadding;
-          painter.dispose();
-          return width <= half;
-        }
+    return LayoutBuilder(builder: (context, constraints) {
+      final half = constraints.maxWidth / 2;
+      final textScaler = MediaQuery.textScalerOf(context);
+      final textDirection = Directionality.of(context);
+      // A label fits when it and the button's side padding fit in half the bar.
+      bool fits(OmiDialogAction action) {
+        final painter = TextPainter(
+          text: TextSpan(text: action.label, style: _style(action)),
+          textDirection: textDirection,
+          textScaler: textScaler,
+          maxLines: 1,
+        )..layout();
+        final width = painter.width + 2 * _sidePadding;
+        painter.dispose();
+        return width <= half;
+      }
 
-        if (actions.length == 2 && actions.every(fits)) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              hairline,
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: _button(actions.first)),
-                    VerticalDivider(width: 1, thickness: 0.5, color: OmiColors.border),
-                    Expanded(child: _button(actions.last)),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
-        // Stacked: the action on top, Cancel last, the way iOS stacks an alert's buttons.
+      if (actions.length == 2 && actions.every(fits)) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final action in actions.reversed) ...[hairline, _button(action)],
+            hairline,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _button(actions.first)),
+                  VerticalDivider(width: 1, thickness: 0.5, color: OmiColors.border),
+                  Expanded(child: _button(actions.last)),
+                ],
+              ),
+            ),
           ],
         );
-      },
-    );
+      }
+      // Stacked: the action on top, Cancel last, the way iOS stacks an alert's buttons.
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final action in actions.reversed) ...[hairline, _button(action)],
+        ],
+      );
+    });
   }
 }

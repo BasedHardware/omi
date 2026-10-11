@@ -18,10 +18,10 @@ class UsageProvider with ChangeNotifier {
     UsageRequest? usageRequest,
     Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
     DateTime Function()? now,
-  }) : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
-       _usageRequest = usageRequest ?? getUserUsage,
-       _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
-       _now = now ?? DateTime.now;
+  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+        _usageRequest = usageRequest ?? getUserUsage,
+        _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
+        _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;

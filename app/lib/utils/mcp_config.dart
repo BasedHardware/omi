@@ -20,27 +20,27 @@ String hostedMcpUrl(String apiBaseUrl) => '${apiBaseUrl.replaceAll(RegExp(r'/+$'
 /// entry. The copyable text and the highlighted code block are both built
 /// from this single source so they can never drift apart.
 List<(McpJsonToken, String)> hostedMcpConfigTokens(String mcpUrl) => [
-  (McpJsonToken.plain, '{\n  '),
-  (McpJsonToken.key, '"mcpServers"'),
-  (McpJsonToken.plain, ': {\n    '),
-  (McpJsonToken.key, '"omi"'),
-  (McpJsonToken.plain, ': {\n      '),
-  (McpJsonToken.key, '"type"'),
-  (McpJsonToken.plain, ': '),
-  (McpJsonToken.string, '"http"'),
-  (McpJsonToken.plain, ',\n      '),
-  (McpJsonToken.key, '"url"'),
-  (McpJsonToken.plain, ': '),
-  // jsonEncode keeps the output parseable even for an odd configured base.
-  (McpJsonToken.string, jsonEncode(mcpUrl)),
-  (McpJsonToken.plain, ',\n      '),
-  (McpJsonToken.key, '"headers"'),
-  (McpJsonToken.plain, ': {\n        '),
-  (McpJsonToken.key, '"Authorization"'),
-  (McpJsonToken.plain, ': '),
-  (McpJsonToken.string, '"Bearer <key>"'),
-  (McpJsonToken.plain, '\n      }\n    }\n  }\n}'),
-];
+      (McpJsonToken.plain, '{\n  '),
+      (McpJsonToken.key, '"mcpServers"'),
+      (McpJsonToken.plain, ': {\n    '),
+      (McpJsonToken.key, '"omi"'),
+      (McpJsonToken.plain, ': {\n      '),
+      (McpJsonToken.key, '"type"'),
+      (McpJsonToken.plain, ': '),
+      (McpJsonToken.string, '"http"'),
+      (McpJsonToken.plain, ',\n      '),
+      (McpJsonToken.key, '"url"'),
+      (McpJsonToken.plain, ': '),
+      // jsonEncode keeps the output parseable even for an odd configured base.
+      (McpJsonToken.string, jsonEncode(mcpUrl)),
+      (McpJsonToken.plain, ',\n      '),
+      (McpJsonToken.key, '"headers"'),
+      (McpJsonToken.plain, ': {\n        '),
+      (McpJsonToken.key, '"Authorization"'),
+      (McpJsonToken.plain, ': '),
+      (McpJsonToken.string, '"Bearer <key>"'),
+      (McpJsonToken.plain, '\n      }\n    }\n  }\n}'),
+    ];
 
 /// The exact Claude Code `~/.claude.json` config JSON copied to the clipboard.
 String hostedMcpConfigJson(String mcpUrl) => hostedMcpConfigTokens(mcpUrl).map((token) => token.$2).join();

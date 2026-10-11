@@ -22,13 +22,11 @@ void main() {
     final first = Completer<bool>();
     final second = Completer<bool>();
     final calls = <(String, bool)>[];
-    final provider = PeopleProvider(
-      setPinned: (id, value) {
-        calls.add((id, value));
-        if (id == 'b') return Future.value(true);
-        return calls.where((c) => c.$1 == 'a').length == 1 ? first.future : second.future;
-      },
-    );
+    final provider = PeopleProvider(setPinned: (id, value) {
+      calls.add((id, value));
+      if (id == 'b') return Future.value(true);
+      return calls.where((c) => c.$1 == 'a').length == 1 ? first.future : second.future;
+    });
     addTearDown(provider.dispose);
     final pin = provider.setPinned('a', true);
     final unpin = provider.setPinned('a', false);

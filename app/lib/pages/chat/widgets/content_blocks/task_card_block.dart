@@ -101,9 +101,9 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
                     child: Text(
                       item.description,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: item.completed ? OmiColors.textSecondary : OmiColors.textPrimary,
-                        decoration: item.completed ? TextDecoration.lineThrough : null,
-                      ),
+                            color: item.completed ? OmiColors.textSecondary : OmiColors.textPrimary,
+                            decoration: item.completed ? TextDecoration.lineThrough : null,
+                          ),
                     ),
                   ),
                 ],

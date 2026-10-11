@@ -10,13 +10,9 @@ void main() {
   }
 
   testWidgets('fills the given number of steps with the neutral text colour, one semantics node', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: Center(child: OmiLevelMeter(level: 2, semanticsLabel: 'Confidence: Likely')),
-        ),
-      ),
-    );
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: Center(child: OmiLevelMeter(level: 2, semanticsLabel: 'Confidence: Likely'))),
+    ));
     expect(stepColor(tester, 0), OmiColors.textPrimary);
     expect(stepColor(tester, 1), OmiColors.textPrimary);
     expect(stepColor(tester, 2), isNot(OmiColors.textPrimary));
@@ -25,12 +21,8 @@ void main() {
 
   testWidgets('a step that fills while on screen animates in (the tick-up moment)', (tester) async {
     Widget meter(int level) => MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: OmiLevelMeter(level: level, semanticsLabel: 'Confidence'),
-        ),
-      ),
-    );
+          home: Scaffold(body: Center(child: OmiLevelMeter(level: level, semanticsLabel: 'Confidence'))),
+        );
     await tester.pumpWidget(meter(2));
     await tester.pumpWidget(meter(3));
     await tester.pump(const Duration(milliseconds: 50));

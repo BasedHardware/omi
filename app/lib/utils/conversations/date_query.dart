@@ -103,10 +103,8 @@ ConversationDateQuery parseConversationDateQuery(String input, {DateTime? now}) 
   }
 
   scan(RegExp(r'(?<!\w)today(?!\w)', caseSensitive: false), (_) => _dayRange(today.year, today.month, today.day));
-  scan(
-    RegExp(r'(?<!\w)yesterday(?!\w)', caseSensitive: false),
-    (_) => _dayRangeAt(DateTime(today.year, today.month, today.day - 1)),
-  );
+  scan(RegExp(r'(?<!\w)yesterday(?!\w)', caseSensitive: false),
+      (_) => _dayRangeAt(DateTime(today.year, today.month, today.day - 1)));
   scan(RegExp(r'(?<!\w)last week(?!\w)', caseSensitive: false), (_) {
     final monday = DateTime(today.year, today.month, today.day - (today.weekday - 1 + 7));
     return (
@@ -137,14 +135,13 @@ ConversationDateQuery parseConversationDateQuery(String input, {DateTime? now}) 
     return _dayRange(year, month, day);
   });
   scan(
-    RegExp('(?<!\\w)(\\d{1,2})(?:st|nd|rd|th)?\\s*($_monthToken)(?:\\s*,?\\s*(\\d{4}))?(?!\\w)', caseSensitive: false),
-    (m) {
-      final day = int.parse(m.group(1)!);
-      final month = _months[m.group(2)!.toLowerCase()]!;
-      final year = m.group(3) != null ? int.parse(m.group(3)!) : today.year;
-      return _dayRange(year, month, day);
-    },
-  );
+      RegExp('(?<!\\w)(\\d{1,2})(?:st|nd|rd|th)?\\s*($_monthToken)(?:\\s*,?\\s*(\\d{4}))?(?!\\w)',
+          caseSensitive: false), (m) {
+    final day = int.parse(m.group(1)!);
+    final month = _months[m.group(2)!.toLowerCase()]!;
+    final year = m.group(3) != null ? int.parse(m.group(3)!) : today.year;
+    return _dayRange(year, month, day);
+  });
   scan(RegExp('(?<!\\w)($_monthToken)\\s+(\\d{4})(?!\\w)', caseSensitive: false), (m) {
     final month = _months[m.group(1)!.toLowerCase()]!;
     final year = int.parse(m.group(2)!);

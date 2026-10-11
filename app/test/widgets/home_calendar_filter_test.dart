@@ -69,10 +69,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    tester.widget<CalendarDatePicker2>(find.byType(CalendarDatePicker2)).onValueChanged?.call([
-      DateTime(2026, 7, 1),
-      DateTime(2026, 7, 3),
-    ]);
+    tester
+        .widget<CalendarDatePicker2>(find.byType(CalendarDatePicker2))
+        .onValueChanged
+        ?.call([DateTime(2026, 7, 1), DateTime(2026, 7, 3)]);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const Key('date_range_done')));
     await tester.pump();
@@ -82,11 +82,8 @@ void main() {
     final provider = Provider.of<ConversationProvider>(context, listen: false);
     expect(provider.selectedStartDate, isNotNull);
     expect(provider.selectedEndDate, isNotNull);
-    expect(
-      provider.selectedStartDate != provider.selectedEndDate,
-      isTrue,
-      reason: 'a two-day pick must become a range filter',
-    );
+    expect(provider.selectedStartDate != provider.selectedEndDate, isTrue,
+        reason: 'a two-day pick must become a range filter');
 
     final chip = find.byKey(const ValueKey('home_date_filter'));
     expect(chip, findsOneWidget);
@@ -160,8 +157,9 @@ List<SingleChildWidget> _homeProviders() {
     ChangeNotifierProvider(create: (_) => PeopleProvider()),
     ChangeNotifierProvider(create: (_) => LocaleProvider()),
     ChangeNotifierProvider(
-      create: (_) =>
-          SpeakerTagPromptsProvider(fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse())),
+      create: (_) => SpeakerTagPromptsProvider(
+        fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+      ),
     ),
   ];
 }

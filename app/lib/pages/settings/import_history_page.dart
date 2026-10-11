@@ -70,10 +70,10 @@ bool isImportableFile(String fileName, List<String> allowedExtensions) {
 /// The icon an import-history row shows for a job's importer, or null for the
 /// Limitless logo (Limitless jobs, including those from before sources were reported).
 IconData? importJobSourceIcon(ImportJobSource source) => switch (source) {
-  ImportJobSource.limitless => null,
-  ImportJobSource.transcriptFiles => Icons.subtitles_outlined,
-  ImportJobSource.other => Icons.upload_file_outlined,
-};
+      ImportJobSource.limitless => null,
+      ImportJobSource.transcriptFiles => Icons.subtitles_outlined,
+      ImportJobSource.other => Icons.upload_file_outlined,
+    };
 
 class ImportJobCountChip {
   final int count;
@@ -172,25 +172,25 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   }
 
   Future<void> _startLimitlessImport() => _startImport(
-    analyticsSource: 'limitless',
-    allowedExtensions: const ['zip'],
-    upload: (file) async {
-      final job = await startLimitlessImport(file);
-      return job == null ? const ImportStartResult.failed() : ImportStartResult.started(job);
-    },
-    retry: _startLimitlessImport,
-  );
+        analyticsSource: 'limitless',
+        allowedExtensions: const ['zip'],
+        upload: (file) async {
+          final job = await startLimitlessImport(file);
+          return job == null ? const ImportStartResult.failed() : ImportStartResult.started(job);
+        },
+        retry: _startLimitlessImport,
+      );
 
   Future<void> _startTranscriptImport() => _startImport(
-    analyticsSource: 'transcript_files',
-    allowedExtensions: transcriptImportExtensions,
-    upload: (file) async => startTranscriptImport(
-      file,
-      language: SharedPreferencesUtil().userPrimaryLanguage,
-      timeZone: await getUsageDeviceTimeZone(),
-    ),
-    retry: _startTranscriptImport,
-  );
+        analyticsSource: 'transcript_files',
+        allowedExtensions: transcriptImportExtensions,
+        upload: (file) async => startTranscriptImport(
+          file,
+          language: SharedPreferencesUtil().userPrimaryLanguage,
+          timeZone: await getUsageDeviceTimeZone(),
+        ),
+        retry: _startTranscriptImport,
+      );
 
   Future<void> _startImport({
     required String analyticsSource,

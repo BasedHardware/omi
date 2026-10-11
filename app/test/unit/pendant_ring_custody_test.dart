@@ -209,12 +209,10 @@ void main() {
 
     setUp(() async {
       tmp = await Directory.systemTemp.createTemp('custody_test');
-      custody = tracked(
-        PendantRingCustody(
-          store: PendantCustodyStore(directoryProvider: () async => tmp),
-          walValidator: (_) async => true,
-        ),
-      );
+      custody = tracked(PendantRingCustody(
+        store: PendantCustodyStore(directoryProvider: () async => tmp),
+        walValidator: (_) async => true,
+      ));
     });
 
     tearDown(() async {
@@ -378,12 +376,10 @@ void main() {
 
     test('a deleted proof WAL blocks validatedAdvanceTarget — no release of the stale range', () async {
       final live = <String>{'r.bin', 'w.bin'};
-      final c = tracked(
-        PendantRingCustody(
-          store: PendantCustodyStore(directoryProvider: () async => tmp),
-          walValidator: (ref) async => live.contains(ref.fileName),
-        ),
-      );
+      final c = tracked(PendantRingCustody(
+        store: PendantCustodyStore(directoryProvider: () async => tmp),
+        walValidator: (ref) async => live.contains(ref.fileName),
+      ));
       await c.beginConnection('dev', 1, info());
       c.setLivePersistEnabled('dev', 1, true);
       await c.recordDurableRingRange('dev', 1, 42, 0, 5, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
@@ -419,15 +415,13 @@ void main() {
     test('validatedAdvanceTarget never extends past the target it validated', () async {
       final gate = Completer<void>();
       final live = <String>{'r.bin'};
-      final c = tracked(
-        PendantRingCustody(
-          store: PendantCustodyStore(directoryProvider: () async => tmp),
-          walValidator: (ref) async {
-            await gate.future;
-            return live.contains(ref.fileName);
-          },
-        ),
-      );
+      final c = tracked(PendantRingCustody(
+        store: PendantCustodyStore(directoryProvider: () async => tmp),
+        walValidator: (ref) async {
+          await gate.future;
+          return live.contains(ref.fileName);
+        },
+      ));
       await c.beginConnection('dev', 1, info());
       await c.recordDurableRingRange('dev', 1, 42, 0, 5, [const CustodyWalRef(fileName: 'r.bin', bytes: 1, frames: 1)]);
 
@@ -455,15 +449,13 @@ void main() {
 
     test('isDurableLiveRecord returns false when the incarnation changes during validation', () async {
       final gate = Completer<void>();
-      final c = tracked(
-        PendantRingCustody(
-          store: PendantCustodyStore(directoryProvider: () async => tmp),
-          walValidator: (ref) async {
-            await gate.future;
-            return true;
-          },
-        ),
-      );
+      final c = tracked(PendantRingCustody(
+        store: PendantCustodyStore(directoryProvider: () async => tmp),
+        walValidator: (ref) async {
+          await gate.future;
+          return true;
+        },
+      ));
       await c.beginConnection('dev', 1, info());
       c.setLivePersistEnabled('dev', 1, true);
       for (var f = 0; f < 10; f++) {

@@ -8,17 +8,17 @@ import 'package:omi/pages/chat/widgets/chat_starters.dart';
 import 'package:omi/ui/ui.dart';
 
 Widget host(int count, {bool reduced = false}) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: const [Locale('en')],
-  home: MediaQuery(
-    data: MediaQueryData(disableAnimations: reduced),
-    child: Scaffold(
-      body: ChatEntrance(
-        child: ChatGreeting(isConnected: true, name: 'Alex', hour: 10, todayCount: count),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: MediaQuery(
+        data: MediaQueryData(disableAnimations: reduced),
+        child: Scaffold(
+          body: ChatEntrance(
+            child: ChatGreeting(isConnected: true, name: 'Alex', hour: 10, todayCount: count),
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
 
 double opacity(WidgetTester tester, String key) =>
     tester.widget<Opacity>(find.descendant(of: find.byKey(Key(key)), matching: find.byType(Opacity)).first).opacity;

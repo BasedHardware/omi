@@ -18,11 +18,7 @@ Person? personById(List<Person> people, String? id) {
 /// Pass the conversation's [segments] so "Speaker N" uses the conversation's dense numbering
 /// (see [SpeakerNames]); without them only [segment] is known and it is numbered 1. Code that
 /// labels many segments builds one [SpeakerNames.forSegments] resolver instead.
-String speakerLabel(
-  BuildContext context,
-  TranscriptSegment segment,
-  Person? person, {
-  List<TranscriptSegment>? segments,
-}) {
+String speakerLabel(BuildContext context, TranscriptSegment segment, Person? person,
+    {List<TranscriptSegment>? segments}) {
   return SpeakerNames.forSegments(segments ?? [segment], l10n: context.l10n).forSegment(segment, person: person);
 }

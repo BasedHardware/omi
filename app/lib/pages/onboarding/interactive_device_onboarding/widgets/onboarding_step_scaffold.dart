@@ -32,8 +32,8 @@ class OnboardingProgressDots extends StatelessWidget {
             color: isActive
                 ? OmiColors.textPrimary
                 : isCompleted
-                ? OmiColors.textPrimary.withValues(alpha: 0.5)
-                : OmiColors.textPrimary.withValues(alpha: 0.2),
+                    ? OmiColors.textPrimary.withValues(alpha: 0.5)
+                    : OmiColors.textPrimary.withValues(alpha: 0.2),
           ),
         );
       }),

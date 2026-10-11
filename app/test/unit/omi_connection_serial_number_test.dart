@@ -50,12 +50,12 @@ class _DisTransport extends DeviceTransport {
 }
 
 Map<String, List<int>> _cv1Reads({String? serial}) => {
-  modelNumberCharacteristicUuid: 'Omi CV 1'.codeUnits,
-  firmwareRevisionCharacteristicUuid: '3.0.21'.codeUnits,
-  hardwareRevisionCharacteristicUuid: '5.0'.codeUnits,
-  manufacturerNameCharacteristicUuid: 'Based Hardware'.codeUnits,
-  if (serial != null) serialNumberCharacteristicUuid: serial.codeUnits,
-};
+      modelNumberCharacteristicUuid: 'Omi CV 1'.codeUnits,
+      firmwareRevisionCharacteristicUuid: '3.0.21'.codeUnits,
+      hardwareRevisionCharacteristicUuid: '5.0'.codeUnits,
+      manufacturerNameCharacteristicUuid: 'Based Hardware'.codeUnits,
+      if (serial != null) serialNumberCharacteristicUuid: serial.codeUnits,
+    };
 
 BtDevice _device() => BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 

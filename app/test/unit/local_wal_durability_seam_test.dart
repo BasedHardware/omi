@@ -49,9 +49,9 @@ void main() {
   });
 
   WalFrame frame(int counter, int fragment) => WalFrame(
-    payload: [0xAA, counter & 0xFF],
-    syncKey: FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF, fragment]),
-  );
+        payload: [0xAA, counter & 0xFF],
+        syncKey: FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF, fragment]),
+      );
 
   List<File> audioFiles() => tempDir.listSync().whereType<File>().where((f) => f.path.endsWith('.bin')).toList();
 
@@ -109,16 +109,16 @@ void main() {
     final f2 = makeFile('audio_collision_b.bin');
 
     Wal ext(String path) => Wal(
-      timerStart: ts,
-      codec: BleAudioCodec.opus,
-      seconds: 1,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      filePath: path,
-      device: 'devkit-1',
-      deviceModel: 'Omi DevKit',
-      totalFrames: 10,
-    );
+          timerStart: ts,
+          codec: BleAudioCodec.opus,
+          seconds: 1,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          filePath: path,
+          device: 'devkit-1',
+          deviceModel: 'Omi DevKit',
+          totalFrames: 10,
+        );
 
     final gen = sync.sessionGeneration;
     await sync.addExternalWal(ext(f1.path.split('/').last), admittedGeneration: gen);

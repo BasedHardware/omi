@@ -375,7 +375,9 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
       ),
       child: Row(
         children: [
-          ExcludeSemantics(child: FaIcon(FontAwesomeIcons.triangleExclamation, color: OmiColors.warning, size: 18)),
+          ExcludeSemantics(
+            child: FaIcon(FontAwesomeIcons.triangleExclamation, color: OmiColors.warning, size: 18),
+          ),
           const SizedBox(width: 14),
           Expanded(child: Text(text, style: OmiType.subhead.copyWith(height: 1.4))),
         ],
@@ -383,12 +385,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     );
   }
 
-  Widget _buildVersionItem({
-    required FaIconData icon,
-    required String label,
-    required String version,
-    Color? chipColor,
-  }) {
+  Widget _buildVersionItem(
+      {required FaIconData icon, required String label, required String version, Color? chipColor}) {
     return Padding(
       padding: const EdgeInsets.all(OmiSpacing.md),
       child: Row(
@@ -441,10 +439,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             child: Row(
               children: [
                 Flexible(
-                  child: Text(
-                    context.l10n.deviceUpToDate,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                  ),
+                  child: Text(context.l10n.deviceUpToDate,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),

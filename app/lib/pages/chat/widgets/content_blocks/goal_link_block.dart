@@ -63,8 +63,7 @@ class GoalLinkBlock extends StatelessWidget {
       title: goal.title,
       builder: (sheetContext) {
         final unit = goal.unit?.trim();
-        final progress =
-            '${_format(goal.currentValue)} / ${_format(goal.targetValue)}'
+        final progress = '${_format(goal.currentValue)} / ${_format(goal.targetValue)}'
             '${unit == null || unit.isEmpty ? '' : ' $unit'}';
         return Padding(
           padding: const EdgeInsets.only(bottom: OmiSpacing.xl),

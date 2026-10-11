@@ -86,8 +86,7 @@ final deviceScenarios = <AuditScenario>[
     id: 'device-diagnostics-healthy',
     title: 'Device Diagnostics, a healthy week with frequent auto-recovered drops',
     page: 'lib/pages/settings/device_diagnostics.dart (DeviceDiagnostics)',
-    state:
-        'Native BLE replies faked: connected 1h 11m at 100% battery and about -68 dBm; 357 drops in the '
+    state: 'Native BLE replies faked: connected 1h 11m at 100% battery and about -68 dBm; 357 drops in the '
         'last 7 days, each back in 1-3 s except one of about 40 s; 368 since pairing; no failed connections',
     run: (a) async {
       await _pumpDiagnostics(a, battery: 100, rssi: -68, failedLast24h: 0);

@@ -14,12 +14,10 @@ void main() {
   Future<void> pumpEntry(WidgetTester tester, MessagingChannelsProvider provider) async {
     await provider.load();
     usePhoneViewport(tester);
-    await tester.pumpWidget(
-      chatAppsHost(
-        const Scaffold(body: SingleChildScrollView(child: ChatAppsIntegrationsEntry())),
-        provider: provider,
-      ),
-    );
+    await tester.pumpWidget(chatAppsHost(
+      const Scaffold(body: SingleChildScrollView(child: ChatAppsIntegrationsEntry())),
+      provider: provider,
+    ));
     await settle(tester);
   }
 

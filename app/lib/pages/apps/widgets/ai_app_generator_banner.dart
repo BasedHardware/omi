@@ -37,7 +37,9 @@ class AiAppGeneratorBanner extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.mdAll),
-              child: Center(child: FaIcon(FontAwesomeIcons.wandMagicSparkles, color: OmiColors.textPrimary, size: 16)),
+              child: Center(
+                child: FaIcon(FontAwesomeIcons.wandMagicSparkles, color: OmiColors.textPrimary, size: 16),
+              ),
             ),
 
             const SizedBox(width: OmiSpacing.sm),

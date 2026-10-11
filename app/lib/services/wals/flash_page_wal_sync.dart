@@ -636,8 +636,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         }
       }
 
-      final bool reachedEnd =
-          lastProcessedIndex != null &&
+      final bool reachedEnd = lastProcessedIndex != null &&
           lastProcessedIndex >= endPage &&
           (lastDurablePageIndex == null ||
               (lastAcknowledgedIndex != null && lastAcknowledgedIndex >= lastDurablePageIndex));

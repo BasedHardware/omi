@@ -47,9 +47,8 @@ class _CaptureAppState extends State<_CaptureApp> {
   }
 
   Future<void> _capture() async {
-    final storage = Platform.isAndroid
-        ? (await getExternalStorageDirectory())!
-        : await getApplicationDocumentsDirectory();
+    final storage =
+        Platform.isAndroid ? (await getExternalStorageDirectory())! : await getApplicationDocumentsDirectory();
     final directory = Directory('${storage.path}/omi-layout-evidence');
     await directory.create(recursive: true);
     for (final fixed in [false, true]) {
@@ -76,22 +75,22 @@ class _CaptureAppState extends State<_CaptureApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: buildOmiTheme(brightness: Brightness.light),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: const [Locale('en')],
-    home: RepaintBoundary(
-      key: _surface,
-      child: Scaffold(
-        body: OnboardingStepLayout(
-          reserveHeader: _fixed,
-          progress: const OnboardingProgressDots(current: 4, total: 6),
-          onBack: () {},
-          child: SpeechProfileWidget(controller: _flow, goNext: () {}, onSkip: () {}),
+        debugShowCheckedModeBanner: false,
+        theme: buildOmiTheme(brightness: Brightness.light),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: RepaintBoundary(
+          key: _surface,
+          child: Scaffold(
+            body: OnboardingStepLayout(
+              reserveHeader: _fixed,
+              progress: const OnboardingProgressDots(current: 4, total: 6),
+              onBack: () {},
+              child: SpeechProfileWidget(controller: _flow, goNext: () {}, onSkip: () {}),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 class _InertVoiceIO implements GuidedVoiceIO {

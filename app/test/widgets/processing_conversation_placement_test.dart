@@ -22,10 +22,9 @@ Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async 
   addTearDown(tester.view.resetDevicePixelRatio);
   final screen = await buildTypedConversationScreen(provider);
   final goals = GoalsProvider(
-    goalsFetcher: () async => [
-      Goal.fromJson({'id': 'goal', 'title': 'Read a book'}),
-    ],
-  );
+      goalsFetcher: () async => [
+            Goal.fromJson({'id': 'goal', 'title': 'Read a book'})
+          ]);
   addTearDown(goals.dispose);
   await goals.init();
   await tester.pumpWidget(ChangeNotifierProvider.value(value: goals, child: screen));
@@ -79,19 +78,15 @@ void main() {
     expect(find.byType(SliverFillRemaining), findsNothing);
     final headers = find.byType(DateListItem);
     expect(headers, findsOneWidget);
-    expect(
-      tester.widget<DateListItem>(headers).date,
-      conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt),
-    );
+    expect(tester.widget<DateListItem>(headers).date,
+        conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt));
 
     provider.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
     provider.addProcessingConversation(completed('real')..status = ConversationStatus.processing);
     await tester.pump();
     expect(find.byType(ProcessingConversationWidget), findsOneWidget);
     expect(
-      tester.widget<ProcessingConversationWidget>(find.byType(ProcessingConversationWidget)).conversation.id,
-      'real',
-    );
+        tester.widget<ProcessingConversationWidget>(find.byType(ProcessingConversationWidget)).conversation.id, 'real');
 
     provider.removeProcessingConversation('real');
     await provider.addConversation(completed('real'));
@@ -115,9 +110,10 @@ void main() {
     final processing = find.byType(ProcessingConversationWidget);
     expect(processing, findsOneWidget);
     expect(tester.widget<ProcessingConversationWidget>(processing).conversation.id, '0');
-    expect(tester.widgetList<DateListItem>(find.byType(DateListItem)).map((header) => header.date), [
-      conversationLocalDayKey(now),
-    ]);
+    expect(
+      tester.widgetList<DateListItem>(find.byType(DateListItem)).map((header) => header.date),
+      [conversationLocalDayKey(now)],
+    );
 
     provider.removeProcessingConversation('0');
     provider.addProcessingConversation(
@@ -126,9 +122,10 @@ void main() {
     );
     await tester.pump();
     expect(tester.widget<ProcessingConversationWidget>(processing).conversation.id, 'new');
-    expect(tester.widgetList<DateListItem>(find.byType(DateListItem)).map((header) => header.date), [
-      conversationLocalDayKey(yesterdayNoon),
-    ]);
+    expect(
+      tester.widgetList<DateListItem>(find.byType(DateListItem)).map((header) => header.date),
+      [conversationLocalDayKey(yesterdayNoon)],
+    );
 
     provider.removeProcessingConversation('new');
     await provider.addConversation(completed('new'));
@@ -162,15 +159,11 @@ void main() {
     expect(find.byType(ConversationListItem), findsNWidgets(2));
     final processing = find.byType(ProcessingConversationWidget);
     expect(processing, findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.byKey(const ValueKey('today'))).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byWidget(headers[1])).dy),
-    );
+    expect(tester.getBottomLeft(find.byKey(const ValueKey('today'))).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.byWidget(headers[1])).dy));
     expect(tester.getBottomLeft(find.byWidget(headers[1])).dy, lessThanOrEqualTo(tester.getTopLeft(processing).dy));
-    expect(
-      tester.getBottomLeft(processing).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('yesterday'))).dy),
-    );
+    expect(tester.getBottomLeft(processing).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('yesterday'))).dy));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -196,10 +189,8 @@ void main() {
     expect(find.byType(SliverFillRemaining), findsNothing);
     final processing = find.byType(ProcessingConversationWidget);
     expect(processing, findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.byKey(const ValueKey('today'))).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byWidget(headers[1])).dy),
-    );
+    expect(tester.getBottomLeft(find.byKey(const ValueKey('today'))).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.byWidget(headers[1])).dy));
     expect(tester.getBottomLeft(find.byWidget(headers[1])).dy, lessThanOrEqualTo(tester.getTopLeft(processing).dy));
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -216,10 +207,8 @@ void main() {
     expect(find.byType(ProcessingConversationWidget), findsOneWidget);
     final headers = find.byType(DateListItem);
     expect(headers, findsOneWidget);
-    expect(
-      tester.widget<DateListItem>(headers).date,
-      conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt),
-    );
+    expect(tester.widget<DateListItem>(headers).date,
+        conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt));
     expect(find.byType(EmptyConversationsWidget), findsNothing);
     expect(find.byType(SliverFillRemaining), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -238,10 +227,8 @@ void main() {
     expect(find.byType(SliverFillRemaining), findsNothing);
     final headers = find.byType(DateListItem);
     expect(headers, findsOneWidget);
-    expect(
-      tester.widget<DateListItem>(headers).date,
-      conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt),
-    );
+    expect(tester.widget<DateListItem>(headers).date,
+        conversationLocalDayKey(placeholder.startedAt ?? placeholder.createdAt));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

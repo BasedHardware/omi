@@ -13,7 +13,9 @@ bool isFramedWalSyncFileName(String fileName) {
 void assertWalSyncFilesAreFramedBins(Iterable<String> fileNames) {
   for (final name in fileNames) {
     if (!isFramedWalSyncFileName(name)) {
-      throw ArgumentError('WAL sync must upload framed .bin audio (opus/PCM), not decoded WAV: $name');
+      throw ArgumentError(
+        'WAL sync must upload framed .bin audio (opus/PCM), not decoded WAV: $name',
+      );
     }
   }
 }

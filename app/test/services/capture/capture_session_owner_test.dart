@@ -5,21 +5,21 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 
 RecordingTransferCoordinator _coordinator({int Function()? drains}) => RecordingTransferCoordinator(
-  reconcile: () async {},
-  discover: () async {},
-  refreshPending: () async {},
-  drain: () async {
-    drains?.call();
-    return const RecordingTransferDrainResult.skipped();
-  },
-  autoUploadEnabled: () => true,
-);
+      reconcile: () async {},
+      discover: () async {},
+      refreshPending: () async {},
+      drain: () async {
+        drains?.call();
+        return const RecordingTransferDrainResult.skipped();
+      },
+      autoUploadEnabled: () => true,
+    );
 
 CaptureSessionOwner _owner({RecordingTransferCoordinator? coordinator}) => CaptureSessionOwner(
-  coordinator: coordinator ?? _coordinator(),
-  startForeground: () async {},
-  stopForeground: () async {},
-);
+      coordinator: coordinator ?? _coordinator(),
+      startForeground: () async {},
+      stopForeground: () async {},
+    );
 
 void main() {
   test('keepalive joins pending connect and a generation roll closes the stale socket', () async {

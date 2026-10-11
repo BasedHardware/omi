@@ -91,7 +91,10 @@ void main() {
 
     test('ignores WALs recorded before the session started', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final provider = _provider([_wal(now - 500, WalStatus.miss), _wal(now - 20, WalStatus.miss)]);
+      final provider = _provider([
+        _wal(now - 500, WalStatus.miss),
+        _wal(now - 20, WalStatus.miss),
+      ]);
       provider.testSessionStartSeconds = now - 60;
       addTearDown(provider.dispose);
 

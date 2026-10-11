@@ -7,11 +7,8 @@ import '../support/spine/contract.dart';
 void main() {
   contractTest('C3 malformed row cannot blank valid neighbors or escape through telemetry', () {
     final events = <ApiFallbackEvent>[];
-    final result = decodeApiRows<int>(
-      '[{"n":1},{"private":"sensitive"},{"n":3}]',
-      (row) => row['n'] as int,
-      fallback: events.add,
-    );
+    final result =
+        decodeApiRows<int>('[{"n":1},{"private":"sensitive"},{"n":3}]', (row) => row['n'] as int, fallback: events.add);
     expect(result, isA<ApiSuccess<List<int>>>());
     final success = result as ApiSuccess<List<int>>;
     expect(success.data, [1, 3]);
@@ -47,7 +44,8 @@ void main() {
         ApiProblemKind.forbidden ||
         ApiProblemKind.notFound ||
         ApiProblemKind.unprocessable ||
-        ApiProblemKind.rejected => ApiViewPhase.terminal,
+        ApiProblemKind.rejected =>
+          ApiViewPhase.terminal,
         _ => ApiViewPhase.error,
       };
       expect(first.phase, expected);
@@ -55,12 +53,8 @@ void main() {
       expect(first.problem!.kind, kind);
       expect(events, isEmpty); // hard failures are not fallbacks
     }
-    final stale = presentApiResult(
-      const ApiFailure<List<int>>(ApiProblem(ApiProblemKind.server)),
-      previous: [7],
-      isEmpty: empty,
-      fallback: events.add,
-    );
+    final stale = presentApiResult(const ApiFailure<List<int>>(ApiProblem(ApiProblemKind.server)),
+        previous: [7], isEmpty: empty, fallback: events.add);
     expect(stale.phase, ApiViewPhase.error);
     expect(stale.data, [7]);
     expect(stale.problem!.kind, ApiProblemKind.server);
@@ -68,14 +62,10 @@ void main() {
       ApiProblemKind.transport,
       ApiProblemKind.authTransient,
       ApiProblemKind.rateLimited,
-      ApiProblemKind.decode,
+      ApiProblemKind.decode
     ]) {
-      final projected = presentApiResult(
-        ApiFailure<List<int>>(ApiProblem(kind)),
-        previous: [7],
-        isEmpty: empty,
-        fallback: (_) {},
-      );
+      final projected =
+          presentApiResult(ApiFailure<List<int>>(ApiProblem(kind)), previous: [7], isEmpty: empty, fallback: (_) {});
       expect(projected.phase, ApiViewPhase.error);
       expect(projected.data, [7]);
       expect(projected.problem!.kind, kind);
@@ -90,33 +80,27 @@ void main() {
       ApiProblemKind.paymentRequired,
       ApiProblemKind.notFound,
       ApiProblemKind.unprocessable,
-      ApiProblemKind.rejected,
+      ApiProblemKind.rejected
     ]) {
       final events = <ApiFallbackEvent>[];
-      final view = presentApiResult(
-        ApiFailure<List<String>>(ApiProblem(kind)),
-        previous: ['private-record'],
-        isEmpty: (values) => values.isEmpty,
-        fallback: events.add,
-      );
+      final view = presentApiResult(ApiFailure<List<String>>(ApiProblem(kind)),
+          previous: ['private-record'], isEmpty: (values) => values.isEmpty, fallback: events.add);
       expect(view.data, isNull);
       expect(events, isEmpty);
       expect(
-        view.phase,
-        kind == ApiProblemKind.authTerminal
-            ? ApiViewPhase.authenticationRequired
-            : kind == ApiProblemKind.paymentRequired
-            ? ApiViewPhase.locked
-            : ApiViewPhase.terminal,
-      );
+          view.phase,
+          kind == ApiProblemKind.authTerminal
+              ? ApiViewPhase.authenticationRequired
+              : kind == ApiProblemKind.paymentRequired
+                  ? ApiViewPhase.locked
+                  : ApiViewPhase.terminal);
     }
   });
   contractTest('C3 fallback emitter uses shared closed fields and one event', () {
     final emitted = <(String, Map<String, String>)>[];
     recordFallback(
-      const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
-      emit: (name, fields) => emitted.add((name, fields)),
-    );
+        const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
+        emit: (name, fields) => emitted.add((name, fields)));
     expect(emitted, hasLength(1));
     expect(emitted.single.$1, 'fallback_triggered');
     expect(emitted.single.$2, {

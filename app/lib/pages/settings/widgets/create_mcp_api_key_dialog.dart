@@ -85,7 +85,10 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
         ),
       ),
       actions: [
-        OmiDialogAction(label: context.l10n.cancel, onPressed: _isCreating ? null : () => Navigator.of(context).pop()),
+        OmiDialogAction(
+          label: context.l10n.cancel,
+          onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
+        ),
         OmiDialogAction(
           label: _isCreating ? context.l10n.creating : context.l10n.create,
           isDefault: true,

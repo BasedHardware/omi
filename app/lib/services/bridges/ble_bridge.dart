@@ -182,10 +182,8 @@ class BleBridge implements BleFlutterApi {
       if (_connectionRevisions[key] != revision) return;
       final start = (jsonDecode(raw) as Map)['audio_outage_started_at'] as num?;
       if (start != null && start > 0) {
-        await DeviceHealthTelemetry.recordOutage(
-          peripheralUuid,
-          at: DateTime.fromMillisecondsSinceEpoch(start.toInt()),
-        );
+        await DeviceHealthTelemetry.recordOutage(peripheralUuid,
+            at: DateTime.fromMillisecondsSinceEpoch(start.toInt()));
       }
     } catch (_) {
       // Native has already durably recorded the start; import it on emission.

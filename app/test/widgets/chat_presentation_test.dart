@@ -8,13 +8,13 @@ import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/ui/ui.dart';
 
 Widget host(Widget child, {bool reduced = false, double scale = 1}) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: MediaQuery(
-    data: MediaQueryData(size: const Size(320, 568), disableAnimations: reduced, textScaler: TextScaler.linear(scale)),
-    child: Scaffold(body: child),
-  ),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: MediaQuery(
+          data: MediaQueryData(
+              size: const Size(320, 568), disableAnimations: reduced, textScaler: TextScaler.linear(scale)),
+          child: Scaffold(body: child)),
+    );
 
 void main() {
   testWidgets('intro settles once and rebuilds retain the draft, focus and animation position', (tester) async {
@@ -22,11 +22,7 @@ void main() {
     final focus = FocusNode();
     addTearDown(controller.dispose);
     addTearDown(focus.dispose);
-    Widget content() => ChatEntrance(
-      child: ChatRise(
-        child: TextField(controller: controller, focusNode: focus),
-      ),
-    );
+    Widget content() => ChatEntrance(child: ChatRise(child: TextField(controller: controller, focusNode: focus)));
     await tester.pumpWidget(host(content()));
     expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 0);
     await tester.pump(const Duration(milliseconds: 1100));
@@ -42,10 +38,7 @@ void main() {
   });
 
   testWidgets('only an explicit new-chat revision replays the intro', (tester) async {
-    Widget content(int revision) => ChatEntrance(
-      revision: revision,
-      child: const ChatRise(child: Text('Hello')),
-    );
+    Widget content(int revision) => ChatEntrance(revision: revision, child: const ChatRise(child: Text('Hello')));
     await tester.pumpWidget(host(content(0)));
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpWidget(host(content(1)));
@@ -62,11 +55,8 @@ void main() {
     expect(tester.binding.hasScheduledFrame, isFalse);
     await tester.pumpWidget(host(content));
     await tester.pump();
-    expect(
-      tester.widget<Opacity>(find.byType(Opacity).first).opacity,
-      1,
-      reason: 'turning motion back on does not replay',
-    );
+    expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 1,
+        reason: 'turning motion back on does not replay');
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(host(content));
     await tester.pump(const Duration(milliseconds: 100));
@@ -97,20 +87,15 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     String? draft;
-    await tester.pumpWidget(
-      host(
-        Column(
-          children: [
-            const Expanded(
-              child: ChatGreeting(isConnected: true, name: 'A long name with multiple words', hour: 10, todayCount: 12),
-            ),
-            ChatSuggestions(hasExistingData: true, isConnected: true, onSelected: (value) => draft = value),
-          ],
-        ),
+    await tester.pumpWidget(host(
+        Column(children: [
+          const Expanded(
+              child:
+                  ChatGreeting(isConnected: true, name: 'A long name with multiple words', hour: 10, todayCount: 12)),
+          ChatSuggestions(hasExistingData: true, isConnected: true, onSelected: (value) => draft = value),
+        ]),
         scale: 2,
-        reduced: true,
-      ),
-    );
+        reduced: true));
     await tester.tap(find.byKey(const Key('chat_starter_decide')));
     expect(draft, 'What did I decide today?');
     expect(tester.takeException(), isNull);
@@ -120,39 +105,23 @@ void main() {
   testWidgets('popup and history Back return to the same parent without rebuilding its state', (tester) async {
     var visits = 0;
     final navigator = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      MaterialApp(
+    await tester.pumpWidget(MaterialApp(
         navigatorKey: navigator,
-        home: Builder(
-          builder: (context) {
-            visits++;
-            return Scaffold(
+        home: Builder(builder: (context) {
+          visits++;
+          return Scaffold(
               body: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  ChatSheetRoute(
-                    builder: (context) => Scaffold(
-                      appBar: AppBar(leading: const OmiCloseButton()),
-                      body: TextButton(
-                        child: const Text('History'),
-                        onPressed: () => Navigator.of(context).push(
-                          omiPageRoute(
-                            builder: (_) => Scaffold(
-                              appBar: AppBar(leading: const OmiBackButton()),
-                              body: const Text('Past'),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                child: const Text('Open'),
-              ),
-            );
-          },
-        ),
-      ),
-    );
+                  onPressed: () => Navigator.of(context).push(ChatSheetRoute(
+                      builder: (context) => Scaffold(
+                            appBar: AppBar(leading: const OmiCloseButton()),
+                            body: TextButton(
+                                child: const Text('History'),
+                                onPressed: () => Navigator.of(context).push(omiPageRoute(
+                                    builder: (_) => Scaffold(
+                                        appBar: AppBar(leading: const OmiBackButton()), body: const Text('Past'))))),
+                          ))),
+                  child: const Text('Open')));
+        })));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('History'));

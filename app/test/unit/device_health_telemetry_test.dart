@@ -40,7 +40,7 @@ void main() {
           'lostAudioSeconds': 5.5,
           'audioPacketsReceived': 8,
           'audioPacketsExpected': 10,
-        },
+        }
       ],
       'battery_history_v2': [
         {'ts': start, 'level': 80, 'charging': false},
@@ -50,7 +50,7 @@ void main() {
       'firmware_diagnostics': [
         {
           'ts': start + 1000,
-          'reset_cause_names': ['RESET_WATCHDOG'],
+          'reset_cause_names': ['RESET_WATCHDOG']
         },
       ],
     }, day);
@@ -198,20 +198,16 @@ void main() {
     const id = 'unresolved-restart';
     // Seed only the durable record: no in-memory disconnect/recovery state.
     SharedPreferences.setMockInitialValues({
-      DeviceHealthTelemetry.outageKey(id): jsonEncode({
-        'identity_epoch': AnalyticsManager.identityEpoch,
-        'open_since': start - 86400000,
-      }),
+      DeviceHealthTelemetry.outageKey(id):
+          jsonEncode({'identity_epoch': AnalyticsManager.identityEpoch, 'open_since': start - 86400000}),
       'device_health_day_$id': '2026-10-08',
     });
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 10),
-      loadDiagnostics: (_) async => '{}',
-      emissionContext: {'app_build': 'new+2'},
-      emit: (name, properties) => AnalyticsManager().track(name, properties: properties),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 10),
+        loadDiagnostics: (_) async => '{}',
+        emissionContext: {'app_build': 'new+2'},
+        emit: (name, properties) => AnalyticsManager().track(name, properties: properties));
     await drainDelivery();
     events.addAll(delivered);
     expect(events, hasLength(1));
@@ -225,25 +221,20 @@ void main() {
     final start = DateTime(2026, 10, 9, 23, 59);
     const id = 'recovered-restart';
     SharedPreferences.setMockInitialValues({
-      DeviceHealthTelemetry.outageKey(id): jsonEncode({
-        'identity_epoch': AnalyticsManager.identityEpoch,
-        'open_since': start.millisecondsSinceEpoch,
-      }),
+      DeviceHealthTelemetry.outageKey(id):
+          jsonEncode({'identity_epoch': AnalyticsManager.identityEpoch, 'open_since': start.millisecondsSinceEpoch}),
     });
     await DeviceHealthTelemetry.recordRecovery(id, at: DateTime(2026, 10, 10, 0, 1));
     final prefs = await SharedPreferences.getInstance();
     final record = jsonDecode(prefs.getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
     expect(record.containsKey('open_since'), isFalse);
-    final result = DeviceHealthTelemetry.rollup({
-      'outage_resolved_days': record['resolved_days'],
-    }, DateTime(2026, 10, 10));
+    final result =
+        DeviceHealthTelemetry.rollup({'outage_resolved_days': record['resolved_days']}, DateTime(2026, 10, 10));
     expect(result['lost_audio_seconds'], 60);
     expect(
-      DeviceHealthTelemetry.rollup({
-        'outage_resolved_days': record['resolved_days'],
-      }, DateTime(2026, 10, 9))['lost_audio_seconds'],
-      60,
-    );
+        DeviceHealthTelemetry.rollup(
+            {'outage_resolved_days': record['resolved_days']}, DateTime(2026, 10, 9))['lost_audio_seconds'],
+        60);
     expect(result['unresolved_outage_open'], isFalse);
     expect(result['unresolved_outage_seconds'], isNull);
   });
@@ -256,18 +247,16 @@ void main() {
     final newDay = DateTime(2026, 10, 10);
     SharedPreferences.setMockInitialValues({'device_health_day_$id': '2026-10-07'});
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id, firmwareRevision: 'current'),
-      now: DateTime(2026, 10, 11),
-      emissionContext: {'app_build': 'current+3'},
-      loadDiagnostics: (_) async => jsonEncode({
-        'battery_history_v2': [
-          {'ts': oldDay.millisecondsSinceEpoch, 'level': 80, 'app_build': 'old+1', 'firmware': 'fw1'},
-          {'ts': newDay.millisecondsSinceEpoch, 'level': 70, 'app_build': 'new+2', 'firmware': null},
-        ],
-      }),
-      emit: (name, properties) => AnalyticsManager().track(name, properties: properties),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id, firmwareRevision: 'current'),
+        now: DateTime(2026, 10, 11),
+        emissionContext: {'app_build': 'current+3'},
+        loadDiagnostics: (_) async => jsonEncode({
+              'battery_history_v2': [
+                {'ts': oldDay.millisecondsSinceEpoch, 'level': 80, 'app_build': 'old+1', 'firmware': 'fw1'},
+                {'ts': newDay.millisecondsSinceEpoch, 'level': 70, 'app_build': 'new+2', 'firmware': null},
+              ]
+            }),
+        emit: (name, properties) => AnalyticsManager().track(name, properties: properties));
     await drainDelivery();
     events.addAll(delivered);
     expect(events.map((e) => e['day']), ['2026-10-08', '2026-10-10']);
@@ -307,13 +296,11 @@ void main() {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('device_health_day_$id', '2026-09-01');
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 11),
-      emissionContext: {},
-      loadDiagnostics: (_) async => '{}',
-      emit: (_, props) => events.add(props),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 11),
+        emissionContext: {},
+        loadDiagnostics: (_) async => '{}',
+        emit: (_, props) => events.add(props));
     expect(events, hasLength(7));
     expect(events.first['day'], '2026-10-04');
     expect(events.every((e) => e['lost_audio_seconds'] == 86400), isTrue);
@@ -326,20 +313,18 @@ void main() {
     final diagnostics = jsonEncode({
       'audio_outage_started_at': nextStart,
       'disconnect_history_v2': [
-        {'timestamp': start, 'lostAudioResolvedAt': start + 60000},
+        {'timestamp': start, 'lostAudioResolvedAt': start + 60000}
       ],
     });
     for (var attempt = 0; attempt < 2; attempt++) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('device_health_day_$id');
       final events = <Map<String, dynamic>>[];
-      await DeviceHealthTelemetry.maybeEmit(
-        BtDevice.empty().copyWith(id: id),
-        now: DateTime(2026, 10, 10),
-        emissionContext: {},
-        loadDiagnostics: (_) async => diagnostics,
-        emit: (_, props) => events.add(props),
-      );
+      await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+          now: DateTime(2026, 10, 10),
+          emissionContext: {},
+          loadDiagnostics: (_) async => diagnostics,
+          emit: (_, props) => events.add(props));
       expect(events.single['lost_audio_seconds'], 11 * 3600 + 60);
       expect(events.single['unresolved_outage_seconds'], 11 * 3600);
       expect(events.single['unresolved_outage_open'], isTrue);
@@ -349,13 +334,8 @@ void main() {
     const id = 'exact-midnight';
     await DeviceHealthTelemetry.recordOutage(id, at: DateTime(2026, 10, 9, 23));
     final events = <Map<String, dynamic>>[];
-    Future<void> emit(DateTime now) => DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: now,
-      emissionContext: {},
-      loadDiagnostics: (_) async => '{}',
-      emit: (_, props) => events.add(props),
-    );
+    Future<void> emit(DateTime now) => DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: now, emissionContext: {}, loadDiagnostics: (_) async => '{}', emit: (_, props) => events.add(props));
     await emit(DateTime(2026, 10, 10, 0, 30));
     await DeviceHealthTelemetry.recordRecovery(id, at: DateTime(2026, 10, 10, 1));
     await emit(DateTime(2026, 10, 11));
@@ -370,13 +350,11 @@ void main() {
     await DeviceHealthTelemetry.recordOutage(id, at: DateTime(2026, 10, 9, 23));
     await DeviceHealthTelemetry.recordRecovery(id, at: DateTime(2026, 10, 12, 1));
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 13),
-      emissionContext: {},
-      loadDiagnostics: (_) async => '{}',
-      emit: (_, props) => events.add(props),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 13),
+        emissionContext: {},
+        loadDiagnostics: (_) async => '{}',
+        emit: (_, props) => events.add(props));
     expect(events.map((e) => e['lost_audio_seconds']), [3600, 86400, 86400, 3600]);
     expect(events.fold<num>(0, (total, e) => total + (e['lost_audio_seconds'] as num)), 180000);
     expect(events.every((e) => (e['lost_audio_seconds'] as num) <= 86400), isTrue);
@@ -406,29 +384,27 @@ void main() {
     expect(prefs.getString(DeviceHealthTelemetry.outageKey(id)), isNull);
     await prefs.setString(DeviceHealthTelemetry.outageKey(id), old);
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 10),
-      emissionContext: {},
-      loadDiagnostics: (_) async => jsonEncode({
-        'identity_epoch': AnalyticsManager.identityEpoch,
-        'battery_history_v2': [
-          {
-            'identity_epoch': AnalyticsManager.identityEpoch - 1,
-            'ts': DateTime(2026, 10, 9).millisecondsSinceEpoch,
-            'level': 80,
-          },
-        ],
-        'disconnect_history_v2': [
-          {
-            'identity_epoch': AnalyticsManager.identityEpoch - 1,
-            'timestamp': DateTime(2026, 10, 9).millisecondsSinceEpoch,
-            'lostAudioResolvedAt': DateTime(2026, 10, 9, 1).millisecondsSinceEpoch,
-          },
-        ],
-      }),
-      emit: (_, props) => events.add(props),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 10),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'identity_epoch': AnalyticsManager.identityEpoch,
+              'battery_history_v2': [
+                {
+                  'identity_epoch': AnalyticsManager.identityEpoch - 1,
+                  'ts': DateTime(2026, 10, 9).millisecondsSinceEpoch,
+                  'level': 80
+                }
+              ],
+              'disconnect_history_v2': [
+                {
+                  'identity_epoch': AnalyticsManager.identityEpoch - 1,
+                  'timestamp': DateTime(2026, 10, 9).millisecondsSinceEpoch,
+                  'lostAudioResolvedAt': DateTime(2026, 10, 9, 1).millisecondsSinceEpoch
+                }
+              ]
+            }),
+        emit: (_, props) => events.add(props));
     expect(events, isEmpty);
     await DeviceHealthTelemetry.recordOutage(id, at: DateTime(2026, 10, 10));
     final record = jsonDecode(prefs.getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
@@ -440,26 +416,22 @@ void main() {
     const id = 'native-session-kill';
     final start = DateTime(2026, 10, 9, 23);
     final events = <Map<String, dynamic>>[];
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 10),
-      emissionContext: {},
-      loadDiagnostics: (_) async => jsonEncode({
-        'identity_epoch': AnalyticsManager.identityEpoch,
-        'audio_outage_started_at': start.millisecondsSinceEpoch,
-      }),
-      emit: (_, props) => events.add(props),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 10),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'identity_epoch': AnalyticsManager.identityEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+            }),
+        emit: (_, props) => events.add(props));
     expect(events.single['unresolved_outage_open'], isTrue);
     expect(events.single['lost_audio_seconds'], 3600);
     await DeviceHealthTelemetry.recordRecovery(id, at: DateTime(2026, 10, 10, 1));
-    await DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: id),
-      now: DateTime(2026, 10, 11),
-      emissionContext: {},
-      loadDiagnostics: (_) async => '{}',
-      emit: (_, props) => events.add(props),
-    );
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 11),
+        emissionContext: {},
+        loadDiagnostics: (_) async => '{}',
+        emit: (_, props) => events.add(props));
     expect(events.last['unresolved_outage_open'], isFalse);
     expect(events.last['lost_audio_seconds'], 3600);
   });
@@ -470,16 +442,14 @@ void main() {
     final raw = Completer<String>();
     final entered = Completer<void>();
     final events = <Map<String, dynamic>>[];
-    final emission = DeviceHealthTelemetry.maybeEmit(
-      BtDevice.empty().copyWith(id: 'late-import'),
-      now: DateTime(2026, 10, 10),
-      emissionContext: {},
-      loadDiagnostics: (_) {
-        entered.complete();
-        return raw.future;
-      },
-      emit: (_, props) => events.add(props),
-    );
+    final emission = DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: 'late-import'),
+        now: DateTime(2026, 10, 10),
+        emissionContext: {},
+        loadDiagnostics: (_) {
+          entered.complete();
+          return raw.future;
+        },
+        emit: (_, props) => events.add(props));
     await entered.future;
     AnalyticsManager().bindIdentity('after-load');
     await DeviceHealthTelemetry.policySettled;
@@ -506,13 +476,11 @@ void main() {
 
   test('sign-out sends native retirement before subsequent recording', () async {
     final policies = <Map>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      DeviceHealthTelemetry.policyChannel,
-      (call) async {
-        policies.add(call.arguments as Map);
-        return null;
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(DeviceHealthTelemetry.policyChannel, (call) async {
+      policies.add(call.arguments as Map);
+      return null;
+    });
     AnalyticsManager().bindIdentity('signed-in');
     await DeviceHealthTelemetry.policySettled;
     AnalyticsManager().bindIdentity(null);
@@ -521,36 +489,27 @@ void main() {
     expect(policies.last['enabled'], isFalse);
     await DeviceHealthTelemetry.recordOutage('signed-out');
     expect((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey('signed-out')), isNull);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      DeviceHealthTelemetry.policyChannel,
-      null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(DeviceHealthTelemetry.policyChannel, null);
   });
 }
 
 Future<List<Map<String, dynamic>>> setupDelivery() async {
   debugDefaultTargetPlatformOverride = TargetPlatform.android;
   final delivered = <Map<String, dynamic>>[];
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-    const MethodChannel('posthog_flutter'),
-    (call) async {
-      if (call.method == 'distinctId') return 'delivery-user';
-      if (call.method == 'capture') {
-        final args = call.arguments as Map;
-        if (args['eventName'] == DeviceHealthTelemetry.eventName) {
-          delivered.add(Map<String, dynamic>.from(args['properties'] as Map));
-        }
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(const MethodChannel('posthog_flutter'), (call) async {
+    if (call.method == 'distinctId') return 'delivery-user';
+    if (call.method == 'capture') {
+      final args = call.arguments as Map;
+      if (args['eventName'] == DeviceHealthTelemetry.eventName) {
+        delivered.add(Map<String, dynamic>.from(args['properties'] as Map));
       }
-      return null;
-    },
-  );
+    }
+    return null;
+  });
   PackageInfo.setMockInitialValues(
-    appName: 'test',
-    packageName: 'test',
-    version: 'current',
-    buildNumber: '3',
-    buildSignature: '',
-  );
+      appName: 'test', packageName: 'test', version: 'current', buildNumber: '3', buildSignature: '');
   AnalyticsManager.configure(PostHogAnalyticsAdapter(apiKey: 'hermetic'));
   AnalyticsManager().bindIdentity('delivery-user');
   await DeviceHealthTelemetry.policySettled;

@@ -80,26 +80,24 @@ void main() {
   test('queued silence event cannot change ownership or run pause effects', () {
     final state = CaptureCoordinatorState.idle().copyWith(phase: CapturePhase.pendantLive);
     final transition = transitionCapture(
-      state,
-      const UplinkSilenceElapsed(null),
-      CaptureEnvironment(
-        policyMuted: false,
-        paused: false,
-        batchModeEnabled: false,
-        batchModeSuspendedForOnboarding: false,
-        deviceSupportsTranscribeLater: false,
-        networkConnected: true,
-        signedIn: () => true,
-        phoneMicSupportsBatch: false,
-        transcriptReady: true,
-        socketConnected: true,
-        deviceServiceReady: true,
-        callActive: false,
-        deviceRecording: true,
-        micCapturing: false,
-        uplinkSilenceExpired: true,
-      ),
-    );
+        state,
+        const UplinkSilenceElapsed(null),
+        CaptureEnvironment(
+            policyMuted: false,
+            paused: false,
+            batchModeEnabled: false,
+            batchModeSuspendedForOnboarding: false,
+            deviceSupportsTranscribeLater: false,
+            networkConnected: true,
+            signedIn: () => true,
+            phoneMicSupportsBatch: false,
+            transcriptReady: true,
+            socketConnected: true,
+            deviceServiceReady: true,
+            callActive: false,
+            deviceRecording: true,
+            micCapturing: false,
+            uplinkSilenceExpired: true));
     expect(transition.state, same(state));
     expect(transition.effects, isEmpty);
   });
@@ -201,15 +199,14 @@ void main() {
     await elapse(const Duration(seconds: 200));
     world.controller.onSegmentReceived([
       TranscriptSegment(
-        id: 'speech',
-        text: 'hello',
-        speaker: 'SPEAKER_0',
-        isUser: false,
-        personId: null,
-        start: 0,
-        end: 1,
-        translations: [],
-      ),
+          id: 'speech',
+          text: 'hello',
+          speaker: 'SPEAKER_0',
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 1,
+          translations: []),
     ]);
     await world.settle();
     await elapse(const Duration(seconds: 200));
@@ -220,32 +217,30 @@ void main() {
   });
 
   for (final charging in [false, true]) {
-    test(
-      '${charging ? 'charging' : 'foreground'} resumes silence as a fresh session but respects manual mute',
-      () async {
-        await legacySilencePause();
-        final recording = world.controller.activeRecordingId;
-        final sockets = world.sockets.length;
-        if (charging) {
-          world.controller.onChargingStarted();
-        } else {
-          world.controller.onAppResumed();
-        }
-        await world.controller.pendingSourceSwitch;
-        await world.settle();
-        expect(world.controller.isPaused, false);
-        expect(world.controller.silencePaused, false);
-        expect(world.controller.activeRecordingId, isNot(recording));
-        expect(world.sockets.length, sockets + 1);
-        expect(world.deviceConnection!.openAudioSubscriptions, 1);
-        await world.controller.pauseCapture();
+    test('${charging ? 'charging' : 'foreground'} resumes silence as a fresh session but respects manual mute',
+        () async {
+      await legacySilencePause();
+      final recording = world.controller.activeRecordingId;
+      final sockets = world.sockets.length;
+      if (charging) {
         world.controller.onChargingStarted();
+      } else {
         world.controller.onAppResumed();
-        await world.settle();
-        expect(world.controller.isPaused, true);
-        expect(world.sockets.length, sockets + 1);
-      },
-    );
+      }
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.controller.isPaused, false);
+      expect(world.controller.silencePaused, false);
+      expect(world.controller.activeRecordingId, isNot(recording));
+      expect(world.sockets.length, sockets + 1);
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
+      await world.controller.pauseCapture();
+      world.controller.onChargingStarted();
+      world.controller.onAppResumed();
+      await world.settle();
+      expect(world.controller.isPaused, true);
+      expect(world.sockets.length, sockets + 1);
+    });
   }
 
   test('manual pause takes over silence reason and prevents auto resume', () async {
@@ -261,15 +256,14 @@ void main() {
     await world.controller.pendingSourceSwitch;
     world.controller.onSegmentReceived([
       TranscriptSegment(
-        id: 'late',
-        text: 'still speaking',
-        speaker: null,
-        isUser: false,
-        personId: null,
-        start: 0,
-        end: 1,
-        translations: [],
-      ),
+          id: 'late',
+          text: 'still speaking',
+          speaker: null,
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 1,
+          translations: []),
     ]);
     await world.settle();
     expect(world.controller.isPaused, true);

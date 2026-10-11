@@ -63,27 +63,22 @@ Future<void> _pumpWith(
   required ConversationScreenshotDelete delete,
   DateTime Function()? now,
 }) async {
-  await tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
-      home: Scaffold(
-        body: CustomScrollView(
-          slivers: [
-            ConversationScreenshotsSection(
-              conversationId: 'conv-1',
-              fetch: fetch,
-              delete: delete,
-              loadBytes: (_) async => base64Decode(
-                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-              ),
-              now: now ?? () => _t0,
-            ),
-          ],
+  await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: const [Locale('en')],
+    home: Scaffold(
+      body: CustomScrollView(slivers: [
+        ConversationScreenshotsSection(
+          conversationId: 'conv-1',
+          fetch: fetch,
+          delete: delete,
+          loadBytes: (_) async => base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+          now: now ?? () => _t0,
         ),
-      ),
+      ]),
     ),
-  );
+  ));
   await tester.pump();
   await tester.pump();
 }
@@ -102,17 +97,15 @@ void main() {
 
   testWidgets('a fetch that throws renders nothing and does not fail the page', (tester) async {
     final fake = _Fake([const ApiSuccess(ConversationScreenshots.empty)]);
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: const [Locale('en')],
-        home: Scaffold(
-          body: CustomScrollView(
-            slivers: [ConversationScreenshotsSection(conversationId: 'conv-1', fetch: (_) => throw StateError('boom'))],
-          ),
-        ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: Scaffold(
+        body: CustomScrollView(slivers: [
+          ConversationScreenshotsSection(conversationId: 'conv-1', fetch: (_) => throw StateError('boom')),
+        ]),
       ),
-    );
+    ));
     await tester.pump();
     expect(fake.fetches, 0);
     expect(_section, findsNothing);
@@ -127,13 +120,11 @@ void main() {
 
   testWidgets('banner leads the strip; captions shown, empty caption falls back', (tester) async {
     final fake = _Fake([
-      ApiSuccess(
-        _set([
-          _frame('b', caption: 'Weekly sync on Meet', banner: true),
-          _frame('s1', caption: 'Roadmap slide'),
-          _frame('s2'),
-        ]),
-      ),
+      ApiSuccess(_set([
+        _frame('b', caption: 'Weekly sync on Meet', banner: true),
+        _frame('s1', caption: 'Roadmap slide'),
+        _frame('s2'),
+      ])),
     ]);
     await _pump(tester, fake);
     expect(_section, findsOneWidget);
@@ -161,23 +152,20 @@ void main() {
       'url_expires_at': '2026-09-30T13:00:00Z',
       'ground': {
         'stops': ['#000000', '#FFFFFF'],
-        'is_neutral': true,
+        'is_neutral': true
       },
     };
-    final result = await getConversationScreenshots(
-      'conv-1',
-      send: (request) async => http.Response(
-        jsonEncode({
-          'revision': 3,
-          'banner': {...frame, 'id': 'b', 'role': 'banner'},
-          'strip': [
-            {...frame, 'id': 's1', 'role': 'strip'},
-            {...frame, 'id': 'b', 'role': 'banner'},
-          ],
-        }),
-        200,
-      ),
-    );
+    final result = await getConversationScreenshots('conv-1',
+        send: (request) async => http.Response(
+            jsonEncode({
+              'revision': 3,
+              'banner': {...frame, 'id': 'b', 'role': 'banner'},
+              'strip': [
+                {...frame, 'id': 's1', 'role': 'strip'},
+                {...frame, 'id': 'b', 'role': 'banner'},
+              ],
+            }),
+            200));
     final set = (result as ApiSuccess<ConversationScreenshots>).data;
     expect(set.frames.map((f) => f.id), ['b', 's1']);
     expect(set.frames.first.isBanner, isTrue);
@@ -186,7 +174,7 @@ void main() {
 
   testWidgets('tap opens the viewer on the whole set at the tapped frame', (tester) async {
     final fake = _Fake([
-      ApiSuccess(_set([_frame('b', banner: true), _frame('s1'), _frame('s2')])),
+      ApiSuccess(_set([_frame('b', banner: true), _frame('s1'), _frame('s2')]))
     ]);
     await _pump(tester, fake);
     await tester.tap(_tile('s1'));
@@ -240,7 +228,7 @@ void main() {
 
   testWidgets('long-press → Delete → confirm deletes the frame and adopts the server set', (tester) async {
     final fake = _Fake([
-      ApiSuccess(_set([_frame('b', banner: true, caption: 'Banner'), _frame('s1', caption: 'Other')])),
+      ApiSuccess(_set([_frame('b', banner: true, caption: 'Banner'), _frame('s1', caption: 'Other')]))
     ]);
     fake.deleteResponse = ApiSuccess(_set([_frame('s1', caption: 'Other', banner: true)], revision: 2));
     await _pump(tester, fake);
@@ -260,7 +248,7 @@ void main() {
 
   testWidgets('cancelling the confirmation deletes nothing', (tester) async {
     final fake = _Fake([
-      ApiSuccess(_set([_frame('b', caption: 'Banner')])),
+      ApiSuccess(_set([_frame('b', caption: 'Banner')]))
     ]);
     await _pump(tester, fake);
     await tester.longPress(_tile('b'));
@@ -275,7 +263,7 @@ void main() {
 
   testWidgets('deleting the last frame hides the section', (tester) async {
     final fake = _Fake([
-      ApiSuccess(_set([_frame('only', caption: 'Only one')])),
+      ApiSuccess(_set([_frame('only', caption: 'Only one')]))
     ]);
     await _pump(tester, fake);
     await tester.longPress(_tile('only'));
@@ -373,7 +361,7 @@ void main() {
   testWidgets('a screen reader can open a tile and reach Open and Delete', (tester) async {
     final handle = tester.ensureSemantics();
     final fake = _Fake([
-      ApiSuccess(_set([_frame('b', caption: 'Banner'), _frame('s1', caption: 'Other')])),
+      ApiSuccess(_set([_frame('b', caption: 'Banner'), _frame('s1', caption: 'Other')]))
     ]);
     fake.deleteResponse = ApiSuccess(_set([_frame('s1', caption: 'Other')], revision: 2));
     await _pump(tester, fake);
@@ -383,7 +371,7 @@ void main() {
     expect(data.hasAction(SemanticsAction.tap), isTrue);
     expect(data.hasAction(SemanticsAction.customAction), isTrue);
     final labels = [
-      for (final id in data.customSemanticsActionIds ?? const <int>[]) CustomSemanticsAction.getAction(id)!.label,
+      for (final id in data.customSemanticsActionIds ?? const <int>[]) CustomSemanticsAction.getAction(id)!.label
     ];
     expect(labels, containsAll(['Open', 'Delete']));
 
@@ -411,7 +399,7 @@ void main() {
   // Review of #19887: the strip runs to the screen edges; only its padding aligns the first tile.
   testWidgets('the strip scrolls edge to edge with the first tile at the gutter', (tester) async {
     final fake = _Fake([
-      ApiSuccess(_set([_frame('a'), _frame('b'), _frame('c')])),
+      ApiSuccess(_set([_frame('a'), _frame('b'), _frame('c')]))
     ]);
     await _pump(tester, fake);
     final strip = find.byKey(const ValueKey('conversation_screenshots_strip'));

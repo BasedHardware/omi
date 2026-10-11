@@ -19,23 +19,20 @@ void main() {
       final previous = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);
       addTearDown(() => OmiColors.active = previous);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: Scaffold(
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: Scaffold(
             body: OfflineSyncStorageSheet(
-              syncedCount: 0,
-              pendingCount: 0,
-              totalCount: 0,
-              onClearSynced: () => fail('zero count must not offer clearing'),
-              onClearPending: () => fail('zero count must not offer clearing'),
-              onClearAll: () => fail('zero total must not offer clearing'),
-            ),
-          ),
-        ),
-      );
+          syncedCount: 0,
+          pendingCount: 0,
+          totalCount: 0,
+          onClearSynced: () => fail('zero count must not offer clearing'),
+          onClearPending: () => fail('zero count must not offer clearing'),
+          onClearAll: () => fail('zero total must not offer clearing'),
+        )),
+      ));
       await tester.pumpAndSettle();
       for (final label in ['Synced', 'Pending', 'Conversations created', 'Not yet synced to your phone']) {
         final text = find.text(label);
@@ -68,33 +65,29 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('fr'),
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(OmiSpacing.xl),
-                child: OfflineSyncStorageSheet(
-                  syncedCount: 2,
-                  pendingCount: 3,
-                  totalCount: 5,
-                  onClearSynced: () {},
-                  onClearPending: () {},
-                  onClearAll: () {},
-                ),
-              ),
-            ),
-          ),
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('fr'),
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
         ),
-      );
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: Padding(
+          padding: const EdgeInsets.all(OmiSpacing.xl),
+          child: OfflineSyncStorageSheet(
+            syncedCount: 2,
+            pendingCount: 3,
+            totalCount: 5,
+            onClearSynced: () {},
+            onClearPending: () {},
+            onClearAll: () {},
+          ),
+        ))),
+      ));
       await tester.pumpAndSettle();
       final context = tester.element(find.byType(OfflineSyncStorageSheet));
       final l10n = AppLocalizations.of(context);
@@ -122,14 +115,12 @@ void main() {
       final previous = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);
       addTearDown(() => OmiColors.active = previous);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: const Scaffold(body: Center(child: NoConversationsHero())),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: const Scaffold(body: Center(child: NoConversationsHero())),
+      ));
       await tester.pumpAndSettle();
       final title = find.text('No conversations yet');
       expect(title.hitTestable(), findsOneWidget);
@@ -139,22 +130,19 @@ void main() {
   }
   testWidgets('nonzero counts retain category and clear-all callbacks', (tester) async {
     final calls = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: const [Locale('en')],
-        home: Scaffold(
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: Scaffold(
           body: OfflineSyncStorageSheet(
-            syncedCount: 2,
-            pendingCount: 3,
-            totalCount: 5,
-            onClearSynced: () => calls.add('synced'),
-            onClearPending: () => calls.add('pending'),
-            onClearAll: () => calls.add('all'),
-          ),
-        ),
-      ),
-    );
+        syncedCount: 2,
+        pendingCount: 3,
+        totalCount: 5,
+        onClearSynced: () => calls.add('synced'),
+        onClearPending: () => calls.add('pending'),
+        onClearAll: () => calls.add('all'),
+      )),
+    ));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Clear').first);
     await tester.tap(find.text('Clear').last);

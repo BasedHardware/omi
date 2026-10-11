@@ -72,7 +72,11 @@ class _AuthComponentState extends State<AuthComponent> {
                         const SizedBox(width: 8),
                         Text(
                           context.l10n.signInWithApple,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Manrope',
+                          ),
                         ),
                       ],
                     ),

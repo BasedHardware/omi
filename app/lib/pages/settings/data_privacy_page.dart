@@ -55,20 +55,16 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     try {
       final enabled = await SiriIntegration.instance.isEnabled();
       if (mounted && revision == _siriRevision) setState(() => _siriEnabled = enabled);
-    } catch (_) {
-      /* Keep the default until native state is available. */
-    }
+    } catch (_) {/* Keep the default until native state is available. */}
   }
 
   void _setSiriEnabled(bool enabled) {
     final revision = ++_siriRevision;
     final previous = _siriEnabled;
     setState(() => _siriEnabled = enabled);
-    unawaited(
-      SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
-        if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
-      }),
-    );
+    unawaited(SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
+    }));
   }
 
   @override
@@ -200,7 +196,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                             Text(
                               _searchHintSupported
                                   ? '${context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi')}'
-                                        '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
+                                      '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
                                   : context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
                               style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                             ),
@@ -214,9 +210,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess = appProvider.apps
-                          .where((app) => app.enabled && app.worksExternally())
-                          .toList();
+                      final appsWithDataAccess =
+                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
 
                       if (appsWithDataAccess.isEmpty) {
                         return Column(

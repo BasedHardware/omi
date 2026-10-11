@@ -29,16 +29,10 @@ void main() {
 
       Env.addDebugTrustedAuthority('127.0.0.1');
       expect(shouldAttachOmiCredentials(fixture), isTrue);
-      expect(
-        shouldAttachOmiCredentials('http://127.0.0.1:10/v1/conversations/seeded'),
-        isFalse,
-        reason: 'trust is the active fixture origin, not every port on that host',
-      );
-      expect(
-        shouldAttachOmiCredentials('http://localhost:9/v1/conversations/seeded'),
-        isFalse,
-        reason: 'trust is exact host membership, not every loopback name',
-      );
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:10/v1/conversations/seeded'), isFalse,
+          reason: 'trust is the active fixture origin, not every port on that host');
+      expect(shouldAttachOmiCredentials('http://localhost:9/v1/conversations/seeded'), isFalse,
+          reason: 'trust is exact host membership, not every loopback name');
       expect(
         shouldHonorRequestedOmiAuth(requested: true, customBackendActive: true, url: fixture),
         isTrue,
@@ -54,11 +48,8 @@ void main() {
       expect(() => Env.armDebugJourneyCredentialTrust(), throwsA(isA<AssertionError>()));
       expect(() => Env.addDebugTrustedAuthority('127.0.0.1'), throwsA(isA<AssertionError>()));
       expect(shouldAttachOmiCredentials('http://127.0.0.1:9/v1/conversations/seeded'), isFalse);
-      expect(
-        shouldAttachOmiCredentials('https://api.omi.me/v1/users/me'),
-        isTrue,
-        reason: 'refusing fixture trust must not drop official Omi hosts',
-      );
+      expect(shouldAttachOmiCredentials('https://api.omi.me/v1/users/me'), isTrue,
+          reason: 'refusing fixture trust must not drop official Omi hosts');
     });
 
     test('registration without the journey boot flag asserts and does not trust the host', () {
@@ -104,11 +95,8 @@ void main() {
 
       Env.overrideApiBaseUrl('http://127.0.0.1:10/');
       expect(shouldAttachOmiCredentials('http://127.0.0.1:10/v1/conversations/seeded'), isFalse);
-      expect(
-        shouldAttachOmiCredentials('http://127.0.0.1:9/v1/conversations/seeded'),
-        isFalse,
-        reason: 'the previous fixture is no longer trusted after the override moves',
-      );
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:9/v1/conversations/seeded'), isFalse,
+          reason: 'the previous fixture is no longer trusted after the override moves');
 
       final headers = await buildHeaders(
         requireAuthCheck: false,

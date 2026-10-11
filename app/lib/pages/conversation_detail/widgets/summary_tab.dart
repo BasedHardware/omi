@@ -28,13 +28,12 @@ class SummaryTab extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
-  const SummaryTab({
-    super.key,
-    this.reviewEnabled = false,
-    this.searchQuery = '',
-    this.currentResultIndex = -1,
-    this.onTapWhenSearchEmpty,
-  });
+  const SummaryTab(
+      {super.key,
+      this.reviewEnabled = false,
+      this.searchQuery = '',
+      this.currentResultIndex = -1,
+      this.onTapWhenSearchEmpty});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -70,8 +69,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           // sections population until that wire is available.
           final hasSummaryFeedback =
               !discarded && !summarySelection.isApp && summarySelection.content.trim().isNotEmpty;
-          final hasRecordingFeedback =
-              !discarded &&
+          final hasRecordingFeedback = !discarded &&
               conversation != null &&
               conversation.status == ConversationStatus.completed &&
               conversation.audioFiles.isNotEmpty;
@@ -85,8 +83,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           return AppReviewPrompt(
             contentId: conversation?.id ?? '',
             moment: AppReviewMoment.conversationRead,
-            enabled:
-                widget.reviewEnabled &&
+            enabled: widget.reviewEnabled &&
                 !_isEditing &&
                 !provider.isLoading &&
                 !provider.loadingReprocessConversation &&
@@ -102,44 +99,40 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(
-                        slivers: [
-                          // Title and facts live in the page header, shared by every tab.
-                          SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
-                          discarded
-                              ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                              : GetAppsWidgets(
-                                  searchQuery: widget.searchQuery,
-                                  currentResultIndex: widget.currentResultIndex,
-                                  canStartEditing: () {
-                                    final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                      context,
-                                      listen: false,
-                                    );
-                                    if (!connectivityProvider.isConnected) {
-                                      ConnectivityProvider.showNoInternetDialog(context);
-                                      return false;
-                                    }
-                                    return true;
-                                  },
-                                  onEditStarted: (_) {
-                                    setState(() => _isEditing = true);
-                                    PlatformManager.instance.analytics.editSummaryStarted();
-                                  },
-                                  onEditCancelled: (_) {
-                                    setState(() => _isEditing = false);
-                                    PlatformManager.instance.analytics.editSummaryCancelled();
-                                  },
-                                  onSaveSummarySelection: (selection, newContent) {
-                                    PlatformManager.instance.analytics.editSummarySaved();
-                                    context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                      selection,
-                                      newContent,
-                                    );
-                                  },
-                                ),
-                        ],
-                      ),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        // Title and facts live in the page header, shared by every tab.
+                        SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                        discarded
+                            ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                            : GetAppsWidgets(
+                                searchQuery: widget.searchQuery,
+                                currentResultIndex: widget.currentResultIndex,
+                                canStartEditing: () {
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (!connectivityProvider.isConnected) {
+                                    ConnectivityProvider.showNoInternetDialog(context);
+                                    return false;
+                                  }
+                                  return true;
+                                },
+                                onEditStarted: (_) {
+                                  setState(() => _isEditing = true);
+                                  PlatformManager.instance.analytics.editSummaryStarted();
+                                },
+                                onEditCancelled: (_) {
+                                  setState(() => _isEditing = false);
+                                  PlatformManager.instance.analytics.editSummaryCancelled();
+                                },
+                                onSaveSummarySelection: (selection, newContent) {
+                                  PlatformManager.instance.analytics.editSummarySaved();
+                                  context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                        selection,
+                                        newContent,
+                                      );
+                                },
+                              ),
+                      ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
                     // conversation can have adjudicated screenshots.
@@ -150,22 +143,20 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       ),
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(
-                        slivers: [
-                          if (feedbackKind == FeedbackPromptKind.summary)
-                            SummaryFeedbackPrompt(
-                              key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
-                              conversationId: conversation?.id,
-                            ),
-                          if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
-                            RecordingQualityFeedbackPrompt(
-                              key: ValueKey('recording-feedback-${conversation.id}'),
-                              recordingId: conversation.id,
-                            ),
-                          const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                          const SliverToBoxAdapter(child: SizedBox(height: 150)),
-                        ],
-                      ),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        if (feedbackKind == FeedbackPromptKind.summary)
+                          SummaryFeedbackPrompt(
+                            key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                            conversationId: conversation?.id,
+                          ),
+                        if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                          RecordingQualityFeedbackPrompt(
+                            key: ValueKey('recording-feedback-${conversation.id}'),
+                            recordingId: conversation.id,
+                          ),
+                        const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                        const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                      ]),
                     ),
                   ],
                 ),

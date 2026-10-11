@@ -96,10 +96,8 @@ void main() {
   testWidgets('recording prompt opens the sheet with recording reasons only', (tester) async {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     expect(find.byKey(const ValueKey('recording_feedback_give_feedback')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('recording_feedback_give_feedback')));
@@ -120,9 +118,7 @@ void main() {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
     await pumpPrompt(
-      tester,
-      SummaryFeedbackPrompt(conversationId: 'conversation-2', submitFeedback: recordingSubmitter(calls)),
-    );
+        tester, SummaryFeedbackPrompt(conversationId: 'conversation-2', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byKey(const ValueKey('summary_feedback_give_feedback')));
     await tester.pumpAndSettle();
@@ -139,10 +135,8 @@ void main() {
   testWidgets('selecting a reason submits -1 with the mapped reason', (tester) async {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byKey(const ValueKey('recording_feedback_give_feedback')));
     await tester.pumpAndSettle();
@@ -165,9 +159,7 @@ void main() {
     final emitted = <RegisteredEvent>[];
     ProductTelemetry.instance = ProductTelemetry(emit: emitted.add);
     await pumpPrompt(
-      tester,
-      SummaryFeedbackPrompt(conversationId: 'conversation-2', submitFeedback: recordingSubmitter(calls)),
-    );
+        tester, SummaryFeedbackPrompt(conversationId: 'conversation-2', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byKey(const ValueKey('summary_feedback_give_feedback')));
     await tester.pumpAndSettle();
@@ -189,10 +181,8 @@ void main() {
   testWidgets('chat row is hidden when Intercom is unavailable', (tester) async {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byKey(const ValueKey('recording_feedback_give_feedback')));
     await tester.pumpAndSettle();
@@ -203,10 +193,8 @@ void main() {
   testWidgets('closing the sheet without a choice submits nothing and keeps the prompt', (tester) async {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byKey(const ValueKey('recording_feedback_give_feedback')));
     await tester.pumpAndSettle();
@@ -221,10 +209,8 @@ void main() {
   testWidgets('dismiss ✕ still dismisses without submitting and suppresses the target', (tester) async {
     resetFeedbackPolicy();
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
@@ -233,10 +219,8 @@ void main() {
     expect(find.byKey(const ValueKey('recording_feedback_give_feedback')), findsNothing);
 
     // The decision was recorded: a fresh prompt for the same target shows nothing.
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
     expect(find.byKey(const ValueKey('recording_feedback_give_feedback')), findsNothing);
   });
 
@@ -244,10 +228,8 @@ void main() {
     resetFeedbackPolicy();
     await FeedbackPromptPolicy.instance.claim('conversation-0');
     final calls = <CapturedFeedback>[];
-    await pumpPrompt(
-      tester,
-      RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)),
-    );
+    await pumpPrompt(tester,
+        RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: recordingSubmitter(calls)));
 
     expect(find.byKey(const ValueKey('recording_feedback_give_feedback')), findsNothing);
     expect(calls, isEmpty);

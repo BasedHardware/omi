@@ -56,19 +56,16 @@ class _ChannelChatsPageState extends State<ChannelChatsPage> {
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.chatAppsChannelChats(name))),
       body: switch (_result) {
         null => const OmiLoadingState(),
-        ApiFailure(:final problem) => OmiErrorState(
-          message: ChatAppsProblem.fromApi(problem).message(context),
-          onRetry: _load,
-        ),
+        ApiFailure(:final problem) =>
+          OmiErrorState(message: ChatAppsProblem.fromApi(problem).message(context), onRetry: _load),
         ApiSuccess(:final data) => _list(
-          context,
-          [
-            for (final s in data)
-              if (s.channelLinkId == widget.linkId) s,
-          ],
-          channel,
-          name,
-        ),
+            context,
+            [
+              for (final s in data)
+                if (s.channelLinkId == widget.linkId) s
+            ],
+            channel,
+            name),
       },
     );
   }
@@ -99,8 +96,10 @@ class _ChannelChatsPageState extends State<ChannelChatsPage> {
                   subtitle: session.preview.trim().isEmpty
                       ? dates.timestamp(session.updatedAt)
                       : '${dates.timestamp(session.updatedAt)} · ${session.preview.trim()}',
-                  onTap: () =>
-                      routeToPage(context, ChannelTranscriptPage(session: session, channel: channel, api: _api)),
+                  onTap: () => routeToPage(
+                    context,
+                    ChannelTranscriptPage(session: session, channel: channel, api: _api),
+                  ),
                 ),
             ],
           ),
@@ -158,10 +157,8 @@ class _ChannelTranscriptPageState extends State<ChannelTranscriptPage> {
               children: [
                 if (channel != null) ...[ChatAppLogo(channel, size: 20), const SizedBox(width: OmiSpacing.xs)],
                 Expanded(
-                  child: Text(
-                    l10n.chatAppsReadOnlyBanner(name),
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                  ),
+                  child: Text(l10n.chatAppsReadOnlyBanner(name),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 ),
               ],
             ),
@@ -169,26 +166,22 @@ class _ChannelTranscriptPageState extends State<ChannelTranscriptPage> {
           Expanded(
             child: switch (_result) {
               null => const OmiLoadingState(),
-              ApiFailure(:final problem) => OmiErrorState(
-                message: ChatAppsProblem.fromApi(problem).message(context),
-                onRetry: _load,
-              ),
-              ApiSuccess(:final data) when data.isEmpty => OmiEmptyState(
-                icon: Icons.chat_bubble_outline_rounded,
-                title: l10n.chatAppsNoMessages,
-              ),
+              ApiFailure(:final problem) =>
+                OmiErrorState(message: ChatAppsProblem.fromApi(problem).message(context), onRetry: _load),
+              ApiSuccess(:final data) when data.isEmpty =>
+                OmiEmptyState(icon: Icons.chat_bubble_outline_rounded, title: l10n.chatAppsNoMessages),
               ApiSuccess(:final data) => ListView.separated(
-                // Newest first from the server; read top to bottom like the chat app.
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xxl),
-                itemCount: data.length,
-                separatorBuilder: (_, __) => const SizedBox(height: OmiSpacing.md),
-                itemBuilder: (context, index) {
-                  final message = data[data.length - 1 - index];
-                  return message.sender == MessageSender.human
-                      ? HumanMessage(message: message)
-                      : getMarkdownWidget(context, message.text);
-                },
-              ),
+                  // Newest first from the server; read top to bottom like the chat app.
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xxl),
+                  itemCount: data.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: OmiSpacing.md),
+                  itemBuilder: (context, index) {
+                    final message = data[data.length - 1 - index];
+                    return message.sender == MessageSender.human
+                        ? HumanMessage(message: message)
+                        : getMarkdownWidget(context, message.text);
+                  },
+                ),
             },
           ),
         ],

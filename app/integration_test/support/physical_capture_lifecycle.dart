@@ -33,16 +33,11 @@ Future<void> runBoundedPhysicalCapture({
     });
     // Attach an error handler immediately, including for a late response after
     // the deadline. A stalled or failed collector cannot strand the recorder.
-    unawaited(
-      Future<void>.sync(reportStarted).then(
-        (_) {
-          reported = true;
-        },
-        onError: (Object error, StackTrace stack) {
-          if (!finished.isCompleted) finished.completeError(error, stack);
-        },
-      ),
-    );
+    unawaited(Future<void>.sync(reportStarted).then((_) {
+      reported = true;
+    }, onError: (Object error, StackTrace stack) {
+      if (!finished.isCompleted) finished.completeError(error, stack);
+    }));
     await finished.future;
   } catch (error) {
     captureError = error;

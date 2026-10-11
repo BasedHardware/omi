@@ -58,9 +58,8 @@ Future<String?> exportUserDataToFile(
   RandomAccessFile? output;
   var finished = false;
   try {
-    final response =
-        await (request ??
-            () => makeRawApiCall(
+    final response = await (request ??
+        () => makeRawApiCall(
               url: '${Env.apiBaseUrl}v1/users/export?stream=true',
               method: 'GET',
               abortTrigger: abort.future,

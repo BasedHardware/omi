@@ -64,8 +64,10 @@ Widget _app(DeviceProvider provider) {
     ],
     supportedLocales: AppLocalizations.supportedLocales,
     // The device picture pulses while connected; Reduce Motion stops it so pumpAndSettle settles.
-    builder: (context, child) =>
-        MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    ),
     home: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: const DeviceSettings()),
   );
 }

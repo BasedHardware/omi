@@ -18,22 +18,18 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
-  id: 'seg',
-  text: text,
-  speaker: 'SPEAKER_00',
-  isUser: false,
-  personId: null,
-  start: 0,
-  end: 1,
-  translations: [],
-);
+      id: 'seg',
+      text: text,
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: null,
+      start: 0,
+      end: 1,
+      translations: [],
+    );
 
-ServerConversation _conversation({
-  String title = 'Venue talk.',
-  String overview = '',
-  bool summaryRetryable = true,
-  String? captureCoverage,
-}) {
+ServerConversation _conversation(
+    {String title = 'Venue talk.', String overview = '', bool summaryRetryable = true, String? captureCoverage}) {
   return ServerConversation(
     id: 'detail-retry',
     createdAt: DateTime(2026, 9, 30, 12),
@@ -126,9 +122,10 @@ void main() {
     await tester.pumpWidget(_app(detail, ConversationDetailHeader(onOpenRecordings: (_) {}), folders: folders));
     final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
 
-    final field = tester.widget<TextField>(
-      find.descendant(of: find.byType(ConversationTitleField), matching: find.byType(TextField)),
-    );
+    final field = tester.widget<TextField>(find.descendant(
+      of: find.byType(ConversationTitleField),
+      matching: find.byType(TextField),
+    ));
     expect(field.decoration!.hintText, 'Venue talk.');
     expect(field.decoration!.hintText, isNot(l10n.untitledConversation));
   });
@@ -150,16 +147,13 @@ void main() {
       if (coverage == 'incomplete') {
         final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
         expect(find.text(l10n.partialRecording), findsOneWidget);
-        await tester.pumpWidget(
-          _app(
-            detail,
-            MediaQuery(
+        await tester.pumpWidget(_app(
+          detail,
+          MediaQuery(
               data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-              child: ConversationDetailHeader(onOpenRecordings: (_) {}),
-            ),
-            folders: folders,
-          ),
-        );
+              child: ConversationDetailHeader(onOpenRecordings: (_) {})),
+          folders: folders,
+        ));
         expect(badge, findsOneWidget);
         expect(tester.takeException(), isNull);
       }

@@ -44,10 +44,7 @@ class ConversationDetailChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconTheme.merge(
-            data: IconThemeData(color: ink, size: 15),
-            child: icon,
-          ),
+          IconTheme.merge(data: IconThemeData(color: ink, size: 15), child: icon),
           const SizedBox(width: 8),
           Flexible(
             child: Text(

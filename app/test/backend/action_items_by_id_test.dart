@@ -8,12 +8,11 @@ void main() {
   test('task detail GET addresses the backend id outside list pagination', () async {
     String? requested;
     final api = ActionItemsApi(
-      baseUrl: 'http://127.0.0.1:8976/',
-      send: (request) async {
-        requested = request.url;
-        return http.Response('{"id":"task-150","description":"Older task","completed":false}', 200);
-      },
-    );
+        baseUrl: 'http://127.0.0.1:8976/',
+        send: (request) async {
+          requested = request.url;
+          return http.Response('{"id":"task-150","description":"Older task","completed":false}', 200);
+        });
 
     final result = await api.getById('task-150');
     expect(requested, 'http://127.0.0.1:8976/v1/action-items/task-150');

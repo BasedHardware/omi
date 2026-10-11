@@ -47,7 +47,9 @@ class AppMetadataWidget extends StatelessWidget {
     showAppOptionPicker<String>(
       context: context,
       title: context.l10n.appCategoryModalTitle,
-      options: [for (final c in categories) AppFormOption<String>(c.id, c.getLocalizedTitle(context))],
+      options: [
+        for (final c in categories) AppFormOption<String>(c.id, c.getLocalizedTitle(context)),
+      ],
       selected: context.read<AddAppProvider>().appCategory,
       onSelected: setAppCategory,
     );
@@ -58,7 +60,10 @@ class AppMetadataWidget extends StatelessWidget {
     showAppOptionPicker<bool>(
       context: context,
       title: l10n.appPricingLabel,
-      options: [AppFormOption<bool>(false, l10n.pricingFree), AppFormOption<bool>(true, l10n.pricingPaid)],
+      options: [
+        AppFormOption<bool>(false, l10n.pricingFree),
+        AppFormOption<bool>(true, l10n.pricingPaid),
+      ],
       selected: context.read<AddAppProvider>().isPaid,
       onSelected: (isPaid) => context.read<AddAppProvider>().setIsPaid(isPaid),
     );
@@ -84,7 +89,10 @@ class AppMetadataWidget extends StatelessWidget {
             children: [
               // App ID field with copy button (only shown when updating)
               if (updateAppId != null) ...[
-                Padding(padding: const EdgeInsets.only(left: 8.0), child: AppFormSectionTitle(l10n.appIdLabel)),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: AppFormSectionTitle(l10n.appIdLabel),
+                ),
                 Container(
                   margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                   padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
@@ -131,14 +139,14 @@ class AppMetadataWidget extends StatelessWidget {
                           ),
                           child: imageFile != null || imageUrl != null
                               ? (imageUrl == null
-                                    ? ClipRRect(
-                                        borderRadius: const BorderRadius.all(Radius.circular(14.0)),
-                                        child: Image.file(imageFile!, fit: BoxFit.cover),
-                                      )
-                                    : ClipRRect(
-                                        borderRadius: const BorderRadius.all(Radius.circular(14.0)),
-                                        child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
-                                      ))
+                                  ? ClipRRect(
+                                      borderRadius: const BorderRadius.all(Radius.circular(14.0)),
+                                      child: Image.file(imageFile!, fit: BoxFit.cover),
+                                    )
+                                  : ClipRRect(
+                                      borderRadius: const BorderRadius.all(Radius.circular(14.0)),
+                                      child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
+                                    ))
                               : Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [

@@ -70,7 +70,7 @@ void main() {
 
     await provider.sendVoiceMessageStreamToServer(
       [
-        <int>[1, 2, 3],
+        <int>[1, 2, 3]
       ],
       codec: BleAudioCodec.opus,
       onNoSpeech: () async => failureHaptics++,
@@ -94,7 +94,7 @@ void main() {
     provider.chatSessionId = 'past';
     provider.messages = [prior];
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
     expect(provider.messages, [prior]);
     expect(provider.messages.single.text, 'Past thread');
@@ -116,10 +116,10 @@ void main() {
     );
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
     await provider.sendVoiceMessageStreamToServer([
-      <int>[2],
+      <int>[2]
     ], codec: BleAudioCodec.opus);
 
     expect(streamCalls, 2);

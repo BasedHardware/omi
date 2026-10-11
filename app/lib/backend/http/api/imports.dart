@@ -140,15 +140,13 @@ class ImportJobResponse {
 const transcriptImportExtensions = ['zip', 'srt', 'vtt', 'txt'];
 
 String transcriptImportUrl(String baseUrl, {required String language, String? timeZone, String origin = 'other'}) {
-  return Uri.parse('${baseUrl}v1/import/transcripts')
-      .replace(
-        queryParameters: {
-          'language': language.isEmpty ? 'en' : language,
-          'tz': (timeZone == null || timeZone.isEmpty) ? 'UTC' : timeZone,
-          'origin': origin,
-        },
-      )
-      .toString();
+  return Uri.parse('${baseUrl}v1/import/transcripts').replace(
+    queryParameters: {
+      'language': language.isEmpty ? 'en' : language,
+      'tz': (timeZone == null || timeZone.isEmpty) ? 'UTC' : timeZone,
+      'origin': origin,
+    },
+  ).toString();
 }
 
 /// The largest upload the import routes accept (`IMPORT_MAX_PART_SIZE` in
@@ -158,9 +156,18 @@ const transcriptImportMaxUploadBytes = 100 * 1024 * 1024;
 /// The outcome of starting an import: the job to poll, or why it was refused: the
 /// file was too large to send, or the server's status code and plain-text `detail`.
 class ImportStartResult {
-  const ImportStartResult.started(ImportJobResponse this.job) : statusCode = null, errorDetail = null, tooLarge = false;
-  const ImportStartResult.failed({this.statusCode, this.errorDetail}) : job = null, tooLarge = false;
-  const ImportStartResult.tooLarge() : job = null, statusCode = null, errorDetail = null, tooLarge = true;
+  const ImportStartResult.started(ImportJobResponse this.job)
+      : statusCode = null,
+        errorDetail = null,
+        tooLarge = false;
+  const ImportStartResult.failed({this.statusCode, this.errorDetail})
+      : job = null,
+        tooLarge = false;
+  const ImportStartResult.tooLarge()
+      : job = null,
+        statusCode = null,
+        errorDetail = null,
+        tooLarge = true;
 
   final ImportJobResponse? job;
   final int? statusCode;

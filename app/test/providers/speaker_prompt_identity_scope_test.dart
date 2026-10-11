@@ -6,23 +6,21 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 TranscriptSegment segment(String id, {bool owner = false}) => TranscriptSegment(
-  id: id,
-  text: 'Synthetic speech',
-  speaker: 'SPEAKER_01',
-  speakerId: 1,
-  isUser: owner,
-  personId: null,
-  start: 0,
-  end: 6,
-  translations: [],
-);
+    id: id,
+    text: 'Synthetic speech',
+    speaker: 'SPEAKER_01',
+    speakerId: 1,
+    isUser: owner,
+    personId: null,
+    start: 0,
+    end: 6,
+    translations: []);
 
 ServerConversation row(String id) => ServerConversation(
-  id: id,
-  createdAt: DateTime.utc(2026, 10, 9),
-  structured: Structured('Synthetic', ''),
-  transcriptSegments: [segment('played'), segment('sibling', owner: true)],
-);
+    id: id,
+    createdAt: DateTime.utc(2026, 10, 9),
+    structured: Structured('Synthetic', ''),
+    transcriptSegments: [segment('played'), segment('sibling', owner: true)]);
 
 void main() {
   test('server identities update only bound IDs in the returned conversation and every visible copy', () {
@@ -31,15 +29,13 @@ void main() {
     provider.conversations = [canonical, unrelated];
     provider.searchedConversations = [search];
     provider.groupedConversations = {
-      DateTime.utc(2026, 10, 9): [group],
+      DateTime.utc(2026, 10, 9): [group]
     };
-    provider.applySpeakerPromptIdentities(
-      const GeneratedSpeakerTagPromptAnswerResponse(
-        conversationId: 'c',
-        qualityOutcome: 'owner_missed',
-        segmentIdentities: [GeneratedSpeakerTagPromptSegmentIdentity(id: 'played', isUser: true)],
-      ),
-    );
+    provider.applySpeakerPromptIdentities(const GeneratedSpeakerTagPromptAnswerResponse(
+      conversationId: 'c',
+      qualityOutcome: 'owner_missed',
+      segmentIdentities: [GeneratedSpeakerTagPromptSegmentIdentity(id: 'played', isUser: true)],
+    ));
     for (final copy in [canonical, search, group]) {
       expect(copy.transcriptSegments[0].isUser, isTrue);
       expect(copy.transcriptSegments[0].speakerLabelSource, 'manual');

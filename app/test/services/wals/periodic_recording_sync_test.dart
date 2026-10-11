@@ -161,12 +161,10 @@ void main() {
     Future<Object?> nativeCall(String method) async {
       final completed = Completer<Object?>();
       messenger.handlePlatformMessage(
-        PeriodicRecordingSync.channel.name,
-        const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
-        (reply) {
-          completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
-        },
-      );
+          PeriodicRecordingSync.channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
+          (reply) {
+        completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
+      });
       return completed.future;
     }
 

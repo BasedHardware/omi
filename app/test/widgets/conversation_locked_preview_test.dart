@@ -199,14 +199,14 @@ void main() {
   });
 
   List<ServerConversation> lockedRun() => [
-    for (var i = 0; i < 2; i++)
-      ServerConversation(
-        id: 'locked-$i',
-        createdAt: DateTime.utc(2020, 1, 1, 12 - i),
-        structured: Structured('$_title $i', 'Overview', emoji: '📝'),
-        isLocked: true,
-      ),
-  ];
+        for (var i = 0; i < 2; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+            structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
 
   testWidgets('rows in a locked run keep their own long-press menu', (tester) async {
     final run = lockedRun();

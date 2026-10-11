@@ -17,12 +17,8 @@ class CalendarMeetingSnapshot {
 }
 
 class CalendarCaptureGapMonitor {
-  CalendarCaptureGapMonitor({
-    required this.load,
-    required this.ownerKey,
-    required this.localMeetings,
-    required this.emit,
-  });
+  CalendarCaptureGapMonitor(
+      {required this.load, required this.ownerKey, required this.localMeetings, required this.emit});
   final Future<List<CalendarCaptureWindow>?> Function(DateTime start, DateTime end) load;
   final String Function() ownerKey;
   final ValueListenable<CalendarMeetingSnapshot> localMeetings;
@@ -87,12 +83,10 @@ class CalendarCaptureGapMonitor {
     return _nextFetch != null && _nextFetch!.isAfter(now) ? _nextFetch : now;
   }
 
-  Future<void> check(
-    DateTime now, {
-    required bool Function() captureOwns,
-    required String? Function() gapReason,
-    required String Function() phase,
-  }) async {
+  Future<void> check(DateTime now,
+      {required bool Function() captureOwns,
+      required String? Function() gapReason,
+      required String Function() phase}) async {
     final due = nextCheckAt(now, captureOwns: captureOwns());
     if (due == null || due.isAfter(now) || _loading) return;
     final owner = _owner;
@@ -125,7 +119,7 @@ class CalendarCaptureGapMonitor {
             'reason': reason,
             'phase': phase(),
             'meeting_elapsed_seconds': now.difference(window.start).inSeconds,
-            'calendar_evidence': 'accepted_capture_gap',
+            'calendar_evidence': 'accepted_capture_gap'
           });
         } catch (_) {}
       }

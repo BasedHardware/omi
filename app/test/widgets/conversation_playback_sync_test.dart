@@ -29,21 +29,21 @@ import 'package:omi/widgets/transcript.dart';
 final _start = DateTime.utc(2026, 9, 24, 9, 39);
 
 AudioFile _file(String id, {double duration = 60, int? startsAfterSeconds}) => AudioFile(
-  id: id,
-  uid: 'u',
-  conversationId: 'c',
-  chunkTimestamps: const [],
-  duration: duration,
-  startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
-);
+      id: id,
+      uid: 'u',
+      conversationId: 'c',
+      chunkTimestamps: const [],
+      duration: duration,
+      startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
+    );
 
 AudioFileUrlInfo _url(String id, String status, {double duration = 60}) => AudioFileUrlInfo(
-  id: id,
-  status: status,
-  signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
-  contentType: status == 'cached' ? 'audio/mpeg' : null,
-  duration: duration,
-);
+      id: id,
+      status: status,
+      signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
+      contentType: status == 'cached' ? 'audio/mpeg' : null,
+      duration: duration,
+    );
 
 TranscriptSegment _segment(
   String id,
@@ -67,14 +67,14 @@ TranscriptSegment _segment(
 
 /// A dense artifact where artifact seconds equal wall seconds inside [spans].
 AudioUrlsResponse _dense(List<ConversationAudioSpan> spans, {String fileStatus = 'pending'}) => AudioUrlsResponse(
-  files: [_url('a', fileStatus)],
-  conversationAudio: ConversationAudioUrlInfo(
-    status: 'cached',
-    signedUrl: 'https://audio.test/conversation.mp3',
-    capturedDuration: spans.isEmpty ? 0 : spans.last.artifactEnd,
-    spans: spans,
-  ),
-);
+      files: [_url('a', fileStatus)],
+      conversationAudio: ConversationAudioUrlInfo(
+        status: 'cached',
+        signedUrl: 'https://audio.test/conversation.mp3',
+        capturedDuration: spans.isEmpty ? 0 : spans.last.artifactEnd,
+        spans: spans,
+      ),
+    );
 
 /// Stands in for the native just_audio player: records seek/play/pause calls
 /// and lets the test emit deterministic position/state events.
@@ -272,9 +272,9 @@ Future<_DetailHarness> _pumpDetail(
 /// Artifact seconds of every recorded `seek:<pos>:<index>` call — mapper
 /// output is fractional, so assert with [closeTo], never string equality.
 List<double> _seekArtifacts(List<String> calls) => [
-  for (final c in calls)
-    if (c.startsWith('seek:')) double.parse(c.substring(5, c.indexOf(':', 5))),
-];
+      for (final c in calls)
+        if (c.startsWith('seek:')) double.parse(c.substring(5, c.indexOf(':', 5))),
+    ];
 
 double _topOf(WidgetTester tester, Key key) => tester.getTopLeft(find.byKey(key)).dy;
 
@@ -318,15 +318,15 @@ Future<void> _removeDetail(WidgetTester tester) async {
 }
 
 Finder _currentFill(Finder scope) => find.ancestor(
-  of: scope,
-  matching: find.byWidgetPredicate(
-    (widget) =>
-        widget is DecoratedBox &&
-        widget.decoration is BoxDecoration &&
-        (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
-        (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll,
-  ),
-);
+      of: scope,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
+            (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll,
+      ),
+    );
 
 ServerConversation _snapshotConversation({required double audioSeconds, required double transcriptEnd}) =>
     _conversation(
@@ -1408,8 +1408,8 @@ void main() {
       _segment('seg3', 390, 398),
     ];
     urls() => ApiSuccess(
-      AudioUrlsResponse(files: [_url('a', 'cached', duration: 60), _url('b', 'unavailable', duration: 60)]),
-    );
+          AudioUrlsResponse(files: [_url('a', 'cached', duration: 60), _url('b', 'unavailable', duration: 60)]),
+        );
     final harness = await _pumpDetail(
       tester,
       _conversation(

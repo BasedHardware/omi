@@ -76,21 +76,21 @@ class _VoiceAnalyticsAdapter implements AnalyticsAdapter {
 }
 
 App _personaApp() => App(
-  id: 'persona-app',
-  name: 'Persona App',
-  author: 'Author',
-  description: 'persona-only app',
-  image: 'https://example.com/a.png',
-  capabilities: {'persona'},
-  status: 'approved',
-  category: 'productivity-and-organization',
-  approved: true,
-  deleted: false,
-  enabled: true,
-  isPaid: false,
-  isUserPaid: false,
-  ratingCount: 0,
-);
+      id: 'persona-app',
+      name: 'Persona App',
+      author: 'Author',
+      description: 'persona-only app',
+      image: 'https://example.com/a.png',
+      capabilities: {'persona'},
+      status: 'approved',
+      category: 'productivity-and-organization',
+      approved: true,
+      deleted: false,
+      enabled: true,
+      isPaid: false,
+      isUserPaid: false,
+      ratingCount: 0,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -142,9 +142,12 @@ void main() {
     addTearDown(provider.dispose);
     provider.updateAppProvider(appProvider);
 
-    await provider.sendVoiceMessageStreamToServer([
-      <int>[1, 2, 3],
-    ], codec: BleAudioCodec.opus);
+    await provider.sendVoiceMessageStreamToServer(
+      [
+        <int>[1, 2, 3]
+      ],
+      codec: BleAudioCodec.opus,
+    );
 
     await AnalyticsManager.flushPending(force: true);
     final voiceEvent = adapter.events.singleWhere((e) => e.key == 'Chat Voice Input Used');

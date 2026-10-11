@@ -21,30 +21,34 @@ class BootRecoveryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    home: Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.health_and_safety_outlined, size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  // omi-ux-allow: hardcoded-text -- mandated copy before localization boots.
-                  'Recovery mode: the app is paused to protect your data. Retry starts the full app.',
-                  key: const Key('boot_recovery_banner'),
-                  textAlign: TextAlign.center,
-                  style: OmiType.title2,
+        home: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.health_and_safety_outlined, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      // omi-ux-allow: hardcoded-text -- mandated copy before localization boots.
+                      'Recovery mode: the app is paused to protect your data. Retry starts the full app.',
+                      key: const Key('boot_recovery_banner'),
+                      textAlign: TextAlign.center,
+                      style: OmiType.title2,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      key: const Key('boot_recovery_retry'),
+                      onPressed: onRetry,
+                      child: Text(_retryLabel),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(key: const Key('boot_recovery_retry'), onPressed: onRetry, child: Text(_retryLabel)),
-              ],
+              ),
             ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }

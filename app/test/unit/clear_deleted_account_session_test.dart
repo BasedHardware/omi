@@ -80,15 +80,14 @@ void main() {
         final Future<void> operation = switch (path) {
           'manual' => service.signOut(),
           'switch' => service.signOutForAccountSwitch(),
-          'expiry' => service.expireSession(
-            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
-          ),
+          'expiry' =>
+            service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken)),
           _ => clearDeletedAccountSession(
-            authService: service,
-            clearUserState: () => order.add('providers'),
-            clearWal: () async => order.add('wal'),
-            clearPreferences: () async => order.add('preferences'),
-          ),
+              authService: service,
+              clearUserState: () => order.add('providers'),
+              clearWal: () async => order.add('wal'),
+              clearPreferences: () async => order.add('preferences'),
+            ),
         };
         await operation.timeout(const Duration(seconds: 1));
         expect(gateway.signOutCalls, 1);

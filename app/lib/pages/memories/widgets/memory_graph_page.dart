@@ -43,9 +43,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  }) : position = initialPosition,
-       velocity = v.Vector3.zero(),
-       force = v.Vector3.zero();
+  })  : position = initialPosition,
+        velocity = v.Vector3.zero(),
+        force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -1054,7 +1054,8 @@ class GraphPainter3D extends CustomPainter {
             OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
             node.baseColor,
             0.5,
-          )!.withValues(alpha: p.alpha),
+          )!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],

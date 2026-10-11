@@ -53,15 +53,13 @@ void main() {
     final deadline = DateTime.now().add(const Duration(seconds: 2));
     var quarantineRecorded = false;
     while (!quarantineRecorded && DateTime.now().isBefore(deadline)) {
-      final recordedKeys = stored.getKeys().where(
-        (candidate) => [
-          'onboardingCompleted',
-          'batchModeEnabled',
-          'btDevice',
-          'btDevices',
-          'capturePolicy',
-        ].any((key) => candidate.startsWith('$key.corrupt-')),
-      );
+      final recordedKeys = stored.getKeys().where((candidate) => [
+            'onboardingCompleted',
+            'batchModeEnabled',
+            'btDevice',
+            'btDevices',
+            'capturePolicy'
+          ].any((key) => candidate.startsWith('$key.corrupt-')));
       final allOriginalsArchived = recordedKeys.length == 5;
       if (allOriginalsArchived && await journal.exists()) {
         final entries = jsonDecode(await journal.readAsString()) as List<dynamic>;
@@ -81,7 +79,7 @@ void main() {
   test('mixed-type list is archived as JSON before the original is removed', () async {
     const key = 'flash_page_pending_uploads';
     SharedPreferences.setMockInitialValues({
-      key: <dynamic>['upload-1', 42],
+      key: <dynamic>['upload-1', 42]
     });
     await SharedPreferencesUtil.init();
     final stored = await SharedPreferences.getInstance();
@@ -91,36 +89,30 @@ void main() {
     expect(SharedPreferencesUtil().getStringList(key), isEmpty);
     final journal = jsonDecode(await File('${directory.path}/boot_stages.json').readAsString()) as List<dynamic>;
     expect(
-      journal,
-      contains(
-        predicate<Map<String, dynamic>>(
+        journal,
+        contains(predicate<Map<String, dynamic>>(
           (entry) => entry['stage'] == 'quarantine:$key' && entry['state'] == 'invalid_schema',
-        ),
-      ),
-    );
+        )));
   });
 
   test('pre-fencing WAL index admits valid old entries and archives a corrupt sibling', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final index = File('${directory.path}/wals.json');
-    await index.writeAsString(
-      jsonEncode({
-        'wals': [
-          {'timer_start': 1000, 'codec': 'BleAudioCodec.opus', 'seconds': 30},
-          {'timer_start': 'old-string', 'codec': 'BleAudioCodec.opus'},
-        ],
-      }),
-    );
+    await index.writeAsString(jsonEncode({
+      'wals': [
+        {'timer_start': 1000, 'codec': 'BleAudioCodec.opus', 'seconds': 30},
+        {'timer_start': 'old-string', 'codec': 'BleAudioCodec.opus'},
+      ],
+    }));
     await WalFileManager.init();
     final loaded = await WalFileManager.loadWals();
     expect(loaded.length, 1);
     expect(loaded.single.timerStart, 1000);
     expect(loaded.single.ownerUid, isNull);
     expect(directory.listSync().whereType<File>().any((file) => file.path.contains('wals.json.corrupt-')), isTrue);
-    final archived = directory.listSync().whereType<File>().singleWhere(
-      (file) => file.path.contains('wals.json.corrupt-'),
-    );
+    final archived =
+        directory.listSync().whereType<File>().singleWhere((file) => file.path.contains('wals.json.corrupt-'));
     expect(await archived.readAsString(), contains('old-string'));
     expect(await WalFileManager.loadWals(), hasLength(1));
   });
@@ -139,13 +131,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     await File('${directory.path}/wals.json').writeAsString('{invalid');
-    await File('${directory.path}/wals_backup.json').writeAsString(
-      jsonEncode({
-        'wals': [
-          {'timer_start': 2000, 'codec': 'BleAudioCodec.opus'},
-        ],
-      }),
-    );
+    await File('${directory.path}/wals_backup.json').writeAsString(jsonEncode({
+      'wals': [
+        {'timer_start': 2000, 'codec': 'BleAudioCodec.opus'},
+      ],
+    }));
     final audio = File('${directory.path}/audio_old.bin');
     await audio.writeAsBytes([1, 2, 3]);
     await WalFileManager.init();

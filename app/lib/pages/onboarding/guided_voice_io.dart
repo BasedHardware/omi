@@ -20,9 +20,11 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'guided_voice_controller.dart';
 
 class DeviceGuidedVoiceIO implements GuidedVoiceIO {
-  DeviceGuidedVoiceIO({Future<Memory?> Function(String, String, String)? createMemoryRequest, IMicRecorderService? mic})
-    : _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
-      _mic = mic;
+  DeviceGuidedVoiceIO({
+    Future<Memory?> Function(String, String, String)? createMemoryRequest,
+    IMicRecorderService? mic,
+  })  : _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _mic = mic;
 
   final Future<Memory?> Function(String, String, String) _createMemoryRequest;
   final IMicRecorderService? _mic;
@@ -103,8 +105,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
   Future<String> transcribe(Uint8List pcm) async {
     String text;
     if (_local) {
-      text =
-          (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
+      text = (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
               ?.rawText ??
           '';
     } else {

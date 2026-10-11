@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/utils/build_provenance.dart';
 
 typedef BackgroundResourceEventEmitter = void Function(String eventName, Map<String, dynamic> properties);
-typedef BackgroundResourceSnapshotLoader =
-    Future<BackgroundResourceSnapshot> Function(DateTime backgroundStartedAt, BackgroundResourceSnapshot startSnapshot);
+typedef BackgroundResourceSnapshotLoader = Future<BackgroundResourceSnapshot> Function(
+  DateTime backgroundStartedAt,
+  BackgroundResourceSnapshot startSnapshot,
+);
 
 abstract interface class BackgroundCheckpointStore {
   Future<Map<String, Object>?> read();
@@ -136,14 +138,14 @@ class BackgroundResourceTelemetry {
     bool Function()? enabled,
     String? Function()? currentBuild,
     String? Function()? currentGitSha,
-  }) : _ownerKey = ownerKey ?? (() => 'anonymous'),
-       _identityEpoch = identityEpoch ?? (() => 0),
-       _enabled = enabled ?? (() => true),
-       _currentBuild = currentBuild ?? (() => null),
-       _currentGitSha = currentGitSha ?? _provenanceGitSha,
-       _emit = emit,
-       _now = now ?? DateTime.now,
-       _sessionIdFactory = sessionIdFactory ?? (() => DateTime.now().microsecondsSinceEpoch.toString());
+  })  : _ownerKey = ownerKey ?? (() => 'anonymous'),
+        _identityEpoch = identityEpoch ?? (() => 0),
+        _enabled = enabled ?? (() => true),
+        _currentBuild = currentBuild ?? (() => null),
+        _currentGitSha = currentGitSha ?? _provenanceGitSha,
+        _emit = emit,
+        _now = now ?? DateTime.now,
+        _sessionIdFactory = sessionIdFactory ?? (() => DateTime.now().microsecondsSinceEpoch.toString());
 
   static const eventName = 'Mobile Background Resource Session';
 
@@ -174,27 +176,27 @@ class BackgroundResourceTelemetry {
   /// [launchContext] is best-effort (`cold_start`, `resume`, `restored`).
   /// Null or unrecognized values are omitted.
   Future<void> recoverInterrupted({String? launchContext}) => _serialize(() async {
-    final store = checkpointStore;
-    if (store == null) return;
-    final epoch = _identityEpoch();
-    final owner = _ownerKey();
-    final checkpoint = await store.read();
-    if (checkpoint == null) return;
-    await store.clear();
-    if (!_enabled() || epoch != _identityEpoch() || owner != _ownerKey() || checkpoint['owner'] != owner) return;
-    final started = DateTime.tryParse(checkpoint['started_at'] as String? ?? '');
-    final id = checkpoint['background_session_id'];
-    if (started == null || id is! String || _now().isBefore(started)) return;
-    _emit('Mobile Background Observation Interrupted', {
-      'background_session_id': id,
-      'background_duration_seconds': _now().difference(started).inSeconds,
-      'observation_state': 'unobserved',
-      'start_recording_state': checkpoint['recording_state'] ?? 'unknown',
-      'batch_mode_enabled': checkpoint['batch_mode_enabled'] == true,
-      ..._originProperties(checkpoint),
-      ..._launchProperties(launchContext),
-    });
-  });
+        final store = checkpointStore;
+        if (store == null) return;
+        final epoch = _identityEpoch();
+        final owner = _ownerKey();
+        final checkpoint = await store.read();
+        if (checkpoint == null) return;
+        await store.clear();
+        if (!_enabled() || epoch != _identityEpoch() || owner != _ownerKey() || checkpoint['owner'] != owner) return;
+        final started = DateTime.tryParse(checkpoint['started_at'] as String? ?? '');
+        final id = checkpoint['background_session_id'];
+        if (started == null || id is! String || _now().isBefore(started)) return;
+        _emit('Mobile Background Observation Interrupted', {
+          'background_session_id': id,
+          'background_duration_seconds': _now().difference(started).inSeconds,
+          'observation_state': 'unobserved',
+          'start_recording_state': checkpoint['recording_state'] ?? 'unknown',
+          'batch_mode_enabled': checkpoint['batch_mode_enabled'] == true,
+          ..._originProperties(checkpoint),
+          ..._launchProperties(launchContext),
+        });
+      });
 
   Map<String, dynamic> _originProperties(Map<String, Object> checkpoint) {
     final properties = <String, dynamic>{};
@@ -244,26 +246,24 @@ class BackgroundResourceTelemetry {
       epoch: _identityEpoch(),
     );
     final session = _activeSession!;
-    unawaited(
-      _serialize(() async {
-        if (!_enabled() || session.epoch != _identityEpoch() || session.owner != _ownerKey()) return;
-        final checkpoint = <String, Object>{
-          'owner': session.owner,
-          'background_session_id': session.id,
-          'started_at': session.startedAt.toUtc().toIso8601String(),
-          'recording_state': session.snapshot.recordingState,
-          'batch_mode_enabled': session.snapshot.batchModeEnabled,
-        };
-        final originBuild = _usableObservationIdentity(_readBuild());
-        if (originBuild != null) checkpoint['origin_build'] = originBuild;
-        final originSha = _usableObservationIdentity(_readGitSha());
-        if (originSha != null) checkpoint['origin_git_sha'] = originSha;
-        await checkpointStore?.write(checkpoint);
-        if (!_enabled() || session.epoch != _identityEpoch() || session.owner != _ownerKey()) {
-          await checkpointStore?.clear();
-        }
-      }),
-    );
+    unawaited(_serialize(() async {
+      if (!_enabled() || session.epoch != _identityEpoch() || session.owner != _ownerKey()) return;
+      final checkpoint = <String, Object>{
+        'owner': session.owner,
+        'background_session_id': session.id,
+        'started_at': session.startedAt.toUtc().toIso8601String(),
+        'recording_state': session.snapshot.recordingState,
+        'batch_mode_enabled': session.snapshot.batchModeEnabled,
+      };
+      final originBuild = _usableObservationIdentity(_readBuild());
+      if (originBuild != null) checkpoint['origin_build'] = originBuild;
+      final originSha = _usableObservationIdentity(_readGitSha());
+      if (originSha != null) checkpoint['origin_git_sha'] = originSha;
+      await checkpointStore?.write(checkpoint);
+      if (!_enabled() || session.epoch != _identityEpoch() || session.owner != _ownerKey()) {
+        await checkpointStore?.clear();
+      }
+    }));
   }
 
   Future<void> onResumed(BackgroundResourceSnapshotLoader loadSnapshot) async {
@@ -319,13 +319,8 @@ class BackgroundResourceTelemetry {
 }
 
 class _BackgroundSessionStart {
-  const _BackgroundSessionStart({
-    required this.id,
-    required this.startedAt,
-    required this.snapshot,
-    required this.owner,
-    required this.epoch,
-  });
+  const _BackgroundSessionStart(
+      {required this.id, required this.startedAt, required this.snapshot, required this.owner, required this.epoch});
 
   final String owner;
   final int epoch;

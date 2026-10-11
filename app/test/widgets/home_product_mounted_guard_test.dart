@@ -111,8 +111,9 @@ List<SingleChildWidget> _homeProviders() {
     ChangeNotifierProvider(create: (_) => LocaleProvider()),
     // Home embeds the conversation list; its speaker-tag card fetches through this seam, so no I/O.
     ChangeNotifierProvider(
-      create: (_) =>
-          SpeakerTagPromptsProvider(fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse())),
+      create: (_) => SpeakerTagPromptsProvider(
+        fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+      ),
     ),
   ];
 }

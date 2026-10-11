@@ -68,9 +68,7 @@ class _ProjectHeader extends StatelessWidget {
           children: [
             Icon(Icons.folder_outlined, size: 18, color: OmiColors.textSecondary),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(title, style: OmiType.headline, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
+            Expanded(child: Text(title, style: OmiType.headline, maxLines: 1, overflow: TextOverflow.ellipsis)),
             Text(
               '$count',
               semanticsLabel: l10n.tasksCountLabel(count),

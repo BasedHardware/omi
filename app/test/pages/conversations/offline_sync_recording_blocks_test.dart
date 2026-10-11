@@ -94,25 +94,23 @@ Future<_Sync> _pump(WidgetTester tester, List<Wal> wals) async {
   tester.view.physicalSize = const Size(1170, 4000);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+  await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: MultiProvider(
+      providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: sync),
+        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
       ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SyncProvider>.value(value: sync),
-          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
-        ],
-        child: const AutoSyncPage(),
-      ),
+      child: const AutoSyncPage(),
     ),
-  );
+  ));
   await tester.pump();
   return sync;
 }

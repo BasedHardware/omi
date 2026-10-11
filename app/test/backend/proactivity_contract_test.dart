@@ -25,10 +25,8 @@ void main() {
     final items = (fixture['producer_items'] as List)
         .map((item) => GeneratedProactivityFeedItem.fromJson(item as Map<String, dynamic>))
         .toList();
-    expect(items.map((item) => proactivityTargetRoute(item.target)), [
-      '/conversation/synthetic-conversation',
-      '/task/synthetic-task',
-    ]);
+    expect(items.map((item) => proactivityTargetRoute(item.target)),
+        ['/conversation/synthetic-conversation', '/task/synthetic-task']);
     expect(ProactivityPush.matches(fixture['mentor_push'] as Map<String, dynamic>), isTrue);
   });
 

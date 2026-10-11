@@ -34,7 +34,11 @@ enum CaptureDisplayState {
 /// The one label for [state]. [bufferingFor] adds the elapsed minutes to [CaptureDisplayState.bufferingOffline].
 /// The capturing page uses the full transcription-outage sentence so the reader learns recording
 /// still continues and will be processed later; the Home card uses [captureCardCopy].
-String captureStateLabel(AppLocalizations l10n, CaptureDisplayState state, {Duration? bufferingFor}) {
+String captureStateLabel(
+  AppLocalizations l10n,
+  CaptureDisplayState state, {
+  Duration? bufferingFor,
+}) {
   switch (state) {
     case CaptureDisplayState.listening:
       return l10n.listening;
@@ -100,31 +104,19 @@ CaptureCardCopy captureCardCopy(
 }) {
   switch (state) {
     case CaptureDisplayState.paused when micTaken:
-      return CaptureCardCopy(
-        l10n.paused,
-        detail: l10n.captureMicInUseElsewhere,
-        explanation: l10n.captureMicInterruptedDetail,
-      );
+      return CaptureCardCopy(l10n.paused,
+          detail: l10n.captureMicInUseElsewhere, explanation: l10n.captureMicInterruptedDetail);
     case CaptureDisplayState.reconnecting when !socketDown:
       return CaptureCardCopy(l10n.reconnecting);
     case CaptureDisplayState.reconnecting:
-      return CaptureCardCopy(
-        l10n.reconnecting,
-        detail: l10n.captureStillRecording,
-        explanation: l10n.transcriptionPausedReconnecting,
-      );
+      return CaptureCardCopy(l10n.reconnecting,
+          detail: l10n.captureStillRecording, explanation: l10n.transcriptionPausedReconnecting);
     case CaptureDisplayState.bufferingOffline:
-      return CaptureCardCopy(
-        l10n.offline,
-        detail: l10n.captureAudioSavedTranscribesLater,
-        explanation: l10n.captureCustomSttUnreachableDetail,
-      );
+      return CaptureCardCopy(l10n.offline,
+          detail: l10n.captureAudioSavedTranscribesLater, explanation: l10n.captureCustomSttUnreachableDetail);
     case CaptureDisplayState.transcriptionUnavailable:
-      return CaptureCardCopy(
-        l10n.captureNotTranscribing,
-        detail: l10n.captureAudioSavedTranscribesLater,
-        explanation: l10n.transcriptionUnavailableRecordingContinues,
-      );
+      return CaptureCardCopy(l10n.captureNotTranscribing,
+          detail: l10n.captureAudioSavedTranscribesLater, explanation: l10n.transcriptionUnavailableRecordingContinues);
     default:
       return CaptureCardCopy(captureStateLabel(l10n, state));
   }

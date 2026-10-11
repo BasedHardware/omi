@@ -30,7 +30,14 @@ class SearchFolderCount {
 /// What the search overlay shows before anything is typed: how many of each thing there are.
 /// Every count is decoration: null (an older backend without the route) never hides a tile.
 class SearchOverview {
-  const SearchOverview({this.starred, this.folders = const [], this.recaps, this.memories, this.people, this.places});
+  const SearchOverview({
+    this.starred,
+    this.folders = const [],
+    this.recaps,
+    this.memories,
+    this.people,
+    this.places,
+  });
 
   final int? starred;
   final List<SearchFolderCount> folders;
@@ -56,27 +63,28 @@ class SearchOverview {
 
 /// `GET /v1/search/overview`. A missing route remains a distinct failure.
 Future<ApiResult<SearchOverview>> getSearchOverview({ApiSend? send}) => executeApi(
-  request: ApiRequest(url: '${Env.apiBaseUrl}v1/search/overview', method: 'GET'),
-  send: send,
-  decode: (body) =>
-      SearchOverview.fromGenerated(search_wire.GeneratedSearchOverviewResponse.fromJson(_responseObject(body))),
-);
+      request: ApiRequest(url: '${Env.apiBaseUrl}v1/search/overview', method: 'GET'),
+      send: send,
+      decode: (body) => SearchOverview.fromGenerated(search_wire.GeneratedSearchOverviewResponse.fromJson(
+        _responseObject(body),
+      )),
+    );
 
 /// `GET /v1/users/daily-summaries/search`: recaps whose words match [query], newest first.
 Future<ApiResult<List<DailySummary>>> searchDailySummaries(String query, {int limit = 10, ApiSend? send}) => executeApi(
-  request: ApiRequest(
-    url: '${Env.apiBaseUrl}v1/users/daily-summaries/search?query=${Uri.encodeQueryComponent(query)}&limit=$limit',
-    method: 'GET',
-  ),
-  send: send,
-  decode: (body) {
-    final response = wire.GeneratedDailySummariesResponse.fromJson(_responseObject(body));
-    return [
-      for (final summary in response.summaries ?? const <wire.GeneratedDailySummaryResponse>[])
-        DailySummary.fromGenerated(summary),
-    ];
-  },
-);
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/users/daily-summaries/search?query=${Uri.encodeQueryComponent(query)}&limit=$limit',
+        method: 'GET',
+      ),
+      send: send,
+      decode: (body) {
+        final response = wire.GeneratedDailySummariesResponse.fromJson(_responseObject(body));
+        return [
+          for (final summary in response.summaries ?? const <wire.GeneratedDailySummaryResponse>[])
+            DailySummary.fromGenerated(summary),
+        ];
+      },
+    );
 
 /// `GET /v1/action-items/search`: tasks semantically close to [query].
 Future<ApiResult<List<ActionItemWithMetadata>>> searchActionItems(String query, {int limit = 10, ApiSend? send}) =>
@@ -99,13 +107,13 @@ class MemorySearchHit {
 
 /// `GET /memory/search`: the memories the user sees by default whose content matches [query].
 Future<ApiResult<List<MemorySearchHit>>> searchMemories(String query, {int limit = 10, ApiSend? send}) => executeApi(
-  request: ApiRequest(
-    url: '${Env.apiBaseUrl}memory/search?query=${Uri.encodeQueryComponent(query)}&limit=$limit',
-    method: 'GET',
-  ),
-  send: send,
-  decode: (body) => [
-    for (final item in search_wire.GeneratedProductMemorySearchResponse.fromJson(_responseObject(body)).items)
-      MemorySearchHit(id: item.memoryId, content: item.content),
-  ],
-);
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}memory/search?query=${Uri.encodeQueryComponent(query)}&limit=$limit',
+        method: 'GET',
+      ),
+      send: send,
+      decode: (body) => [
+        for (final item in search_wire.GeneratedProductMemorySearchResponse.fromJson(_responseObject(body)).items)
+          MemorySearchHit(id: item.memoryId, content: item.content),
+      ],
+    );

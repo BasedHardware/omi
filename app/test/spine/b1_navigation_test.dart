@@ -13,9 +13,7 @@ void main() {
     expect(api.visibleRoute, isNull);
     const expected = String.fromEnvironment('OMI_DEV_CONTROLS') == '1' ? 'unmounted' : 'ineligible';
     await expectLater(
-      api.navigate('chat'),
-      throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', expected)),
-    );
+        api.navigate('chat'), throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', expected)));
     expect(api.visibleRoute, isNull);
     expect(api.pendingTransitions, 0);
   });
@@ -24,10 +22,8 @@ void main() {
     final previous = F.env;
     try {
       F.env = Environment.prod;
-      await expectLater(
-        AppAddressability.instance.navigate('chat'),
-        throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', 'ineligible')),
-      );
+      await expectLater(AppAddressability.instance.navigate('chat'),
+          throwsA(isA<AddressabilityRefused>().having((e) => e.code, 'code', 'ineligible')));
     } finally {
       F.env = previous;
     }

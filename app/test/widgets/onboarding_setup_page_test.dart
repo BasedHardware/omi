@@ -38,16 +38,12 @@ int _doneCount() => find.byKey(const ValueKey('done')).evaluate().length;
 void main() {
   testWidgets('steps tick one by one and the page advances once after the last tick', (tester) async {
     var finished = 0;
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () => finished++,
-          stepInterval: _interval,
-          // Keep the prompt out of this test's way.
-          ratingPromptDelay: const Duration(hours: 1),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(OnboardingSetupPage(
+      onFinished: () => finished++,
+      stepInterval: _interval,
+      // Keep the prompt out of this test's way.
+      ratingPromptDelay: const Duration(hours: 1),
+    )));
     await tester.pump();
     expect(find.byKey(const Key('onboarding_setup_page')), findsOneWidget);
     expect(find.text('Setting up your Omi'), findsOneWidget);
@@ -78,17 +74,13 @@ void main() {
   testWidgets('waits for pending setup, but never longer than the cap', (tester) async {
     var finished = 0;
     final pending = Completer<void>();
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () => finished++,
-          pendingWork: pending.future,
-          stepInterval: _interval,
-          maxPendingWait: const Duration(seconds: 3),
-          ratingPromptDelay: const Duration(hours: 1),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(OnboardingSetupPage(
+      onFinished: () => finished++,
+      pendingWork: pending.future,
+      stepInterval: _interval,
+      maxPendingWait: const Duration(seconds: 3),
+      ratingPromptDelay: const Duration(hours: 1),
+    )));
     await tester.pump(_interval * OnboardingSetupPage.stepCount); // t = 3750: ticks done
     await tester.pump(const Duration(seconds: 2));
     expect(finished, 0, reason: 'still waiting on real setup');
@@ -98,16 +90,12 @@ void main() {
 
   testWidgets('pending setup finishing early releases the page right after the last tick', (tester) async {
     var finished = 0;
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () => finished++,
-          pendingWork: Future<void>.value(),
-          stepInterval: _interval,
-          ratingPromptDelay: const Duration(hours: 1),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(OnboardingSetupPage(
+      onFinished: () => finished++,
+      pendingWork: Future<void>.value(),
+      stepInterval: _interval,
+      ratingPromptDelay: const Duration(hours: 1),
+    )));
     await tester.pump(_interval * OnboardingSetupPage.stepCount);
     await tester.pump(const Duration(seconds: 1));
     expect(finished, 1);
@@ -116,16 +104,12 @@ void main() {
   testWidgets('rating prompt: Yes requests the store review and the page then advances', (tester) async {
     var finished = 0;
     var reviews = 0;
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () => finished++,
-          stepInterval: _interval,
-          ratingPromptDelay: _promptDelay,
-          requestReview: () async => reviews++,
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(OnboardingSetupPage(
+      onFinished: () => finished++,
+      stepInterval: _interval,
+      ratingPromptDelay: _promptDelay,
+      requestReview: () async => reviews++,
+    )));
     await tester.pump(_promptDelay - const Duration(milliseconds: 100));
     await tester.pump();
     expect(find.byType(CupertinoAlertDialog), findsNothing);
@@ -156,16 +140,12 @@ void main() {
   testWidgets('rating prompt: Not really just closes the alert', (tester) async {
     var reviews = 0;
     var finished = 0;
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () => finished++,
-          stepInterval: const Duration(hours: 1),
-          ratingPromptDelay: _promptDelay,
-          requestReview: () async => reviews++,
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(OnboardingSetupPage(
+      onFinished: () => finished++,
+      stepInterval: const Duration(hours: 1),
+      ratingPromptDelay: _promptDelay,
+      requestReview: () async => reviews++,
+    )));
     await tester.pump(_promptDelay);
     await tester.pump(_transition);
     expect(find.byType(CupertinoAlertDialog), findsOneWidget);
@@ -178,17 +158,15 @@ void main() {
   });
 
   testWidgets('uses a Material alert on Android', (tester) async {
-    await tester.pumpWidget(
-      _host(
-        OnboardingSetupPage(
-          onFinished: () {},
-          stepInterval: const Duration(hours: 1),
-          ratingPromptDelay: _promptDelay,
-          requestReview: () async {},
-        ),
-        platform: TargetPlatform.android,
+    await tester.pumpWidget(_host(
+      OnboardingSetupPage(
+        onFinished: () {},
+        stepInterval: const Duration(hours: 1),
+        ratingPromptDelay: _promptDelay,
+        requestReview: () async {},
       ),
-    );
+      platform: TargetPlatform.android,
+    ));
     await tester.pump(_promptDelay);
     await tester.pump(_transition);
     expect(find.byType(AlertDialog), findsOneWidget);

@@ -119,8 +119,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       builder: (context, provider, child) {
         // The card means "what's recording now": hidden when nothing is (a connected pendant
         // that is not capturing, or a stopped phone). Transcribe Later keeps its own card.
-        final batch =
-            provider.isPhoneMicBatchRecording ||
+        final batch = provider.isPhoneMicBatchRecording ||
             (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
         final (pendantConnected, pendantPaired, pendantConnecting) = context.select<DeviceProvider, (bool, bool, bool)>(
           (d) => (d.connectedDevice != null, d.pairedDevice?.id.isNotEmpty ?? false, d.isConnecting),
@@ -129,8 +128,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (pendantDropped) {
           return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
         }
-        final phoneLive =
-            provider.recordingState == RecordingState.record ||
+        final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
             provider.recordingState == RecordingState.interrupted ||
             provider.recordingState == RecordingState.systemAudioRecord ||
@@ -148,8 +146,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
               return;
             }
-            final isCaptureActive =
-                provider.recordingState == RecordingState.record ||
+            final isCaptureActive = provider.recordingState == RecordingState.record ||
                 provider.recordingState == RecordingState.systemAudioRecord ||
                 provider.recordingState == RecordingState.deviceRecord ||
                 provider.recordingState == RecordingState.initialising ||
@@ -169,11 +166,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(
-              _buildUnifiedRecordingUI(provider),
-              padding: batch ? _liveCardPadding : EdgeInsets.zero,
-              decorated: batch,
-            ),
+            child: _cardShell(_buildUnifiedRecordingUI(provider),
+                padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
           ),
         );
       },
@@ -185,12 +179,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
   Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
-    margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-    width: double.maxFinite,
-    padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
-    decoration: decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
-    child: child,
-  );
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        width: double.maxFinite,
+        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
+        decoration:
+            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
+        child: child,
+      );
 
   /// Updates the remembered pendant capture and says whether it dropped: no source is live, the
   /// pendant it came from is still paired but not connected. See [_droppedSource].
@@ -262,8 +257,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // A phone-mic batch session reports RecordingState.record too; exclude it here so
     // the Live "Listening" card never renders for it (it is handled above).
-    bool isPhoneRecording =
-        !provider.isPhoneMicBatchRecording &&
+    bool isPhoneRecording = !provider.isPhoneMicBatchRecording &&
         (provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.recordingState == RecordingState.initialising ||
@@ -302,15 +296,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       capturingPhotos: hasPhotos,
     );
     // Initialising: the microphone is opening and no audio flows yet, so it is not Listening.
-    final starting =
-        isPhoneRecording &&
+    final starting = isPhoneRecording &&
         provider.recordingState == RecordingState.initialising &&
         displayState == CaptureDisplayState.listening;
     final copy = unverified
         ? CaptureCardCopy(context.l10n.captureSourcePendant)
         : starting
-        ? CaptureCardCopy(context.l10n.captureStarting)
-        : captureCardCopy(context.l10n, displayState, micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+            ? CaptureCardCopy(context.l10n.captureStarting)
+            : captureCardCopy(context.l10n, displayState,
+                micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
@@ -325,9 +319,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // The session clock (how long the pendant has been connected) is not the conversation.
         compact: true,
         lastLine: provider.segments.lastOrNull?.text,
-        note: isPhoneRecording && provider.pendantPausedForPhone
-            ? context.l10n.pendantPausedResumesWhenYouFinish
-            : null,
+        note:
+            isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
         // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
         onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
             ? null
@@ -340,15 +333,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           card,
           if (provider.isConversationMarkedForStarring) ...[
             const SizedBox(height: OmiSpacing.sm),
-            Row(
-              children: [
-                FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
-                const SizedBox(width: OmiSpacing.xs),
-                Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-              ],
-            ),
+            Row(children: [
+              FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
+              const SizedBox(width: OmiSpacing.xs),
+              Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ]),
           ],
-          if (hasPhotos) ...[const SizedBox(height: 12), PhotosPreviewWidget(photos: provider.photos)],
+          if (hasPhotos) ...[
+            const SizedBox(height: 12),
+            PhotosPreviewWidget(photos: provider.photos),
+          ],
         ],
       );
     } else if (provider.havingRecordingDevice && SharedPreferencesUtil().batchModeEnabled) {
@@ -384,18 +378,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (minutesStored > 0) l10n.pendantMinutesStored(minutesStored),
         if (almostFull) l10n.captureStorageAlmostFull,
       ].join('  ·  ');
-      copy = CaptureCardCopy(
-        l10n.recording,
-        detail: detail.isEmpty ? null : detail,
-        explanation: almostFull ? l10n.pendantStorageAlmostFull : null,
-      );
+      copy = CaptureCardCopy(l10n.recording,
+          detail: detail.isEmpty ? null : detail, explanation: almostFull ? l10n.pendantStorageAlmostFull : null);
       note = prefs.pendantDraining ? l10n.pendantSyncingRecordings : l10n.pendantRecordingNote;
     } else if (storageFull) {
-      copy = CaptureCardCopy(
-        l10n.paused,
-        detail: l10n.capturePhoneStorageFull,
-        explanation: l10n.transcribeLaterStorageFull,
-      );
+      copy = CaptureCardCopy(l10n.paused,
+          detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
     } else if (muted) {
       copy = CaptureCardCopy(l10n.paused);
     } else if (unverified) {
@@ -452,10 +440,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ),
         if (actions.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.sm),
-          Padding(
-            padding: const EdgeInsets.only(right: OmiSpacing.xxs),
-            child: _OfflineControls(actions: actions),
-          ),
+          Padding(padding: const EdgeInsets.only(right: OmiSpacing.xxs), child: _OfflineControls(actions: actions)),
         ],
       ],
     );
@@ -479,51 +464,41 @@ class _OfflineControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final scaler = MediaQuery.textScalerOf(context);
-        final direction = Directionality.of(context);
-        // The ambient text style supplies the platform font the button label resolves to.
-        final labelStyle = DefaultTextStyle.of(
-          context,
-        ).style.merge(OmiType.subhead.copyWith(fontWeight: FontWeight.w600));
-        // What a compact OmiButton needs to show its label whole: padding, glyph, gap and text.
-        double needed(String label) {
-          final painter = TextPainter(
-            text: TextSpan(text: label, style: labelStyle),
-            textDirection: direction,
-            textScaler: scaler,
-            maxLines: 1,
-          )..layout();
-          final width = painter.width;
-          painter.dispose();
-          return width + 2 * OmiSpacing.md + 16 + OmiSpacing.xs + 2;
-        }
+    return LayoutBuilder(builder: (context, constraints) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      // The ambient text style supplies the platform font the button label resolves to.
+      final labelStyle =
+          DefaultTextStyle.of(context).style.merge(OmiType.subhead.copyWith(fontWeight: FontWeight.w600));
+      // What a compact OmiButton needs to show its label whole: padding, glyph, gap and text.
+      double needed(String label) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: labelStyle),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width + 2 * OmiSpacing.md + 16 + OmiSpacing.xs + 2;
+      }
 
-        final paired =
-            actions.length >= 2 &&
-            actions.take(2).map((a) => needed(a.label)).reduce((a, b) => a > b ? a : b) * 2 + _gap <=
-                constraints.maxWidth;
-        final rows = <Widget>[
-          if (paired)
-            Row(
-              children: [
-                Expanded(child: _button(actions[0])),
-                const SizedBox(width: _gap),
-                Expanded(child: _button(actions[1])),
-              ],
-            ),
-          for (final a in actions.skip(paired ? 2 : 0)) _button(a),
-        ];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: _gap), rows[i]],
-          ],
-        );
-      },
-    );
+      final paired = actions.length >= 2 &&
+          actions.take(2).map((a) => needed(a.label)).reduce((a, b) => a > b ? a : b) * 2 + _gap <=
+              constraints.maxWidth;
+      final rows = <Widget>[
+        if (paired)
+          Row(children: [
+            Expanded(child: _button(actions[0])),
+            const SizedBox(width: _gap),
+            Expanded(child: _button(actions[1])),
+          ]),
+        for (final a in actions.skip(paired ? 2 : 0)) _button(a),
+      ];
+      return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: _gap), rows[i]],
+      ]);
+    });
   }
 }
 
@@ -653,9 +628,10 @@ getPhoneMicRecordingButton(
         const SizedBox(width: 4),
         Text(
           text,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium!.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium!
+              .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],
@@ -804,7 +780,10 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                     Container(
                       width: 24,
                       height: 24,
-                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(
+                        color: OmiColors.surface2,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     // Processing label

@@ -13,24 +13,19 @@ void main() {
     navigatorKey = GlobalKey<NavigatorState>();
     queue = PromptQueue(contextProvider: () => navigatorKey.currentState?.overlay?.context);
     shown = [];
-    await tester.pumpWidget(
-      MaterialApp(
-        navigatorKey: navigatorKey,
-        home: const Scaffold(body: SizedBox()),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(navigatorKey: navigatorKey, home: const Scaffold(body: SizedBox())));
   }
 
   PromptPresenter dialog(String id) => (context) {
-    shown.add(id);
-    return showDialog<void>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(id),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text('close $id'))],
-      ),
-    );
-  };
+        shown.add(id);
+        return showDialog<void>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text(id),
+            actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text('close $id'))],
+          ),
+        );
+      };
 
   Future<void> closeCurrent(WidgetTester tester) async {
     await tester.tap(find.textContaining('close '));

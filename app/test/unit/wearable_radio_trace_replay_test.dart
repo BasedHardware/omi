@@ -33,22 +33,18 @@ Future<void> replayRadioTrace(Map<String, dynamic> trace) async {
   expect(trace['audio_retained'], false);
   final events = (trace['events'] as List).cast<Map<String, dynamic>>();
   expect(events.where((e) => e['kind'] == 'completed'), hasLength(1), reason: 'incomplete device trace');
-  expect(
-    events.where((e) => e['kind'] == 'connected').length,
-    greaterThanOrEqualTo(2),
-    reason: 'a reconnect must actually have been observed',
-  );
+  expect(events.where((e) => e['kind'] == 'connected').length, greaterThanOrEqualTo(2),
+      reason: 'a reconnect must actually have been observed');
   const id = 'synthetic-radio-replay';
   final host = _RadioHost();
   final transport = NativeBleTransport(id, hostApi: host);
   final received = <List<int>>[];
-  final stream = transport
-      .getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid)
-      .listen(received.add);
+  final stream =
+      transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid).listen(received.add);
   final states = <DeviceTransportState>[];
   final stateStream = transport.connectionStateStream.listen(states.add);
   final services = [
-    BleService(uuid: omiServiceUuid, characteristicUuids: [audioDataStreamCharacteristicUuid]),
+    BleService(uuid: omiServiceUuid, characteristicUuids: [audioDataStreamCharacteristicUuid])
   ];
   var previousPackets = 0;
   var replayedSamples = 0;
@@ -79,12 +75,8 @@ Future<void> replayRadioTrace(Map<String, dynamic> trace) async {
             expect(disconnected, false, reason: 'trace delivered packets before a fresh service-ready event');
             final before = received.length;
             final payload = Uint8List.fromList([readyGenerations, replayedSamples & 255, 0, 1]);
-            BleBridge.instance.onCharacteristicValueUpdated(
-              id,
-              omiServiceUuid,
-              audioDataStreamCharacteristicUuid,
-              payload,
-            );
+            BleBridge.instance
+                .onCharacteristicValueUpdated(id, omiServiceUuid, audioDataStreamCharacteristicUuid, payload);
             await Future<void>.delayed(Duration.zero);
             expect(received.length, before + 1, reason: 'a pre-disconnect listener must survive reconnect');
             expect(received.last, payload);
@@ -163,10 +155,8 @@ void main() {
       {'kind': 'disconnected', 'elapsed_ms': 40642, 'expected': true},
     ],
   };
-  test(
-    'observed early payload and reconnect order preserves the transport listener',
-    () => replayRadioTrace(observedOrder),
-  );
+  test('observed early payload and reconnect order preserves the transport listener',
+      () => replayRadioTrace(observedOrder));
   final path = Platform.environment['OMI_BLE_RADIO_TRACE'];
   if (path != null) {
     test('retained physical radio order replays through the production transport', () async {

@@ -81,21 +81,18 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
       }
       if (mounted) setState(() => _askGateOn = on);
     }();
-    AppReviewTuning.readingDuration().then(
-      (duration) {
-        if (mounted) {
-          setState(() {
-            _readingDuration = duration;
-            _tuningReady = true;
-          });
-        }
-      },
-      onError: (_) {
-        if (mounted) {
-          setState(() => _tuningReady = true);
-        }
-      },
-    );
+    AppReviewTuning.readingDuration().then((duration) {
+      if (mounted) {
+        setState(() {
+          _readingDuration = duration;
+          _tuningReady = true;
+        });
+      }
+    }, onError: (_) {
+      if (mounted) {
+        setState(() => _tuningReady = true);
+      }
+    });
   }
 
   bool _available(BuildContext context) {
@@ -170,11 +167,9 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
     // Leaving the app while the alert is up returns no answer; ask again on a later summary.
     if (!mounted) return;
     SharedPreferencesUtil().ratingAskAnswer = enjoying ? 'yes' : 'no';
-    const TypedEvents().emit(
-      FirstSummaryRatingPromptAnswered(
-        answer: enjoying ? FirstSummaryRatingPromptAnsweredAnswer.yes : FirstSummaryRatingPromptAnsweredAnswer.no,
-      ),
-    );
+    const TypedEvents().emit(FirstSummaryRatingPromptAnswered(
+      answer: enjoying ? FirstSummaryRatingPromptAnsweredAnswer.yes : FirstSummaryRatingPromptAnsweredAnswer.no,
+    ));
     if (!enjoying) return;
     OmiHaptics.success();
     try {
@@ -196,8 +191,7 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
       valueListenable: PhoneCallProvider.callStateListenable,
       builder: (context, _, child) => ReviewReadingMoment(
         contentId: '$owner:${widget.contentId}',
-        enabled:
-            _tuningReady &&
+        enabled: _tuningReady &&
             !_ratingAskedThisSession &&
             _nativeAllowed &&
             widget.enabled &&

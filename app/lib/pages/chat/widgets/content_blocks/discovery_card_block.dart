@@ -44,7 +44,10 @@ class _DiscoveryCardBlockState extends State<DiscoveryCardBlock> {
           ChatBlockEyebrow(icon: Icons.auto_awesome_outlined, label: l10n.discovery),
           const SizedBox(height: 6),
           if (widget.block.title.trim().isNotEmpty)
-            Text(widget.block.title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              widget.block.title,
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
           if (body.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(body, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),

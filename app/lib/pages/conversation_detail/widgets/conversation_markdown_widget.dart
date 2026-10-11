@@ -37,10 +37,8 @@ MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
     h5Padding: conversationMarkdownHeaderPadding,
     h6Padding: conversationMarkdownHeaderPadding,
     blockquote: style.copyWith(backgroundColor: Colors.transparent, color: OmiColors.textPrimary),
-    blockquoteDecoration: BoxDecoration(
-      color: OmiColors.surface3,
-      borderRadius: const BorderRadius.all(Radius.circular(4)),
-    ),
+    blockquoteDecoration:
+        BoxDecoration(color: OmiColors.surface3, borderRadius: const BorderRadius.all(Radius.circular(4))),
     code: style.copyWith(
       backgroundColor: Colors.transparent,
       decoration: TextDecoration.none,

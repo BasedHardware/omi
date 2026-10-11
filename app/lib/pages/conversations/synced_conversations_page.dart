@@ -14,7 +14,10 @@ class SyncedConversationsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.processedConversations), backgroundColor: OmiColors.surface0),
+      appBar: AppBar(
+        title: Text(context.l10n.processedConversations),
+        backgroundColor: OmiColors.surface0,
+      ),
       backgroundColor: OmiColors.surface0,
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {

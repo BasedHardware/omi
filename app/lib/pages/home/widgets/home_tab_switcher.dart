@@ -72,9 +72,7 @@ class HomeTabSwitcher extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               style: OmiType.title2.copyWith(
-                fontWeight: FontWeight.w700,
-                color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary,
-              ),
+                  fontWeight: FontWeight.w700, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary),
               child: Text(label),
             ),
           ),

@@ -61,10 +61,10 @@ class DeviceToolRequest {
 /// them cancelling the compose sheet.
 class DeviceToolDispatcher {
   DeviceToolDispatcher({DeviceToolSurface? surface, String Function()? currentOwnerUid})
-    : _surface = surface ?? DeviceToolSurface(),
-      // Injectable so the account-change path is exercised in tests without a
-      // real sign-out.
-      _currentOwnerUid = currentOwnerUid ?? (() => SharedPreferencesUtil().uid);
+      : _surface = surface ?? DeviceToolSurface(),
+        // Injectable so the account-change path is exercised in tests without a
+        // real sign-out.
+        _currentOwnerUid = currentOwnerUid ?? (() => SharedPreferencesUtil().uid);
 
   final DeviceToolSurface _surface;
   final String Function() _currentOwnerUid;
@@ -124,7 +124,11 @@ class DeviceToolDispatcher {
     await _postResult(request.callId, result);
   }
 
-  Future<DeviceToolResult> _executeWithOwnerBoundary(String tool, Map<String, dynamic> arguments, String? owner) async {
+  Future<DeviceToolResult> _executeWithOwnerBoundary(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? owner,
+  ) async {
     final execution = _surface.execute(tool, arguments);
     while (true) {
       final completed = await Future.any<Object?>([

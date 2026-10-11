@@ -10,13 +10,13 @@ void main() {
   const device = 'ingress-test';
   final now = DateTime.fromMillisecondsSinceEpoch(100000);
   String snapshot({String phase = 'flowing', bool confirmed = true}) => jsonEncode({
-    'phase': phase,
-    'generation': 'current-connection',
-    'reason': 'audio_observed',
-    'valid_until_ms': 130000,
-    'subscription_confirmed': confirmed,
-    'unverified_since_ms': 0,
-  });
+        'phase': phase,
+        'generation': 'current-connection',
+        'reason': 'audio_observed',
+        'valid_until_ms': 130000,
+        'subscription_confirmed': confirmed,
+        'unverified_since_ms': 0,
+      });
 
   tearDown(() => BleBridge.instance.onPeripheralDisconnected(device, null));
 
@@ -56,7 +56,7 @@ void main() {
     expect(bridge.ingressHealth(device)!.verifiedAt(now), isTrue);
     for (var launch = 0; launch < 5; launch++) {
       bridge.onDeviceReady(device, [
-        BleService(uuid: 'cached-service', characteristicUuids: ['audio', 'battery']),
+        BleService(uuid: 'cached-service', characteristicUuids: ['audio', 'battery'])
       ]);
       expect(bridge.ingressHealth(device), isNull);
       bridge.onCaptureHealth(device, snapshot(phase: 'unverified'));

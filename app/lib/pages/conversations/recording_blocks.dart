@@ -35,17 +35,17 @@ class RecordingBlock {
 /// Higher is more serious. A switch, not a list, so a new state cannot compile
 /// without a rank and silently read as the healthiest.
 int _rank(WalSyncDisplayState state) => switch (state) {
-  WalSyncDisplayState.synced => 0,
-  WalSyncDisplayState.uploaded => 1,
-  WalSyncDisplayState.waiting => 2,
-  WalSyncDisplayState.syncing => 3,
-  WalSyncDisplayState.retrying => 4,
-  WalSyncDisplayState.outsideRecoveryWindow => 5,
-  WalSyncDisplayState.unsupportedAudio => 6,
-  WalSyncDisplayState.corrupted => 7,
-  WalSyncDisplayState.uploadRejected => 8,
-  WalSyncDisplayState.failed => 9,
-};
+      WalSyncDisplayState.synced => 0,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.waiting => 2,
+      WalSyncDisplayState.syncing => 3,
+      WalSyncDisplayState.retrying => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 5,
+      WalSyncDisplayState.unsupportedAudio => 6,
+      WalSyncDisplayState.corrupted => 7,
+      WalSyncDisplayState.uploadRejected => 8,
+      WalSyncDisplayState.failed => 9,
+    };
 
 bool _onDevice(Wal wal) => wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
 
@@ -61,8 +61,7 @@ List<RecordingBlock> groupRecordingBlocks(List<Wal> newestFirst) {
     final key = (wal.device, _onDevice(wal));
     final current = open[key];
     final next = current?.last;
-    final joins =
-        next != null &&
+    final joins = next != null &&
         wal.timerStart <= next.timerStart &&
         next.timerStart - (wal.timerStart + wal.seconds) <= recordingBlockGapSeconds;
     if (joins) {

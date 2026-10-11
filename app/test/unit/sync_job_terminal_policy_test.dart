@@ -8,7 +8,10 @@ import 'package:omi/services/wals/wal.dart';
 void main() {
   group('syncJobTerminalPolicy', () {
     test('acknowledges only a truthful completed terminal job', () {
-      expect(syncJobTerminalPolicy(status: 'completed', isTerminal: true), SyncJobTerminalPolicy.acknowledge);
+      expect(
+        syncJobTerminalPolicy(status: 'completed', isTerminal: true),
+        SyncJobTerminalPolicy.acknowledge,
+      );
     });
 
     test('retains retry material for partial and full failures', () {
@@ -22,8 +25,14 @@ void main() {
     });
 
     test('waits for nonterminal jobs regardless of their status text', () {
-      expect(syncJobTerminalPolicy(status: 'processing', isTerminal: false), SyncJobTerminalPolicy.wait);
-      expect(syncJobTerminalPolicy(status: 'completed', isTerminal: false), SyncJobTerminalPolicy.wait);
+      expect(
+        syncJobTerminalPolicy(status: 'processing', isTerminal: false),
+        SyncJobTerminalPolicy.wait,
+      );
+      expect(
+        syncJobTerminalPolicy(status: 'completed', isTerminal: false),
+        SyncJobTerminalPolicy.wait,
+      );
     });
   });
 
@@ -38,7 +47,13 @@ void main() {
 
       expect(
         () => requireCompleteSyncUpload(response),
-        throwsA(isA<SyncUploadIncompleteException>().having((error) => error.failedSegments, 'failedSegments', 1)),
+        throwsA(
+          isA<SyncUploadIncompleteException>().having(
+            (error) => error.failedSegments,
+            'failedSegments',
+            1,
+          ),
+        ),
       );
     });
   });
@@ -59,7 +74,10 @@ void main() {
 
     test('recognizes the legacy stale-worker shape', () {
       expect(syncJobIsBackendBusy(status()), isTrue);
-      expect(syncJobIsBackendBusy(status(error: 'Job timed out (background worker likely died)')), isTrue);
+      expect(
+        syncJobIsBackendBusy(status(error: 'Job timed out (background worker likely died)')),
+        isTrue,
+      );
     });
 
     test('does not hide typed zero-segment failures from retry accounting', () {
@@ -70,13 +88,13 @@ void main() {
 
   group('syncJobFailureIsPermanent', () {
     SyncJobStatusResponse job({required String status, String? reasonCode}) => SyncJobStatusResponse(
-      jobId: 'synthetic-job',
-      status: status,
-      totalSegments: 1,
-      processedSegments: 1,
-      failedSegments: 1,
-      reasonCode: reasonCode,
-    );
+          jobId: 'synthetic-job',
+          status: status,
+          totalSegments: 1,
+          processedSegments: 1,
+          failedSegments: 1,
+          reasonCode: reasonCode,
+        );
 
     test('classifies an input-caused whole-job failure as permanent', () {
       for (final reasonCode in ['sync_invalid_audio', 'stt_invalid_input']) {
@@ -120,14 +138,14 @@ void main() {
 
   group('isAutoUploadEligible', () {
     Wal wal({required int retryCount, WalStatus status = WalStatus.miss}) => Wal(
-      timerStart: 1789473658,
-      codec: BleAudioCodec.opus,
-      seconds: 1,
-      status: status,
-      storage: WalStorage.disk,
-      filePath: 'audio.bin',
-      retryCount: retryCount,
-    );
+          timerStart: 1789473658,
+          codec: BleAudioCodec.opus,
+          seconds: 1,
+          status: status,
+          storage: WalStorage.disk,
+          filePath: 'audio.bin',
+          retryCount: retryCount,
+        );
 
     test('admits a recording with budget left', () {
       expect(isAutoUploadEligible(wal(retryCount: 0)), isTrue);

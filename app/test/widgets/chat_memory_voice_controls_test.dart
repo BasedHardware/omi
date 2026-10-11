@@ -70,30 +70,27 @@ void main() {
 
   Future<void> pumpChat(WidgetTester tester, _VoiceState voice, {List<ServerMessage> messages = const []}) async {
     final provider = _SilentMessages()..messages = messages;
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: const [Locale('en')],
-        home: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<MessageProvider>.value(value: provider),
-            ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-            ChangeNotifierProvider(create: (_) => HomeProvider()),
-            ChangeNotifierProvider<VoiceRecorderProvider>.value(value: voice),
-            ChangeNotifierProvider(create: (_) => AppProvider()),
-            ChangeNotifierProvider(
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<MessageProvider>.value(value: provider),
+          ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (_) => HomeProvider()),
+          ChangeNotifierProvider<VoiceRecorderProvider>.value(value: voice),
+          ChangeNotifierProvider(create: (_) => AppProvider()),
+          ChangeNotifierProvider(
               create: (_) => IntegrationProvider(
-                fetchStatus: (_) async => null,
-                saveStatus: (_, __) async => false,
-                deleteStatus: (_) async => false,
-                persistPref: (_, __) async {},
-              ),
-            ),
-          ],
-          child: const ChatPage(),
-        ),
+                    fetchStatus: (_) async => null,
+                    saveStatus: (_, __) async => false,
+                    deleteStatus: (_) async => false,
+                    persistPref: (_, __) async {},
+                  )),
+        ],
+        child: const ChatPage(),
       ),
-    );
+    ));
     await tester.pump();
   }
 
@@ -138,20 +135,19 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final now = DateTime.utc(2026, 9, 27);
     final messages = List.generate(
-      35,
-      (i) => ServerMessage(
-        'message-$i',
-        now.add(Duration(minutes: i)),
-        'Message $i with a longer transcript line',
-        MessageSender.human,
-        MessageType.text,
-        null,
-        false,
-        [],
-        [],
-        [],
-      ),
-    );
+        35,
+        (i) => ServerMessage(
+              'message-$i',
+              now.add(Duration(minutes: i)),
+              'Message $i with a longer transcript line',
+              MessageSender.human,
+              MessageType.text,
+              null,
+              false,
+              [],
+              [],
+              [],
+            ));
     await pumpChat(tester, _VoiceState(VoiceRecorderState.idle), messages: messages);
     await tester.pump(const Duration(milliseconds: 350));
     final list = find.byType(ListView).first;

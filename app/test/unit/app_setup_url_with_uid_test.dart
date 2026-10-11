@@ -24,9 +24,7 @@ void main() {
   test('the fragment stays after the query', () {
     expect(appSetupUrlWithUid('https://example.com/setup#step2', 'u1'), 'https://example.com/setup?uid=u1#step2');
     expect(
-      appSetupUrlWithUid('https://example.com/setup?a=b#step2', 'u1'),
-      'https://example.com/setup?a=b&uid=u1#step2',
-    );
+        appSetupUrlWithUid('https://example.com/setup?a=b#step2', 'u1'), 'https://example.com/setup?a=b&uid=u1#step2');
   });
 
   test('a uid with reserved characters reaches the server unchanged', () {

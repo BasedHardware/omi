@@ -120,10 +120,7 @@ class _PermissionRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: OmiSpacing.xxs),
           decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: OmiRadius.mdAll),
-          child: Text(
-            label,
-            style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600),
-          ),
+          child: Text(label, style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
         ),
         const SizedBox(width: 10),
         Expanded(

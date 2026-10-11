@@ -9,14 +9,14 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 
 UserSubscriptionResponse _subscription(PlanType plan) => UserSubscriptionResponse(
-  subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
-  transcriptionSecondsUsed: 0,
-  transcriptionSecondsLimit: 0,
-  wordsTranscribedUsed: 0,
-  wordsTranscribedLimit: 0,
-  insightsGainedUsed: 0,
-  insightsGainedLimit: 0,
-);
+      subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    );
 
 /// What the paywall's "switch to free" does (plans_sheet.dart).
 Future<CustomSttConfig> _switchToFreeFromPaywall() async {

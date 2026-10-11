@@ -25,7 +25,12 @@ Map<String, dynamic> _memoryJson({
     'half_life_days': 180,
     'as_of': asOf,
     'arguments': {
-      'memory_use': {'state': 'useful', 'suppressed': false, 'last_action': 'useful', 'feedback_id': 'feedback-1'},
+      'memory_use': {
+        'state': 'useful',
+        'suppressed': false,
+        'last_action': 'useful',
+        'feedback_id': 'feedback-1',
+      },
     },
   };
 }
@@ -39,7 +44,10 @@ void main() {
     expect(memory.currencyBand, 'current');
     expect(memory.halfLifeDays, 180);
     expect(memory.asOf?.toUtc(), DateTime.parse('2026-09-13T11:00:00Z'));
-    expect(memory.beliefComputedAt?.toUtc(), DateTime.parse('2026-09-13T12:00:00Z'));
+    expect(
+      memory.beliefComputedAt?.toUtc(),
+      DateTime.parse('2026-09-13T12:00:00Z'),
+    );
     expect(memory.isCurrentForUse, isTrue);
     expect(memory.memoryUseSuppressed, isFalse);
     expect(memory.memoryUseAction, 'useful');
@@ -52,18 +60,25 @@ void main() {
     expect(roundTrip.memoryUseAction, 'useful');
   });
 
-  test('unknown assessment is usable but never fabricated as a currency value', () {
-    final memory = Memory.fromJson(_memoryJson(currency: null, currencyBand: null));
+  test(
+    'unknown assessment is usable but never fabricated as a currency value',
+    () {
+      final memory = Memory.fromJson(
+        _memoryJson(currency: null, currencyBand: null),
+      );
 
-    expect(memory.hasUnknownCurrency, isTrue);
-    expect(memory.currency, isNull);
-    expect(memory.currencyBand, isNull);
-    expect(memory.isCurrentForUse, isTrue);
-    expect(memory.isUsefulNow, isTrue);
-  });
+      expect(memory.hasUnknownCurrency, isTrue);
+      expect(memory.currency, isNull);
+      expect(memory.currencyBand, isNull);
+      expect(memory.isCurrentForUse, isTrue);
+      expect(memory.isUsefulNow, isTrue);
+    },
+  );
 
   test('an old response without an assessment is not current', () {
-    final memory = Memory.fromJson(_memoryJson(beliefComputedAt: null, currency: null, currencyBand: null));
+    final memory = Memory.fromJson(
+      _memoryJson(beliefComputedAt: null, currency: null, currencyBand: null),
+    );
 
     expect(memory.hasCurrencyAssessment, isFalse);
     expect(memory.isCurrentForUse, isFalse);
@@ -82,17 +97,20 @@ void main() {
     expect(memory.isUsefulNow, isFalse);
   });
 
-  test('historical ledger rows stay out of current use even with a current band', () {
-    final memory = Memory.fromJson({
-      ..._memoryJson(),
-      'ledger_schema_version': 'knowledge_ledger.v1',
-      'kind': 'fact',
-      'intent_backed': true,
-      'invalid_at': '2026-09-12T12:00:00Z',
-    });
+  test(
+    'historical ledger rows stay out of current use even with a current band',
+    () {
+      final memory = Memory.fromJson({
+        ..._memoryJson(),
+        'ledger_schema_version': 'knowledge_ledger.v1',
+        'kind': 'fact',
+        'intent_backed': true,
+        'invalid_at': '2026-09-12T12:00:00Z',
+      });
 
-    expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
-    expect(memory.isCurrentForUse, isFalse);
-    expect(memory.isUsefulNow, isFalse);
-  });
+      expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
+      expect(memory.isCurrentForUse, isFalse);
+      expect(memory.isUsefulNow, isFalse);
+    },
+  );
 }

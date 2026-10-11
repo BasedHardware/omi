@@ -50,10 +50,8 @@ void main() {
       newMicros = measure(encodeWalFrames);
       oldMicros = measure(legacy);
     }
-    stdout.writeln(
-      'WAL_BENCHMARK round=$round chunks=1000 frames_per_chunk=1000 bytes_per_frame=80 '
-      'legacy_us=$oldMicros encoded_us=$newMicros output_bytes=${encoded.length}',
-    );
+    stdout.writeln('WAL_BENCHMARK round=$round chunks=1000 frames_per_chunk=1000 bytes_per_frame=80 '
+        'legacy_us=$oldMicros encoded_us=$newMicros output_bytes=${encoded.length}');
   }
   stdout.writeln('checksum=$checksum byte_equivalence=PASS');
 }

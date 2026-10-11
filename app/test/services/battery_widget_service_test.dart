@@ -6,11 +6,11 @@ void main() {
     final updates = <Map<String, Object>>[];
     final service = BatteryWidgetService.testing((info) async => updates.add(info));
     Future<void> publish(int battery, {bool connected = true}) => service.updateBatteryInfo(
-      deviceName: 'Friend',
-      batteryLevel: battery,
-      deviceType: 'friend',
-      isConnected: connected,
-    );
+          deviceName: 'Friend',
+          batteryLevel: battery,
+          deviceType: 'friend',
+          isConnected: connected,
+        );
     await publish(90);
     for (var i = 0; i < 20; i++) {
       await publish(90);

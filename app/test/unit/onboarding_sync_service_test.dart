@@ -17,18 +17,18 @@ void main() {
   late bool writesSucceed;
 
   OnboardingSyncService create() => OnboardingSyncService(
-    read: (owner) => disk[owner] ?? '',
-    write: (owner, value) async {
-      if (!writesSucceed) return false;
-      disk[owner] = value;
-      return true;
-    },
-    send: (session, fields) async {
-      sent.add((owner: session.ownerUid, fields: Map.of(fields)));
-      return transport(session, fields);
-    },
-    isCurrent: (session) => current?.ownerUid == session.ownerUid && current?.generation == session.generation,
-  );
+        read: (owner) => disk[owner] ?? '',
+        write: (owner, value) async {
+          if (!writesSucceed) return false;
+          disk[owner] = value;
+          return true;
+        },
+        send: (session, fields) async {
+          sent.add((owner: session.ownerUid, fields: Map.of(fields)));
+          return transport(session, fields);
+        },
+        isCurrent: (session) => current?.ownerUid == session.ownerUid && current?.generation == session.generation,
+      );
 
   setUp(() {
     disk = {};

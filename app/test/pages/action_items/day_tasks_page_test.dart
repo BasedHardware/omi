@@ -27,36 +27,25 @@ class _Fetch {
   Completer<ApiResult<ActionItemsResponse>>? gate;
   final calls = <({DateTime start, DateTime end, int offset})>[];
 
-  Future<ApiResult<ActionItemsResponse>> call({
-    required DateTime startDate,
-    required DateTime endDate,
-    int limit = 50,
-    int offset = 0,
-  }) {
+  Future<ApiResult<ActionItemsResponse>> call(
+      {required DateTime startDate, required DateTime endDate, int limit = 50, int offset = 0}) {
     calls.add((start: startDate, end: endDate, offset: offset));
     final pending = gate;
     if (pending != null) return pending.future;
     final thrown = error;
     if (thrown != null) return Future.error(thrown);
     if (fail) return Future.value(const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 500)));
-    return Future.value(
-      ApiSuccess(
-        ActionItemsResponse(actionItems: pages?.call(offset) ?? items, hasMore: hasMore),
-        rejectedRows: rejectedRows,
-        truncated: truncated,
-      ),
-    );
+    return Future.value(ApiSuccess(ActionItemsResponse(actionItems: pages?.call(offset) ?? items, hasMore: hasMore),
+        rejectedRows: rejectedRows, truncated: truncated));
   }
 }
 
 Future<void> _pumpPage(WidgetTester tester, DateTime date, DayTasksFetcher fetch) {
-  return tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: DayTasksPage(date: date, fetchTasks: fetch),
-    ),
-  );
+  return tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: DayTasksPage(date: date, fetchTasks: fetch),
+  ));
 }
 
 void main() {
@@ -208,11 +197,8 @@ void main() {
     fetch.fail = false;
     fetch.hasMore = false;
     fetch.pages = (offset) => [_task('p1-0', 'Task 0 dup'), _task('p3-0', 'New Task')];
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('day_tasks_retry')),
-      200,
-      scrollable: find.byType(Scrollable),
-    );
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('day_tasks_retry')), 200,
+        scrollable: find.byType(Scrollable));
     await tester.tap(find.byKey(const ValueKey('day_tasks_retry')));
     await tester.pump();
     await tester.pumpAndSettle();

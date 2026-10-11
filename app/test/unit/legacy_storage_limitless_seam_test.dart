@@ -174,16 +174,16 @@ void main() {
   });
 
   Wal storageWal({int totalBytes = 440}) => Wal(
-    timerStart: 1700000000,
-    codec: BleAudioCodec.opus,
-    seconds: 5,
-    status: WalStatus.miss,
-    storage: WalStorage.sdcard,
-    device: 'devkit-1',
-    fileNum: 1,
-    storageOffset: 0,
-    storageTotalBytes: totalBytes,
-  );
+        timerStart: 1700000000,
+        codec: BleAudioCodec.opus,
+        seconds: 5,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'devkit-1',
+        fileNum: 1,
+        storageOffset: 0,
+        storageTotalBytes: totalBytes,
+      );
 
   StorageSyncImpl storageSyncWith(_FakeLocalSync local, _FakeStorageDevice card, Wal wal) {
     final sync = StorageSyncImpl(_Listener())

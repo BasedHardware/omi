@@ -63,25 +63,24 @@ void main() {
       final d = dependencies(world: w, preferences: SharedPreferencesUtil(), location: location);
       final phone = PhoneSpy(w.wal.getSyncs().phone);
       final deps = CaptureDependencies(
-        wal: WalSpy(phone),
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
-        auth: d.auth,
-        connectivity: d.connectivity,
-        now: d.now,
-        scheduling: d.scheduling,
-        preferences: d.preferences,
-        ble: d.ble,
-        openSocket: d.openSocket,
-        owner: d.owner,
-        location: location,
-        localSegments: d.localSegments,
-        codec: d.codec,
-        microphonePermission: d.microphonePermission,
-        refreshConversation: d.refreshConversation,
-        telemetry: d.telemetry,
-        ensureDeviceConnection: d.ensureDeviceConnection,
-      );
+          wal: WalSpy(phone),
+          phoneMic: d.phoneMic,
+          batchSupported: d.batchSupported,
+          auth: d.auth,
+          connectivity: d.connectivity,
+          now: d.now,
+          scheduling: d.scheduling,
+          preferences: d.preferences,
+          ble: d.ble,
+          openSocket: d.openSocket,
+          owner: d.owner,
+          location: location,
+          localSegments: d.localSegments,
+          codec: d.codec,
+          microphonePermission: d.microphonePermission,
+          refreshConversation: d.refreshConversation,
+          telemetry: d.telemetry,
+          ensureDeviceConnection: d.ensureDeviceConnection);
 
       final p = composeCaptureProvider(deps);
       await p.streamRecording();
@@ -112,77 +111,58 @@ void main() {
       w.disposeController();
       var drains = 0;
       final coordinator = RecordingTransferCoordinator(
-        reconcile: () async {},
-        discover: () async {},
-        refreshPending: () async {},
-        autoUploadEnabled: () => true,
-        drain: () async {
-          drains++;
-          return const RecordingTransferDrainResult.skipped();
-        },
-      );
-      final owner = CaptureSessionOwner(
-        coordinator: coordinator,
-        startForeground: () async {},
-        stopForeground: () async {},
-      );
+          reconcile: () async {},
+          discover: () async {},
+          refreshPending: () async {},
+          autoUploadEnabled: () => true,
+          drain: () async {
+            drains++;
+            return const RecordingTransferDrainResult.skipped();
+          });
+      final owner =
+          CaptureSessionOwner(coordinator: coordinator, startForeground: () async {}, stopForeground: () async {});
       final d = dependencies(
-        world: w,
-        preferences: SharedPreferencesUtil(),
-        open:
-            ({
-              required codec,
+          world: w,
+          preferences: SharedPreferencesUtil(),
+          open: (
+              {required codec,
               required sampleRate,
               required language,
               required force,
               source,
               clientConversationId,
-              customSttConfig,
-            }) async {
-              final socket = TranscriptSegmentSocketService.withSocket(
-                sampleRate,
-                codec,
-                language,
-                ScriptedPureSocket(),
-              );
-              await socket.start();
-              return socket;
-            },
-      );
+              customSttConfig}) async {
+            final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, ScriptedPureSocket());
+            await socket.start();
+            return socket;
+          });
       final phone = PhoneSpy(w.wal.getSyncs().phone);
       final deps = CaptureDependencies(
-        wal: WalSpy(phone),
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
-        auth: d.auth,
-        connectivity: d.connectivity,
-        now: d.now,
-        scheduling: d.scheduling,
-        preferences: d.preferences,
-        ble: d.ble,
-        openSocket: d.openSocket,
-        owner: owner,
-        location: d.location,
-        localSegments: d.localSegments,
-        codec: d.codec,
-        microphonePermission: d.microphonePermission,
-        refreshConversation: d.refreshConversation,
-        telemetry: d.telemetry,
-        ensureDeviceConnection: d.ensureDeviceConnection,
-      );
+          wal: WalSpy(phone),
+          phoneMic: d.phoneMic,
+          batchSupported: d.batchSupported,
+          auth: d.auth,
+          connectivity: d.connectivity,
+          now: d.now,
+          scheduling: d.scheduling,
+          preferences: d.preferences,
+          ble: d.ble,
+          openSocket: d.openSocket,
+          owner: owner,
+          location: d.location,
+          localSegments: d.localSegments,
+          codec: d.codec,
+          microphonePermission: d.microphonePermission,
+          refreshConversation: d.refreshConversation,
+          telemetry: d.telemetry,
+          ensureDeviceConnection: d.ensureDeviceConnection);
 
       final p = composeCaptureProvider(deps);
       await p.changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
       phone.finalizeGate = Completer<void>();
-      p.onMessageEventReceived(
-        ConversationProcessingStartedEvent(
+      p.onMessageEventReceived(ConversationProcessingStartedEvent(
           memory: ServerConversation(
-            id: 'synthetic',
-            createdAt: w.clock.now(),
-            structured: Structured('fixture', 'fixture'),
-          ),
-        ),
-      );
+              id: 'synthetic', createdAt: w.clock.now(), structured: Structured('fixture', 'fixture'))));
       w.scheduler.elapse(const Duration(seconds: 30));
       await pumpEventQueue();
       expect(drains, 0);

@@ -12,15 +12,15 @@ import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/onboarding_sync_service.dart';
 
 Widget _host(Widget child) => MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -49,14 +49,10 @@ void main() {
     )..bindSession(session);
     addTearDown(service.dispose);
     var advanced = 0;
-    await tester.pumpWidget(
-      _host(
-        FoundOmiWidget(
-          goNext: () => advanced++,
-          saveSource: (source) => service.enqueue(session, acquisitionSource: source),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_host(FoundOmiWidget(
+      goNext: () => advanced++,
+      saveSource: (source) => service.enqueue(session, acquisitionSource: source),
+    )));
     await tester.tap(find.text('YouTube'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('found_omi_continue')));
@@ -82,7 +78,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     var canSave = false;
     var advanced = 0;
-    await tester.pumpWidget(_host(FoundOmiWidget(goNext: () => advanced++, saveSource: (_) async => canSave)));
+    await tester.pumpWidget(_host(FoundOmiWidget(
+      goNext: () => advanced++,
+      saveSource: (_) async => canSave,
+    )));
     await tester.tap(find.text('YouTube'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('found_omi_continue')));

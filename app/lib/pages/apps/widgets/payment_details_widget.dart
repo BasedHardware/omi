@@ -27,10 +27,8 @@ class PaymentDetailsWidget extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  context.l10n.paymentAppCost,
-                  style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
-                ),
+                child:
+                    Text(context.l10n.paymentAppCost, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),

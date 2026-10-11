@@ -44,16 +44,16 @@ class ReviewProvider extends ChangeNotifier {
     ReleaseChannelReporter? reportChannel,
     String Function()? releaseChannel,
     Future<int?> Function()? appBuild,
-  }) : _reportChannel = reportChannel ?? api.putReleaseChannel,
-       _releaseChannel = releaseChannel ?? _defaultReleaseChannel,
-       _appBuild = appBuild ?? _defaultAppBuild,
-       _isEligible = isEligible ?? _defaultEligible,
-       _loadItems = loadItems ?? api.getReviewItems,
-       _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
-       _loadProjects = loadProjects ?? api.getProjectEntities,
-       _sendAnswer = sendAnswer ?? api.answerReviewItem,
-       _loadClip = loadClip ?? _defaultLoadClip,
-       _playClipOverride = playClip;
+  })  : _reportChannel = reportChannel ?? api.putReleaseChannel,
+        _releaseChannel = releaseChannel ?? _defaultReleaseChannel,
+        _appBuild = appBuild ?? _defaultAppBuild,
+        _isEligible = isEligible ?? _defaultEligible,
+        _loadItems = loadItems ?? api.getReviewItems,
+        _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
+        _loadProjects = loadProjects ?? api.getProjectEntities,
+        _sendAnswer = sendAnswer ?? api.answerReviewItem,
+        _loadClip = loadClip ?? _defaultLoadClip,
+        _playClipOverride = playClip;
 
   final bool Function() _isEligible;
   final ReleaseChannelReporter _reportChannel;
@@ -278,10 +278,10 @@ class ReviewProvider extends ChangeNotifier {
   static bool _defaultEligible() => Env.isTestFlight || F.env == Environment.dev;
 
   static Future<ApiResult<Uint8List>> _defaultLoadClip(SpeakerItem speaker) => speaker_api.getSpeakerTagPromptClip(
-    conversationId: speaker.conversationId,
-    start: speaker.start,
-    end: speaker.end,
-  );
+        conversationId: speaker.conversationId,
+        start: speaker.start,
+        end: speaker.end,
+      );
 
   void _notify() {
     if (!_disposed) notifyListeners();

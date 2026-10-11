@@ -17,10 +17,10 @@ class SyncTransferKeepAlive {
     Future<void> Function()? start,
     Future<void> Function()? stop,
     void Function(Future<dynamic> Function(MethodCall)? handler)? installNativeHandler,
-  }) : _isAndroid = isAndroid ?? _defaultIsAndroid,
-       _isIOS = isIOS ?? _defaultIsIOS,
-       _start = start,
-       _stop = stop {
+  })  : _isAndroid = isAndroid ?? _defaultIsAndroid,
+        _isIOS = isIOS ?? _defaultIsIOS,
+        _start = start,
+        _stop = stop {
     // Production uses the channel for both directions. Tests that replace the
     // native start/stop calls need no binary messenger unless they explicitly
     // inject a handler installer.

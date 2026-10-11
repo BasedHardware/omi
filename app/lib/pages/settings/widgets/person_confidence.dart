@@ -6,25 +6,25 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Filled steps of the three-step meter for a server confidence band.
 int confidenceLevel(String band) => switch (band) {
-  'confirmed' => 3,
-  'likely' => 2,
-  'unverified' => 1,
-  _ => 0,
-};
+      'confirmed' => 3,
+      'likely' => 2,
+      'unverified' => 1,
+      _ => 0,
+    };
 
 String confidenceLabel(BuildContext context, String band) => switch (band) {
-  'confirmed' => context.l10n.confidenceConfirmed,
-  'likely' => context.l10n.confidenceLikely,
-  'unverified' => context.l10n.confidenceUnverified,
-  _ => context.l10n.unknown,
-};
+      'confirmed' => context.l10n.confidenceConfirmed,
+      'likely' => context.l10n.confidenceLikely,
+      'unverified' => context.l10n.confidenceUnverified,
+      _ => context.l10n.unknown,
+    };
 
 /// Voice-match levels on suggestions: 3 close, 2 possible, 1 weak.
 String voiceMatchLabel(BuildContext context, int level) => switch (level) {
-  3 => context.l10n.voiceMatchClose,
-  2 => context.l10n.voiceMatchPossible,
-  _ => context.l10n.voiceMatchWeak,
-};
+      3 => context.l10n.voiceMatchClose,
+      2 => context.l10n.voiceMatchPossible,
+      _ => context.l10n.voiceMatchWeak,
+    };
 
 class PersonConfidenceMeter extends StatelessWidget {
   const PersonConfidenceMeter({super.key, required this.person, this.size = OmiLevelMeterSize.small});
@@ -34,10 +34,10 @@ class PersonConfidenceMeter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => OmiLevelMeter(
-    level: confidenceLevel(person.confidence),
-    size: size,
-    semanticsLabel: context.l10n.confidenceMeterLabel(confidenceLabel(context, person.confidence)),
-  );
+        level: confidenceLevel(person.confidence),
+        size: size,
+        semanticsLabel: context.l10n.confidenceMeterLabel(confidenceLabel(context, person.confidence)),
+      );
 }
 
 class VoiceMatchMeter extends StatelessWidget {
@@ -111,11 +111,9 @@ class _ConfidenceSheet extends StatelessWidget {
     add('card_confirms', Icons.check_circle_outline, l10n.evidenceCardConfirms, _Effect.counts);
     add('card_picks', Icons.touch_app_outlined, l10n.evidenceCardPicks, _Effect.counts);
     add('auto_confirmed', Icons.done_all, l10n.evidenceAutoConfirmed, _Effect.little);
-    rows.add(
-      person.voiceReadiness == 'ready'
-          ? (Icons.graphic_eq, l10n.evidenceVoiceReady, _Effect.counts)
-          : (Icons.graphic_eq, l10n.evidenceNoVoice, _Effect.needed),
-    );
+    rows.add(person.voiceReadiness == 'ready'
+        ? (Icons.graphic_eq, l10n.evidenceVoiceReady, _Effect.counts)
+        : (Icons.graphic_eq, l10n.evidenceNoVoice, _Effect.needed));
     add('auto_unconfirmed', Icons.auto_awesome_outlined, l10n.evidenceAutoUnconfirmed, _Effect.barely);
     add('auto_corrected', Icons.swap_horiz, l10n.evidenceAutoCorrected, _Effect.against);
     if (person.conversationCount == 0) rows.add((Icons.hearing_outlined, l10n.evidenceNotHeard, _Effect.none));
@@ -148,9 +146,7 @@ class _ConfidenceSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: OmiSpacing.xs),
-          Center(
-            child: PersonConfidenceMeter(person: person, size: OmiLevelMeterSize.large),
-          ),
+          Center(child: PersonConfidenceMeter(person: person, size: OmiLevelMeterSize.large)),
           const SizedBox(height: OmiSpacing.sm),
           Text(confidenceLabel(context, person.confidence), style: OmiType.title3, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xxs),
@@ -163,10 +159,9 @@ class _ConfidenceSheet extends StatelessWidget {
           OmiSettingsGroup(
             header: l10n.confidenceEvidenceHeader,
             children: [
-              for (final (icon, text, effect)
-                  in person.confidence == 'unknown'
-                      ? [(Icons.help_outline, l10n.unknown, _Effect.none)]
-                      : _evidence(context))
+              for (final (icon, text, effect) in person.confidence == 'unknown'
+                  ? [(Icons.help_outline, l10n.unknown, _Effect.none)]
+                  : _evidence(context))
                 OmiSettingsRow(
                   leading: Icon(icon),
                   title: text,

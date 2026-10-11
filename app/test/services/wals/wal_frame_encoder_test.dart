@@ -6,18 +6,17 @@ import 'package:omi/services/wals/wal_frame_encoder.dart';
 void main() {
   test('WAL golden preserves empty frames, byte order, payloads and boundaries', () {
     expect(
-      encodeWalFrames([
-        [],
-        [1, 2, 255],
-        [0],
-      ]),
-      [0, 0, 0, 0, 3, 0, 0, 0, 1, 2, 255, 1, 0, 0, 0, 0],
-    );
+        encodeWalFrames([
+          [],
+          [1, 2, 255],
+          [0]
+        ]),
+        [0, 0, 0, 0, 3, 0, 0, 0, 1, 2, 255, 1, 0, 0, 0, 0]);
     expect(encodeWalFrames([]), isEmpty);
     final large = Uint8List.fromList(List.generate(513, (i) => i & 255));
     final encoded = encodeWalFrames([
       large,
-      [7, 8],
+      [7, 8]
     ]);
     expect(encoded.sublist(0, 4), [1, 2, 0, 0]);
     expect(encoded.sublist(4, 517), large);

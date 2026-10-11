@@ -9,7 +9,7 @@ void main() {
     final removed = <String>[];
     await applyAppleReminderTaskMutations(
       updates: [
-        {'id': 'edited', 'description': 'New title'},
+        {'id': 'edited', 'description': 'New title'}
       ],
       deleteIds: ['deleted', 'not-deleted'],
       syncBatch: (_) async => true,
@@ -30,7 +30,7 @@ void main() {
     final removed = <String>[];
     await applyAppleReminderTaskMutations(
       updates: [
-        {'id': 'edited', 'description': 'Rejected'},
+        {'id': 'edited', 'description': 'Rejected'}
       ],
       deleteIds: ['failed-delete'],
       syncBatch: (_) async => false,
@@ -51,7 +51,7 @@ void main() {
     final order = <String>[];
     final sync = applyAppleReminderTaskMutations(
       updates: [
-        {'id': 'edited', 'description': 'Changed'},
+        {'id': 'edited', 'description': 'Changed'}
       ],
       deleteIds: ['deleted'],
       syncBatch: (_) async => true,

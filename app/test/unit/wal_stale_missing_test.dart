@@ -20,13 +20,13 @@ class Listener implements IWalSyncListener {
 void main() {
   final start = DateTime.utc(2026, 10, 7);
   Wal wal(int end, {WalStatus status = WalStatus.miss, WalStorage storage = WalStorage.disk}) => Wal(
-    timerStart: end - 60,
-    seconds: 60,
-    codec: BleAudioCodec.pcm16,
-    status: status,
-    storage: storage,
-    device: 'phone-mic',
-  );
+        timerStart: end - 60,
+        seconds: 60,
+        codec: BleAudioCodec.pcm16,
+        status: status,
+        storage: storage,
+        device: 'phone-mic',
+      );
   test('reports old miss disk WALs including exhausted retries without changing custody', () async {
     final events = <Map<String, Object?>>[];
     final nowSecs = start.millisecondsSinceEpoch ~/ 1000;

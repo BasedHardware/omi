@@ -37,17 +37,17 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     DateTime Function()? now,
     int Function()? monotonicMs,
     bool? supported,
-  }) : _readBattery = readBattery ?? (() => _channel.invokeMapMethod<String, Object?>('read')),
-       _readBuild = readBuild ?? (() async => (await PackageInfo.fromPlatform()).buildNumber),
-       _preferences = preferences ?? SharedPreferences.getInstance,
-       _consent = trackingConsent ?? AnalyticsManager.trackingConsent,
-       _identityChanges = identityChanges ?? AnalyticsManager.identityChanges,
-       _identity = identity ?? (() => AnalyticsManager.currentIdentity),
-       _captureContext = captureContext ?? (() => (source: 'unknown', mode: 'unknown')),
-       _emit = emit ?? ((name, properties) => PlatformManager.instance.analytics.track(name, properties: properties)),
-       _now = now ?? DateTime.now,
-       _monotonicMs = monotonicMs ?? _elapsedClock(),
-       _supported = supported ?? (Platform.isAndroid || Platform.isIOS);
+  })  : _readBattery = readBattery ?? (() => _channel.invokeMapMethod<String, Object?>('read')),
+        _readBuild = readBuild ?? (() async => (await PackageInfo.fromPlatform()).buildNumber),
+        _preferences = preferences ?? SharedPreferences.getInstance,
+        _consent = trackingConsent ?? AnalyticsManager.trackingConsent,
+        _identityChanges = identityChanges ?? AnalyticsManager.identityChanges,
+        _identity = identity ?? (() => AnalyticsManager.currentIdentity),
+        _captureContext = captureContext ?? (() => (source: 'unknown', mode: 'unknown')),
+        _emit = emit ?? ((name, properties) => PlatformManager.instance.analytics.track(name, properties: properties)),
+        _now = now ?? DateTime.now,
+        _monotonicMs = monotonicMs ?? _elapsedClock(),
+        _supported = supported ?? (Platform.isAndroid || Platform.isIOS);
 
   bool get _usesAndroidElapsed => defaultTargetPlatform == TargetPlatform.android;
 
@@ -141,9 +141,8 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     try {
       _prefs = await _preferences();
       if (_disposed) return;
-      _persistedConsent = _consentGeneration > 0
-          ? _consent.value
-          : (_prefs!.getBool('product_analytics_enabled') ?? true);
+      _persistedConsent =
+          _consentGeneration > 0 ? _consent.value : (_prefs!.getBool('product_analytics_enabled') ?? true);
       final previous = _record(_prefs!.getString(snapshotKey));
       if (!_enabled || _generation > 0) {
         await _clearBaseline();
@@ -178,11 +177,11 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
   }
 
   Future<void> _clearBaseline() => _write(() async {
-    final prefs = _prefs;
-    if (prefs == null) return;
-    await prefs.remove(snapshotKey);
-    await prefs.remove(lastSampleKey);
-  });
+        final prefs = _prefs;
+        if (prefs == null) return;
+        await prefs.remove(snapshotKey);
+        await prefs.remove(lastSampleKey);
+      });
 
   void _invalidateBaseline({required bool identityChanged}) {
     _generation++;
@@ -195,11 +194,9 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     _clockElapsedMs = _usesAndroidElapsed ? null : _monotonicMs();
     _foregroundSinceMs = _state == AppLifecycleState.resumed ? _clockElapsedMs : null;
     _chargingObservedAtMs = null;
-    unawaited(
-      _clearBaseline().catchError((Object _) {
-        debugPrint('Phone battery telemetry: baseline cleanup unavailable');
-      }),
-    );
+    unawaited(_clearBaseline().catchError((Object _) {
+      debugPrint('Phone battery telemetry: baseline cleanup unavailable');
+    }));
   }
 
   void _onIdentityChanged() => _invalidateBaseline(identityChanged: true);
@@ -303,8 +300,7 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     if (_enabled && charging && _previous != null) _chargingObservedAtMs = _now().millisecondsSinceEpoch;
   }
 
-  static String? _thermalState(Object? value) =>
-      const {
+  static String? _thermalState(Object? value) => const {
         'nominal',
         'fair',
         'serious',
@@ -316,8 +312,8 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
         'emergency',
         'shutdown',
       }.contains(value)
-      ? value as String
-      : null;
+          ? value as String
+          : null;
 
   Future<double?> _observeBuild(String? build, int atMs) async {
     if (build == null || build.isEmpty || build == 'unknown') return null;
@@ -328,10 +324,8 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
       // A high-water mark keeps age monotone even across wall-clock rollback.
       final priorHigh = old?['build'] == build && old?['high_ms'] is int ? old!['high_ms'] as int : first;
       final high = atMs > priorHigh ? atMs : priorHigh;
-      if (!await _prefs!.setString(
-        buildFirstRunKey,
-        jsonEncode({'build': build, 'first_ms': first, 'high_ms': high}),
-      )) {
+      if (!await _prefs!
+          .setString(buildFirstRunKey, jsonEncode({'build': build, 'first_ms': first, 'high_ms': high}))) {
         return;
       }
       seconds = (high - first) / 1000.0;
@@ -374,20 +368,18 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
       final validity = _identityChanged
           ? 'identity_changed'
           : previous == null
-          ? 'no_baseline'
-          : clockInvalid
-          ? 'clock_invalid'
-          : build == null || previous['build'] == null
-          ? 'no_baseline'
-          : previous['build'] == build
-          ? 'same_build'
-          : 'build_changed';
+              ? 'no_baseline'
+              : clockInvalid
+                  ? 'clock_invalid'
+                  : build == null || previous['build'] == null
+                      ? 'no_baseline'
+                      : previous['build'] == build
+                          ? 'same_build'
+                          : 'build_changed';
       final foregroundMsAtSample = _foregroundMs;
-      final foregroundSeconds = previous != null && _foregroundCoverage && !clockInvalid
-          ? _foregroundMs / 1000.0
-          : null;
-      final chargingObserved =
-          previousMs != null &&
+      final foregroundSeconds =
+          previous != null && _foregroundCoverage && !clockInvalid ? _foregroundMs / 1000.0 : null;
+      final chargingObserved = previousMs != null &&
           _chargingObservedAtMs != null &&
           _chargingObservedAtMs! > previousMs &&
           _chargingObservedAtMs! < atMs;

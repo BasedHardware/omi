@@ -11,7 +11,7 @@ class _LoopbackHttp extends HttpOverrides {}
 /// server. No Env, auth singleton, production URL or default CaptureController.
 class C3Fixture {
   C3Fixture._(this.backend)
-    : client = IOClient(HttpOverrides.runWithHttpOverrides(() => HttpClient(), _LoopbackHttp()));
+      : client = IOClient(HttpOverrides.runWithHttpOverrides(() => HttpClient(), _LoopbackHttp()));
   final JourneyFixtureBackend backend;
   final http.Client client;
   static Future<C3Fixture> start() async => C3Fixture._(await JourneyFixtureBackend.start());

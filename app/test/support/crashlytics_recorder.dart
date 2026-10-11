@@ -17,7 +17,10 @@ class CrashlyticsRecorder {
 
 class _CrashlyticsCapableFirebaseCore implements TestFirebaseCoreHostApi {
   @override
-  Future<PigeonInitializeResponse> initializeApp(String appName, PigeonFirebaseOptions initializeAppRequest) async {
+  Future<PigeonInitializeResponse> initializeApp(
+    String appName,
+    PigeonFirebaseOptions initializeAppRequest,
+  ) async {
     return PigeonInitializeResponse(
       name: appName,
       options: initializeAppRequest,

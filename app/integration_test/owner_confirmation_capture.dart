@@ -66,33 +66,25 @@ class _CaptureState extends State<_Capture> {
   void initState() {
     super.initState();
     prompts = SpeakerTagPromptsProvider(
-      fetchPrompts: () async => ApiSuccess(
-        GeneratedSpeakerTagPromptsResponse.fromJson(
-          await _request('/v1/speaker-tag-prompts?owner_excerpt=true') as Map<String, dynamic>,
-        ),
-      ),
+      fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse.fromJson(
+          await _request('/v1/speaker-tag-prompts?owner_excerpt=true') as Map<String, dynamic>)),
       markShown: (ids, {bool setShown = true}) async {
         await _request('/v1/speaker-tag-prompts/shown', body: {'prompt_ids': ids, 'set_shown': setShown});
         return const ApiSuccess(false);
       },
       loadClip: (prompt) async {
-        final query = Uri(
-          queryParameters: {
-            'conversation_id': prompt.conversationId,
-            'start': '${prompt.clipStart}',
-            'end': '${prompt.clipEnd}',
-            'prompt_id': prompt.id,
-            'evidence_id': prompt.evidenceId,
-          },
-        ).query;
+        final query = Uri(queryParameters: {
+          'conversation_id': prompt.conversationId,
+          'start': '${prompt.clipStart}',
+          'end': '${prompt.clipEnd}',
+          'prompt_id': prompt.id,
+          'evidence_id': prompt.evidenceId
+        }).query;
         final clip = await _request('/v1/speaker-tag-prompts/clip?$query');
         return ApiSuccess(Uint8List.fromList(base64Decode(clip['audio_base64'] as String)));
       },
-      submitAnswer: (request) async => ApiSuccess(
-        GeneratedSpeakerTagPromptAnswerResponse.fromJson(
-          await _request('/v1/speaker-tag-prompts/answer', body: request.toJson()) as Map<String, dynamic>,
-        ),
-      ),
+      submitAnswer: (request) async => ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse.fromJson(
+          await _request('/v1/speaker-tag-prompts/answer', body: request.toJson()) as Map<String, dynamic>)),
       emit: (_) {},
       answeredHold: const Duration(seconds: 4),
     );
@@ -104,11 +96,10 @@ class _CaptureState extends State<_Capture> {
         .map((s) => TranscriptSegment.fromJson(s as Map<String, dynamic>))
         .toList();
     row = ServerConversation(
-      id: 'synthetic-conversation',
-      createdAt: DateTime.now(),
-      structured: Structured('Synthetic coffee chat', ''),
-      transcriptSegments: segments,
-    );
+        id: 'synthetic-conversation',
+        createdAt: DateTime.now(),
+        structured: Structured('Synthetic coffee chat', ''),
+        transcriptSegments: segments);
     conversation.conversations = [row!];
     if (mounted) setState(() {});
   }
@@ -130,51 +121,42 @@ class _CaptureState extends State<_Capture> {
 
   @override
   Widget build(BuildContext context) => MultiProvider(
-    providers: [
-      ChangeNotifierProvider.value(value: people),
-      ChangeNotifierProvider.value(value: prompts),
-      ChangeNotifierProvider.value(value: conversation),
-    ],
-    child: MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: buildOmiTheme(brightness: Brightness.dark),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Synthetic owner confirmation')),
-        body: row == null
-            ? const Center(child: OmiSpinner())
-            : Column(
-                children: [
-                  const SpeakerTagPromptCard(),
-                  Expanded(
-                    child: Consumer<ConversationProvider>(
-                      builder: (context, provider, _) => TranscriptWidget(
-                        key: ValueKey(prompts.answeredCount),
-                        segments: row!.transcriptSegments,
-                        bottomMargin: 16,
-                        contentVersion: prompts.answeredCount,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+        providers: [
+          ChangeNotifierProvider.value(value: people),
+          ChangeNotifierProvider.value(value: prompts),
+          ChangeNotifierProvider.value(value: conversation)
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: buildOmiTheme(brightness: Brightness.dark),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            appBar: AppBar(title: const Text('Synthetic owner confirmation')),
+            body: row == null
+                ? const Center(child: OmiSpinner())
+                : Column(children: [
+                    const SpeakerTagPromptCard(),
+                    Expanded(
+                        child: Consumer<ConversationProvider>(
+                            builder: (context, provider, _) => TranscriptWidget(
+                                  key: ValueKey(prompts.answeredCount),
+                                  segments: row!.transcriptSegments,
+                                  bottomMargin: 16,
+                                  contentVersion: prompts.answeredCount,
+                                ))),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       TextButton(
-                        key: const Key('fixture_reset'),
-                        onPressed: () => _reset(false),
-                        child: const Text('Reset unknown excerpt'),
-                      ),
+                          key: const Key('fixture_reset'),
+                          onPressed: () => _reset(false),
+                          child: const Text('Reset unknown excerpt')),
                       TextButton(
-                        key: const Key('fixture_reset_owner'),
-                        onPressed: () => _reset(true),
-                        child: const Text('Reset owner excerpt'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-      ),
-    ),
-  );
+                          key: const Key('fixture_reset_owner'),
+                          onPressed: () => _reset(true),
+                          child: const Text('Reset owner excerpt')),
+                    ]),
+                  ]),
+          ),
+        ),
+      );
 }

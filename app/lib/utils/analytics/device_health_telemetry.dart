@@ -75,9 +75,9 @@ class DeviceHealthTelemetry {
       final prefs = await _availablePreferences();
       if (prefs == null) return;
       if (retire) {
-        for (final key in prefs.getKeys().where(
-          (key) => key.startsWith('device_health_outage_') || key.startsWith('device_health_day_'),
-        )) {
+        for (final key in prefs
+            .getKeys()
+            .where((key) => key.startsWith('device_health_outage_') || key.startsWith('device_health_day_'))) {
           await prefs.remove(key);
         }
       }
@@ -104,28 +104,32 @@ class DeviceHealthTelemetry {
   }
 
   static Future<void> _resolveOutage(String id, {DateTime? at, num? nativeStart}) => _writeOutage(id, (record, now) {
-    final start = nativeStart ?? record['open_since'] as num?;
-    if (start == null || (record['last_resolved_start'] as num? ?? -1) >= start) return;
-    if (record['open_since'] == start) record.remove('open_since');
-    final began = DateTime.fromMillisecondsSinceEpoch(start.toInt());
-    final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
-    var day = DateTime(began.year, began.month, began.day);
-    final recovery = DateTime.fromMillisecondsSinceEpoch(now);
-    final oldest = DateTime(recovery.year, recovery.month, recovery.day - 7);
-    if (day.isBefore(oldest)) day = oldest;
-    while (day.millisecondsSinceEpoch < now) {
-      final end = DateTime(day.year, day.month, day.day + 1);
-      final lower = start.clamp(day.millisecondsSinceEpoch, end.millisecondsSinceEpoch);
-      final upper = now.clamp(day.millisecondsSinceEpoch, end.millisecondsSinceEpoch);
-      final dayKey = day.millisecondsSinceEpoch.toString();
-      days[dayKey] = ((days[dayKey] as num? ?? 0) + (upper - lower).clamp(0, 86400000) / 1000).clamp(0, 86400);
-      day = end;
-    }
-    record['resolved_days'] = days;
-    record['last_resolved_start'] = start;
-  }, at);
+        final start = nativeStart ?? record['open_since'] as num?;
+        if (start == null || (record['last_resolved_start'] as num? ?? -1) >= start) return;
+        if (record['open_since'] == start) record.remove('open_since');
+        final began = DateTime.fromMillisecondsSinceEpoch(start.toInt());
+        final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+        var day = DateTime(began.year, began.month, began.day);
+        final recovery = DateTime.fromMillisecondsSinceEpoch(now);
+        final oldest = DateTime(recovery.year, recovery.month, recovery.day - 7);
+        if (day.isBefore(oldest)) day = oldest;
+        while (day.millisecondsSinceEpoch < now) {
+          final end = DateTime(day.year, day.month, day.day + 1);
+          final lower = start.clamp(day.millisecondsSinceEpoch, end.millisecondsSinceEpoch);
+          final upper = now.clamp(day.millisecondsSinceEpoch, end.millisecondsSinceEpoch);
+          final dayKey = day.millisecondsSinceEpoch.toString();
+          days[dayKey] = ((days[dayKey] as num? ?? 0) + (upper - lower).clamp(0, 86400000) / 1000).clamp(0, 86400);
+          day = end;
+        }
+        record['resolved_days'] = days;
+        record['last_resolved_start'] = start;
+      }, at);
 
-  static Future<void> _writeOutage(String id, void Function(Map<String, dynamic>, int) change, DateTime? at) {
+  static Future<void> _writeOutage(
+    String id,
+    void Function(Map<String, dynamic>, int) change,
+    DateTime? at,
+  ) {
     if (!AnalyticsManager.deviceHealthRecordingEnabled) return Future.value();
     final epoch = AnalyticsManager.identityEpoch;
     final policy = _policyWrites;
@@ -133,56 +137,53 @@ class DeviceHealthTelemetry {
     final now = (at ?? DateTime.now()).millisecondsSinceEpoch;
     // Serialize all devices so the next available write also flushes other
     // devices buffered before startup. Preserve observation time, not flush time.
-    final next = _storageWrite
-        .catchError((Object _) {})
-        .then((_) async {
-          await policy;
-          if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
-          (_pendingWrites[key] ??= []).add(_PendingOutageWrite(epoch, now, change));
-          final prefs = await _availablePreferences();
-          if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
-          if (prefs == null) return;
-          for (final pendingKey in _pendingWrites.keys.toList()) {
-            final pending = _pendingWrites[pendingKey];
-            if (pending == null) continue;
-            pending.removeWhere((write) => write.epoch != AnalyticsManager.identityEpoch);
-            if (pending.isEmpty) {
-              _pendingWrites.remove(pendingKey);
-              _retryWrites.remove(pendingKey);
-              continue;
+    final next = _storageWrite.catchError((Object _) {}).then((_) async {
+      await policy;
+      if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
+      (_pendingWrites[key] ??= []).add(_PendingOutageWrite(epoch, now, change));
+      final prefs = await _availablePreferences();
+      if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
+      if (prefs == null) return;
+      for (final pendingKey in _pendingWrites.keys.toList()) {
+        final pending = _pendingWrites[pendingKey];
+        if (pending == null) continue;
+        pending.removeWhere((write) => write.epoch != AnalyticsManager.identityEpoch);
+        if (pending.isEmpty) {
+          _pendingWrites.remove(pendingKey);
+          _retryWrites.remove(pendingKey);
+          continue;
+        }
+        try {
+          var record = jsonDecode(prefs.getString(pendingKey) ?? '{}') as Map<String, dynamic>;
+          if (record['identity_epoch'] != epoch) record = {};
+          final before = jsonEncode(record);
+          record['identity_epoch'] = epoch;
+          for (final write in pending) {
+            write.change(record, write.at);
+            final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+            days.removeWhere((day, _) => int.parse(day) < write.at - 8 * 86400000);
+            final retainedDays = days.keys.toList()..sort();
+            for (final day in retainedDays.take((retainedDays.length - 8).clamp(0, retainedDays.length))) {
+              days.remove(day);
             }
-            try {
-              var record = jsonDecode(prefs.getString(pendingKey) ?? '{}') as Map<String, dynamic>;
-              if (record['identity_epoch'] != epoch) record = {};
-              final before = jsonEncode(record);
-              record['identity_epoch'] = epoch;
-              for (final write in pending) {
-                write.change(record, write.at);
-                final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
-                days.removeWhere((day, _) => int.parse(day) < write.at - 8 * 86400000);
-                final retainedDays = days.keys.toList()..sort();
-                for (final day in retainedDays.take((retainedDays.length - 8).clamp(0, retainedDays.length))) {
-                  days.remove(day);
-                }
-                record['resolved_days'] = days;
-              }
-              final encoded = jsonEncode(record);
-              if (encoded != before || _retryWrites.contains(pendingKey)) {
-                // SharedPreferences updates its cache even if the platform write
-                // fails. Force a retry rather than mistaking that cache for disk.
-                _retryWrites.add(pendingKey);
-                if (!await prefs.setString(pendingKey, encoded)) continue;
-              }
-              // Retirement may have cleared the buffer while persistence was awaited.
-              if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
-              _pendingWrites.remove(pendingKey);
-              _retryWrites.remove(pendingKey);
-            } catch (_) {
-              // Keep the observations for retry; telemetry must never break BLE flows.
-            }
+            record['resolved_days'] = days;
           }
-        })
-        .catchError((Object _) {});
+          final encoded = jsonEncode(record);
+          if (encoded != before || _retryWrites.contains(pendingKey)) {
+            // SharedPreferences updates its cache even if the platform write
+            // fails. Force a retry rather than mistaking that cache for disk.
+            _retryWrites.add(pendingKey);
+            if (!await prefs.setString(pendingKey, encoded)) continue;
+          }
+          // Retirement may have cleared the buffer while persistence was awaited.
+          if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
+          _pendingWrites.remove(pendingKey);
+          _retryWrites.remove(pendingKey);
+        } catch (_) {
+          // Keep the observations for retry; telemetry must never break BLE flows.
+        }
+      }
+    }).catchError((Object _) {});
     _storageWrite = next;
     _writes[key] = next;
     return next;
@@ -227,9 +228,8 @@ class DeviceHealthTelemetry {
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
     final openSince = diagnostics['outage_open_since'] as num?;
-    final unresolved = openSince == null
-        ? null
-        : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
+    final unresolved =
+        openSince == null ? null : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
     if (unresolved != null) lostAudioSeconds = (lostAudioSeconds ?? 0) + unresolved;
     final builds = <String>{};
     final firmwares = <String>{};
@@ -237,7 +237,7 @@ class DeviceHealthTelemetry {
       ...battery,
       ...firmware,
       ...events,
-      ...(diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>(),
+      ...(diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()
     ]) {
       final ts = point['ts'] ?? point['timestamp'];
       if (ts is! num || ts < start || ts >= end) continue;
@@ -408,7 +408,7 @@ class DeviceHealthTelemetry {
           'battery_history_v2',
           'disconnect_history_v2',
           'firmware_diagnostics',
-          'audio_packet_days',
+          'audio_packet_days'
         ]) {
           diagnostics[key] = (diagnostics[key] as List? ?? [])
               .whereType<Map>()
@@ -439,8 +439,8 @@ class DeviceHealthTelemetry {
       final phone = emissionContext != null
           ? null
           : Platform.isIOS
-          ? (await DeviceInfoPlugin().iosInfo).utsname.machine
-          : (await DeviceInfoPlugin().androidInfo).model;
+              ? (await DeviceInfoPlugin().iosInfo).utsname.machine
+              : (await DeviceInfoPlugin().androidInfo).model;
       var day = last == null ? yesterday : DateTime(last.year, last.month, last.day + 1);
       final oldest = DateTime(yesterday.year, yesterday.month, yesterday.day - 6);
       if (day.isBefore(oldest)) day = oldest;

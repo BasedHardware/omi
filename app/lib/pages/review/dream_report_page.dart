@@ -149,11 +149,8 @@ class _StatusCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                report.live ? Icons.auto_fix_high : Icons.visibility_outlined,
-                size: 18,
-                color: OmiColors.textSecondary,
-              ),
+              Icon(report.live ? Icons.auto_fix_high : Icons.visibility_outlined,
+                  size: 18, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: Text(
@@ -267,15 +264,15 @@ class _RunCard extends StatelessWidget {
 }
 
 IconData _editIcon(String kind) => switch (kind) {
-  'spelling' => Icons.spellcheck,
-  'merge_people' => Icons.people_outline,
-  'merge_memories' => Icons.call_merge,
-  'memory' => Icons.lightbulb_outline,
-  'entity_summary' => Icons.badge_outlined,
-  'close_task' => Icons.task_alt,
-  'retire_task' => Icons.remove_done,
-  _ => Icons.auto_fix_high_outlined,
-};
+      'spelling' => Icons.spellcheck,
+      'merge_people' => Icons.people_outline,
+      'merge_memories' => Icons.call_merge,
+      'memory' => Icons.lightbulb_outline,
+      'entity_summary' => Icons.badge_outlined,
+      'close_task' => Icons.task_alt,
+      'retire_task' => Icons.remove_done,
+      _ => Icons.auto_fix_high_outlined,
+    };
 
 class _RunDetail extends StatelessWidget {
   const _RunDetail({required this.run, required this.live});
@@ -317,27 +314,26 @@ class _RunDetail extends StatelessWidget {
     }
     if (run.vocabulary.isNotEmpty) {
       children.add(ReviewSectionLabel(label: l10n.dreamReportLearnedWords));
-      children.add(
-        Wrap(
-          spacing: OmiSpacing.xs,
-          runSpacing: OmiSpacing.xs,
-          children: [
-            for (final term in run.vocabulary)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
-                child: Text(term.spelling, style: OmiType.footnote),
-              ),
-          ],
-        ),
-      );
+      children.add(Wrap(
+        spacing: OmiSpacing.xs,
+        runSpacing: OmiSpacing.xs,
+        children: [
+          for (final term in run.vocabulary)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+              child: Text(term.spelling, style: OmiType.footnote),
+            ),
+        ],
+      ));
     }
     if (run.feedback.isNotEmpty || run.privacyRejected > 0) {
       children.add(ReviewSectionLabel(label: l10n.dreamReportFeedback));
       for (final item in run.feedback) {
-        children.add(
-          _Line(icon: Icons.outbox_outlined, text: '${item.component} · ${item.failureClass} · ${item.count}'),
-        );
+        children.add(_Line(
+          icon: Icons.outbox_outlined,
+          text: '${item.component} · ${item.failureClass} · ${item.count}',
+        ));
       }
       if (run.privacyRejected > 0) {
         children.add(_Line(icon: Icons.shield_outlined, text: l10n.dreamReportPrivacyHeld(run.privacyRejected)));
@@ -375,10 +371,8 @@ class _EditRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  edit.targetLabel.isEmpty ? l10n.dreamReportDeletedItem : edit.targetLabel,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                ),
+                Text(edit.targetLabel.isEmpty ? l10n.dreamReportDeletedItem : edit.targetLabel,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 if (change.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),

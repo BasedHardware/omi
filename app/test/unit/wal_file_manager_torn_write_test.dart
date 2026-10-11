@@ -45,12 +45,7 @@ class _TornWriteFile implements File {
 }
 
 Wal _wal(int timerStart) => Wal(
-  timerStart: timerStart,
-  codec: BleAudioCodec.opus,
-  seconds: 60,
-  status: WalStatus.miss,
-  storage: WalStorage.disk,
-);
+    timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, storage: WalStorage.disk);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

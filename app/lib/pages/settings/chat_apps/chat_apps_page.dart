@@ -106,8 +106,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
   }
 
   Future<void> _openWaitlist(MessagingChannelsProvider provider) async {
-    final offerTelegram =
-        provider.linkFor(ChatChannel.telegram) == null &&
+    final offerTelegram = provider.linkFor(ChatChannel.telegram) == null &&
         provider.config.endpoint(ChatChannel.telegram) != null &&
         _proStatus(context.read<UsageProvider>()) != _ProStatus.free;
     final action = await showWhatsAppWaitlistSheet(context, offerTelegram: offerTelegram);
@@ -119,10 +118,8 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final opened = endpoint != null && await openChatApp(channel, endpoint);
     if (opened || !mounted) return;
     final l10n = context.l10n;
-    OmiFeedback.error(
-      context,
-      l10n.chatAppsCouldNotOpen(channel == ChatChannel.imessage ? l10n.chatAppsMessagesApp : channel.displayName),
-    );
+    OmiFeedback.error(context,
+        l10n.chatAppsCouldNotOpen(channel == ChatChannel.imessage ? l10n.chatAppsMessagesApp : channel.displayName));
   }
 
   @override
@@ -165,7 +162,9 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
             ],
             OmiSettingsGroup(
               footer: l10n.chatAppsMoreComing,
-              children: [for (final channel in ChatChannel.values) _channelRow(context, provider, channel, pro)],
+              children: [
+                for (final channel in ChatChannel.values) _channelRow(context, provider, channel, pro),
+              ],
             ),
             const SizedBox(height: OmiSpacing.xl),
             if (pro == _ProStatus.free)
@@ -223,10 +222,8 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         leading: logo,
         title: channel.displayName,
         subtitle: l10n.chatAppsNotAvailableYet,
-        trailing: IntegrationStatusChip(
-          joined ? l10n.chatAppsOnTheList : l10n.chatAppsNotifyMe,
-          tone: IntegrationChipTone.muted,
-        ),
+        trailing: IntegrationStatusChip(joined ? l10n.chatAppsOnTheList : l10n.chatAppsNotifyMe,
+            tone: IntegrationChipTone.muted),
         onTap: () => _openWaitlist(provider),
       );
     }
@@ -324,15 +321,11 @@ class _ConnectedBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l10n.chatAppsIsConnected(channel.displayName),
-                    style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
-                  ),
+                  Text(l10n.chatAppsIsConnected(channel.displayName),
+                      style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text(
-                    l10n.chatAppsReplyThereAnytime(app),
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                  ),
+                  Text(l10n.chatAppsReplyThereAnytime(app),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 ],
               ),
             ),
@@ -359,9 +352,7 @@ class _InlineNotice extends StatelessWidget {
           children: [
             ExcludeSemantics(child: Icon(icon, size: 16, color: OmiColors.textTertiary)),
             const SizedBox(width: OmiSpacing.xs),
-            Expanded(
-              child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-            ),
+            Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
           ],
         ),
       ),
@@ -379,10 +370,7 @@ class _WhatOmiDoes extends StatelessWidget {
     return Container(
       key: const ValueKey('chat_apps_what_omi_does'),
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(
-        border: Border.all(color: OmiColors.border),
-        borderRadius: OmiRadius.lgAll,
-      ),
+      decoration: BoxDecoration(border: Border.all(color: OmiColors.border), borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -418,10 +406,7 @@ class _TryAsking extends StatelessWidget {
         for (final prompt in [l10n.chatAppsTryPromise, l10n.chatAppsTryWeek, l10n.chatAppsTryRemind]) ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm + 2, vertical: OmiSpacing.sm),
-            decoration: BoxDecoration(
-              border: Border.all(color: OmiColors.border),
-              borderRadius: OmiRadius.mdAll,
-            ),
+            decoration: BoxDecoration(border: Border.all(color: OmiColors.border), borderRadius: OmiRadius.mdAll),
             child: Text(prompt, style: OmiType.subhead),
           ),
           const SizedBox(height: OmiSpacing.xs),
@@ -443,10 +428,7 @@ class _ProCard extends StatelessWidget {
     return Container(
       key: const ValueKey('chat_apps_pro_card'),
       padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: BoxDecoration(
-        border: Border.all(color: OmiColors.border),
-        borderRadius: OmiRadius.lgAll,
-      ),
+      decoration: BoxDecoration(border: Border.all(color: OmiColors.border), borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -461,11 +443,7 @@ class _ProCard extends StatelessWidget {
           ChatAppsBullet(icon: Icons.check_rounded, iconColor: check, text: l10n.chatAppsProPerkContext),
           const SizedBox(height: OmiSpacing.lg),
           OmiButton(
-            key: const ValueKey('chat_apps_upgrade'),
-            label: l10n.upgradeToPro,
-            expand: true,
-            onPressed: onUpgrade,
-          ),
+              key: const ValueKey('chat_apps_upgrade'), label: l10n.upgradeToPro, expand: true, onPressed: onUpgrade),
         ],
       ),
     );

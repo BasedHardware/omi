@@ -33,10 +33,8 @@ void main() {
 
     test('an unknown future plan shows its id readably, never "Free Plan"', () {
       expect(planDisplayName(PlanType.fromWire('team_max'), const [], l10n), 'Team Max');
-      expect(
-        planDisplayName(PlanType.fromWire('team_max'), [SubscriptionPlan(id: 'team_max', title: 'Team')], l10n),
-        'Team',
-      );
+      expect(planDisplayName(PlanType.fromWire('team_max'), [SubscriptionPlan(id: 'team_max', title: 'Team')], l10n),
+          'Team');
     });
 
     test('a blank backend title is ignored', () {

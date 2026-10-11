@@ -7,60 +7,60 @@ import 'package:omi/backend/schema/review.dart';
 import 'package:omi/providers/review_provider.dart';
 
 Map<String, dynamic> _speakerJson(String id, {String conversationId = 'c1'}) => {
-  'item_id': 'speaker:$id',
-  'kind': 'speaker',
-  'title': 'Who said this?',
-  'quote': 'See you Friday.',
-  'speaker': {
-    'prompt_id': id,
-    'conversation_id': conversationId,
-    'conversation_title': 'Sync',
-    'start': 1.5,
-    'end': 8,
-    'candidates': [
-      {'person_id': 'p1', 'name': 'Béla', 'organization': 'Paraform'},
-      {'person_id': '', 'name': 'Nobody'},
-    ],
-    'affected_conversation_count': 4,
-    'context': [
-      {'speaker_label': 'Speaker 2', 'text': 'See you Friday.', 'is_target': true},
-    ],
-  },
-};
+      'item_id': 'speaker:$id',
+      'kind': 'speaker',
+      'title': 'Who said this?',
+      'quote': 'See you Friday.',
+      'speaker': {
+        'prompt_id': id,
+        'conversation_id': conversationId,
+        'conversation_title': 'Sync',
+        'start': 1.5,
+        'end': 8,
+        'candidates': [
+          {'person_id': 'p1', 'name': 'Béla', 'organization': 'Paraform'},
+          {'person_id': '', 'name': 'Nobody'},
+        ],
+        'affected_conversation_count': 4,
+        'context': [
+          {'speaker_label': 'Speaker 2', 'text': 'See you Friday.', 'is_target': true},
+        ],
+      },
+    };
 
 Map<String, dynamic> _samePersonJson() => {
-  'item_id': 'same_person:x',
-  'kind': 'same_person',
-  'same_person': {
-    'left': {'entity_id': 'person:a', 'type': 'person', 'name': 'Béla', 'conversation_count': 6},
-    'right': {
-      'entity_id': 'person:b',
-      'type': 'person',
-      'name': 'Bela K',
-      'signals': ['From contacts'],
-    },
-    'reason': 'Same company',
-  },
-};
+      'item_id': 'same_person:x',
+      'kind': 'same_person',
+      'same_person': {
+        'left': {'entity_id': 'person:a', 'type': 'person', 'name': 'Béla', 'conversation_count': 6},
+        'right': {
+          'entity_id': 'person:b',
+          'type': 'person',
+          'name': 'Bela K',
+          'signals': ['From contacts']
+        },
+        'reason': 'Same company',
+      },
+    };
 
 ReviewItem _item(Map<String, dynamic> json) => ReviewItem.fromJson(json)!;
 
 Map<String, dynamic> _proposalJson({String id = 'agent_proposal:a', String kind = 'retire_task'}) => {
-  'item_id': id,
-  'kind': 'agent_proposal',
-  'title': 'Dream suggestion',
-  'agent_proposal': {
-    'target_label': 'Book the venue',
-    'edit': {
-      'kind': kind,
-      'target': 'action_items/t1',
-      'before': '',
-      'after': '',
-      'reason': 'A later conversation says the venue is booked.',
-      'evidence': ['conversations/c2'],
-    },
-  },
-};
+      'item_id': id,
+      'kind': 'agent_proposal',
+      'title': 'Dream suggestion',
+      'agent_proposal': {
+        'target_label': 'Book the venue',
+        'edit': {
+          'kind': kind,
+          'target': 'action_items/t1',
+          'before': '',
+          'after': '',
+          'reason': 'A later conversation says the venue is booked.',
+          'evidence': ['conversations/c2'],
+        },
+      },
+    };
 
 void main() {
   group('wire parsing', () {
@@ -87,21 +87,27 @@ void main() {
         'kind': 'task',
         'task': {'candidate_id': 'c1', 'description': 'Send the SOW'},
       });
-      expect(const ReviewAnswer.dismissTask(TaskDismissReason.notMine).toJson(task.kind), {
-        'task': {
-          'decision': 'dismiss',
-          'dismiss_reason': 'not_mine',
-          'edited_description': null,
-          'due_at': null,
-          'workstream_id': null,
+      expect(
+        const ReviewAnswer.dismissTask(TaskDismissReason.notMine).toJson(task.kind),
+        {
+          'task': {
+            'decision': 'dismiss',
+            'dismiss_reason': 'not_mine',
+            'edited_description': null,
+            'due_at': null,
+            'workstream_id': null,
+          },
+          'not_sure': false,
         },
-        'not_sure': false,
-      });
+      );
       expect(const ReviewAnswer.notSure().toJson(ReviewItemKind.speaker), {'not_sure': true});
-      expect(const ReviewAnswer.samePerson(true).toJson(ReviewItemKind.samePerson), {
-        'same_person': {'decision': 'yes'},
-        'not_sure': false,
-      });
+      expect(
+        const ReviewAnswer.samePerson(true).toJson(ReviewItemKind.samePerson),
+        {
+          'same_person': {'decision': 'yes'},
+          'not_sure': false,
+        },
+      );
     });
 
     test('entity page keeps typed refs and a pending question', () {
@@ -184,10 +190,9 @@ void main() {
   group('ReviewProvider', () {
     test('a 404 turns the surface off; success turns it on', () async {
       final off = ReviewProvider(
-        isEligible: () => true,
-        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
-      );
+          isEligible: () => true,
+          reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
       await off.load();
       expect(off.availability, ReviewAvailability.off);
 
@@ -235,10 +240,9 @@ void main() {
 
     test('a transient failure keeps the surface state and reports it', () async {
       final provider = ReviewProvider(
-        isEligible: () => true,
-        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)),
-      );
+          isEligible: () => true,
+          reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
       await provider.load();
       expect(provider.availability, ReviewAvailability.unknown);
       expect(provider.loadFailed, isTrue);
@@ -273,15 +277,10 @@ void main() {
       final provider = ReviewProvider(
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => ApiSuccess(
-          ReviewItemsResponse(
-            items: [
-              _item(_speakerJson('a', conversationId: 'conv-9')),
-              _item(_samePersonJson()),
-            ],
-            remainingToday: 2,
-          ),
-        ),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(
+          items: [_item(_speakerJson('a', conversationId: 'conv-9')), _item(_samePersonJson())],
+          remainingToday: 2,
+        )),
       );
       await provider.load();
       expect(provider.questionAbout('person:b')?.itemId, 'same_person:x');

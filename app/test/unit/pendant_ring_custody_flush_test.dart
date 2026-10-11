@@ -17,16 +17,16 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 const _ringId = 0x1122334455667788;
 
 RingInfo _ringInfo({int ringId = _ringId, int readSeq = 0, int writeSeq = 64}) => RingInfo(
-  readSeq: readSeq,
-  writeSeq: writeSeq,
-  capacityPackets: 1024,
-  droppedPackets: 0,
-  packetSize: 444,
-  advertisedCaps: 0x0F,
-  contractVersion: 1,
-  ringId: ringId,
-  infoBytes: 41,
-);
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 1024,
+      droppedPackets: 0,
+      packetSize: 444,
+      advertisedCaps: 0x0F,
+      contractVersion: 1,
+      ringId: ringId,
+      infoBytes: 41,
+    );
 
 LiveMarkNotification _liveMark(int ringSeq, int liveIndex) {
   final bd = ByteData(19);
@@ -101,11 +101,8 @@ void main() {
     custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x99));
 
     final flushed = custody.flush();
-    expect(
-      await _completesWithoutWaiting(flushed),
-      isFalse,
-      reason: 'flush must not complete while a queued custody write is still pending',
-    );
+    expect(await _completesWithoutWaiting(flushed), isFalse,
+        reason: 'flush must not complete while a queued custody write is still pending');
 
     gated.open();
     await flushed;

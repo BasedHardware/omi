@@ -61,16 +61,12 @@ void main() {
       try {
         final writes = [
           PhysicalQualification.runtimeEvent('run_app_scheduled'),
-          PhysicalQualification.runtimeEvent(
-            'flutter_error',
-            error: StateError('sensitive-token'),
-            stack: StackTrace.fromString(
-              'sensitive-token\n'
-              '#0      MyApp.build (package:omi/main.dart:321:7)\n'
-              '#1      run (dart:async/zone.dart:11:2)\n'
-              '#2      private (https://example.test/sensitive-token:1:1)\n',
-            ),
-          ),
+          PhysicalQualification.runtimeEvent('flutter_error',
+              error: StateError('sensitive-token'),
+              stack: StackTrace.fromString('sensitive-token\n'
+                  '#0      MyApp.build (package:omi/main.dart:321:7)\n'
+                  '#1      run (dart:async/zone.dart:11:2)\n'
+                  '#2      private (https://example.test/sensitive-token:1:1)\n')),
           PhysicalQualification.runtimeEvent('first_frame_callback'),
         ];
         await Future.wait(writes);
@@ -140,7 +136,12 @@ void main() {
       'peripheral_id': peripheral,
     };
     String? choose(Map<String, dynamic> control, {List<String> ids = const [peripheral]}) =>
-        PhysicalQualification.selectedWearable(control: control, scanId: scan, fixtureUid: fixture, candidateIds: ids);
+        PhysicalQualification.selectedWearable(
+          control: control,
+          scanId: scan,
+          fixtureUid: fixture,
+          candidateIds: ids,
+        );
 
     test('wait never selects and matching host approval selects the sole candidate', () {
       expect(choose({'command': 'wait'}), isNull);
@@ -165,7 +166,7 @@ void main() {
         [],
         [''],
         [peripheral, 'another-device'],
-        [peripheral, peripheral],
+        [peripheral, peripheral]
       ]) {
         expect(() => choose({'command': 'wait'}, ids: ids), throwsStateError);
         expect(() => choose(selected, ids: ids), throwsStateError);
@@ -225,7 +226,7 @@ void main() {
       '172.32.0.1',
       '100.63.0.1',
       '100.128.0.1',
-      '8.8.8.8',
+      '8.8.8.8'
     ]) {
       expect(PhysicalQualification.isPrivateLiteral(host), isFalse, reason: host);
     }

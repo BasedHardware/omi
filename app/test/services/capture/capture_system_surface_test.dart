@@ -61,10 +61,10 @@ void main() {
   });
 
   Map<String, Object?> request(String action) => {
-    'recordingId': presentation.snapshot['recordingId'],
-    'conversationRevision': presentation.snapshot['conversationRevision'],
-    'action': action,
-  };
+        'recordingId': presentation.snapshot['recordingId'],
+        'conversationRevision': presentation.snapshot['conversationRevision'],
+        'action': action,
+      };
 
   test('phone pause fences real audio and resume preserves recording and elapsed time', () async {
     final id = presentation.snapshot['recordingId'];

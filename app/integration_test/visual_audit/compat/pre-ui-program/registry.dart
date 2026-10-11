@@ -21,25 +21,29 @@ import 'scenarios/tasks.dart';
 
 /// The theme lib/main.dart passed to MaterialApp at these revisions.
 ThemeData preUiProgramTheme() => ThemeData(
-  useMaterial3: false,
-  colorScheme: const ColorScheme.dark(primary: Colors.black, secondary: Color(0xFF35343B), surface: Colors.black38),
-  snackBarTheme: const SnackBarThemeData(
-    backgroundColor: Color(0xFF1F1F25),
-    contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-  ),
-  textTheme: TextTheme(
-    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-  ),
-  textSelectionTheme: const TextSelectionThemeData(
-    cursorColor: Colors.white,
-    selectionColor: Colors.white24,
-    selectionHandleColor: Colors.white,
-  ),
-  cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: Colors.white),
-);
+      useMaterial3: false,
+      colorScheme: const ColorScheme.dark(
+        primary: Colors.black,
+        secondary: Color(0xFF35343B),
+        surface: Colors.black38,
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFF1F1F25),
+        contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+      ),
+      textTheme: TextTheme(
+        titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+        titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+        bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+        labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+      ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: Colors.white,
+        selectionColor: Colors.white24,
+        selectionHandleColor: Colors.white,
+      ),
+      cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: Colors.white),
+    );
 
 final auditSuite = AuditSuite(
   name: 'pre-ui-program',

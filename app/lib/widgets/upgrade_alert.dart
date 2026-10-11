@@ -140,7 +140,10 @@ class UpdatePrompt extends StatelessWidget {
             style: OmiType.subhead.copyWith(color: OmiColors.textTertiary, height: 1.4),
             textAlign: TextAlign.center,
           ),
-          if (notes != null) ...[const SizedBox(height: OmiSpacing.lg), UpdateWhatsNew(notes: notes)],
+          if (notes != null) ...[
+            const SizedBox(height: OmiSpacing.lg),
+            UpdateWhatsNew(notes: notes),
+          ],
           const SizedBox(height: OmiSpacing.xl),
           OmiButton(key: const ValueKey('update_now'), label: l10n.update, onPressed: onUpdate, expand: true),
           if (!required) ...[

@@ -16,12 +16,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -68,11 +63,11 @@ void main() {
         ['Phone Mic Recording Stopped', globals],
         [
           'Transcribe Later Toggled',
-          {...globals, 'enabled': false},
+          {...globals, 'enabled': false}
         ],
         [
           'Transcribe Later Toggled',
-          {...globals, 'enabled': true},
+          {...globals, 'enabled': true}
         ],
       ]);
       expect(AnalyticsManager.queuedEventCountForTesting, 0);

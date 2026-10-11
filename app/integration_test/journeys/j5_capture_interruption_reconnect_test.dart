@@ -90,25 +90,17 @@ void main() {
     await world.reconstructProcess();
 
     final persistedWals = await world.wal.syncs.phone.getAllWals();
-    final recoverableOnDisk =
-        persistedWals.isNotEmpty &&
-        await Future.wait(
-          persistedWals.map((w) async {
-            final path = await Wal.getFilePath(w.filePath);
-            return path != null && File(path).existsSync();
-          }),
-        ).then((checks) => checks.every((ok) => ok));
-    evidence.record(
-      'audio-persisted-after-interruption',
-      ok: recoverableOnDisk,
-      invariant: JourneyFault.failCaptureRecovery.invariant,
-      detail: '${persistedWals.length} WAL(s) on disk after reconstruction',
-    );
-    expect(
-      recoverableOnDisk,
-      isTrue,
-      reason: 'unsynced audio must be recoverable from real temp files after the process is gone',
-    );
+    final recoverableOnDisk = persistedWals.isNotEmpty &&
+        await Future.wait(persistedWals.map((w) async {
+          final path = await Wal.getFilePath(w.filePath);
+          return path != null && File(path).existsSync();
+        })).then((checks) => checks.every((ok) => ok));
+    evidence.record('audio-persisted-after-interruption',
+        ok: recoverableOnDisk,
+        invariant: JourneyFault.failCaptureRecovery.invariant,
+        detail: '${persistedWals.length} WAL(s) on disk after reconstruction');
+    expect(recoverableOnDisk, isTrue,
+        reason: 'unsynced audio must be recoverable from real temp files after the process is gone');
 
     // Reconnect: the recovery coordinator drains the persisted WAL through
     // the real upload boundary.
@@ -124,46 +116,33 @@ void main() {
     final countsAfter = await world.walCounts();
     final allSynced = (countsAfter[WalStatus.miss] ?? 0) == 0 && (countsAfter[WalStatus.synced] ?? 0) > 0;
     final drainedExactlyOnce = attemptsByFile.values.every((c) => c == 1) && attemptsByFile.isNotEmpty && allSynced;
-    evidence.record(
-      'recovery-uploads-exactly-once',
-      ok: drainedExactlyOnce,
-      invariant: 'reconnected recovery uploads persisted audio without duplicates',
-      detail: attemptsByFile.toString(),
-    );
-    expect(
-      drainedExactlyOnce,
-      isTrue,
-      reason: 'each persisted audio file must be uploaded exactly once after reconnect (got $attemptsByFile)',
-    );
+    evidence.record('recovery-uploads-exactly-once',
+        ok: drainedExactlyOnce,
+        invariant: 'reconnected recovery uploads persisted audio without duplicates',
+        detail: attemptsByFile.toString());
+    expect(drainedExactlyOnce, isTrue,
+        reason: 'each persisted audio file must be uploaded exactly once after reconnect (got $attemptsByFile)');
 
     // Live identity rule: the authoritative recording identity is the
     // recording id + native session ids (C3 contract).
     final identitySane = startSessionIdsBeforeKill.isNotEmpty;
-    evidence.record(
-      'live-identity-authoritative',
-      ok: identitySane,
-      invariant:
-          'live capture identity comes from the native session id (activeCaptureSessionId is a window, not a per-recording id)',
-    );
+    evidence.record('live-identity-authoritative',
+        ok: identitySane,
+        invariant:
+            'live capture identity comes from the native session id (activeCaptureSessionId is a window, not a per-recording id)');
     expect(identitySane, isTrue);
 
     evidence.stateAfter = {'wals_drained': attemptsByFile.length, 'contract': captureScenarioContractVersion};
-    expect(
-      evidence.failed,
-      0,
-      reason:
-          'failing assertions: '
-          '${evidence.assertions.where((a) => a['ok'] == false).map((a) => a['name']).toList()} '
-          'detail: ${evidence.assertions.map((a) => "${a['name']}=${a['ok']} ${a['detail'] ?? ''}").toList()}',
-    );
+    expect(evidence.failed, 0,
+        reason: 'failing assertions: '
+            '${evidence.assertions.where((a) => a['ok'] == false).map((a) => a['name']).toList()} '
+            'detail: ${evidence.assertions.map((a) => "${a['name']}=${a['ok']} ${a['detail'] ?? ''}").toList()}');
     await evidence.write();
   });
 
   test('negative: fail-capture-recovery must fail naming recoverability', () async {
     final evidence = JourneyEvidence.begin(
-      journeyId: 'j5_capture_interruption_reconnect.fail-capture-recovery',
-      lane: 'hermetic-replay',
-    );
+        journeyId: 'j5_capture_interruption_reconnect.fail-capture-recovery', lane: 'hermetic-replay');
     evidence.stateBefore = {'contract': captureScenarioContractVersion, 'fault': JourneyFault.failCaptureRecovery.name};
     final world = await CaptureReplayWorld.boot(tempDir: tempDir);
     addTearDown(world.dispose);
@@ -195,12 +174,10 @@ void main() {
     final stillPending = (counts[WalStatus.miss] ?? 0) > 0;
     final recoverabilityBroken = syncedCount == 0 && stillPending;
 
-    evidence.record(
-      'fault-exposes-missing-invariant',
-      ok: recoverabilityBroken,
-      invariant: JourneyFault.failCaptureRecovery.invariant,
-      detail: 'synced WALs: $syncedCount; pending WALs: ${counts[WalStatus.miss] ?? 0}',
-    );
+    evidence.record('fault-exposes-missing-invariant',
+        ok: recoverabilityBroken,
+        invariant: JourneyFault.failCaptureRecovery.invariant,
+        detail: 'synced WALs: $syncedCount; pending WALs: ${counts[WalStatus.miss] ?? 0}');
     if (!recoverabilityBroken) {
       await evidence.write();
       fail('oracle cannot detect unrecoverable audio (synced=$syncedCount pending=${counts[WalStatus.miss] ?? 0})');

@@ -19,7 +19,7 @@ class ConversationPhotoBytesCache {
   final Map<String, Future<Uint8List?>> _storageRequests = {};
 
   ConversationPhotoBytesCache({ConversationPhotoStorageFetcher? fetchStorageImage})
-    : _fetchStorageImage = fetchStorageImage ?? getConversationPhotoImage;
+      : _fetchStorageImage = fetchStorageImage ?? getConversationPhotoImage;
 
   Future<Uint8List?> load(ConversationPhoto photo, String? conversationId) {
     if (photo.base64.isNotEmpty) {
@@ -94,8 +94,7 @@ class _ConversationPhotoImageState extends State<ConversationPhotoImage> {
   @override
   void didUpdateWidget(covariant ConversationPhotoImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final photoChanged =
-        oldWidget.photo.id != widget.photo.id ||
+    final photoChanged = oldWidget.photo.id != widget.photo.id ||
         oldWidget.photo.base64 != widget.photo.base64 ||
         oldWidget.photo.storageId != widget.photo.storageId ||
         oldWidget.conversationId != widget.conversationId ||

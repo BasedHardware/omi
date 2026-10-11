@@ -21,18 +21,16 @@ void main() {
     expect(semanticControlsEligible, isTrue);
     final handlers = <String, developer.ServiceExtensionHandler>{};
     final errors = <String>[];
-    SemanticControls.instance.installIfEligible(
-      register: (name, handler) {
-        expect(handlers.containsKey(name), isFalse, reason: 'duplicate registration: $name');
-        handlers[name] = handler;
-        // Keep walking after a bad name: ALL production registrations must execute.
-        try {
-          developer.registerExtension(name, handler);
-        } catch (error) {
-          errors.add('$name: $error');
-        }
-      },
-    );
+    SemanticControls.instance.installIfEligible(register: (name, handler) {
+      expect(handlers.containsKey(name), isFalse, reason: 'duplicate registration: $name');
+      handlers[name] = handler;
+      // Keep walking after a bad name: ALL production registrations must execute.
+      try {
+        developer.registerExtension(name, handler);
+      } catch (error) {
+        errors.add('$name: $error');
+      }
+    });
     if (errors.isNotEmpty) debugPrint('B0 SDK registration errors: ${errors.join('; ')}');
     expect(handlers, hasLength(5));
     expect(errors, isEmpty, reason: 'Dart SDK registration rejected actual production names');

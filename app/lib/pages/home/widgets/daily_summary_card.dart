@@ -15,7 +15,12 @@ class DailySummaryCard extends StatelessWidget {
   static TextStyle get _headlineStyle => OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3);
   static const double radius = 20;
 
-  const DailySummaryCard({super.key, required this.summary, required this.dateLabel, required this.onTap});
+  const DailySummaryCard({
+    super.key,
+    required this.summary,
+    required this.dateLabel,
+    required this.onTap,
+  });
 
   final DailySummary summary;
   final String dateLabel;
@@ -78,10 +83,8 @@ class DailySummaryCard extends StatelessWidget {
                                 dateLabel,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: OmiType.footnote.copyWith(
-                                  color: OmiColors.textTertiary,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: OmiType.footnote
+                                    .copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -91,21 +94,14 @@ class DailySummaryCard extends StatelessWidget {
                           // Above the map the band is short: whole lines only (at most two), so large
                           // text ends on an ellipsis instead of clipping through a line.
                           Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, box) {
-                                final line =
-                                    MediaQuery.textScalerOf(context).scale(_headlineStyle.fontSize!) *
-                                    _headlineStyle.height!;
-                                final lines = math.min(2, (box.maxHeight / line).floor());
-                                if (lines < 1) return const SizedBox.shrink();
-                                return Text(
-                                  summary.headline,
-                                  style: _headlineStyle,
-                                  maxLines: lines,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
+                            child: LayoutBuilder(builder: (context, box) {
+                              final line = MediaQuery.textScalerOf(context).scale(_headlineStyle.fontSize!) *
+                                  _headlineStyle.height!;
+                              final lines = math.min(2, (box.maxHeight / line).floor());
+                              if (lines < 1) return const SizedBox.shrink();
+                              return Text(summary.headline,
+                                  style: _headlineStyle, maxLines: lines, overflow: TextOverflow.ellipsis);
+                            }),
                           )
                         else
                           Flexible(
@@ -120,20 +116,18 @@ class DailySummaryCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Expanded(
                             // As many whole lines as the card has room for, ending on an ellipsis.
-                            child: LayoutBuilder(
-                              builder: (context, box) {
-                                final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35);
-                                final line = MediaQuery.textScalerOf(context).scale(style.fontSize!) * style.height!;
-                                final lines = (box.maxHeight / line).floor();
-                                if (lines < 1) return const SizedBox.shrink();
-                                return Text(
-                                  summary.overview.trim(),
-                                  style: style,
-                                  maxLines: lines,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
+                            child: LayoutBuilder(builder: (context, box) {
+                              final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35);
+                              final line = MediaQuery.textScalerOf(context).scale(style.fontSize!) * style.height!;
+                              final lines = (box.maxHeight / line).floor();
+                              if (lines < 1) return const SizedBox.shrink();
+                              return Text(
+                                summary.overview.trim(),
+                                style: style,
+                                maxLines: lines,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            }),
                           ),
                         ] else if (!hasMap) ...[
                           const Spacer(),

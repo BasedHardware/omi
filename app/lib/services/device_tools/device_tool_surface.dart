@@ -58,19 +58,24 @@ class DeviceToolDescriptor {
   final bool requiresUserConfirmation;
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'description': description,
-    'input_schema': {'type': 'object', 'properties': parameters, 'required': required, 'additionalProperties': false},
-    'requires_user_confirmation': requiresUserConfirmation,
-  };
+        'name': name,
+        'description': description,
+        'input_schema': {
+          'type': 'object',
+          'properties': parameters,
+          'required': required,
+          'additionalProperties': false,
+        },
+        'requires_user_confirmation': requiresUserConfirmation,
+      };
 }
 
 class DeviceToolSurface {
   DeviceToolSurface({MethodChannel? channel, bool? supported})
-    : _channel = channel ?? const MethodChannel('com.omi.device_tools'),
-      // Injectable so the iOS behaviour is exercised by tests running on a
-      // desktop host, where `Platform.isIOS` would otherwise skip it.
-      isSupported = supported ?? Platform.isIOS;
+      : _channel = channel ?? const MethodChannel('com.omi.device_tools'),
+        // Injectable so the iOS behaviour is exercised by tests running on a
+        // desktop host, where `Platform.isIOS` would otherwise skip it.
+        isSupported = supported ?? Platform.isIOS;
 
   final MethodChannel _channel;
 
@@ -161,7 +166,10 @@ class DeviceToolSurface {
   /// as `run_applescript` gets a result it can reason about.
   Future<DeviceToolResult> execute(String toolName, Map<String, dynamic> arguments) async {
     if (!isSupported) {
-      return DeviceToolResult.failure('unsupported_platform', 'The on-device tool surface is only available on iOS.');
+      return DeviceToolResult.failure(
+        'unsupported_platform',
+        'The on-device tool surface is only available on iOS.',
+      );
     }
 
     switch (toolName) {
@@ -170,12 +178,18 @@ class DeviceToolSurface {
         if (query.isEmpty) {
           return DeviceToolResult.failure('missing_query', 'Provide a name to search for.');
         }
-        return _invoke('searchContacts', {'query': query, if (arguments['limit'] != null) 'limit': arguments['limit']});
+        return _invoke('searchContacts', {
+          'query': query,
+          if (arguments['limit'] != null) 'limit': arguments['limit'],
+        });
 
       case requestPermissionTool:
         final type = (arguments['type'] as String?)?.trim() ?? '';
         if (type.isEmpty || type != 'contacts') {
-          return DeviceToolResult.failure('unsupported_permission', 'iOS can only prompt for the contacts permission.');
+          return DeviceToolResult.failure(
+            'unsupported_permission',
+            'iOS can only prompt for the contacts permission.',
+          );
         }
         return requestContactsPermission();
 
@@ -195,7 +209,10 @@ class DeviceToolSurface {
         });
 
       default:
-        return DeviceToolResult.failure('unknown_tool', '$toolName is not available on this device.');
+        return DeviceToolResult.failure(
+          'unknown_tool',
+          '$toolName is not available on this device.',
+        );
     }
   }
 

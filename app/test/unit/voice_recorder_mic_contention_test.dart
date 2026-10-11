@@ -148,12 +148,11 @@ void main() {
       final mic = _ContendedMic()..failStart = false;
       var transcriptionCalls = 0;
       final provider = VoiceRecorderProvider(
-        mic: mic,
-        transcriber: (_) async {
-          transcriptionCalls++;
-          return 'unexpected';
-        },
-      );
+          mic: mic,
+          transcriber: (_) async {
+            transcriptionCalls++;
+            return 'unexpected';
+          });
       await provider.startRecording();
       expect(recordingsDir().listSync().length, 1);
 

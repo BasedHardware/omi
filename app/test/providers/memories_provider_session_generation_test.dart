@@ -9,14 +9,14 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 
 Memory _memory({required String id, required String uid}) => Memory(
-  id: id,
-  uid: uid,
-  content: 'content-$id',
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 9, 18),
-  updatedAt: DateTime(2026, 9, 18),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: uid,
+      content: 'content-$id',
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 9, 18),
+      updatedAt: DateTime(2026, 9, 18),
+      visibility: MemoryVisibility.private,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

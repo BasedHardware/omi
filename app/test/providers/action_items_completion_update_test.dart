@@ -13,7 +13,8 @@ Future<ActionItemsResponse?> _noItems({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(actionItems: [], hasMore: false);
+}) async =>
+    const ActionItemsResponse(actionItems: [], hasMore: false);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

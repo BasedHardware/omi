@@ -30,50 +30,56 @@ class _DeletedAccountAuthenticationProvider extends _ExpiredAuthenticationProvid
 }
 
 Widget _app(AuthenticationProvider authProvider) => ChangeNotifierProvider<AuthenticationProvider>.value(
-  value: authProvider,
-  child: MaterialApp(
-    navigatorKey: globalNavigatorKey,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: const MobileApp(),
-  ),
-);
+      value: authProvider,
+      child: MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MobileApp(),
+      ),
+    );
 
 void main() {
-  testWidgets('expired session replaces the home shell with reauthentication UI and a clear message', (tester) async {
-    final authProvider = _ExpiredAuthenticationProvider();
-    addTearDown(authProvider.dispose);
+  testWidgets(
+    'expired session replaces the home shell with reauthentication UI and a clear message',
+    (tester) async {
+      final authProvider = _ExpiredAuthenticationProvider();
+      addTearDown(authProvider.dispose);
 
-    await tester.pumpWidget(_app(authProvider));
-    await tester.pump();
+      await tester.pumpWidget(_app(authProvider));
+      await tester.pump();
 
-    expect(find.byType(OnboardingWrapper), findsOneWidget);
-    expect(find.byType(HomePageWrapper), findsNothing);
-    expect(find.text('Session expired — sign in again.'), findsOneWidget);
+      expect(find.byType(OnboardingWrapper), findsOneWidget);
+      expect(find.byType(HomePageWrapper), findsNothing);
+      expect(find.text('Session expired — sign in again.'), findsOneWidget);
 
-    await tester.pumpAndSettle();
-  });
+      await tester.pumpAndSettle();
+    },
+  );
 
-  testWidgets('a session ended by the deleted-account fence says so instead of "session expired"', (tester) async {
-    final authProvider = _DeletedAccountAuthenticationProvider();
-    addTearDown(authProvider.dispose);
+  testWidgets(
+    'a session ended by the deleted-account fence says so instead of "session expired"',
+    (tester) async {
+      final authProvider = _DeletedAccountAuthenticationProvider();
+      addTearDown(authProvider.dispose);
 
-    await tester.pumpWidget(_app(authProvider));
-    await tester.pump();
+      await tester.pumpWidget(_app(authProvider));
+      await tester.pump();
 
-    expect(find.byType(OnboardingWrapper), findsOneWidget);
-    expect(find.byType(HomePageWrapper), findsNothing);
-    expect(
-      find.text('This account is being deleted. Sign in with another account, or wait a few minutes and try again.'),
-      findsOneWidget,
-    );
-    expect(find.text('Session expired — sign in again.'), findsNothing);
+      expect(find.byType(OnboardingWrapper), findsOneWidget);
+      expect(find.byType(HomePageWrapper), findsNothing);
+      expect(
+        find.text('This account is being deleted. Sign in with another account, or wait a few minutes and try again.'),
+        findsOneWidget,
+      );
+      expect(find.text('Session expired — sign in again.'), findsNothing);
 
-    await tester.pumpAndSettle();
-  });
+      await tester.pumpAndSettle();
+    },
+  );
 }

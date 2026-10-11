@@ -20,9 +20,9 @@ bool partitionsEvidenceRuns(bool darkWrite, BleAudioCodec codec, List<WalFrame> 
 
 bool walExtendsRun(Wal wal, WalEvidenceRun run, WalFrame first) => run.claimable
     ? wal.captureRoot == first.captureRoot &&
-          wal.sourceClockEpoch == first.sourceClockEpoch &&
-          wal.sourceFrameStart != null &&
-          wal.sourceFrameStart! + wal.totalFrames == first.sourceFramePosition
+        wal.sourceClockEpoch == first.sourceClockEpoch &&
+        wal.sourceFrameStart != null &&
+        wal.sourceFrameStart! + wal.totalFrames == first.sourceFramePosition
     : wal.captureRoot == null;
 
 double captureSelectionStartSeconds(DateTime preciseEnd, int frameCount, int framesPerSecond) =>
@@ -63,24 +63,20 @@ bool _evidenceContinues(WalFrame prev, WalFrame next) =>
   final root = first.captureRoot;
   final start = first.sourceFramePosition;
   final epoch = first.sourceClockEpoch;
-  final stable =
-      root != null &&
+  final stable = root != null &&
       start != null &&
       epoch != null &&
       frames.asMap().entries.every(
-        (entry) =>
-            entry.value.captureRoot == root &&
-            entry.value.sourceClockEpoch == epoch &&
-            entry.value.sourceFramePosition == start + entry.key,
-      );
+            (entry) =>
+                entry.value.captureRoot == root &&
+                entry.value.sourceClockEpoch == epoch &&
+                entry.value.sourceFramePosition == start + entry.key,
+          );
   return stable ? (root: root, start: start, epoch: epoch) : (root: null, start: null, epoch: null);
 }
 
 ({int? start, int? end, int? ringId, int? epoch}) stableLiveWalEvidence(
-  List<WalFrame> frames,
-  String? deviceId,
-  PendantRingCustody custody,
-) {
+    List<WalFrame> frames, String? deviceId, PendantRingCustody custody) {
   const none = (start: null, end: null, ringId: null, epoch: null);
   if (frames.isEmpty ||
       !frames.every((f) => f.liveOrdinal != null && f.connectionEpoch != null && f.liveRingId != null)) {

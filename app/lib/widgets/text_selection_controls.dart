@@ -43,7 +43,11 @@ class OmiToolbarDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1.0 / MediaQuery.of(context).devicePixelRatio, height: 20, color: OmiColors.border);
+    return Container(
+      width: 1.0 / MediaQuery.of(context).devicePixelRatio,
+      height: 20,
+      color: OmiColors.border,
+    );
   }
 }
 

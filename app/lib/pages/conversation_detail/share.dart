@@ -22,15 +22,12 @@ Future<ShareResult> shareConversationLink(ServerConversation conversation, {Rect
   );
   final analytics = PlatformManager.instance.analytics;
   final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-  analytics.track(
-    'Conversation Shared',
-    properties: {
-      ...analytics.getConversationEventProperties(conversation),
-      'share_method': 'url_share',
-      'share_id': sid,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp,
-    },
-  );
+  analytics.track('Conversation Shared', properties: {
+    ...analytics.getConversationEventProperties(conversation),
+    'share_method': 'url_share',
+    'share_id': sid,
+    'share_status': outcome.status.name,
+    if (targetApp != null) 'target_app': targetApp,
+  });
   return outcome;
 }

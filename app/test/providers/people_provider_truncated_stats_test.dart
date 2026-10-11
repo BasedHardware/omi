@@ -20,20 +20,21 @@ Person _person(
   String confidence = 'unknown',
   String voiceReadiness = 'not_learned',
   List<String>? speechSamples,
-}) => Person(
-  id: id,
-  name: name,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-  conversationCount: conversationCount,
-  lastHeardAt: lastHeardAt,
-  talkSeconds: talkSeconds,
-  autoConversationCount: autoConversationCount,
-  pinned: pinned,
-  confidence: confidence,
-  voiceReadiness: voiceReadiness,
-  speechSamples: speechSamples,
-);
+}) =>
+    Person(
+      id: id,
+      name: name,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      conversationCount: conversationCount,
+      lastHeardAt: lastHeardAt,
+      talkSeconds: talkSeconds,
+      autoConversationCount: autoConversationCount,
+      pinned: pinned,
+      confidence: confidence,
+      voiceReadiness: voiceReadiness,
+      speechSamples: speechSamples,
+    );
 
 void _expectStats(Person person, int? count, DateTime? heard, double? seconds, int? autoCount) {
   expect(person.conversationCount, count);
@@ -50,7 +51,10 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  PeopleProvider provider(PeopleListResponse? Function() loadPeople, {void Function(ApiFallbackEvent)? fallback}) {
+  PeopleProvider provider(
+    PeopleListResponse? Function() loadPeople, {
+    void Function(ApiFallbackEvent)? fallback,
+  }) {
     final created = PeopleProvider(loadPeople: () async => loadPeople(), fallback: fallback);
     addTearDown(created.dispose);
     return created;
@@ -58,36 +62,29 @@ void main() {
 
   test('a truncated load keeps the cached aggregate stats and applies the fresh row data', () async {
     SharedPreferencesUtil().cachedPeople = [
-      _person(
-        'p-a',
-        'Alice Old',
-        conversationCount: 10,
-        lastHeardAt: _heardAt,
-        talkSeconds: 600,
-        autoConversationCount: 4,
-        confidence: 'unverified',
-        speechSamples: ['old.wav'],
-      ),
+      _person('p-a', 'Alice Old',
+          conversationCount: 10,
+          lastHeardAt: _heardAt,
+          talkSeconds: 600,
+          autoConversationCount: 4,
+          confidence: 'unverified',
+          speechSamples: ['old.wav']),
     ];
     final events = <ApiFallbackEvent>[];
     final people = provider(
-      () => PeopleListResponse(
-        people: [
-          _person(
-            'p-a',
-            'Alice',
-            conversationCount: 2,
-            talkSeconds: 30,
-            pinned: true,
-            confidence: 'confirmed',
-            voiceReadiness: 'ready',
-            speechSamples: ['new.wav'],
-          ),
-        ],
-        statsTruncated: true,
-      ),
-      fallback: events.add,
-    );
+        () => PeopleListResponse(
+              people: [
+                _person('p-a', 'Alice',
+                    conversationCount: 2,
+                    talkSeconds: 30,
+                    pinned: true,
+                    confidence: 'confirmed',
+                    voiceReadiness: 'ready',
+                    speechSamples: ['new.wav']),
+              ],
+              statsTruncated: true,
+            ),
+        fallback: events.add);
 
     await people.setPeople();
 
@@ -139,12 +136,10 @@ void main() {
   });
 
   test('a truncated load without cached stats keeps the incoming partial fields', () async {
-    final people = provider(
-      () => PeopleListResponse(
-        people: [_person('p-new', 'New', conversationCount: 2, lastHeardAt: _heardAt)],
-        statsTruncated: true,
-      ),
-    );
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-new', 'New', conversationCount: 2, lastHeardAt: _heardAt)],
+          statsTruncated: true,
+        ));
 
     await people.setPeople();
 
@@ -157,21 +152,13 @@ void main() {
     SharedPreferencesUtil().cachedPeople = [
       _person('p-a', 'Alice', conversationCount: 0, talkSeconds: 0, autoConversationCount: 0),
     ];
-    final people = provider(
-      () => PeopleListResponse(
-        people: [
-          _person(
-            'p-a',
-            'Alice',
-            conversationCount: 5,
-            lastHeardAt: _heardAt,
-            talkSeconds: 90,
-            autoConversationCount: 2,
-          ),
-        ],
-        statsTruncated: true,
-      ),
-    );
+    final people = provider(() => PeopleListResponse(
+          people: [
+            _person('p-a', 'Alice',
+                conversationCount: 5, lastHeardAt: _heardAt, talkSeconds: 90, autoConversationCount: 2),
+          ],
+          statsTruncated: true,
+        ));
 
     await people.setPeople();
 
@@ -181,12 +168,10 @@ void main() {
 
   test('a cached person with no known stats takes the incoming partial fields', () async {
     SharedPreferencesUtil().cachedPeople = [_person('p-a', 'Alice')];
-    final people = provider(
-      () => PeopleListResponse(
-        people: [_person('p-a', 'Alice', conversationCount: 4, lastHeardAt: _heardAt, talkSeconds: 120)],
-        statsTruncated: true,
-      ),
-    );
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-a', 'Alice', conversationCount: 4, lastHeardAt: _heardAt, talkSeconds: 120)],
+          statsTruncated: true,
+        ));
 
     await people.setPeople();
 
@@ -194,10 +179,13 @@ void main() {
   });
 
   test('an optimistic person stays on screen but out of the persisted list', () async {
-    SharedPreferencesUtil().cachedPeople = [_person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt)];
-    final people = provider(
-      () => PeopleListResponse(people: [_person('p-a', 'Alice', conversationCount: 2)], statsTruncated: true),
-    );
+    SharedPreferencesUtil().cachedPeople = [
+      _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt),
+    ];
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-a', 'Alice', conversationCount: 2)],
+          statsTruncated: true,
+        ));
     people.addOptimisticPerson(_person('optimistic-person:temp', 'Draft'));
 
     await people.setPeople();
@@ -212,9 +200,10 @@ void main() {
       _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt),
       _person('p-b', 'Bob', conversationCount: 8),
     ];
-    final people = provider(
-      () => PeopleListResponse(people: [_person('p-a', 'Alice', conversationCount: 1)], statsTruncated: true),
-    );
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-a', 'Alice', conversationCount: 1)],
+          statsTruncated: true,
+        ));
 
     await people.setPeople();
 
@@ -227,10 +216,10 @@ void main() {
       _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt, talkSeconds: 600, autoConversationCount: 4),
     ];
     var incomingCount = 2;
-    final people = provider(
-      () =>
-          PeopleListResponse(people: [_person('p-a', 'Alice', conversationCount: incomingCount)], statsTruncated: true),
-    );
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-a', 'Alice', conversationCount: incomingCount)],
+          statsTruncated: true,
+        ));
 
     await people.setPeople();
     incomingCount = 7;
@@ -241,7 +230,9 @@ void main() {
   });
 
   test('the partial marker survives a provider recreation and a failed refresh', () async {
-    SharedPreferencesUtil().cachedPeople = [_person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt)];
+    SharedPreferencesUtil().cachedPeople = [
+      _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt),
+    ];
     var fail = false;
     PeopleProvider make() {
       final created = PeopleProvider(
@@ -270,10 +261,13 @@ void main() {
   });
 
   test('clearUserData resets the in-memory marker and clearUserDisplayCache clears the persisted one', () async {
-    SharedPreferencesUtil().cachedPeople = [_person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt)];
-    final people = provider(
-      () => PeopleListResponse(people: [_person('p-a', 'Alice', conversationCount: 1)], statsTruncated: true),
-    );
+    SharedPreferencesUtil().cachedPeople = [
+      _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt),
+    ];
+    final people = provider(() => PeopleListResponse(
+          people: [_person('p-a', 'Alice', conversationCount: 1)],
+          statsTruncated: true,
+        ));
     await people.setPeople();
     expect(people.statsTruncated, isTrue);
 
@@ -318,7 +312,9 @@ void main() {
       _person('p-a', 'Alice', conversationCount: 10, lastHeardAt: _heardAt, talkSeconds: 600, autoConversationCount: 4),
       _person('p-b', 'Bob', conversationCount: 8),
     ];
-    final incoming = [_person('p-a', 'Alice Renamed', pinned: true, confidence: 'confirmed', voiceReadiness: 'ready')];
+    final incoming = [
+      _person('p-a', 'Alice Renamed', pinned: true, confidence: 'confirmed', voiceReadiness: 'ready'),
+    ];
 
     final merged = preserveCachedPeopleStats(incoming, cached);
 

@@ -70,8 +70,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app =
-      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -328,8 +327,7 @@ Widget buildMessageWidget(
   // the block list: day summaries, memory citations, and the initial-options
   // surface still render the normal body and must not render its text block a
   // second time below it.
-  final blocksReplaceBody =
-      hasRenderableBlocks &&
+  final blocksReplaceBody = hasRenderableBlocks &&
       message.memories.isEmpty &&
       message.type != MessageType.daySummary &&
       !displayOptions &&
@@ -397,7 +395,10 @@ Widget buildMessageWidget(
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      if (appendBlocks) ...[const SizedBox(height: 8), contentBlocks],
+      if (appendBlocks) ...[
+        const SizedBox(height: 8),
+        contentBlocks,
+      ],
       if (reviewCard != null) ...[
         const SizedBox(height: 12),
         MemoryReviewCard(
@@ -768,34 +769,34 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
           ),
         widget.showTypingIndicator && widget.messageText == '…'
             ? (widget.message.thinkings.isNotEmpty
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                      child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
-                    ))
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
+                  ))
             : widget.showTypingIndicator
-            ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-              )
-            : Builder(
-                builder: (context) {
-                  String? selectedText;
-                  return SelectionArea(
-                    onSelectionChanged: (SelectedContent? selectedContent) {
-                      selectedText = selectedContent?.plainText;
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+                  )
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                            widget.onAskOmi?.call(text);
+                          }, selectedText: selectedText);
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
                     },
-                    contextMenuBuilder: (context, selectableRegionState) {
-                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                        widget.onAskOmi?.call(text);
-                      }, selectedText: selectedText);
-                    },
-                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                  );
-                },
-              ),
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '…' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -1100,10 +1101,7 @@ class _TimelineRow extends StatelessWidget {
             child: Column(
               children: [
                 SizedBox(height: 22, child: Center(child: glyph)),
-                if (!last)
-                  Expanded(
-                    child: Center(child: Container(width: 1, color: OmiColors.border)),
-                  ),
+                if (!last) Expanded(child: Center(child: Container(width: 1, color: OmiColors.border))),
               ],
             ),
           ),

@@ -30,12 +30,12 @@ class SpeakerTagOutcome {
   bool get isSettled => voiceState != 'pending';
 
   SpeakerTagOutcome copyWith({String? voiceState, List<api.PersonVoiceMatch>? matches}) => SpeakerTagOutcome(
-    personId: personId,
-    personName: personName,
-    linesLabeled: linesLabeled,
-    voiceState: voiceState ?? this.voiceState,
-    matches: matches ?? this.matches,
-  );
+        personId: personId,
+        personName: personName,
+        linesLabeled: linesLabeled,
+        voiceState: voiceState ?? this.voiceState,
+        matches: matches ?? this.matches,
+      );
 }
 
 typedef PersonFetcher = Future<ApiResult<Person>> Function(String personId);
@@ -50,8 +50,8 @@ class SpeakerTagOutcomeController extends ChangeNotifier {
     VoiceMatchesFetcher? fetchMatches,
     this.pollInterval = const Duration(seconds: 2),
     this.maxPolls = 6,
-  }) : _fetchPerson = fetchPerson ?? api.getPerson,
-       _fetchMatches = fetchMatches ?? api.getPersonVoiceMatches;
+  })  : _fetchPerson = fetchPerson ?? api.getPerson,
+        _fetchMatches = fetchMatches ?? api.getPersonVoiceMatches;
 
   final PersonFetcher _fetchPerson;
   final VoiceMatchesFetcher _fetchMatches;
@@ -88,12 +88,10 @@ class SpeakerTagOutcomeController extends ChangeNotifier {
   void removeMatch(api.PersonVoiceMatch match) {
     final current = _outcome;
     if (current == null) return;
-    _outcome = current.copyWith(
-      matches: [
-        for (final m in current.matches)
-          if (!identical(m, match)) m,
-      ],
-    );
+    _outcome = current.copyWith(matches: [
+      for (final m in current.matches)
+        if (!identical(m, match)) m
+    ]);
     notifyListeners();
   }
 
@@ -246,11 +244,7 @@ class _OutcomeRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: detail == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 20,
-          height: 20,
-          child: Center(child: ExcludeSemantics(child: leading)),
-        ),
+        SizedBox(width: 20, height: 20, child: Center(child: ExcludeSemantics(child: leading))),
         const SizedBox(width: OmiSpacing.xs),
         Expanded(
           child: Column(

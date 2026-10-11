@@ -32,12 +32,12 @@ String _proposalQuestion(BuildContext context, AgentProposalItem proposal) {
 }
 
 IconData reviewKindIcon(ReviewItemKind kind) => switch (kind) {
-  ReviewItemKind.speaker => Icons.record_voice_over_outlined,
-  ReviewItemKind.task => Icons.task_alt,
-  ReviewItemKind.samePerson => Icons.people_outline,
-  ReviewItemKind.spelling => Icons.spellcheck,
-  ReviewItemKind.agentProposal => Icons.auto_awesome_outlined,
-};
+      ReviewItemKind.speaker => Icons.record_voice_over_outlined,
+      ReviewItemKind.task => Icons.task_alt,
+      ReviewItemKind.samePerson => Icons.people_outline,
+      ReviewItemKind.spelling => Icons.spellcheck,
+      ReviewItemKind.agentProposal => Icons.auto_awesome_outlined,
+    };
 
 /// A 40pt circle holding a kind's icon, used where a card has no play button.
 class ReviewKindBadge extends StatelessWidget {
@@ -175,10 +175,10 @@ class ReviewLinkChip extends StatelessWidget {
 }
 
 IconData entityIcon(EntityType type) => switch (type) {
-  EntityType.person => Icons.person_outline,
-  EntityType.organization => Icons.apartment_outlined,
-  EntityType.project => Icons.folder_outlined,
-};
+      EntityType.person => Icons.person_outline,
+      EntityType.organization => Icons.apartment_outlined,
+      EntityType.project => Icons.folder_outlined,
+    };
 
 /// An initial avatar: a circle for a person, a rounded square for an organization.
 class EntityInitialAvatar extends StatelessWidget {

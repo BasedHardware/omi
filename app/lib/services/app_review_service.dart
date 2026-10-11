@@ -30,15 +30,15 @@ class AppReviewService {
   factory AppReviewService() => _instance;
 
   AppReviewService._internal()
-    : _providedStorage = null,
-      _clock = DateTime.now,
-      _platform = _currentPlatform,
-      _appVersion = _productionAppVersion,
-      _isAvailable = InAppReview.instance.isAvailable,
-      _requestNativeReview = InAppReview.instance.requestReview,
-      _writeState = null,
-      _cooldown = AppReviewTuning.cooldown,
-      _telemetry = _productionTelemetry;
+      : _providedStorage = null,
+        _clock = DateTime.now,
+        _platform = _currentPlatform,
+        _appVersion = _productionAppVersion,
+        _isAvailable = InAppReview.instance.isAvailable,
+        _requestNativeReview = InAppReview.instance.requestReview,
+        _writeState = null,
+        _cooldown = AppReviewTuning.cooldown,
+        _telemetry = _productionTelemetry;
 
   /// Creates an isolated service for hermetic tests and local policy checks.
   AppReviewService.forTesting({
@@ -51,15 +51,15 @@ class AppReviewService {
     Future<bool> Function(String key, String value)? writeState,
     Future<Duration> Function()? cooldown,
     AppReviewTelemetry? telemetry,
-  }) : _providedStorage = storage,
-       _clock = clock ?? DateTime.now,
-       _platform = (() => platform ?? _currentPlatform()),
-       _appVersion = (() => appVersion ?? _productionAppVersion()),
-       _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
-       _requestNativeReview = requestNativeReview ?? InAppReview.instance.requestReview,
-       _writeState = writeState,
-       _cooldown = cooldown ?? (() async => AppReviewPolicy.requestCooldown),
-       _telemetry = telemetry ?? _productionTelemetry;
+  })  : _providedStorage = storage,
+        _clock = clock ?? DateTime.now,
+        _platform = (() => platform ?? _currentPlatform()),
+        _appVersion = (() => appVersion ?? _productionAppVersion()),
+        _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
+        _requestNativeReview = requestNativeReview ?? InAppReview.instance.requestReview,
+        _writeState = writeState,
+        _cooldown = cooldown ?? (() async => AppReviewPolicy.requestCooldown),
+        _telemetry = telemetry ?? _productionTelemetry;
 
   static const String _stateKey = 'app_review_policy_v1';
 
@@ -249,9 +249,8 @@ class AppReviewService {
     if (_storageBroken) return false;
     try {
       final encoded = jsonEncode(state.toJson());
-      final ok = _writeState == null
-          ? await storage.setString(_stateKey, encoded)
-          : await _writeState!(_stateKey, encoded);
+      final ok =
+          _writeState == null ? await storage.setString(_stateKey, encoded) : await _writeState!(_stateKey, encoded);
       if (!ok) {
         _storageBroken = true;
         return false;
@@ -432,13 +431,13 @@ final class _ReviewState {
   });
 
   factory _ReviewState.empty() => _ReviewState(
-    migrationComplete: false,
-    migratedAtMs: null,
-    firstSeenAtMs: null,
-    readingDays: <String>{},
-    attempts: <_StoredAttempt>[],
-    badExperiences: <String, int>{},
-  );
+        migrationComplete: false,
+        migratedAtMs: null,
+        firstSeenAtMs: null,
+        readingDays: <String>{},
+        attempts: <_StoredAttempt>[],
+        badExperiences: <String, int>{},
+      );
 
   factory _ReviewState.fromJson(Object? raw) {
     if (raw is! Map || raw['schema'] != 1 || raw['migrationComplete'] is! bool) {
@@ -480,12 +479,12 @@ final class _ReviewState {
   DateTime? get migratedAt => migratedAtMs == null ? null : DateTime.fromMillisecondsSinceEpoch(migratedAtMs!);
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'schema': 1,
-    'migrationComplete': migrationComplete,
-    'migratedAtMs': migratedAtMs,
-    'firstSeenAtMs': firstSeenAtMs,
-    'readingDays': readingDays.toList()..sort(),
-    'attempts': attempts.map((attempt) => attempt.toJson()).toList(growable: false),
-    'badExperiences': badExperiences,
-  };
+        'schema': 1,
+        'migrationComplete': migrationComplete,
+        'migratedAtMs': migratedAtMs,
+        'firstSeenAtMs': firstSeenAtMs,
+        'readingDays': readingDays.toList()..sort(),
+        'attempts': attempts.map((attempt) => attempt.toJson()).toList(growable: false),
+        'badExperiences': badExperiences,
+      };
 }

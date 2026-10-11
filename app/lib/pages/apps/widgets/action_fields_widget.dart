@@ -61,7 +61,10 @@ class ActionFieldsWidget extends StatelessWidget {
                                 Container(
                                   width: 40,
                                   height: 40,
-                                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                                  decoration: BoxDecoration(
+                                    color: OmiColors.surface2,
+                                    borderRadius: OmiRadius.mdAll,
+                                  ),
                                   child: Center(
                                     child: FaIcon(
                                       _getIconForAction(actionType.id),
@@ -71,7 +74,12 @@ class ActionFieldsWidget extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 14),
-                                Expanded(child: Text(actionType.getLocalizedTitle(context), style: OmiType.callout)),
+                                Expanded(
+                                  child: Text(
+                                    actionType.getLocalizedTitle(context),
+                                    style: OmiType.callout,
+                                  ),
+                                ),
                                 OmiSwitch(
                                   value: isSelected,
                                   onChanged: (value) {

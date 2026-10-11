@@ -48,9 +48,8 @@ App _app({
     isPaid: paid,
     isUserPaid: false,
     paymentLink: paymentLink,
-    externalIntegration: external
-        ? ExternalIntegration(authSteps: authSteps, setupCompletedUrl: setupCompletedUrl)
-        : null,
+    externalIntegration:
+        external ? ExternalIntegration(authSteps: authSteps, setupCompletedUrl: setupCompletedUrl) : null,
   );
 }
 
@@ -252,9 +251,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a never-finishing detail read stops at the deadline and a late paid result cannot enable', (
-    tester,
-  ) async {
+  testWidgets('a never-finishing detail read stops at the deadline and a late paid result cannot enable',
+      (tester) async {
     var detailReads = 0;
     var enableCalls = 0;
     final pending = Completer<Map<String, dynamic>?>();

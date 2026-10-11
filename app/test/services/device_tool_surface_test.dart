@@ -12,10 +12,13 @@ void main() {
   setUp(() {
     calls = [];
     nextResponse = {'ok': true};
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-      calls.add(call);
-      return nextResponse;
-    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) async {
+        calls.add(call);
+        return nextResponse;
+      },
+    );
   });
 
   tearDown(() {
@@ -33,11 +36,14 @@ void main() {
     });
 
     test('advertises exactly the three mobile tools', () {
-      expect(supportedSurface().tools.map((tool) => tool.name), [
-        DeviceToolSurface.searchContactsTool,
-        DeviceToolSurface.proposeMessageTool,
-        DeviceToolSurface.requestPermissionTool,
-      ]);
+      expect(
+        supportedSurface().tools.map((tool) => tool.name),
+        [
+          DeviceToolSurface.searchContactsTool,
+          DeviceToolSurface.proposeMessageTool,
+          DeviceToolSurface.requestPermissionTool,
+        ],
+      );
     });
 
     test('withholds propose_message on a device that cannot send text', () async {
@@ -48,10 +54,10 @@ void main() {
 
       final available = await supportedSurface().availableTools();
 
-      expect(available.map((tool) => tool.name), [
-        DeviceToolSurface.searchContactsTool,
-        DeviceToolSurface.requestPermissionTool,
-      ]);
+      expect(
+        available.map((tool) => tool.name),
+        [DeviceToolSurface.searchContactsTool, DeviceToolSurface.requestPermissionTool],
+      );
     });
 
     test('offers all tools on a device that can send text', () async {
@@ -59,11 +65,14 @@ void main() {
 
       final available = await supportedSurface().availableTools();
 
-      expect(available.map((tool) => tool.name), [
-        DeviceToolSurface.searchContactsTool,
-        DeviceToolSurface.proposeMessageTool,
-        DeviceToolSurface.requestPermissionTool,
-      ]);
+      expect(
+        available.map((tool) => tool.name),
+        [
+          DeviceToolSurface.searchContactsTool,
+          DeviceToolSurface.proposeMessageTool,
+          DeviceToolSurface.requestPermissionTool,
+        ],
+      );
     });
 
     test('advertises nothing on an unsupported platform without touching the channel', () async {

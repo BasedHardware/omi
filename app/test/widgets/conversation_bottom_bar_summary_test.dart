@@ -24,15 +24,15 @@ ServerConversation _conversation({required List<AppResponse> appResults, bool wi
 }
 
 TranscriptSegment _segment(double start, double end) => TranscriptSegment(
-  id: 's-$start',
-  text: 'words',
-  speaker: 'SPEAKER_0',
-  isUser: false,
-  personId: null,
-  start: start,
-  end: end,
-  translations: [],
-);
+      id: 's-$start',
+      text: 'words',
+      speaker: 'SPEAKER_0',
+      isUser: false,
+      personId: null,
+      start: start,
+      end: end,
+      translations: [],
+    );
 
 ConversationDetailProvider _provider(ServerConversation conversation) {
   final provider = ConversationDetailProvider();
@@ -86,11 +86,8 @@ void main() {
     expect(bar, findsOneWidget);
     expect(find.text('Ask Omi'), findsOneWidget);
     expect(tester.getCenter(find.text('Ask Omi')).dx, moreOrLessEquals(tester.getCenter(bar).dx, epsilon: 1));
-    expect(
-      find.descendant(of: bar, matching: find.byType(FaIcon)),
-      findsNothing,
-      reason: 'no mic, no glyph: just the words',
-    );
+    expect(find.descendant(of: bar, matching: find.byType(FaIcon)), findsNothing,
+        reason: 'no mic, no glyph: just the words');
     // The summarizing app is picked from the ⋯ menu now, not the bar.
     expect(find.text('Unknown App'), findsNothing);
     expect(find.bySemanticsLabel('Transcript'), findsNothing);

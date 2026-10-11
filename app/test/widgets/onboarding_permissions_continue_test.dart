@@ -37,9 +37,7 @@ Future<int> _tapContinue(WidgetTester tester, _FakeSource source) async {
     MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: const [Locale('en')],
-      home: Scaffold(
-        body: PermissionsWidget(source: source, goNext: () => nextCalls++),
-      ),
+      home: Scaffold(body: PermissionsWidget(source: source, goNext: () => nextCalls++)),
     ),
   );
   await tester.pumpAndSettle();

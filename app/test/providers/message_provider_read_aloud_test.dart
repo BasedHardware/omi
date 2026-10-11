@@ -62,7 +62,8 @@ class _FakeSpeaker implements ChatReplySpeaker {
   Future<void> interruptResponse({
     required String messageId,
     required VoiceReplyPlaybackInterruptSource source,
-  }) async => interrupts.add(messageId);
+  }) async =>
+      interrupts.add(messageId);
 }
 
 ServerMessage _ai(String id, String text) =>

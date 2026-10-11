@@ -51,18 +51,18 @@ String buildShareUrl(String path, {String? raw, String? source, String? sid}) {
 /// Tag a backend-issued public URL without losing existing query parameters.
 String tagShareUrl(String url, {String? source, String? sid}) {
   final uri = Uri.parse(url);
-  return uri
-      .replace(
-        queryParameters: {...uri.queryParameters, 's': source ?? mobileShareSource(), 'sid': sid ?? newShareId()},
-      )
-      .toString();
+  return uri.replace(queryParameters: {
+    ...uri.queryParameters,
+    's': source ?? mobileShareSource(),
+    'sid': sid ?? newShareId(),
+  }).toString();
 }
 
 String mobileShareSource() => switch (defaultTargetPlatform) {
-  TargetPlatform.iOS => 'ios',
-  TargetPlatform.android => 'android',
-  _ => 'unknown',
-};
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.android => 'android',
+      _ => 'unknown',
+    };
 
 /// Random per-share attempt; never derived from the sender or content.
 String newShareId() {

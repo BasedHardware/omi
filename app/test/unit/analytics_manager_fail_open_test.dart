@@ -298,10 +298,8 @@ void main() {
     final adapter = _DeliveryAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
-    AnalyticsManager().track(
-      'Capture Wedge Detected',
-      properties: {'app_version': null, 'app_build': 'observed-build', 'build': null},
-    );
+    AnalyticsManager().track('Capture Wedge Detected',
+        properties: {'app_version': null, 'app_build': 'observed-build', 'build': null});
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.single.properties.containsKey('app_version'), false);
     expect(adapter.events.single.properties.containsKey('build'), false);

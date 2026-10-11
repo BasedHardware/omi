@@ -50,10 +50,7 @@ class _ReviewPageState extends State<ReviewPage> {
         message: l10n.reviewCaughtUpBody,
         action: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _RecentChangesLink(),
-            _DreamReportLink(probe: widget.probeDreamReport),
-          ],
+          children: [_RecentChangesLink(), _DreamReportLink(probe: widget.probeDreamReport)],
         ),
       );
     } else {

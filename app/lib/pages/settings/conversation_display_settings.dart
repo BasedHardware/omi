@@ -68,7 +68,9 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     value: provider.showShortConversations,
                     onChanged: (_) {
                       provider.toggleShortConversations();
-                      PlatformManager.instance.analytics.showShortConversationsToggled(provider.showShortConversations);
+                      PlatformManager.instance.analytics.showShortConversationsToggled(
+                        provider.showShortConversations,
+                      );
                     },
                   ),
                   OmiSettingsRow.toggle(

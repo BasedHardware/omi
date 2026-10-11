@@ -89,20 +89,17 @@ void main() {
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader:
-            (
-              files, {
-              onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation,
-            }) async {
-              throw uploadFailure;
-            },
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          throw uploadFailure;
+        },
         fairUseStatusLoader: () async => {'stage': 'none'},
       ),
     );
@@ -283,8 +280,7 @@ void main() {
       expect(
         sync.testWals.first.status,
         WalStatus.miss,
-        reason:
-            'a WAL whose file exists must not be corrupted by pre-upload checks; '
+        reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
             'a failed upload leaves it retryable as miss',
       );
     });
@@ -333,8 +329,7 @@ void main() {
       expect(
         stuck.retryCount,
         0,
-        reason:
-            'syncAll() never increments retryCount, so the WAL looks brand-new '
+        reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
             'on every app open and is unconditionally re-queued',
       );
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
@@ -360,11 +355,8 @@ void main() {
       expect(skipped.status, WalStatus.miss, reason: 'the recording is retained, not discarded');
       expect(skipped.isSyncing, false);
       expect(skipped.retryCount, 50, reason: 'a skipped recording spends nothing further');
-      expect(
-        skipped.syncDisplayState,
-        WalSyncDisplayState.failed,
-        reason: 'the sync row presents it as failed with a manual retry',
-      );
+      expect(skipped.syncDisplayState, WalSyncDisplayState.failed,
+          reason: 'the sync row presents it as failed with a manual retry');
     });
 
     test('syncAll still uploads a WAL with budget left', () async {
@@ -522,11 +514,8 @@ void main() {
         expect(wal.status, WalStatus.uploadRejected);
         expect(wal.syncDisplayState, WalSyncDisplayState.uploadRejected);
         expect(await sync.getMissingWals(), isEmpty);
-        expect(
-          File('${tempDir.path}/${wal.filePath}').existsSync(),
-          isTrue,
-          reason: 'terminal means stop retrying, not silently delete user audio',
-        );
+        expect(File('${tempDir.path}/${wal.filePath}').existsSync(), isTrue,
+            reason: 'terminal means stop retrying, not silently delete user audio');
       });
     }
 
@@ -558,23 +547,20 @@ void main() {
         listener,
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                uploads++;
-                return UploadFilesResult.done(
-                  SyncLocalFilesResponse(newConversationIds: const [], updatedConversationIds: const ['recovered']),
-                );
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads++;
+            return UploadFilesResult.done(
+              SyncLocalFilesResponse(newConversationIds: const [], updatedConversationIds: const ['recovered']),
+            );
+          },
           fairUseStatusLoader: () async => {'stage': 'none'},
         ),
       );
@@ -612,29 +598,29 @@ void main() {
         now: () => now,
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                uploads++;
-                uploadedConversationId = conversationId;
-                claimedLiveCapture = claimLiveCapture;
-                return UploadFilesResult.done(
-                  SyncLocalFilesResponse(newConversationIds: ['recovered'], updatedConversationIds: []),
-                );
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads++;
+            uploadedConversationId = conversationId;
+            claimedLiveCapture = claimLiveCapture;
+            return UploadFilesResult.done(
+              SyncLocalFilesResponse(newConversationIds: ['recovered'], updatedConversationIds: []),
+            );
+          },
           fairUseStatusLoader: () async => {'stage': 'none'},
         ),
       );
-      final wal = _makeWal(timerStart: now.millisecondsSinceEpoch ~/ 1000 - 60, filePath: filename);
+      final wal = _makeWal(
+        timerStart: now.millisecondsSinceEpoch ~/ 1000 - 60,
+        filePath: filename,
+      );
       expect(wal.conversationId, isNull, reason: 'no ConversationProcessingStartedEvent ever arrived');
       backgroundSync.testWals = [wal];
 

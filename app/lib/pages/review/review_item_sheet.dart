@@ -103,7 +103,9 @@ class _SpeakerDetail extends StatefulWidget {
 
 class _SpeakerChoice {
   const _SpeakerChoice.person(this.personId) : isMe = false;
-  const _SpeakerChoice.me() : personId = null, isMe = true;
+  const _SpeakerChoice.me()
+      : personId = null,
+        isMe = true;
 
   final String? personId;
   final bool isMe;
@@ -273,15 +275,15 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
             label: _naming || chosenName == null ? l10n.reviewConfirm : l10n.reviewConfirmPerson(chosenName),
             onPressed: canConfirm
                 ? () => _send(
-                    context,
-                    widget.item,
-                    _naming
-                        ? ReviewAnswer.speaker(newName: newName)
-                        : _choice!.isMe
-                        ? const ReviewAnswer.speaker(isMe: true)
-                        : ReviewAnswer.speaker(personId: _choice!.personId),
-                    widget.onDone,
-                  )
+                      context,
+                      widget.item,
+                      _naming
+                          ? ReviewAnswer.speaker(newName: newName)
+                          : _choice!.isMe
+                              ? const ReviewAnswer.speaker(isMe: true)
+                              : ReviewAnswer.speaker(personId: _choice!.personId),
+                      widget.onDone,
+                    )
                 : null,
           ),
           secondary: [
@@ -755,9 +757,8 @@ class _SpellingDetailState extends State<_SpellingDetail> {
         _Actions(
           primary: OmiButton(
             label: l10n.save,
-            onPressed: value == null
-                ? null
-                : () => _send(context, widget.item, ReviewAnswer.spelling(value), widget.onDone),
+            onPressed:
+                value == null ? null : () => _send(context, widget.item, ReviewAnswer.spelling(value), widget.onDone),
           ),
           secondary: [
             OmiButton.secondary(

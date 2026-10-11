@@ -16,7 +16,11 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
       listBullet: OmiType.callout,
       blockquote: OmiType.callout.copyWith(height: 1.4, backgroundColor: Colors.transparent),
       blockquoteDecoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-      code: TextStyle(color: OmiColors.textPrimary, backgroundColor: Colors.transparent, fontFamily: 'monospace'),
+      code: TextStyle(
+        color: OmiColors.textPrimary,
+        backgroundColor: Colors.transparent,
+        fontFamily: 'monospace',
+      ),
       codeblockDecoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
     ),
     onTapLink: (text, href, title) {

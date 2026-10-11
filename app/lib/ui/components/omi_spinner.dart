@@ -35,7 +35,11 @@ class OmiSpinner extends StatelessWidget {
   Widget build(BuildContext context) {
     final spinner = SizedBox.square(
       dimension: size.diameter,
-      child: CircularProgressIndicator(strokeWidth: 2, color: color ?? OmiColors.accent, semanticsLabel: label),
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: color ?? OmiColors.accent,
+        semanticsLabel: label,
+      ),
     );
     if (label == null) return spinner;
     return Column(

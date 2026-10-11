@@ -101,9 +101,9 @@ class ChatSheetRoute<T> extends PageRoute<T> with OmiEdgeSwipeRoute<T> {
     final distance = (1 - progress.value) * _extent;
     final dismiss = isCurrent
         ? !cancelled &&
-              !willHandlePopInternally &&
-              popDisposition == RoutePopDisposition.pop &&
-              ((distance >= _extent * .22 && velocity > -700) || (distance >= 32 && velocity >= 900))
+            !willHandlePopInternally &&
+            popDisposition == RoutePopDisposition.pop &&
+            ((distance >= _extent * .22 && velocity > -700) || (distance >= 32 && velocity >= 900))
         : !isActive;
     final travel = dismiss ? progress.value : 1 - progress.value;
     final duration = _reduceMotion ? Duration.zero : Duration(milliseconds: (180 + 140 * travel).round());
@@ -177,10 +177,8 @@ class ChatSheetTransition extends StatelessWidget {
           ),
         ),
         SlideTransition(
-          position: Tween<Offset>(
-            begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(rise),
+          position: Tween<Offset>(begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, 1), end: Offset.zero)
+              .animate(rise),
           child: FadeTransition(opacity: Tween<double>(begin: 0.6, end: 1).animate(rise), child: child),
         ),
       ],

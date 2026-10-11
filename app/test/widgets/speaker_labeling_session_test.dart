@@ -22,16 +22,16 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/transcript.dart';
 
 TranscriptSegment _line(String id, int speakerId, String text, double start, {String? personId}) => TranscriptSegment(
-  id: id,
-  text: text,
-  speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-  speakerId: speakerId,
-  isUser: false,
-  personId: personId,
-  start: start,
-  end: start + 2,
-  translations: const [],
-);
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: false,
+      personId: personId,
+      start: start,
+      end: start + 2,
+      translations: const [],
+    );
 
 Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
@@ -106,20 +106,19 @@ void main() {
       );
       saves = [];
       regenerations = 0;
-      detail =
-          ConversationDetailProvider(
-              assignSpeaker: (_, ids, {isUser, personId, speakerId}) async {
-                saves.add((ids.join(','), personId));
-                return true;
-              },
-              reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
-                regenerations++;
-                return conversation;
-              },
-              fetchConversation: (_) async => conversation,
-            )
-            ..selectedDate = conversation.createdAt
-            ..setCachedConversation(conversation);
+      detail = ConversationDetailProvider(
+        assignSpeaker: (_, ids, {isUser, personId, speakerId}) async {
+          saves.add((ids.join(','), personId));
+          return true;
+        },
+        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+          regenerations++;
+          return conversation;
+        },
+        fetchConversation: (_) async => conversation,
+      )
+        ..selectedDate = conversation.createdAt
+        ..setCachedConversation(conversation);
       outcome = SpeakerTagOutcomeController(
         fetchPerson: (id) async => ApiSuccess(_person(id, 'Maya')),
         fetchMatches: (_) async => const ApiSuccess([]),

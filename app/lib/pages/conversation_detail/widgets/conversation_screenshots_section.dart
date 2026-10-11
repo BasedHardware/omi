@@ -13,8 +13,8 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 
 typedef ConversationScreenshotsFetch = Future<ApiResult<ConversationScreenshots>> Function(String conversationId);
-typedef ConversationScreenshotDelete =
-    Future<ApiResult<ConversationScreenshots>> Function(String conversationId, String frameId);
+typedef ConversationScreenshotDelete = Future<ApiResult<ConversationScreenshots>> Function(
+    String conversationId, String frameId);
 typedef ScreenshotBytesLoader = Future<Uint8List?> Function(String url);
 
 /// "What was on screen": the meeting's approved screenshots as a horizontal strip in the summary,
@@ -273,7 +273,8 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
-    )..layout()).height;
+    )..layout())
+        .height;
     return SliverToBoxAdapter(
       child: Padding(
         key: const ValueKey('conversation_screenshots_section'),
@@ -352,10 +353,10 @@ Future<Uint8List?> _downloadBytes(String url) async {
 
 /// The image provider a tile draws, decoded at the tile's pixel size rather than the frame's.
 ImageProvider screenshotThumbnailProvider(String url, double devicePixelRatio) => ResizeImage(
-  NetworkImage(url),
-  width: (ConversationScreenshotsSection.tileWidth * devicePixelRatio).round(),
-  policy: ResizeImagePolicy.fit,
-);
+      NetworkImage(url),
+      width: (ConversationScreenshotsSection.tileWidth * devicePixelRatio).round(),
+      policy: ResizeImagePolicy.fit,
+    );
 
 class _ScreenshotTile extends StatelessWidget {
   const _ScreenshotTile({
@@ -378,18 +379,18 @@ class _ScreenshotTile extends StatelessWidget {
   static TextStyle get captionStyle => OmiType.footnote.copyWith(color: OmiColors.textSecondary);
 
   IconData get _glyph => switch (frame.sourceBadge) {
-    'code' => Icons.code,
-    'browser' => Icons.public,
-    'document' => Icons.description_outlined,
-    'slides' => Icons.slideshow_outlined,
-    'product' => Icons.apps_outlined,
-    _ => Icons.image_outlined,
-  };
+        'code' => Icons.code,
+        'browser' => Icons.public,
+        'document' => Icons.description_outlined,
+        'slides' => Icons.slideshow_outlined,
+        'product' => Icons.apps_outlined,
+        _ => Icons.image_outlined,
+      };
 
   Widget _placeholder() => ColoredBox(
-    color: OmiColors.surface2,
-    child: Center(child: Icon(_glyph, size: 22, color: OmiColors.textTertiary)),
-  );
+        color: OmiColors.surface2,
+        child: Center(child: Icon(_glyph, size: 22, color: OmiColors.textTertiary)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -440,7 +441,12 @@ class _ScreenshotTile extends StatelessWidget {
               ),
               const SizedBox(height: OmiSpacing.xxs),
               ExcludeSemantics(
-                child: Text(caption, maxLines: 1, overflow: TextOverflow.ellipsis, style: captionStyle),
+                child: Text(
+                  caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: captionStyle,
+                ),
               ),
             ],
           ),

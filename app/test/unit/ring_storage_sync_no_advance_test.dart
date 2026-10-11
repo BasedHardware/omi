@@ -191,14 +191,14 @@ void main() {
   }
 
   Wal ringWal() => Wal(
-    timerStart: 1000,
-    codec: BleAudioCodec.opus,
-    seconds: 60,
-    status: WalStatus.miss,
-    storage: WalStorage.sdcard,
-    device: 'devkit-1',
-    storageTotalBytes: 444,
-  );
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'devkit-1',
+        storageTotalBytes: 444,
+      );
 
   test('READ_BEGIN with a mismatched start seq aborts the transfer — no advance', () async {
     final info = RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444);

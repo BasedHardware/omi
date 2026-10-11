@@ -97,11 +97,8 @@ class DevApiKeyCreatedSheet extends StatelessWidget {
                     SelectableText(
                       apiKey.key,
                       onTap: () => _copyKey(context),
-                      style: OmiType.subhead.copyWith(
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
+                      style:
+                          OmiType.subhead.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w500, height: 1.4),
                     ),
                   ],
                 ),

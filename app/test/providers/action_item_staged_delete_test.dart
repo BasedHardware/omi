@@ -15,7 +15,8 @@ Future<ActionItemsResponse?> _empty({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(actionItems: []);
+}) async =>
+    const ActionItemsResponse(actionItems: []);
 
 /// The deferred single-task delete behind every task Undo toast (docs/ux-contract.md §4, D5).
 void main() {

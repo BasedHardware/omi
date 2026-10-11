@@ -32,9 +32,9 @@ class OmiIconButton extends StatelessWidget {
     required this.onPressed,
     this.color,
     this.isDestructive = false,
-  }) : filled = false,
-       fillColor = null,
-       diameter = kOmiIconCircleDiameter;
+  })  : filled = false,
+        fillColor = null,
+        diameter = kOmiIconCircleDiameter;
 
   const OmiIconButton.filled({
     super.key,

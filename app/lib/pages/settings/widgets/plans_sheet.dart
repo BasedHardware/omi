@@ -709,9 +709,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Widget _buildPromoCodeField() {
     OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: OmiRadius.mdAll,
-      borderSide: BorderSide(color: color),
-    );
+          borderRadius: OmiRadius.mdAll,
+          borderSide: BorderSide(color: color),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

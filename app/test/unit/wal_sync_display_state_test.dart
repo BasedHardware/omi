@@ -132,7 +132,10 @@ void main() {
     });
 
     test('a single healthy WAL reports its own state', () {
-      expect(worstSessionSyncState([makeWal(status: WalStatus.miss)]), WalSyncDisplayState.waiting);
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.miss)]),
+        WalSyncDisplayState.waiting,
+      );
     });
 
     test('failed outranks retrying, syncing and waiting', () {
@@ -159,7 +162,10 @@ void main() {
     });
 
     test('corrupted and outsideRecoveryWindow are terminal like failed', () {
-      expect(worstSessionSyncState([makeWal(status: WalStatus.corrupted)]), WalSyncDisplayState.corrupted);
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.corrupted)]),
+        WalSyncDisplayState.corrupted,
+      );
       expect(
         worstSessionSyncState([makeWal(status: WalStatus.outsideRecoveryWindow)]),
         WalSyncDisplayState.outsideRecoveryWindow,

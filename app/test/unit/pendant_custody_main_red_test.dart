@@ -179,7 +179,11 @@ void main() {
 
   test('pendant BLE frames drain to disk within the 10s custody window', () async {
     final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
-    final sync = LocalWalSyncImpl(_Listener(), periodic: scheduler.periodic, persistWals: WalFileManager.saveWals);
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      periodic: scheduler.periodic,
+      persistWals: WalFileManager.saveWals,
+    );
     sync.setDeviceInfo('dev', 'Omi');
     sync.start();
     try {

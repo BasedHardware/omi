@@ -19,26 +19,27 @@ class ProactivityApi {
   }
 
   Future<ApiResult<GeneratedProactivityFeedResponse>> feed({String cursor = ''}) => executeApi(
-    request: ApiRequest(
-      url: '${baseUrl}v1/proactivity/feed?${Uri(queryParameters: {'limit': '20', 'cursor': cursor}).query}',
-      method: 'GET',
-    ),
-    decode: (body) => GeneratedProactivityFeedResponse.fromJson(_object(body)),
-    send: send,
-    canSend: canSend,
-  );
+        request: ApiRequest(
+          url: '${baseUrl}v1/proactivity/feed?${Uri(queryParameters: {'limit': '20', 'cursor': cursor}).query}',
+          method: 'GET',
+        ),
+        decode: (body) => GeneratedProactivityFeedResponse.fromJson(_object(body)),
+        send: send,
+        canSend: canSend,
+      );
 
   Future<ApiResult<GeneratedProactivityOutcomeResponse>> outcome(
     String itemId,
     GeneratedProactivityOutcomeRequest outcome,
-  ) => executeApi(
-    request: ApiRequest(
-      url: '${baseUrl}v1/proactivity/items/${Uri.encodeComponent(itemId)}/outcomes',
-      method: 'POST',
-      body: jsonEncode(outcome.toJson()),
-    ),
-    decode: (body) => GeneratedProactivityOutcomeResponse.fromJson(_object(body)),
-    send: send,
-    canSend: canSend,
-  );
+  ) =>
+      executeApi(
+        request: ApiRequest(
+          url: '${baseUrl}v1/proactivity/items/${Uri.encodeComponent(itemId)}/outcomes',
+          method: 'POST',
+          body: jsonEncode(outcome.toJson()),
+        ),
+        decode: (body) => GeneratedProactivityOutcomeResponse.fromJson(_object(body)),
+        send: send,
+        canSend: canSend,
+      );
 }

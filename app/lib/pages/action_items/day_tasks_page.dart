@@ -13,13 +13,12 @@ import 'package:omi/pages/conversations/day_conversations_page.dart' show dayDat
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-typedef DayTasksFetcher =
-    Future<ApiResult<ActionItemsResponse>> Function({
-      required DateTime startDate,
-      required DateTime endDate,
-      int limit,
-      int offset,
-    });
+typedef DayTasksFetcher = Future<ApiResult<ActionItemsResponse>> Function({
+  required DateTime startDate,
+  required DateTime endDate,
+  int limit,
+  int offset,
+});
 
 class DayTasksPage extends StatefulWidget {
   const DayTasksPage({super.key, required this.date, this.fetchTasks, this.api});
@@ -53,12 +52,8 @@ class _DayTasksPageState extends State<DayTasksPage> {
   DayTasksFetcher get _fetch =>
       widget.fetchTasks ??
       ({required endDate, limit = 50, offset = 0, required startDate}) =>
-          (widget.api ?? ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '')).list(
-            limit: limit,
-            offset: offset,
-            startDate: startDate,
-            endDate: endDate,
-          );
+          (widget.api ?? ActionItemsApi(baseUrl: Env.apiBaseUrl ?? ''))
+              .list(limit: limit, offset: offset, startDate: startDate, endDate: endDate);
 
   @override
   void initState() {
@@ -212,7 +207,10 @@ class _DayTasksPageState extends State<DayTasksPage> {
         if (_refreshFailed && index == 0) {
           return Padding(
             padding: const EdgeInsets.all(OmiSpacing.md),
-            child: OmiErrorState(message: l10n.somethingWentWrong, onRetry: () => _loadDay()),
+            child: OmiErrorState(
+              message: l10n.somethingWentWrong,
+              onRetry: () => _loadDay(),
+            ),
           );
         }
         index -= extra;
@@ -231,12 +229,8 @@ class _DayTasksPageState extends State<DayTasksPage> {
                     TaskCompletionMark(completed: task.completed),
                     const SizedBox(width: OmiSpacing.sm),
                     Expanded(
-                      child: Text(
-                        task.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: OmiType.subhead,
-                      ),
+                      child:
+                          Text(task.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: OmiType.subhead),
                     ),
                     Icon(Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
                   ],
@@ -276,10 +270,7 @@ class _DayTasksPageState extends State<DayTasksPage> {
       );
     }
     if (_loadingMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: OmiSpacing.md),
-        child: Center(child: OmiSpinner()),
-      );
+      return const Padding(padding: EdgeInsets.symmetric(vertical: OmiSpacing.md), child: Center(child: OmiSpinner()));
     }
     if (_truncated) {
       return Padding(

@@ -75,7 +75,10 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               ] else if (provider.selectedDoubleTapAction != -1 && provider.doublePressCount == 0) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(100)),
+                  decoration: BoxDecoration(
+                    color: OmiColors.surface1,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
                   child: Row(
                     children: [
                       Icon(Icons.touch_app, color: OmiColors.textSecondary, size: 24),

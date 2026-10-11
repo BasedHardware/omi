@@ -48,18 +48,18 @@ class _TypedTaskApi extends api.ActionItemsApi {
     DateTime? endDate,
     DateTime? dueStartDate,
     DateTime? dueEndDate,
-  }) async => result;
+  }) async =>
+      result;
 }
 
 ActionItemWithMetadata _item(String id, {String title = 'Original', bool completed = false, DateTime? dueAt}) =>
     ActionItemWithMetadata(
-      id: id,
-      description: title,
-      completed: completed,
-      createdAt: DateTime.utc(2026, 9, 26),
-      dueAt: dueAt,
-      completedAt: completed ? DateTime.now() : null,
-    );
+        id: id,
+        description: title,
+        completed: completed,
+        createdAt: DateTime.utc(2026, 9, 26),
+        dueAt: dueAt,
+        completedAt: completed ? DateTime.now() : null);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -74,19 +74,24 @@ void main() {
     SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
     addTearDown(() => SiriIntegration.testInstance = null);
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 100, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
-              ActionItemsResponse(actionItems: rows),
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          ActionItemsResponse(actionItems: rows),
       deleteActionItemRequest: (id) async => deleteSucceeds,
       bulkDeleteActionItemsRequest: (ids) async => bulkDeleted ?? ids,
       createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
           _item('created', title: description, completed: completed, dueAt: dueAt),
-      updateActionItemRequest: (id, {description, completed, dueAt}) async => _item(
-        id,
-        title: description ?? rows.first.description,
-        completed: completed ?? rows.first.completed,
-        dueAt: dueAt ?? rows.first.dueAt,
-      ),
+      updateActionItemRequest: (id, {description, completed, dueAt}) async => _item(id,
+          title: description ?? rows.first.description,
+          completed: completed ?? rows.first.completed,
+          dueAt: dueAt ?? rows.first.dueAt),
       updateDueDateRequest: (id, {dueAt, clearDueAt = false}) async =>
           _item(id, title: rows.first.description, completed: rows.first.completed, dueAt: clearDueAt ? null : dueAt),
     );
@@ -168,11 +173,7 @@ void main() {
   test('a typed page with rejected rows cannot prune an unseen valid task', () async {
     final host = _SiriTaskHost();
     host.indexed['unseen'] = SiriTask(
-      id: 'unseen',
-      title: 'Still valid',
-      completed: false,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-    );
+        id: 'unseen', title: 'Still valid', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
     SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
     addTearDown(() => SiriIntegration.testInstance = null);
     final typed = _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [_item('visible')]), rejectedRows: 1));
@@ -206,16 +207,11 @@ void main() {
   test('a later clean page cannot make an earlier rejected page authoritative', () async {
     final host = _SiriTaskHost();
     host.indexed['rejected'] = SiriTask(
-      id: 'rejected',
-      title: 'Still valid',
-      completed: false,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-    );
+        id: 'rejected', title: 'Still valid', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
     SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
     addTearDown(() => SiriIntegration.testInstance = null);
-    final typed = _TypedTaskApi(
-      ApiSuccess(ActionItemsResponse(actionItems: [_item('first')], hasMore: true), rejectedRows: 1),
-    );
+    final typed =
+        _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [_item('first')], hasMore: true), rejectedRows: 1));
     final provider = ActionItemsProvider(actionItemsApi: typed);
     addTearDown(provider.dispose);
     await provider.fetchActionItems();
@@ -247,9 +243,16 @@ void main() {
     addTearDown(() => SiriIntegration.testInstance = null);
     final created = Completer<ActionItemWithMetadata?>();
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 100, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
-              const ActionItemsResponse(actionItems: []),
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          const ActionItemsResponse(actionItems: []),
       createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) => created.future,
     );
     addTearDown(provider.dispose);

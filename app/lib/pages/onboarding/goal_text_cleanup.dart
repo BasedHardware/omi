@@ -28,10 +28,9 @@ String cleanIntroductionGoal(String transcript) {
     text = text.substring(0, text.length - 1).trim();
   }
   // An unfinished starter is not itself a goal.
-  if (RegExp(
-    r'^(?:(?:right now[, ]+)?my (?:number (?:one|1) )?goal is(?: to)?|I (?:want|would like) to)$',
-    caseSensitive: false,
-  ).hasMatch(text)) {
+  if (RegExp(r'^(?:(?:right now[, ]+)?my (?:number (?:one|1) )?goal is(?: to)?|I (?:want|would like) to)$',
+          caseSensitive: false)
+      .hasMatch(text)) {
     return '';
   }
   if (text.isEmpty) return text;

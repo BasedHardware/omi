@@ -39,13 +39,13 @@ void main() {
   }
 
   AppReviewService service(void Function() onNative) => AppReviewService.forTesting(
-    storage: storage,
-    clock: () => DateTime(2026, 10, 9, 12),
-    platform: 'ios',
-    appVersion: '1.0.560',
-    isAvailable: () async => true,
-    requestNativeReview: () async => onNative(),
-  );
+        storage: storage,
+        clock: () => DateTime(2026, 10, 9, 12),
+        platform: 'ios',
+        appVersion: '1.0.560',
+        isAvailable: () async => true,
+        requestNativeReview: () async => onNative(),
+      );
 
   Future<void> pumpSummary(
     WidgetTester tester, {
@@ -55,24 +55,22 @@ void main() {
     bool enabled = true,
     bool flagOn = true,
   }) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: AppReviewPrompt(
-            key: ValueKey(contentId),
-            contentId: contentId,
-            moment: AppReviewMoment.conversationRead,
-            enabled: enabled,
-            service: reviewService,
-            isRatingAskEnabled: () async => flagOn,
-            requestStoreReview: () async => onStoreReview?.call(),
-            child: const SingleChildScrollView(child: SizedBox(height: 120, child: Text('Summary'))),
-          ),
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: AppReviewPrompt(
+          key: ValueKey(contentId),
+          contentId: contentId,
+          moment: AppReviewMoment.conversationRead,
+          enabled: enabled,
+          service: reviewService,
+          isRatingAskEnabled: () async => flagOn,
+          requestStoreReview: () async => onStoreReview?.call(),
+          child: const SingleChildScrollView(child: SizedBox(height: 120, child: Text('Summary'))),
         ),
       ),
-    );
+    ));
     await tester.pump();
   }
 
@@ -81,9 +79,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('an existing user is asked right after a summary opens; Yes opens the store sheet and is final', (
-    tester,
-  ) async {
+  testWidgets('an existing user is asked right after a summary opens; Yes opens the store sheet and is final',
+      (tester) async {
     await setUpPrefs();
     var store = 0, native = 0;
     await pumpSummary(tester, reviewService: service(() => native++), onStoreReview: () => store++);

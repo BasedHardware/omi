@@ -21,20 +21,19 @@ final homeScenarios = <AuditScenario>[
     state: 'An Omi device connected at 72% battery, not charging; nothing recording',
     run: (a) async {
       final device = AuditDeviceProvider(
-        connected: true,
-        battery: 72,
-        device: BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40),
-      );
+          connected: true,
+          battery: 72,
+          device: BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40));
       await a.pump(
-        const Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [BatteryInfoWidget(), SizedBox(height: 32), HomeRecordButton()],
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              BatteryInfoWidget(),
+              SizedBox(height: 32),
+              HomeRecordButton(),
+            ]),
           ),
-        ),
-        providers: [ChangeNotifierProvider<DeviceProvider>.value(value: device)],
-      );
+          providers: [ChangeNotifierProvider<DeviceProvider>.value(value: device)]);
       await a.shot('The header slice of Home: device pill and record button');
     },
   ),

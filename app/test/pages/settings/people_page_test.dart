@@ -37,22 +37,23 @@ Person _person(
   Map<String, int> reasons = const {},
   bool pinned = false,
   int? labelsToConfirm,
-}) => Person(
-  id: id,
-  name: name,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-  voiceReadiness: voice,
-  conversationCount: conversations,
-  lastHeardAt: lastHeard,
-  talkSeconds: conversations == null ? null : conversations * 60.0,
-  confidence: confidence,
-  confidenceReasons: [
-    for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
-  ],
-  pinned: pinned,
-  labelsToConfirm: labelsToConfirm,
-);
+}) =>
+    Person(
+      id: id,
+      name: name,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      voiceReadiness: voice,
+      conversationCount: conversations,
+      lastHeardAt: lastHeard,
+      talkSeconds: conversations == null ? null : conversations * 60.0,
+      confidence: confidence,
+      confidenceReasons: [
+        for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
+      ],
+      pinned: pinned,
+      labelsToConfirm: labelsToConfirm,
+    );
 
 final _people = [
   _person(
@@ -416,9 +417,7 @@ void main() {
 
     expect(find.text('Pin'), findsOneWidget);
     expect(
-      find.text("Pinned people stay at the top of your People list and aren't removed by Clean Up."),
-      findsOneWidget,
-    );
+        find.text("Pinned people stay at the top of your People list and aren't removed by Clean Up."), findsOneWidget);
     await tester.tap(find.byKey(const Key('person_confidence_pill')));
     await tester.pumpAndSettle();
     expect(find.text("Maya Chen is Confirmed. There's nothing else you need to do."), findsOneWidget);
@@ -508,12 +507,10 @@ void main() {
 
   testWidgets('a truncated stats load shows the incomplete-counts notice until a complete refresh', (tester) async {
     var truncated = true;
-    final provider = await _pump(
-      tester,
-      loadPeople: () async => truncated
-          ? PeopleListResponse(people: [..._people], statsTruncated: true)
-          : PeopleListResponse(people: [..._people]),
-    );
+    final provider = await _pump(tester,
+        loadPeople: () async => truncated
+            ? PeopleListResponse(people: [..._people], statsTruncated: true)
+            : PeopleListResponse(people: [..._people]));
 
     expect(find.byKey(const Key('people_stats_incomplete')), findsOneWidget);
     expect(find.text('Counts may be incomplete.'), findsOneWidget);
@@ -533,10 +530,8 @@ void main() {
 
   testWidgets('the cached partial marker keeps the notice visible after a failed refresh', (tester) async {
     var fail = false;
-    final provider = await _pump(
-      tester,
-      loadPeople: () async => fail ? null : PeopleListResponse(people: [..._people], statsTruncated: true),
-    );
+    final provider = await _pump(tester,
+        loadPeople: () async => fail ? null : PeopleListResponse(people: [..._people], statsTruncated: true));
 
     expect(find.byKey(const Key('people_stats_incomplete')), findsOneWidget);
 

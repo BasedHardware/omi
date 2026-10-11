@@ -14,7 +14,8 @@ Future<ActionItemsResponse?> _empty({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(actionItems: []);
+}) async =>
+    const ActionItemsResponse(actionItems: []);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

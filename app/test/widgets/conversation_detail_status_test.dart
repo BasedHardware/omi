@@ -19,15 +19,15 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
-  id: 'seg-1',
-  text: text,
-  speaker: 'SPEAKER_00',
-  isUser: false,
-  personId: null,
-  start: 0,
-  end: 1,
-  translations: [],
-);
+      id: 'seg-1',
+      text: text,
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: null,
+      start: 0,
+      end: 1,
+      translations: [],
+    );
 
 ServerConversation _conversation({
   List<TranscriptSegment> segments = const [],

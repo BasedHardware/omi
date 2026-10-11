@@ -55,7 +55,9 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CustomScrollView(
-            slivers: [RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: _submitter(calls))],
+            slivers: [
+              RecordingQualityFeedbackPrompt(recordingId: 'conversation-0', submitFeedback: _submitter(calls)),
+            ],
           ),
         ),
       ),

@@ -66,9 +66,9 @@ mixin OmiEdgeSwipeRoute<T> on PageRoute<T> {
     final distance = (1 - progress.value) * _edgeWidth;
     final dismiss = isCurrent
         ? !cancelled &&
-              !willHandlePopInternally &&
-              popDisposition == RoutePopDisposition.pop &&
-              ((distance >= _edgeWidth * .33 && velocity > -700) || (distance >= 32 && velocity >= 900))
+            !willHandlePopInternally &&
+            popDisposition == RoutePopDisposition.pop &&
+            ((distance >= _edgeWidth * .33 && velocity > -700) || (distance >= 32 && velocity >= 900))
         : !isActive;
     final travel = dismiss ? progress.value : 1 - progress.value;
     final duration = _edgeReduceMotion ? Duration.zero : Duration(milliseconds: (180 + 140 * travel).round());

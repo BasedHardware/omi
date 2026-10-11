@@ -37,7 +37,7 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
 ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-buildStorageClearActions({
+    buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
   required Future<void> Function() clearAll,
@@ -220,8 +220,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
       final counts = p.offlineServerProcessingCounts;
-      progressText =
-          SyncCardProgressLine.serverProcessingSubtitle(
+      progressText = SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (processed, total) => l.processingProgress(processed, total),
@@ -582,9 +581,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_blockTitle(block), style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced)),
+                  Text(
+                    _blockTitle(block),
+                    style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
+                  ),
                   const SizedBox(height: 3),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _rowSubtitleStyle(color)),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _rowSubtitleStyle(color),
+                  ),
                 ],
               ),
             ),
@@ -627,10 +634,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   static const _rowDivider = Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16);
 
   static TextStyle _rowTitleStyle({required bool synced}) => TextStyle(
-    color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
-    fontSize: 15,
-    fontWeight: FontWeight.w500,
-  );
+        color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      );
 
   static TextStyle _rowSubtitleStyle(Color color) => TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400);
 
@@ -719,10 +726,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     style: _rowTitleStyle(synced: isSynced),
                   ),
                   const SizedBox(height: 3),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _rowSubtitleStyle(color)),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _rowSubtitleStyle(color),
+                  ),
                   if (_rowDownloadFraction(wal) != null) ...[
                     const SizedBox(height: 8),
-                    DeviceDownloadMeter(fraction: _rowDownloadFraction(wal)!, showReadout: false, barHeight: 4),
+                    DeviceDownloadMeter(
+                      fraction: _rowDownloadFraction(wal)!,
+                      showReadout: false,
+                      barHeight: 4,
+                    ),
                   ],
                 ],
               ),

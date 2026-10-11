@@ -13,15 +13,16 @@ Wal _wal(
   WalStorage storage = WalStorage.disk,
   String device = 'pendant-a',
   int retryCount = 0,
-}) => Wal(
-  timerStart: _t0 + start,
-  codec: BleAudioCodec.opus,
-  seconds: seconds,
-  status: status,
-  storage: storage,
-  device: device,
-  retryCount: retryCount,
-);
+}) =>
+    Wal(
+      timerStart: _t0 + start,
+      codec: BleAudioCodec.opus,
+      seconds: seconds,
+      status: status,
+      storage: storage,
+      device: device,
+      retryCount: retryCount,
+    );
 
 List<Wal> _newestFirst(List<Wal> wals) => wals..sort((a, b) => b.timerStart.compareTo(a.timerStart));
 
@@ -55,7 +56,10 @@ void main() {
     // The same audio can exist on the phone and on the device, so newest-first
     // order alternates between the two places.
     final wals = _newestFirst([
-      for (var i = 0; i < 2; i++) ...[_wal(i * 75, 75), _wal(i * 75, 75, storage: WalStorage.sdcard)],
+      for (var i = 0; i < 2; i++) ...[
+        _wal(i * 75, 75),
+        _wal(i * 75, 75, storage: WalStorage.sdcard),
+      ],
     ]);
 
     final blocks = groupRecordingBlocks(wals);
@@ -67,7 +71,10 @@ void main() {
 
   test('two devices recording at the same time interleave but group separately', () {
     final wals = _newestFirst([
-      for (var i = 0; i < 3; i++) ...[_wal(i * 75, 75), _wal(i * 75 + 5, 75, device: 'pendant-b')],
+      for (var i = 0; i < 3; i++) ...[
+        _wal(i * 75, 75),
+        _wal(i * 75 + 5, 75, device: 'pendant-b'),
+      ],
     ]);
 
     final blocks = groupRecordingBlocks(wals);

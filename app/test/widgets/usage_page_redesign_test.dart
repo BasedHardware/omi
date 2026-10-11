@@ -14,36 +14,36 @@ import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/providers/usage_provider.dart';
 
 Widget app(Widget child, {UsageProvider? provider}) => ChangeNotifierProvider<UsageProvider>.value(
-  value: provider ?? UsageProvider(),
-  child: MaterialApp(
-    theme: ThemeData.dark(),
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: const [Locale('en')],
-    home: child,
-  ),
-);
+      value: provider ?? UsageProvider(),
+      child: MaterialApp(
+        theme: ThemeData.dark(),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en')],
+        home: child,
+      ),
+    );
 
 UsageStats stats({int seconds = 30720, int words = 44910}) => UsageStats(
-  transcriptionSeconds: seconds,
-  speechSeconds: 0,
-  wordsTranscribed: words,
-  insightsGained: 714,
-  memoriesCreated: 60,
-);
+      transcriptionSeconds: seconds,
+      speechSeconds: 0,
+      wordsTranscribed: words,
+      insightsGained: 714,
+      memoriesCreated: 60,
+    );
 
 UsageHistoryPoint point(String date, {int words = 10}) => UsageHistoryPoint(
-  date: date,
-  transcriptionSeconds: 120,
-  speechSeconds: 0,
-  wordsTranscribed: words,
-  insightsGained: 3,
-  memoriesCreated: 1,
-);
+      date: date,
+      transcriptionSeconds: 120,
+      speechSeconds: 0,
+      wordsTranscribed: words,
+      insightsGained: 3,
+      memoriesCreated: 1,
+    );
 
 void main() {
   test('overlapping first timezone lookups send the resolved zone', () async {
@@ -109,21 +109,15 @@ void main() {
     final now = DateTime(2026, 9, 26, 21);
     final history = [point('2026-09-01', words: 100), point('2026-09-08', words: 9600)];
     UsageMetric selected = UsageMetric.words;
-    Future<void> pump() => tester.pumpWidget(
-      app(
-        StatefulBuilder(
-          builder: (context, setState) => Scaffold(
-            body: UsageChart(
-              history: history,
-              period: 'monthly',
-              metric: selected,
-              now: now,
-              onMetricChanged: (value) => setState(() => selected = value),
-            ),
-          ),
-        ),
-      ),
-    );
+    Future<void> pump() => tester.pumpWidget(app(StatefulBuilder(
+        builder: (context, setState) => Scaffold(
+              body: UsageChart(
+                  history: history,
+                  period: 'monthly',
+                  metric: selected,
+                  now: now,
+                  onMetricChanged: (value) => setState(() => selected = value)),
+            ))));
     await pump();
     final chart = tester.widget<BarChart>(find.byType(BarChart));
     expect(chart.data.barGroups.length, 30);
@@ -154,19 +148,15 @@ void main() {
         memoriesCreated: 0,
       ),
     ];
-    await tester.pumpWidget(
-      app(
-        Scaffold(
-          body: UsageChart(
-            history: history,
-            period: 'monthly',
-            metric: UsageMetric.minutes,
-            now: DateTime(2026, 9, 26),
-            onMetricChanged: (_) {},
-          ),
-        ),
+    await tester.pumpWidget(app(Scaffold(
+      body: UsageChart(
+        history: history,
+        period: 'monthly',
+        metric: UsageMetric.minutes,
+        now: DateTime(2026, 9, 26),
+        onMetricChanged: (_) {},
       ),
-    );
+    )));
     expect(find.textContaining('30 seconds'), findsOneWidget);
     expect(find.text('12s'), findsOneWidget);
     final chart = tester.widget<BarChart>(find.byType(BarChart));
@@ -182,17 +172,15 @@ void main() {
   testWidgets('plan card is a child of the period scroll view', (tester) async {
     final provider = UsageProvider();
     final now = DateTime.now().toUtc();
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
     provider.debugSetUsage('today', stats(), [point(now.toIso8601String())]);
     await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
     await tester.pump(const Duration(milliseconds: 100));
@@ -202,17 +190,15 @@ void main() {
 
   testWidgets('free plan keeps upgrade and all three usage meters', (tester) async {
     final provider = UsageProvider();
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 30720,
-        transcriptionSecondsLimit: 36000,
-        wordsTranscribedUsed: 44910,
-        wordsTranscribedLimit: 60000,
-        insightsGainedUsed: 714,
-        insightsGainedLimit: 1000,
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 30720,
+      transcriptionSecondsLimit: 36000,
+      wordsTranscribedUsed: 44910,
+      wordsTranscribedLimit: 60000,
+      insightsGainedUsed: 714,
+      insightsGainedLimit: 1000,
+    ));
     provider.debugSetUsage('today', stats(), [point(DateTime.now().toUtc().toIso8601String())]);
     await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
     await tester.pump(const Duration(milliseconds: 100));
@@ -226,19 +212,17 @@ void main() {
 
   testWidgets('zero activity still shows free meters and monthly chat quota', (tester) async {
     final provider = UsageProvider();
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 36000,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 60000,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 1000,
-        chatQuotaUsed: 2,
-        chatQuotaUnit: 'questions',
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 36000,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 60000,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 1000,
+      chatQuotaUsed: 2,
+      chatQuotaUnit: 'questions',
+    ));
     final zero = UsageStats(
       transcriptionSeconds: 0,
       speechSeconds: 0,
@@ -276,17 +260,15 @@ void main() {
         );
       },
     );
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
     provider.debugSetUsage('today', stats(), []);
     await provider.fetchUsageStats(period: 'monthly');
     await provider.fetchUsageStats(period: 'yearly');
@@ -402,17 +384,15 @@ void main() {
       deviceTimeZone: () async => 'UTC',
       usageRequest: ({required String period, required String? timeZone}) async => null,
     );
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
     await provider.fetchUsageStats(period: 'today');
 
     await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));

@@ -10,7 +10,13 @@ void main() {
       const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: RatingDistributionWidget(ratingAvg: 4.2, ratingCount: 7, reviews: [])),
+        home: Scaffold(
+          body: RatingDistributionWidget(
+            ratingAvg: 4.2,
+            ratingCount: 7,
+            reviews: [],
+          ),
+        ),
       ),
     );
 

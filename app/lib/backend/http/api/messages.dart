@@ -19,15 +19,21 @@ class ChatPageContext {
   final String? startDate;
   final String? endDate;
 
-  const ChatPageContext({required this.type, this.id, this.title, this.startDate, this.endDate});
+  const ChatPageContext({
+    required this.type,
+    this.id,
+    this.title,
+    this.startDate,
+    this.endDate,
+  });
 
   Map<String, dynamic> toJson() => {
-    'type': type,
-    if (id != null) 'id': id,
-    if (title != null) 'title': title,
-    if (startDate != null) 'start_date': startDate,
-    if (endDate != null) 'end_date': endDate,
-  };
+        'type': type,
+        if (id != null) 'id': id,
+        if (title != null) 'title': title,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      };
 
   ChatPageContext copyWith({
     String? type,
@@ -119,7 +125,12 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
       final message = decoded['message'];
       final code = decoded['error'];
       if (message is String && message.trim().isNotEmpty) {
-        return ServerMessageChunk(messageId, message, MessageChunkType.error, errorCode: code is String ? code : null);
+        return ServerMessageChunk(
+          messageId,
+          message,
+          MessageChunkType.error,
+          errorCode: code is String ? code : null,
+        );
       }
       if (code is String) {
         return ServerMessageChunk(messageId, payload, MessageChunkType.error, errorCode: code);
@@ -193,12 +204,8 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 /// return the established generic error chunk instead.
 ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) {
   if (line.startsWith('error:402:')) {
-    return ServerMessageChunk(
-      messageId,
-      line.substring('error:402:'.length),
-      MessageChunkType.error,
-      errorCode: 'quota_exceeded',
-    );
+    return ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error,
+        errorCode: 'quota_exceeded');
   }
 
   if (line.startsWith('error: ')) {
@@ -267,12 +274,8 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   )) {
     if (_isIgnorableStreamFrame(line)) continue;
     if (line.startsWith('error:402:')) {
-      yield ServerMessageChunk(
-        messageId,
-        line.substring('error:402:'.length),
-        MessageChunkType.error,
-        errorCode: 'quota_exceeded',
-      );
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error,
+          errorCode: 'quota_exceeded');
       return;
     }
     var messageChunk = parseMessageChunk(line, messageId);
@@ -308,11 +311,8 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(
-  List<File> files, {
-  String? language,
-  ApiStreamingSeams? seams,
-}) async* {
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
+    {String? language, ApiStreamingSeams? seams}) async* {
   var messageId = "1000"; // Default new message
 
   await for (var line in makeMultipartStreamingApiCall(

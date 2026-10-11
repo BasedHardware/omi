@@ -87,12 +87,12 @@ class AnalyticsManager {
   static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
   static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
-    'ready': _analyticsReady,
-    'queue_depth': _queuedEvents.length,
-    'dropped_events': _droppedEvents,
-    'initialization_failures': _initFailures,
-    'handoff_failures': _handoffFailures,
-  };
+        'ready': _analyticsReady,
+        'queue_depth': _queuedEvents.length,
+        'dropped_events': _droppedEvents,
+        'initialization_failures': _initFailures,
+        'handoff_failures': _handoffFailures,
+      };
 
   void setSessionContext(String sessionId, {bool foreground = true}) {
     _eventContext['app_session_id'] = sessionId;
@@ -179,16 +179,16 @@ class AnalyticsManager {
   }
 
   void recordProductError(ProductErrorKind kind) => track(
-    'Product Error',
-    properties: {
-      'error_kind': switch (kind) {
-        ProductErrorKind.flutterFramework => 'flutter_framework',
-        ProductErrorKind.uncaughtDart => 'uncaught_dart',
-        ProductErrorKind.startup => 'startup',
-      },
-      'diagnostic_source': 'crashlytics',
-    },
-  );
+        'Product Error',
+        properties: {
+          'error_kind': switch (kind) {
+            ProductErrorKind.flutterFramework => 'flutter_framework',
+            ProductErrorKind.uncaughtDart => 'uncaught_dart',
+            ProductErrorKind.startup => 'startup',
+          },
+          'diagnostic_source': 'crashlytics',
+        },
+      );
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
@@ -696,20 +696,18 @@ class AnalyticsManager {
             properties.putIfAbsent('build', () => build);
           }
           if (adapter is AnalyticsDeliveryAdapter) {
-            await (adapter as AnalyticsDeliveryAdapter)
-                .deliver(
-                  eventName: event.eventName,
-                  properties: {
-                    ...properties,
-                    'event_id': event.eventId,
-                    r'$insert_id': event.eventId,
-                    'occurred_at': event.occurredAt.toIso8601String(),
-                    'schema_version': properties['schema_version'] ?? 1,
-                    'client_app_namespace': _clientAppNamespace,
-                    'client_app_profile': Env.profile.name,
-                  },
-                )
-                .timeout(_initTimeout);
+            await (adapter as AnalyticsDeliveryAdapter).deliver(
+              eventName: event.eventName,
+              properties: {
+                ...properties,
+                'event_id': event.eventId,
+                r'$insert_id': event.eventId,
+                'occurred_at': event.occurredAt.toIso8601String(),
+                'schema_version': properties['schema_version'] ?? 1,
+                'client_app_namespace': _clientAppNamespace,
+                'client_app_profile': Env.profile.name,
+              },
+            ).timeout(_initTimeout);
           } else {
             adapter.track(eventName: event.eventName, properties: properties);
           }
@@ -837,17 +835,18 @@ class AnalyticsManager {
     required int totalBytes,
     required bool claimsLiveCapture,
     String? recordingId,
-  }) => track(
-    'Recording Upload Started',
-    properties: {
-      'upload_attempt_id': attemptId,
-      if (recordingId != null) 'recording_id': recordingId,
-      'file_count': fileCount,
-      'total_bytes': totalBytes,
-      'claims_live_capture': claimsLiveCapture,
-      'upload_source': 'offline_audio_queue',
-    },
-  );
+  }) =>
+      track(
+        'Recording Upload Started',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+        },
+      );
 
   void recordingUploadCompleted({
     required String attemptId,
@@ -857,19 +856,20 @@ class AnalyticsManager {
     required double durationSeconds,
     required String result,
     String? recordingId,
-  }) => track(
-    'Recording Upload Completed',
-    properties: {
-      'upload_attempt_id': attemptId,
-      if (recordingId != null) 'recording_id': recordingId,
-      'file_count': fileCount,
-      'total_bytes': totalBytes,
-      'claims_live_capture': claimsLiveCapture,
-      'upload_source': 'offline_audio_queue',
-      'duration_seconds': durationSeconds,
-      'result': result,
-    },
-  );
+  }) =>
+      track(
+        'Recording Upload Completed',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+          'duration_seconds': durationSeconds,
+          'result': result,
+        },
+      );
 
   void recordingUploadFailed({
     required String attemptId,
@@ -879,19 +879,20 @@ class AnalyticsManager {
     required double durationSeconds,
     required String failureClass,
     String? recordingId,
-  }) => track(
-    'Recording Upload Failed',
-    properties: {
-      'upload_attempt_id': attemptId,
-      if (recordingId != null) 'recording_id': recordingId,
-      'file_count': fileCount,
-      'total_bytes': totalBytes,
-      'claims_live_capture': claimsLiveCapture,
-      'upload_source': 'offline_audio_queue',
-      'duration_seconds': durationSeconds,
-      'failure_class': failureClass,
-    },
-  );
+  }) =>
+      track(
+        'Recording Upload Failed',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+          'duration_seconds': durationSeconds,
+          'failure_class': failureClass,
+        },
+      );
 
   // Transcribe Later (batch / offline capture)
   void transcribeLaterToggled({required bool enabled}) =>
@@ -931,21 +932,22 @@ class AnalyticsManager {
     required String transcriptionStatusFinal,
     required int durationSeconds,
     String? reason,
-  }) => track(
-    'Phone Call Transcript Session',
-    properties: {
-      'ws_accepted': wsAccepted,
-      'audio_frames_sent': audioFramesSent,
-      'audio_bytes_sent': audioBytesSent,
-      'audio_channel_1_frames': audioChannel1Frames,
-      'audio_channel_2_frames': audioChannel2Frames,
-      'event_channel_errors': eventChannelErrors,
-      'event_channel_coerced': eventChannelCoerced,
-      'transcription_status_final': transcriptionStatusFinal,
-      'duration_seconds': durationSeconds,
-      if (reason != null) 'reason': reason,
-    },
-  );
+  }) =>
+      track(
+        'Phone Call Transcript Session',
+        properties: {
+          'ws_accepted': wsAccepted,
+          'audio_frames_sent': audioFramesSent,
+          'audio_bytes_sent': audioBytesSent,
+          'audio_channel_1_frames': audioChannel1Frames,
+          'audio_channel_2_frames': audioChannel2Frames,
+          'event_channel_errors': eventChannelErrors,
+          'event_channel_coerced': eventChannelCoerced,
+          'transcription_status_final': transcriptionStatusFinal,
+          'duration_seconds': durationSeconds,
+          if (reason != null) 'reason': reason,
+        },
+      );
 
   void phoneCallFailed({String? error}) =>
       track('Phone Call Failed', properties: {'failure_class': 'call_start_failed'});
@@ -1128,11 +1130,11 @@ class AnalyticsManager {
   /// from [BtDevice.toJson] (raw id, name, serial, locator, RSSI) stay off
   /// the analytics channel; hashed identity is the join key.
   static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
-    'type': device.type.name,
-    'device_vendor': device.type.analyticsVendor,
-    'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
-    ..._deviceIdentityProperties(device),
-  };
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
+        ..._deviceIdentityProperties(device),
+      };
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
@@ -1303,9 +1305,9 @@ class AnalyticsManager {
 
   @visibleForTesting
   static Map<String, Object> recordingDeviceProperties(BtDevice? device) => {
-    'recording_hardware_type': device?.type.name ?? 'phone',
-    'recording_firmware_revision': device == null ? 'not_applicable' : _knownDeviceValue(device.firmwareRevision),
-  };
+        'recording_hardware_type': device?.type.name ?? 'phone',
+        'recording_firmware_revision': device == null ? 'not_applicable' : _knownDeviceValue(device.firmwareRevision),
+      };
 
   void conversationListItemClicked(ServerConversation conversation, int idx) =>
       track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
@@ -1323,18 +1325,19 @@ class AnalyticsManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) => track(
-    'Chat Message Sent',
-    properties: {
-      'message_length': message.length,
-      'message_word_count': message.split(' ').length,
-      'includes_files': includesFiles,
-      'number_of_files': numberOfFiles,
-      'chat_target_id': chatTargetId,
-      'is_persona_chat': isPersonaChat,
-      'is_voice_input': isVoiceInput,
-    },
-  );
+  }) =>
+      track(
+        'Chat Message Sent',
+        properties: {
+          'message_length': message.length,
+          'message_word_count': message.split(' ').length,
+          'includes_files': includesFiles,
+          'number_of_files': numberOfFiles,
+          'chat_target_id': chatTargetId,
+          'is_persona_chat': isPersonaChat,
+          'is_voice_input': isVoiceInput,
+        },
+      );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -1347,9 +1350,9 @@ class AnalyticsManager {
   void speechProfileUploadSucceeded() => const TypedEvents().emit(const SpeechProfileUploadSucceeded());
 
   void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
-    speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
-    properties: {if (reason != null) 'reason': reason, if (statusCode != null) 'status_code': statusCode},
-  );
+        speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
+        properties: {if (reason != null) 'reason': reason, if (statusCode != null) 'status_code': statusCode},
+      );
 
   void speechProfileEmbeddingStored() => const TypedEvents().emit(const SpeechProfileEmbeddingStored());
 
@@ -1360,20 +1363,22 @@ class AnalyticsManager {
     required String source,
     required String variant,
     required int promptCount,
-  }) => track(
-    'Guided Intro Started',
-    properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_count': promptCount},
-  );
+  }) =>
+      track(
+        'Guided Intro Started',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_count': promptCount},
+      );
 
   void guidedIntroPromptViewed({
     required String sessionId,
     required String source,
     required String variant,
     required int promptIndex,
-  }) => track(
-    'Guided Intro Prompt Viewed',
-    properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_index': promptIndex},
-  );
+  }) =>
+      track(
+        'Guided Intro Prompt Viewed',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_index': promptIndex},
+      );
 
   void guidedIntroRecordingStarted({
     required String sessionId,
@@ -1381,16 +1386,17 @@ class AnalyticsManager {
     required String variant,
     required int promptIndex,
     required int attempt,
-  }) => track(
-    'Guided Intro Recording Started',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'prompt_index': promptIndex,
-      'attempt': attempt,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Recording Started',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'attempt': attempt,
+        },
+      );
 
   void guidedIntroRecordingFailed({
     required String sessionId,
@@ -1398,16 +1404,17 @@ class AnalyticsManager {
     required String variant,
     required int promptIndex,
     required String failureClass,
-  }) => track(
-    'Guided Intro Recording Failed',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'prompt_index': promptIndex,
-      'failure_class': failureClass,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Recording Failed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'failure_class': failureClass,
+        },
+      );
 
   void guidedIntroPromptCompleted({
     required String sessionId,
@@ -1417,18 +1424,19 @@ class AnalyticsManager {
     required String result,
     required int durationMs,
     required bool transcriptPresent,
-  }) => track(
-    'Guided Intro Prompt Completed',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'prompt_index': promptIndex,
-      'result': result,
-      'duration_ms': durationMs,
-      'transcript_present': transcriptPresent,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Prompt Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'result': result,
+          'duration_ms': durationMs,
+          'transcript_present': transcriptPresent,
+        },
+      );
 
   void guidedIntroReviewShown({
     required String sessionId,
@@ -1437,17 +1445,18 @@ class AnalyticsManager {
     required int answerCount,
     required bool goalPresent,
     required int reviewAttempt,
-  }) => track(
-    'Guided Intro Review Shown',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'answer_count': answerCount,
-      'goal_present': goalPresent,
-      'review_attempt': reviewAttempt,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Review Shown',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'answer_count': answerCount,
+          'goal_present': goalPresent,
+          'review_attempt': reviewAttempt,
+        },
+      );
 
   void guidedIntroSaveSubmitted({
     required String sessionId,
@@ -1458,19 +1467,20 @@ class AnalyticsManager {
     required bool goalSelected,
     required bool voiceAttempted,
     required int attempt,
-  }) => track(
-    'Guided Intro Save Submitted',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'selected_answer_count': selectedAnswerCount,
-      'selected_memory_count': selectedMemoryCount,
-      'goal_selected': goalSelected,
-      'voice_attempted': voiceAttempted,
-      'attempt': attempt,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Save Submitted',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'selected_answer_count': selectedAnswerCount,
+          'selected_memory_count': selectedMemoryCount,
+          'goal_selected': goalSelected,
+          'voice_attempted': voiceAttempted,
+          'attempt': attempt,
+        },
+      );
 
   void guidedIntroVoiceEnrollment({
     required String sessionId,
@@ -1479,17 +1489,18 @@ class AnalyticsManager {
     required String result,
     required int durationMs,
     required int attempt,
-  }) => track(
-    'Guided Intro Voice Enrollment',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'result': result,
-      'duration_ms': durationMs,
-      'attempt': attempt,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Voice Enrollment',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'result': result,
+          'duration_ms': durationMs,
+          'attempt': attempt,
+        },
+      );
 
   void guidedIntroContentSave({
     required String sessionId,
@@ -1500,19 +1511,20 @@ class AnalyticsManager {
     required int memoryFailed,
     required String goalResult,
     required int attempt,
-  }) => track(
-    'Guided Intro Content Save',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'memory_attempted': memoryAttempted,
-      'memory_saved': memorySaved,
-      'memory_failed': memoryFailed,
-      'goal_result': goalResult,
-      'attempt': attempt,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Content Save',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'memory_attempted': memoryAttempted,
+          'memory_saved': memorySaved,
+          'memory_failed': memoryFailed,
+          'goal_result': goalResult,
+          'attempt': attempt,
+        },
+      );
 
   void guidedIntroCompleted({
     required String sessionId,
@@ -1523,19 +1535,20 @@ class AnalyticsManager {
     required int memorySaved,
     required String goalResult,
     required int elapsedMs,
-  }) => track(
-    'Guided Intro Completed',
-    properties: {
-      'session_id': sessionId,
-      'source': source,
-      'variant': variant,
-      'completion_mode': completionMode,
-      'voice_result': voiceResult,
-      'memory_saved': memorySaved,
-      'goal_result': goalResult,
-      'elapsed_ms': elapsedMs,
-    },
-  );
+  }) =>
+      track(
+        'Guided Intro Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'completion_mode': completionMode,
+          'voice_result': voiceResult,
+          'memory_saved': memorySaved,
+          'goal_result': goalResult,
+          'elapsed_ms': elapsedMs,
+        },
+      );
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       const TypedEvents().emit(ShowDiscardedMemoriesToggled(showDiscarded: showDiscarded));
@@ -1550,8 +1563,8 @@ class AnalyticsManager {
       const TypedEvents().emit(ShowDiscardedConversationsToggled(showDiscarded: showDiscarded));
 
   void shortConversationThresholdChanged(int thresholdSeconds) => const TypedEvents().emit(
-    ShortConversationThresholdChanged(thresholdSeconds: thresholdSeconds, thresholdMinutes: thresholdSeconds ~/ 60),
-  );
+        ShortConversationThresholdChanged(thresholdSeconds: thresholdSeconds, thresholdMinutes: thresholdSeconds ~/ 60),
+      );
 
   void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
@@ -1585,20 +1598,21 @@ class AnalyticsManager {
     required VoiceReplyPlaybackFallbackReason fallbackReason,
     required int firstAudioLatencyMs,
     required VoiceReplyPlaybackInterruptSource interruptSource,
-  }) => const TypedEvents().emit(
-    VoiceReplyPlayback(
-      outcome: outcome,
-      skipReason: skipReason,
-      mode: mode,
-      outputRoute: outputRoute,
-      chunksRequested: chunksRequested,
-      chunksPlayed: chunksPlayed,
-      chunksDropped: chunksDropped,
-      fallbackReason: fallbackReason,
-      firstAudioLatencyMs: firstAudioLatencyMs,
-      interruptSource: interruptSource,
-    ),
-  );
+  }) =>
+      const TypedEvents().emit(
+        VoiceReplyPlayback(
+          outcome: outcome,
+          skipReason: skipReason,
+          mode: mode,
+          outputRoute: outputRoute,
+          chunksRequested: chunksRequested,
+          chunksPlayed: chunksPlayed,
+          chunksDropped: chunksDropped,
+          fallbackReason: fallbackReason,
+          firstAudioLatencyMs: firstAudioLatencyMs,
+          interruptSource: interruptSource,
+        ),
+      );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() =>
@@ -1607,28 +1621,28 @@ class AnalyticsManager {
   void conversationMergeSelectionModeExited() => const TypedEvents().emit(const ConversationMergeSelectionModeExited());
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-    'Conversation Selected For Merge',
-    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-  );
+        'Conversation Selected For Merge',
+        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+      );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-    'Conversation Merge Initiated',
-    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-  );
+        'Conversation Merge Initiated',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-    'Conversation Merge Completed',
-    properties: {
-      'merged_conversation_id': mergedConversationId,
-      'removed_count': removedConversationIds.length,
-      'removed_conversation_ids': removedConversationIds,
-    },
-  );
+        'Conversation Merge Completed',
+        properties: {
+          'merged_conversation_id': mergedConversationId,
+          'removed_count': removedConversationIds.length,
+          'removed_conversation_ids': removedConversationIds,
+        },
+      );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-    'Conversation Merge Failed',
-    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-  );
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -1638,14 +1652,14 @@ class AnalyticsManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-    'Share To Contacts Selected',
-    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-  );
+        'Share To Contacts Selected',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-    'Share To Contacts SMS Opened',
-    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-  );
+        'Share To Contacts SMS Opened',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -1728,9 +1742,9 @@ class AnalyticsManager {
       track('Subscription Cancel Reason Selected', properties: {'reason': reason});
 
   void subscriptionCancelConfirmed({required String reason, String? details}) => track(
-    'Subscription Cancel Confirmed',
-    properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
-  );
+        'Subscription Cancel Confirmed',
+        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+      );
 
   void subscriptionCancelKeptPlan({required int step, String? reason}) =>
       track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
@@ -1785,9 +1799,9 @@ class AnalyticsManager {
       track('Delete Account Reason Selected', properties: {'reason': reason});
 
   void deleteAccountFeedbackSubmitted({required String reason, String? details}) => track(
-    'Delete Account Feedback Submitted',
-    properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
-  );
+        'Delete Account Feedback Submitted',
+        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+      );
 
   void deleteAccountAbandoned({required int step, String? reason}) =>
       track('Delete Account Abandoned', properties: {'step': step, 'reason': reason});
@@ -1796,11 +1810,11 @@ class AnalyticsManager {
       track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-    final adapter = _adapter;
-    if (adapter == null) return;
-    adapter.track(eventName: 'User Deleted');
-    adapter.reset();
-  });
+        final adapter = _adapter;
+        if (adapter == null) return;
+        adapter.track(eventName: 'User Deleted');
+        adapter.reset();
+      });
 
   // Apps Filter
   void appsFilterOpened() => const TypedEvents().emit(const AppsFilterOpened());
@@ -1981,14 +1995,15 @@ class AnalyticsManager {
     required bool hasPhotos,
     required int segmentCount,
     required int photoCount,
-  }) => const TypedEvents().emit(
-    LiveTranscriptCardClicked(
-      hasSegments: hasSegments,
-      hasPhotos: hasPhotos,
-      segmentCount: segmentCount,
-      photoCount: photoCount,
-    ),
-  );
+  }) =>
+      const TypedEvents().emit(
+        LiveTranscriptCardClicked(
+          hasSegments: hasSegments,
+          hasPhotos: hasPhotos,
+          segmentCount: segmentCount,
+          photoCount: photoCount,
+        ),
+      );
 
   void conversationListItemClickedWithTimeDifference({
     required ServerConversation conversation,
@@ -2229,17 +2244,18 @@ class AnalyticsManager {
     required int titleDuePulled,
     required int titleDuePushed,
     required int remindersUnlinked,
-  }) => const TypedEvents().emit(
-    AppleRemindersSyncCompleted(
-      pendingExported: pendingExported,
-      syncedChecked: syncedChecked,
-      completionsPulled: completionsPulled,
-      completionsPushed: completionsPushed,
-      titleDuePulled: titleDuePulled,
-      titleDuePushed: titleDuePushed,
-      remindersUnlinked: remindersUnlinked,
-    ),
-  );
+  }) =>
+      const TypedEvents().emit(
+        AppleRemindersSyncCompleted(
+          pendingExported: pendingExported,
+          syncedChecked: syncedChecked,
+          completionsPulled: completionsPulled,
+          completionsPushed: completionsPushed,
+          titleDuePulled: titleDuePulled,
+          titleDuePushed: titleDuePushed,
+          remindersUnlinked: remindersUnlinked,
+        ),
+      );
 
   void appleReminderDirectSync({required String actionItemId}) {
     track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
@@ -2512,13 +2528,14 @@ class AnalyticsManager {
     required int totalConversations,
     required int totalMinutes,
     required int daysActive,
-  }) => const TypedEvents().emit(
-    WrappedGenerationCompleted(
-      totalConversations: totalConversations,
-      totalMinutes: totalMinutes,
-      daysActive: daysActive,
-    ),
-  );
+  }) =>
+      const TypedEvents().emit(
+        WrappedGenerationCompleted(
+          totalConversations: totalConversations,
+          totalMinutes: totalMinutes,
+          daysActive: daysActive,
+        ),
+      );
 
   void wrappedGenerationFailed({String? error}) {
     track('Wrapped Generation Failed', properties: {'failure_class': 'unknown'});
@@ -2890,12 +2907,12 @@ class _QueuedAnalyticsEvent {
   final int identityEpoch;
   final int attempts;
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
-    eventName: eventName,
-    properties: properties,
-    ownedKeys: ownedKeys,
-    eventId: eventId,
-    occurredAt: occurredAt,
-    identityEpoch: identityEpoch,
-    attempts: attempts + 1,
-  );
+        eventName: eventName,
+        properties: properties,
+        ownedKeys: ownedKeys,
+        eventId: eventId,
+        occurredAt: occurredAt,
+        identityEpoch: identityEpoch,
+        attempts: attempts + 1,
+      );
 }

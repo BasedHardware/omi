@@ -55,12 +55,12 @@ enum JourneyFault {
   /// The invariant whose absence the armed fault must expose. Journey
   /// failures are expected to name this string.
   String get invariant => switch (this) {
-    suppressSend => 'a sent user message reaches the server and is echoed into the conversation',
-    suppressAssistantReply => 'a distinct assistant-role reply arrives through the real API path',
-    dropMemorySave => 'a created memory persists across reload',
-    wrongOwnerSession => 'records are only accessible under their owning session principal',
-    failCaptureRecovery => 'persisted audio remains recoverable after reconnect',
-  };
+        suppressSend => 'a sent user message reaches the server and is echoed into the conversation',
+        suppressAssistantReply => 'a distinct assistant-role reply arrives through the real API path',
+        dropMemorySave => 'a created memory persists across reload',
+        wrongOwnerSession => 'records are only accessible under their owning session principal',
+        failCaptureRecovery => 'persisted audio remains recoverable after reconnect',
+      };
 }
 
 /// Client-side fault decisions for the HTTP egress chokepoint.

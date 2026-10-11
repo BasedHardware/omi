@@ -18,38 +18,34 @@ void main() {
   });
 
   Future<void> pushChatWithControls(WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(platform: TargetPlatform.iOS),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  ChatSheetRoute<void>(
-                    builder: (_) => Scaffold(
-                      body: ListView(
-                        children: [
-                          TextButton(
-                            key: const Key('edge_tap_target'),
-                            onPressed: () {},
-                            child: const Text('edge-tap'),
-                          ),
-                          for (var i = 0; i < 40; i++) Text('row $i'),
-                        ],
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: ThemeData(platform: TargetPlatform.iOS),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push(ChatSheetRoute<void>(
+                builder: (_) => Scaffold(
+                  body: ListView(
+                    children: [
+                      TextButton(
+                        key: const Key('edge_tap_target'),
+                        onPressed: () {},
+                        child: const Text('edge-tap'),
                       ),
-                    ),
+                      for (var i = 0; i < 40; i++) Text('row $i'),
+                    ],
                   ),
                 ),
-                child: const Text('open'),
-              ),
+              )),
+              child: const Text('open'),
             ),
           ),
         ),
       ),
-    );
+    ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('edge-tap'), findsOneWidget);

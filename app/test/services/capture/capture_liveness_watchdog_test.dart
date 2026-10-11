@@ -62,9 +62,8 @@ void main() {
     var ready = true;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
-      ports: fake.ports,
-      readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready),
-    );
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
     addTearDown(coordinator.dispose);
     await coordinator.dispatch(const PhoneStartRequested());
     ready = false;
@@ -97,9 +96,8 @@ void main() {
     var ready = true;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
-      ports: fake.ports,
-      readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready),
-    );
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
     addTearDown(coordinator.dispose);
     await coordinator.dispatch(const PhoneStartRequested());
     ready = false;
@@ -123,9 +121,8 @@ void main() {
     var ready = true;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
-      ports: fake.ports,
-      readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready),
-    );
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
     addTearDown(coordinator.dispose);
     await coordinator.dispatch(const PhoneStartRequested());
     final watchdog = CaptureLivenessWatchdog();
@@ -152,23 +149,21 @@ void main() {
   });
   test('queued recovery cannot act on a successor session', () {
     final failure = CaptureLivenessFailure(
-      sessionKey: 'phone-1',
-      reason: CaptureLivenessReason.noFrames,
-      gapStartedAt: start,
-      observedAt: start.add(const Duration(seconds: 45)),
-      observationEpoch: 0,
-    );
+        sessionKey: 'phone-1',
+        reason: CaptureLivenessReason.noFrames,
+        gapStartedAt: start,
+        observedAt: start.add(const Duration(seconds: 45)),
+        observationEpoch: 0);
     final successor = live(key: 'phone-2');
     expect(transitionCapture(successor, failure, environment(successor)).effects, isEmpty);
   });
   test('paused, interrupted, batch and pendant phases never get live recovery effects', () {
     final failure = CaptureLivenessFailure(
-      sessionKey: 'phone-1',
-      reason: CaptureLivenessReason.noFrames,
-      gapStartedAt: start,
-      observedAt: start.add(const Duration(seconds: 45)),
-      observationEpoch: 0,
-    );
+        sessionKey: 'phone-1',
+        reason: CaptureLivenessReason.noFrames,
+        gapStartedAt: start,
+        observedAt: start.add(const Duration(seconds: 45)),
+        observationEpoch: 0);
     for (final phase in CapturePhase.values.where((p) => p != CapturePhase.phoneLive)) {
       final state = live(phase: phase);
       expect(transitionCapture(state, failure, environment(state)).effects, isEmpty, reason: phase.name);
@@ -194,11 +189,8 @@ void main() {
     final failure = watchdog.check(live(), start.add(const Duration(seconds: 75)), socketReady: true)!;
     expect(failure.gapStartedAt, start);
     expect(failure.observedAt, start.add(const Duration(seconds: 75)));
-    final env = environment(
-      live(),
-      appSuspendedAt: start.add(const Duration(seconds: 10)),
-      appResumedAt: start.add(const Duration(seconds: 74)),
-    );
+    final env = environment(live(),
+        appSuspendedAt: start.add(const Duration(seconds: 10)), appResumedAt: start.add(const Duration(seconds: 74)));
     expect(transitionCapture(live(), failure, env).effects, isEmpty);
     expect(transitionCapture(live(), failure, environment(live(), appSuspended: true)).effects, isEmpty);
   });
@@ -208,9 +200,8 @@ void main() {
     var epoch = 0;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
-      ports: fake.ports,
-      readEnvironment: () => environment(coordinator.state, livenessEpoch: epoch, transcriptReady: true),
-    );
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, livenessEpoch: epoch, transcriptReady: true));
     addTearDown(coordinator.dispose);
     await coordinator.dispatch(const PhoneStartRequested());
     final watchdog = CaptureLivenessWatchdog();

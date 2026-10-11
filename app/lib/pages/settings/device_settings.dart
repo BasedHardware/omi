@@ -270,9 +270,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       context,
       isOpenGlass
           ? OmiGlassOtaUpdate(
-              device: provider.pairedDevice,
-              latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
-            )
+              device: provider.pairedDevice, latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails)
           : FirmwareUpdate(device: provider.pairedDevice),
     );
   }
@@ -489,8 +487,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             value: connected == null
                 ? l10n.disconnected
                 : provider.havingNewFirmware
-                ? l10n.available
-                : null,
+                    ? l10n.available
+                    : null,
             onTap: connected != null ? () => _openProductUpdate(provider) : null,
           ),
         // Roll back only when the current firmware differs from the latest stable.

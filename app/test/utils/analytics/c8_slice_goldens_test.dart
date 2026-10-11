@@ -38,58 +38,58 @@ void fireC8Slice(AnalyticsManager analytics) {
 }
 
 List<List<Object>> c8SliceGoldens(Map<String, Object> globals) => [
-  ['Onboarding Completed', globals],
-  ['Phone Mic Recording Started', globals],
-  ['Phone Mic Recording Stopped', globals],
-  [
-    'Transcribe Later Toggled',
-    {...globals, 'enabled': false},
-  ],
-  [
-    'Transcribe Later Toggled',
-    {...globals, 'enabled': true},
-  ],
-  ['Device Onboarding Completed', globals],
-  ['Transcribe Later Recording Processed', globals],
-  ['Calendar Enabled', globals],
-  ['Calendar Disabled', globals],
-  ['Calendar Selected', globals],
-  ['Conversation Display Settings Opened', globals],
-  ['Developer Mode Enabled', globals],
-  ['Developer Mode Disabled', globals],
-  [
-    'Developer Settings Saved',
-    {...globals, 'has_webhook_memory_created': false, 'has_webhook_transcript_received': false},
-  ],
-  [
-    'Developer Settings Saved',
-    {...globals, 'has_webhook_memory_created': true, 'has_webhook_transcript_received': false},
-  ],
-  [
-    'Developer Settings Saved',
-    {...globals, 'has_webhook_memory_created': false, 'has_webhook_transcript_received': true},
-  ],
-  [
-    'Developer Settings Saved',
-    {...globals, 'has_webhook_memory_created': true, 'has_webhook_transcript_received': true},
-  ],
-  [
-    'Voice Response Audio Toggled',
-    {...globals, 'enabled': false},
-  ],
-  [
-    'Voice Response Audio Toggled',
-    {...globals, 'enabled': true},
-  ],
-  [
-    'Show Short Conversations Toggled',
-    {...globals, 'show_short': false},
-  ],
-  [
-    'Show Short Conversations Toggled',
-    {...globals, 'show_short': true},
-  ],
-];
+      ['Onboarding Completed', globals],
+      ['Phone Mic Recording Started', globals],
+      ['Phone Mic Recording Stopped', globals],
+      [
+        'Transcribe Later Toggled',
+        {...globals, 'enabled': false}
+      ],
+      [
+        'Transcribe Later Toggled',
+        {...globals, 'enabled': true}
+      ],
+      ['Device Onboarding Completed', globals],
+      ['Transcribe Later Recording Processed', globals],
+      ['Calendar Enabled', globals],
+      ['Calendar Disabled', globals],
+      ['Calendar Selected', globals],
+      ['Conversation Display Settings Opened', globals],
+      ['Developer Mode Enabled', globals],
+      ['Developer Mode Disabled', globals],
+      [
+        'Developer Settings Saved',
+        {...globals, 'has_webhook_memory_created': false, 'has_webhook_transcript_received': false}
+      ],
+      [
+        'Developer Settings Saved',
+        {...globals, 'has_webhook_memory_created': true, 'has_webhook_transcript_received': false}
+      ],
+      [
+        'Developer Settings Saved',
+        {...globals, 'has_webhook_memory_created': false, 'has_webhook_transcript_received': true}
+      ],
+      [
+        'Developer Settings Saved',
+        {...globals, 'has_webhook_memory_created': true, 'has_webhook_transcript_received': true}
+      ],
+      [
+        'Voice Response Audio Toggled',
+        {...globals, 'enabled': false}
+      ],
+      [
+        'Voice Response Audio Toggled',
+        {...globals, 'enabled': true}
+      ],
+      [
+        'Show Short Conversations Toggled',
+        {...globals, 'show_short': false}
+      ],
+      [
+        'Show Short Conversations Toggled',
+        {...globals, 'show_short': true}
+      ],
+    ];
 
 void fireC8TypeExtension(TypedEvents typed) {
   typed.emit(const TypeExtensionProbe(enabled: false, count: 0, mode: TypeExtensionProbeMode.off));
@@ -98,19 +98,19 @@ void fireC8TypeExtension(TypedEvents typed) {
 }
 
 List<List<Object>> c8TypeExtensionGoldens(Map<String, Object> globals) => [
-  [
-    'Type Extension Probe',
-    {...globals, 'enabled': false, 'count': 0, 'mode': 'off'},
-  ],
-  [
-    'Type Extension Probe',
-    {...globals, 'enabled': true, 'count': 1, 'mode': 'headphones_only'},
-  ],
-  [
-    'Type Extension Probe',
-    {...globals, 'enabled': true, 'count': 99, 'mode': 'always'},
-  ],
-];
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': false, 'count': 0, 'mode': 'off'}
+      ],
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': true, 'count': 1, 'mode': 'headphones_only'}
+      ],
+      [
+        'Type Extension Probe',
+        {...globals, 'enabled': true, 'count': 99, 'mode': 'always'}
+      ],
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -118,12 +118,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -136,7 +131,11 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
-    final globals = <String, Object>{'app_platform': platformName, 'app_version': '1.0.543', 'app_build': '992'};
+    final globals = <String, Object>{
+      'app_platform': platformName,
+      'app_version': '1.0.543',
+      'app_build': '992',
+    };
     expect(emissionPayloads(adapter.events), c8SliceGoldens(globals));
     expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
@@ -150,7 +149,11 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
-    final globals = <String, Object>{'app_platform': platformName, 'app_version': '1.0.543', 'app_build': '992'};
+    final globals = <String, Object>{
+      'app_platform': platformName,
+      'app_version': '1.0.543',
+      'app_build': '992',
+    };
     expect(emissionPayloads(adapter.events), c8TypeExtensionGoldens(globals));
     expect(adapter.events.every((event) => event.$2['count'] is int), isTrue);
     expect(adapter.events.every((event) => event.$2['mode'] is String), isTrue);

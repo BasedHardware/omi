@@ -74,7 +74,10 @@ void main() {
 
   test('a 401 with a transient refresh failure is offline: one send, no session expiry', () async {
     fakeAsync((async) {
-      final service = AuthService.forTesting(tokenGateway: _Gateway(transient: true), refreshDelay: (_) async {});
+      final service = AuthService.forTesting(
+        tokenGateway: _Gateway(transient: true),
+        refreshDelay: (_) async {},
+      );
       final expired = <AuthSessionExpiredEvent>[];
       final sub = service.sessionExpiredEvents.listen(expired.add);
       addTearDown(sub.cancel);
@@ -99,7 +102,10 @@ void main() {
 
   test('a 503 is a classified server failure with its status', () async {
     await expectLater(
-      makeStreamingApiCall(url: messagesUrl, seams: seams((request) async => sse(const [], status: 503))).toList(),
+      makeStreamingApiCall(
+        url: messagesUrl,
+        seams: seams((request) async => sse(const [], status: 503)),
+      ).toList(),
       throwsA(
         isA<ChatStreamException>()
             .having((e) => e.kind, 'kind', ChatStreamFailureClass.server)
@@ -125,7 +131,10 @@ void main() {
   test('an early body disconnect still reports the HTTP status', () async {
     final cut = Stream<List<int>>.error(const SocketException('reset'));
     await expectLater(
-      makeStreamingApiCall(url: messagesUrl, seams: seams((request) async => http.StreamedResponse(cut, 503))).toList(),
+      makeStreamingApiCall(
+        url: messagesUrl,
+        seams: seams((request) async => http.StreamedResponse(cut, 503)),
+      ).toList(),
       throwsA(
         isA<ChatStreamException>()
             .having((e) => e.kind, 'kind', ChatStreamFailureClass.server)

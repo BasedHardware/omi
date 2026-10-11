@@ -29,13 +29,13 @@ class CustodyWalRef {
   });
 
   Map<String, dynamic> toJson() => {
-    'file': fileName,
-    'bytes': bytes,
-    'frames': frames,
-    if (liveRingId != null) 'live_ring': liveRingId,
-    if (liveOrdinalStart != null) 'live_start': liveOrdinalStart,
-    if (liveOrdinalEnd != null) 'live_end': liveOrdinalEnd,
-  };
+        'file': fileName,
+        'bytes': bytes,
+        'frames': frames,
+        if (liveRingId != null) 'live_ring': liveRingId,
+        if (liveOrdinalStart != null) 'live_start': liveOrdinalStart,
+        if (liveOrdinalEnd != null) 'live_end': liveOrdinalEnd,
+      };
 
   static CustodyWalRef? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -69,12 +69,12 @@ class LiveRangeProof {
   });
 
   Map<String, dynamic> toJson() => {
-    'start_seq': startSeq,
-    'end_seq': endSeq,
-    'start_live': startLiveOrdinal,
-    'end_live': endLiveOrdinal,
-    'wals': wals.map((w) => w.toJson()).toList(),
-  };
+        'start_seq': startSeq,
+        'end_seq': endSeq,
+        'start_live': startLiveOrdinal,
+        'end_live': endLiveOrdinal,
+        'wals': wals.map((w) => w.toJson()).toList(),
+      };
 
   static LiveRangeProof? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -102,10 +102,10 @@ class RingRangeProof {
   const RingRangeProof({required this.startSeq, required this.endSeq, required this.wals});
 
   Map<String, dynamic> toJson() => {
-    'start_seq': startSeq,
-    'end_seq': endSeq,
-    'wals': wals.map((w) => w.toJson()).toList(),
-  };
+        'start_seq': startSeq,
+        'end_seq': endSeq,
+        'wals': wals.map((w) => w.toJson()).toList(),
+      };
 
   static RingRangeProof? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -151,22 +151,22 @@ class RingCustodyCheckpoint {
     List<RingRangeProof>? ringRanges,
     this.reportedReadSeq = 0,
     this.reportedWriteSeq = 0,
-  }) : liveRanges = liveRanges ?? [],
-       ringRanges = ringRanges ?? [];
+  })  : liveRanges = liveRanges ?? [],
+        ringRanges = ringRanges ?? [];
 
   Map<String, dynamic> toJson() => {
-    'device_id': deviceId,
-    'ring_id': ringId,
-    'durable_seq': durableSeq,
-    'last_advanced_seq': lastAdvancedSeq,
-    'last_durable_mark': lastMarkSeq,
-    'last_durable_mark_live_index': lastMarkLiveIndex,
-    'last_advanced_mark': lastAdvancedMarkSeq,
-    'live_ranges': liveRanges.map((r) => r.toJson()).toList(),
-    'ring_ranges': ringRanges.map((r) => r.toJson()).toList(),
-    'reported_read_seq': reportedReadSeq,
-    'reported_write_seq': reportedWriteSeq,
-  };
+        'device_id': deviceId,
+        'ring_id': ringId,
+        'durable_seq': durableSeq,
+        'last_advanced_seq': lastAdvancedSeq,
+        'last_durable_mark': lastMarkSeq,
+        'last_durable_mark_live_index': lastMarkLiveIndex,
+        'last_advanced_mark': lastAdvancedMarkSeq,
+        'live_ranges': liveRanges.map((r) => r.toJson()).toList(),
+        'ring_ranges': ringRanges.map((r) => r.toJson()).toList(),
+        'reported_read_seq': reportedReadSeq,
+        'reported_write_seq': reportedWriteSeq,
+      };
 
   static RingCustodyCheckpoint? fromJson(Map<String, dynamic> json) {
     final deviceId = json['device_id'];
@@ -207,9 +207,8 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
     final wals = await WalFileManager.loadWals();
     Wal? indexed;
     for (final wal in wals) {
-      final name = (wal.filePath != null && wal.filePath!.isNotEmpty)
-          ? wal.filePath!.split('/').last
-          : wal.getFileName();
+      final name =
+          (wal.filePath != null && wal.filePath!.isNotEmpty) ? wal.filePath!.split('/').last : wal.getFileName();
       if (name == ref.fileName) {
         indexed = wal;
         break;
@@ -325,8 +324,8 @@ class PendantRingCustody {
   Future<void> _saveQueue = Future.value();
 
   PendantRingCustody({PendantCustodyStore? store, CustodyWalValidator? walValidator})
-    : _store = store ?? PendantCustodyStore(),
-      _walValidator = walValidator ?? walFileManagerCustodyValidator;
+      : _store = store ?? PendantCustodyStore(),
+        _walValidator = walValidator ?? walFileManagerCustodyValidator;
 
   static final PendantRingCustody shared = PendantRingCustody();
 

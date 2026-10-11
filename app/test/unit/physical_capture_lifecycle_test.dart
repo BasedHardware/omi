@@ -40,12 +40,9 @@ void main() {
         start: () async {},
         reportStarted: () => reporting.future,
         stop: () async => stops++,
-      ).then<void>(
-        (_) {},
-        onError: (Object error) {
-          observed = error;
-        },
-      );
+      ).then<void>((_) {}, onError: (Object error) {
+        observed = error;
+      });
       clock.flushMicrotasks();
       reporting.completeError(failure);
       clock.flushMicrotasks();
@@ -66,12 +63,9 @@ void main() {
         start: () async {},
         reportStarted: () => reporting.future,
         stop: () async => stops++,
-      ).then<void>(
-        (_) {},
-        onError: (Object error) {
-          observed = error;
-        },
-      );
+      ).then<void>((_) {}, onError: (Object error) {
+        observed = error;
+      });
       clock.flushMicrotasks();
       clock.elapse(const Duration(seconds: 20));
       expect(stops, 1);
@@ -109,11 +103,9 @@ void main() {
         reportStarted: () async {},
         stop: () async => throw cleanupError,
       ),
-      throwsA(
-        isA<PhysicalCaptureCleanupFailure>()
-            .having((failure) => failure.captureError, 'capture error', same(captureError))
-            .having((failure) => failure.cleanupError, 'cleanup error', same(cleanupError)),
-      ),
+      throwsA(isA<PhysicalCaptureCleanupFailure>()
+          .having((failure) => failure.captureError, 'capture error', same(captureError))
+          .having((failure) => failure.cleanupError, 'cleanup error', same(cleanupError))),
     );
   });
 
@@ -126,12 +118,9 @@ void main() {
         start: () async {},
         reportStarted: () async {},
         stop: () async => throw cleanupError,
-      ).then<void>(
-        (_) {},
-        onError: (Object error) {
-          observed = error;
-        },
-      );
+      ).then<void>((_) {}, onError: (Object error) {
+        observed = error;
+      });
       clock.flushMicrotasks();
       clock.elapse(const Duration(seconds: 20));
       expect(observed, isA<PhysicalCaptureCleanupFailure>());

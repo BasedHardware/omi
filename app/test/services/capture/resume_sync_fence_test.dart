@@ -46,16 +46,14 @@ class _Drain {
       // Async await continuations may otherwise chain inline on this VM.
       // Yield the producer once at depth zero, allowing the consumer to dispatch
       // before pass 2 rises. The real coordinator, fence and effects all run.
-      zoneSpecification: ZoneSpecification(
-        registerUnaryCallback: <R, T>(self, parent, zone, callback) {
-          return parent.registerUnaryCallback<R, T>(zone, (value) {
-            if (yieldAtDrop && !SyncWakeScope.syncOnly && passes == 1 && R == dynamic) {
-              return Future.microtask(() => callback(value)) as R;
-            }
-            return callback(value);
-          });
-        },
-      ),
+      zoneSpecification: ZoneSpecification(registerUnaryCallback: <R, T>(self, parent, zone, callback) {
+        return parent.registerUnaryCallback<R, T>(zone, (value) {
+          if (yieldAtDrop && !SyncWakeScope.syncOnly && passes == 1 && R == dynamic) {
+            return Future.microtask(() => callback(value)) as R;
+          }
+          return callback(value);
+        });
+      }),
     );
     await entered[0].future;
   }
@@ -263,18 +261,16 @@ void main() {
     final release = Completer<void>();
     Future<void>? laterScope;
     var raise = true;
-    SttModeResolver.instance = SttModeResolver(
-      flagReader: () {
-        if (raise) {
-          raise = false;
-          laterScope = SyncWakeScope.run(() async {
-            entered.complete();
-            await release.future;
-          });
-        }
-        return false;
-      },
-    );
+    SttModeResolver.instance = SttModeResolver(flagReader: () {
+      if (raise) {
+        raise = false;
+        laterScope = SyncWakeScope.run(() async {
+          entered.complete();
+          await release.future;
+        });
+      }
+      return false;
+    });
     addTearDown(() async {
       if (!release.isCompleted) release.complete();
       await laterScope;
@@ -290,11 +286,8 @@ void main() {
     expect(world.controller.activeRecordingId, recording);
     expect(writes.where((w) => w['muted'] == false), hasLength(1));
     expect(world.sockets.length, before + 1);
-    expect(
-      world.deviceConnection!.audioSubscriptionsOpened,
-      subscriptions,
-      reason: 'an already active BLE subscription is not duplicated',
-    );
+    expect(world.deviceConnection!.audioSubscriptionsOpened, subscriptions,
+        reason: 'an already active BLE subscription is not duplicated');
   });
 
   test('case 7: authorized first charging sample inside a scope consumes one deferred edge', () async {

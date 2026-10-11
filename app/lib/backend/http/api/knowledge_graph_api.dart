@@ -56,8 +56,7 @@ class KnowledgeGraphApi {
       required Map<String, String> headers,
       required String body,
       required String method,
-    })?
-    apiCaller,
+    })? apiCaller,
   }) async {
     final makeCall = apiCaller ?? makeApiCall;
     final response = await makeCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
@@ -68,7 +67,11 @@ class KnowledgeGraphApi {
     if (response != null && response.statusCode == 409) {
       Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
       // Synthetic client status: account has canonical graph state and is already up to date.
-      return const wire.GeneratedRebuildResponse(edgesCount: 0, nodesCount: 0, status: 'canonical_up_to_date').toJson();
+      return const wire.GeneratedRebuildResponse(
+        edgesCount: 0,
+        nodesCount: 0,
+        status: 'canonical_up_to_date',
+      ).toJson();
     }
     _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }

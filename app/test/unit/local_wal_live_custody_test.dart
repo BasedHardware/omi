@@ -102,16 +102,16 @@ void main() {
   }
 
   RingInfo info(int ringId, {int readSeq = 0, int writeSeq = 100}) => RingInfo(
-    readSeq: readSeq,
-    writeSeq: writeSeq,
-    capacityPackets: 1024,
-    droppedPackets: 0,
-    packetSize: 444,
-    advertisedCaps: 0x0F,
-    contractVersion: 1,
-    ringId: ringId,
-    infoBytes: 41,
-  );
+        readSeq: readSeq,
+        writeSeq: writeSeq,
+        capacityPackets: 1024,
+        droppedPackets: 0,
+        packetSize: 444,
+        advertisedCaps: 0x0F,
+        contractVersion: 1,
+        ringId: ringId,
+        infoBytes: 41,
+      );
 
   WalFrame frame(int counter) =>
       WalFrame(payload: [0xAA, counter & 0xFF], syncKey: FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF, 0]));

@@ -51,9 +51,9 @@ class AudioSessionVoiceOutputRouteSource implements VoiceOutputRouteSource {
     try {
       final outputs = await session.getDevices(includeInputs: false);
       final privateOutput = outputs.cast<AudioDevice?>().firstWhere(
-        (device) => device != null && device.isOutput && _privateOutputTypes.contains(device.type),
-        orElse: () => null,
-      );
+            (device) => device != null && device.isOutput && _privateOutputTypes.contains(device.type),
+            orElse: () => null,
+          );
       if (privateOutput == null) return const VoiceOutputRoute.speaker();
       final name = privateOutput.name.trim();
       return VoiceOutputRoute.headphones(name);

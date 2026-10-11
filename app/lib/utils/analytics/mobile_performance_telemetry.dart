@@ -45,11 +45,9 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
   void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
     final name = topRoute.settings.name;
     // Never transmit dynamic routes, query strings, or runtime type names.
-    _begin(
-      const {'/', '/home', '/chat', '/settings', '/onboarding', '/conversations', '/tasks'}.contains(name)
-          ? name!
-          : 'unnamed_route',
-    );
+    _begin(const {'/', '/home', '/chat', '/settings', '/onboarding', '/conversations', '/tasks'}.contains(name)
+        ? name!
+        : 'unnamed_route');
   }
 
   void _begin(String surface) {

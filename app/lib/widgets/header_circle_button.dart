@@ -54,7 +54,9 @@ class HeaderCircleButton extends StatelessWidget {
           top: 0,
           right: 0,
           child: IgnorePointer(
-            child: ExcludeSemantics(child: HeaderCountBadge(count: badgeCount)),
+            child: ExcludeSemantics(
+              child: HeaderCountBadge(count: badgeCount),
+            ),
           ),
         ),
       ],
@@ -85,7 +87,11 @@ class HeaderCountBadge extends StatelessWidget {
       child: Text(
         label,
         textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700, height: 1.0),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.onAccent,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
       ),
     );
   }

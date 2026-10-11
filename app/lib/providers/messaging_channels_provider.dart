@@ -25,17 +25,17 @@ class ChannelLink {
   });
 
   factory ChannelLink.fromGenerated(wire.GeneratedChannelLink link) => ChannelLink(
-    id: link.id,
-    channelId: link.channel,
-    provider: link.provider,
-    externalId: link.externalId,
-    linkedAt: link.linkedAt,
-    visibleInApp: link.visibleInApp,
-    voiceNotes: link.voiceNotes,
-    keepPrivateMemoriesInApp: link.keepPrivateMemoriesInApp,
-    insights: link.insights,
-    displayHandle: link.displayHandle,
-  );
+        id: link.id,
+        channelId: link.channel,
+        provider: link.provider,
+        externalId: link.externalId,
+        linkedAt: link.linkedAt,
+        visibleInApp: link.visibleInApp,
+        voiceNotes: link.voiceNotes,
+        keepPrivateMemoriesInApp: link.keepPrivateMemoriesInApp,
+        insights: link.insights,
+        displayHandle: link.displayHandle,
+      );
 
   final String id;
   final String channelId;
@@ -69,18 +69,23 @@ class ChannelLink {
     return id;
   }
 
-  ChannelLink copyWith({bool? visibleInApp, bool? voiceNotes, bool? keepPrivateMemoriesInApp}) => ChannelLink(
-    id: id,
-    channelId: channelId,
-    provider: provider,
-    externalId: externalId,
-    linkedAt: linkedAt,
-    visibleInApp: visibleInApp ?? this.visibleInApp,
-    voiceNotes: voiceNotes ?? this.voiceNotes,
-    keepPrivateMemoriesInApp: keepPrivateMemoriesInApp ?? this.keepPrivateMemoriesInApp,
-    insights: insights,
-    displayHandle: displayHandle,
-  );
+  ChannelLink copyWith({
+    bool? visibleInApp,
+    bool? voiceNotes,
+    bool? keepPrivateMemoriesInApp,
+  }) =>
+      ChannelLink(
+        id: id,
+        channelId: channelId,
+        provider: provider,
+        externalId: externalId,
+        linkedAt: linkedAt,
+        visibleInApp: visibleInApp ?? this.visibleInApp,
+        voiceNotes: voiceNotes ?? this.voiceNotes,
+        keepPrivateMemoriesInApp: keepPrivateMemoriesInApp ?? this.keepPrivateMemoriesInApp,
+        insights: insights,
+        displayHandle: displayHandle,
+      );
 }
 
 /// Chat-app links for the signed-in account: the gate, the list, and the actions on it.
@@ -93,10 +98,10 @@ class MessagingChannelsProvider extends ChangeNotifier {
     Future<ChatAppsConfig> Function()? readConfig,
     bool Function(String key)? readLocalFlag,
     Future<bool> Function(String key, bool value)? writeLocalFlag,
-  }) : _api = api,
-       _readConfig = readConfig ?? ChatAppsGate.read,
-       _readLocalFlag = readLocalFlag ?? ((key) => SharedPreferencesUtil().getBool(key)),
-       _writeLocalFlag = writeLocalFlag ?? ((key, value) => SharedPreferencesUtil().saveBool(key, value));
+  })  : _api = api,
+        _readConfig = readConfig ?? ChatAppsGate.read,
+        _readLocalFlag = readLocalFlag ?? ((key) => SharedPreferencesUtil().getBool(key)),
+        _writeLocalFlag = writeLocalFlag ?? ((key, value) => SharedPreferencesUtil().saveBool(key, value));
 
   final MessagingChannelsApi _api;
   final Future<ChatAppsConfig> Function() _readConfig;
@@ -181,10 +186,20 @@ class MessagingChannelsProvider extends ChangeNotifier {
 
   /// Mints a one-time proof for [channel]: `token` for a deep link, `code` for the person to
   /// text. Fails with `forbidden` outside the cohort or without Pro.
-  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(ChatChannel channel, {required String kind}) {
+  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(
+    ChatChannel channel, {
+    required String kind,
+  }) {
     final endpoint = _config.endpoint(channel);
-    if (endpoint == null) return Future.value(const ApiFailure(ApiProblem(ApiProblemKind.forbidden)));
-    return _api.mintProof(channel: channel.wireId, provider: endpoint.provider, kind: kind);
+    if (endpoint == null)
+      return Future.value(
+        const ApiFailure(ApiProblem(ApiProblemKind.forbidden)),
+      );
+    return _api.mintProof(
+      channel: channel.wireId,
+      provider: endpoint.provider,
+      kind: kind,
+    );
   }
 
   /// Unlinks and forgets the link locally; a 404 means it was already gone.
@@ -206,18 +221,30 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Applies the switch at once and reverts it if the server refuses.
-  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) =>
-      _patch(link, visible, (l, value) => l.copyWith(visibleInApp: value), _api.setVisibleInApp);
+  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) => _patch(
+        link,
+        visible,
+        (l, value) => l.copyWith(visibleInApp: value),
+        _api.setVisibleInApp,
+      );
 
-  Future<ApiResult<void>> setVoiceNotes(ChannelLink link, bool enabled) =>
-      _patch(link, enabled, (l, value) => l.copyWith(voiceNotes: value), _api.setVoiceNotes);
+  Future<ApiResult<void>> setVoiceNotes(ChannelLink link, bool enabled) => _patch(
+        link,
+        enabled,
+        (l, value) => l.copyWith(voiceNotes: value),
+        _api.setVoiceNotes,
+      );
 
-  Future<ApiResult<void>> setKeepPrivateMemoriesInApp(ChannelLink link, bool enabled) => _patch(
-    link,
-    enabled,
-    (l, value) => l.copyWith(keepPrivateMemoriesInApp: value),
-    _api.setKeepPrivateMemoriesInApp,
-  );
+  Future<ApiResult<void>> setKeepPrivateMemoriesInApp(
+    ChannelLink link,
+    bool enabled,
+  ) =>
+      _patch(
+        link,
+        enabled,
+        (l, value) => l.copyWith(keepPrivateMemoriesInApp: value),
+        _api.setKeepPrivateMemoriesInApp,
+      );
 
   Future<ApiResult<void>> _patch(
     ChannelLink link,

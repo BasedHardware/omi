@@ -37,21 +37,19 @@ void main() {
       status: ConversationStatus.completed,
     );
     provider.conversations = [conversation];
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ConversationProvider>.value(value: provider),
-          ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
-        ],
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: ConversationListItem(conversation: conversation, date: DateTime(2026, 9, 20), conversationIdx: 0),
-          ),
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ConversationProvider>.value(value: provider),
+        ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ConversationListItem(conversation: conversation, date: DateTime(2026, 9, 20), conversationIdx: 0),
         ),
       ),
-    );
+    ));
   }
 
   final card = find.byKey(const ValueKey('conversation_card'));

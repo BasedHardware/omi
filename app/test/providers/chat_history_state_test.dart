@@ -65,14 +65,14 @@ void main() {
       'sender': 'ai',
       'metadata': '{"chatFirstIntentSource":"capture_arrival"}',
       'content_blocks': [
-        {'type': 'conversationLink', 'conversationId': 'meeting', 'summary': 'Notes'},
+        {'type': 'conversationLink', 'conversationId': 'meeting', 'summary': 'Notes'}
       ],
     });
     final reply = ServerMessage.fromJson({
       ...message('reply').toJson(),
       'sender': 'ai',
       'content_blocks': [
-        {'type': 'taskCard', 'id': 'task-block', 'taskId': 'task'},
+        {'type': 'taskCard', 'id': 'task-block', 'taskId': 'task'}
       ],
     });
     final api = FakeSessions()..readResult = (_, __) async => ApiSuccess([automatic, reply]);
@@ -90,9 +90,11 @@ void main() {
 
   test('filtered session rows still advance the raw page offset', () async {
     final rows = List.generate(
-      100,
-      (i) => ServerMessage.fromJson({...message('auto-$i').toJson(), 'metadata': '{"chatFirstIntentId":"old-$i"}'}),
-    );
+        100,
+        (i) => ServerMessage.fromJson({
+              ...message('auto-$i').toJson(),
+              'metadata': '{"chatFirstIntentId":"old-$i"}',
+            }));
     final api = FakeSessions()..readResult = (_, offset) async => ApiSuccess(offset == 0 ? rows : [message('user')]);
     final provider = MessageProvider(sessionsApi: api);
     addTearDown(provider.dispose);

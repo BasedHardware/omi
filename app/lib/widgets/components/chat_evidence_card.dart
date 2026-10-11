@@ -11,7 +11,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// loading, offline, pruned, and failed evidence therefore cannot block or
 /// replace the answer itself.
 class ChatEvidenceReferenceCard extends StatelessWidget {
-  const ChatEvidenceReferenceCard({super.key, required this.reference, this.onOpen});
+  const ChatEvidenceReferenceCard({
+    super.key,
+    required this.reference,
+    this.onOpen,
+  });
 
   final ChatEvidenceReference reference;
   final VoidCallback? onOpen;
@@ -40,7 +44,9 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(reference.title?.trim().isNotEmpty == true ? reference.title! : reference.sourceLabel),
+                Text(
+                  reference.title?.trim().isNotEmpty == true ? reference.title! : reference.sourceLabel,
+                ),
                 const SizedBox(height: 2),
                 Text(
                   reference.summary?.trim().isNotEmpty == true ? reference.summary! : reference.statusLabel,
@@ -51,7 +57,10 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
               ],
             ),
           ),
-          if (canOpen) ...[const SizedBox(width: 8), Icon(Icons.open_in_new, size: 16, color: OmiColors.textSecondary)],
+          if (canOpen) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.open_in_new, size: 16, color: OmiColors.textSecondary),
+          ],
         ],
       ),
     );
@@ -62,7 +71,13 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
       button: canOpen,
       enabled: canOpen,
       hint: canOpen ? context.l10n.open : null,
-      child: canOpen ? InkWell(onTap: onOpen, borderRadius: OmiRadius.mdAll, child: card) : card,
+      child: canOpen
+          ? InkWell(
+              onTap: onOpen,
+              borderRadius: OmiRadius.mdAll,
+              child: card,
+            )
+          : card,
     );
   }
 
@@ -84,7 +99,11 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
 }
 
 class ChatEvidenceReferenceList extends StatelessWidget {
-  const ChatEvidenceReferenceList({super.key, required this.envelope, this.onOpen});
+  const ChatEvidenceReferenceList({
+    super.key,
+    required this.envelope,
+    this.onOpen,
+  });
 
   final ChatEvidenceReferenceEnvelope envelope;
   final void Function(ChatEvidenceReference reference)? onOpen;

@@ -537,12 +537,10 @@ void main() {
     test('discard removes a pending recording without transcribing', () async {
       final wavFile = await createPendingWav('discard_pending.wav');
       var calls = 0;
-      final provider = VoiceRecorderProvider(
-        transcriber: (_) async {
-          calls++;
-          return 'unexpected';
-        },
-      );
+      final provider = VoiceRecorderProvider(transcriber: (_) async {
+        calls++;
+        return 'unexpected';
+      });
       await provider.checkPendingRecording();
 
       await provider.discardRecording();
@@ -556,12 +554,10 @@ void main() {
     test('discard removes a failed recording without retrying transcription', () async {
       final wavFile = await createPendingWav('discard_failed.wav');
       var calls = 0;
-      final provider = VoiceRecorderProvider(
-        transcriber: (_) async {
-          calls++;
-          return '';
-        },
-      );
+      final provider = VoiceRecorderProvider(transcriber: (_) async {
+        calls++;
+        return '';
+      });
       await provider.checkPendingRecording();
       await provider.retry();
       expect(provider.state, VoiceRecorderState.transcribeFailed);
@@ -578,12 +574,10 @@ void main() {
       final pending = Completer<String>();
       final started = Completer<void>();
       var transcriptCallbackCalled = false;
-      final provider = VoiceRecorderProvider(
-        transcriber: (_) {
-          started.complete();
-          return pending.future;
-        },
-      );
+      final provider = VoiceRecorderProvider(transcriber: (_) {
+        started.complete();
+        return pending.future;
+      });
       provider.setCallbacks(onTranscriptReady: (_, __) => transcriptCallbackCalled = true);
       await provider.checkPendingRecording();
 

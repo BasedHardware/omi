@@ -112,8 +112,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-          ? prefs.fullName
-          : prefs.givenName;
+              ? prefs.fullName
+              : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -306,9 +306,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context);
-    final displayName = isUserReview
-        ? l10n.yourReview
-        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName =
+        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(

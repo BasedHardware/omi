@@ -57,10 +57,8 @@ class _WaveformBar extends StatelessWidget {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: OmiColors.textPrimary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration:
+          BoxDecoration(color: OmiColors.textPrimary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
           Container(
@@ -79,8 +77,8 @@ class _WaveformBar extends StatelessWidget {
                 color: isMuted
                     ? const Color(0xFFEF5350).withValues(alpha: 0.5)
                     : showStar
-                    ? const Color(0xFFFFB300).withValues(alpha: 0.6)
-                    : OmiColors.textSecondary,
+                        ? const Color(0xFFFFB300).withValues(alpha: 0.6)
+                        : OmiColors.textSecondary,
                 amplitude: isMuted ? 0.1 : 1.0,
               ),
               size: const Size(double.infinity, 28),

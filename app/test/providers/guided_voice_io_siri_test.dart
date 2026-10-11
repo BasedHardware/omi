@@ -69,14 +69,13 @@ void main() {
     SiriIntegration.testInstance = SiriIntegration.forTest(host, 'guided-owner');
     addTearDown(() => SiriIntegration.testInstance = null);
     final memory = Memory(
-      id: 'guided-1',
-      uid: 'guided-owner',
-      content: 'I like coffee',
-      category: MemoryCategory.system,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      visibility: MemoryVisibility.private,
-    );
+        id: 'guided-1',
+        uid: 'guided-owner',
+        content: 'I like coffee',
+        category: MemoryCategory.system,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
     final io = DeviceGuidedVoiceIO(createMemoryRequest: (_, __, ___) async => memory);
 
     expect(await io.remember('I like coffee'), isTrue);

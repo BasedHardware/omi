@@ -33,17 +33,18 @@ class _HistorySyncProvider extends InertSyncProvider {
     int at(int daysAgo, int hour, int minute) =>
         DateTime(now.year, now.month, now.day - daysAgo, hour, minute).millisecondsSinceEpoch ~/ 1000;
     Wal wal(int start, int seconds, WalStatus status) => Wal(
-      timerStart: start,
-      codec: BleAudioCodec.opus,
-      seconds: seconds,
-      status: status,
-      storage: WalStorage.disk,
-      device: 'pendant',
-    );
+        timerStart: start,
+        codec: BleAudioCodec.opus,
+        seconds: seconds,
+        status: status,
+        storage: WalStorage.disk,
+        device: 'pendant');
     // Back to back, each starting where the previous one ended.
     List<Wal> run(int start, List<int> lengths, WalStatus status) {
       var t = start;
-      return [for (final s in lengths) wal((t += s) - s, s, status)];
+      return [
+        for (final s in lengths) wal((t += s) - s, s, status),
+      ];
     }
 
     _wals = [
@@ -62,10 +63,10 @@ class _HistorySyncProvider extends InertSyncProvider {
   List<Wal> get displaySortedWals => _wals;
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => switch (filter) {
-    WalDisplayFilter.all => _wals,
-    WalDisplayFilter.pending => _wals.where((w) => w.syncDisplayState != WalSyncDisplayState.synced).toList(),
-    WalDisplayFilter.synced => _wals.where((w) => w.syncDisplayState == WalSyncDisplayState.synced).toList(),
-  };
+        WalDisplayFilter.all => _wals,
+        WalDisplayFilter.pending => _wals.where((w) => w.syncDisplayState != WalSyncDisplayState.synced).toList(),
+        WalDisplayFilter.synced => _wals.where((w) => w.syncDisplayState == WalSyncDisplayState.synced).toList(),
+      };
 }
 
 /// A ConversationProvider already holding [items], grouped by date, whose deletes succeed locally.
@@ -95,8 +96,7 @@ final conversationsScenarios = <AuditScenario>[
     id: 'conversations-locked-preview',
     title: 'Locked conversations with an upgrade action',
     page: _page,
-    state:
-        'An unlocked conversation followed by three consecutive locked previews, which share one '
+    state: 'An unlocked conversation followed by three consecutive locked previews, which share one '
         'frosted card and one upgrade action; synthetic titles only',
     run: (a) async {
       final items = [
@@ -204,10 +204,8 @@ final conversationsScenarios = <AuditScenario>[
     state:
         'Six 75 s files uploading today; ten 3 min files too old to sync, twelve 9 s-75 s synced files and fourteen 3 min synced files from about six weeks ago',
     run: (a) async {
-      await a.pump(
-        const AutoSyncPage(),
-        providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())],
-      );
+      await a.pump(const AutoSyncPage(),
+          providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
       await a.tap(find.text('All'));
       await a.scrollSeries('Open Offline Sync, choose All and scroll the recordings');
     },
@@ -218,10 +216,8 @@ final conversationsScenarios = <AuditScenario>[
     page: 'lib/pages/conversations/auto_sync_page.dart (AutoSyncPage)',
     state: 'The history above; the synced 12:56 PM recording (twelve 9 s-75 s files) is tapped',
     run: (a) async {
-      await a.pump(
-        const AutoSyncPage(),
-        providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())],
-      );
+      await a.pump(const AutoSyncPage(),
+          providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
       await a.tap(find.text('All'));
       await a.tap(find.textContaining('12:56'));
       await a.shot('Tap a recording to see the files it is made of');

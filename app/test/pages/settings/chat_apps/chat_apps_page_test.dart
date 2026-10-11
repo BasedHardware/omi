@@ -34,14 +34,12 @@ void main() {
   }) async {
     final b = backend ?? FakeMessagingBackend();
     usePhoneViewport(tester);
-    await tester.pumpWidget(
-      chatAppsHost(
-        const ChatAppsPage(),
-        provider: b.provider(config: config),
-        usage: usageWith(plan),
-        connectivity: StubConnectivity(online: online),
-      ),
-    );
+    await tester.pumpWidget(chatAppsHost(
+      const ChatAppsPage(),
+      provider: b.provider(config: config),
+      usage: usageWith(plan),
+      connectivity: StubConnectivity(online: online),
+    ));
     await settle(tester);
     return b;
   }
@@ -90,10 +88,8 @@ void main() {
     });
 
     testWidgets('a channel without an address is coming soon', (tester) async {
-      await pumpPage(
-        tester,
-        config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}),
-      );
+      await pumpPage(tester,
+          config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}));
       expect(find.text('Coming Soon'), findsOneWidget);
       expect(find.text('Connect'), findsOneWidget);
     });

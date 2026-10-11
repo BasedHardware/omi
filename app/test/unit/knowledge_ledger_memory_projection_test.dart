@@ -33,14 +33,18 @@ Map<String, dynamic> _ledgerJson({
     'write_reason': 'direct_user_statement',
     'trigger_condition': kind == 'trigger'
         ? {
-            'keywords': ['Toronto'],
+            'keywords': ['Toronto']
           }
         : <String, dynamic>{},
     'user_review': userReview,
     'superseded_by': supersededBy,
     'invalid_at': invalidAt,
     'evidence': [
-      {'evidence_id': 'ev-1', 'independence_group': 'user-assertion', 'source_type': 'chat_turn'},
+      {
+        'evidence_id': 'ev-1',
+        'independence_group': 'user-assertion',
+        'source_type': 'chat_turn',
+      },
     ],
   };
 }
@@ -77,7 +81,7 @@ void main() {
     expect(playbook.ledgerBody, 'Run the release checklist in order.');
     expect(trigger.isLedgerTrigger, isTrue);
     expect(trigger.triggerCondition, {
-      'keywords': ['Toronto'],
+      'keywords': ['Toronto']
     });
   });
 

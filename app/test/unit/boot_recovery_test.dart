@@ -133,17 +133,11 @@ void main() {
 
   testWidgets('recovery screen shows banner and full-startup retry', (tester) async {
     var retries = 0;
-    await tester.pumpWidget(
-      BootRecoveryApp(
-        onRetry: () async {
-          retries++;
-        },
-      ),
-    );
+    await tester.pumpWidget(BootRecoveryApp(onRetry: () async {
+      retries++;
+    }));
     expect(
-      find.text('Recovery mode: the app is paused to protect your data. Retry starts the full app.'),
-      findsOneWidget,
-    );
+        find.text('Recovery mode: the app is paused to protect your data. Retry starts the full app.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('boot_recovery_retry')));
     expect(retries, 1);
   });

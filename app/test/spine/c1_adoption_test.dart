@@ -5,10 +5,9 @@ import '../support/spine/contract.dart';
 
 // Static adoption tripwires complement the behavioral owner/provider tests.
 // They prevent a builder from shipping an unused owner beside old global actors.
-String code(String path) => File(path).readAsStringSync().replaceAll(
-  RegExp(r'''//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' '''.trim()),
-  ' ',
-);
+String code(String path) => File(path)
+    .readAsStringSync()
+    .replaceAll(RegExp(r'''//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' '''.trim()), ' ');
 
 Iterable<String> captureImplementation() sync* {
   final pending = ['lib/services/capture/capture_controller.dart', 'lib/providers/capture_provider.dart'];
@@ -35,12 +34,10 @@ Iterable<String> captureImplementation() sync* {
 void main() {
   contractTest('C1 exemplar has no singleton escape or implicit production connectivity', () {
     pendingContract('C1');
-    final global = RegExp(
-      r'SharedPreferencesUtil\s*\(|ServiceManager\s*\.\s*instance|'
-      r'PlatformManager\s*\.\s*instance|AuthService\s*\.\s*instance|BleBridge\s*\.\s*instance|'
-      r'RecordingTransferCoordinator\s*\.\s*instance|ForegroundUtil\s*\.|'
-      r'CaptureConnectivityBoundary\s*\.\s*production|CaptureAuthBoundary\s*\.\s*production',
-    );
+    final global = RegExp(r'SharedPreferencesUtil\s*\(|ServiceManager\s*\.\s*instance|'
+        r'PlatformManager\s*\.\s*instance|AuthService\s*\.\s*instance|BleBridge\s*\.\s*instance|'
+        r'RecordingTransferCoordinator\s*\.\s*instance|ForegroundUtil\s*\.|'
+        r'CaptureConnectivityBoundary\s*\.\s*production|CaptureAuthBoundary\s*\.\s*production');
     for (final path in captureImplementation()) {
       expect(global.allMatches(code(path)).map((m) => m.group(0)), isEmpty, reason: path);
     }
@@ -55,9 +52,8 @@ void main() {
     expect(violations, isEmpty);
   });
   contractTest('C1 capture and extracted code request FGS intent rather than acting independently', () {
-    final actor = RegExp(
-      r'ForegroundUtil\s*\.\s*(?:initializeForegroundService|startForegroundTask|stopForegroundTask)\s*\(',
-    );
+    final actor =
+        RegExp(r'ForegroundUtil\s*\.\s*(?:initializeForegroundService|startForegroundTask|stopForegroundTask)\s*\(');
     for (final path in captureImplementation()) {
       expect(actor.allMatches(code(path)), isEmpty, reason: path);
     }

@@ -69,9 +69,8 @@ Future<int> _measureProgressive(Uri uri) async {
       compressed.add(bytes);
       if (compressed.length < progressiveTtsPrebufferBytes) continue;
       try {
-        final decoded = await const MethodChannel(
-          'com.omi/tts_mp3_decoder',
-        ).invokeMapMethod<String, dynamic>('decode', {'bytes': compressed.toBytes()});
+        final decoded = await const MethodChannel('com.omi/tts_mp3_decoder')
+            .invokeMapMethod<String, dynamic>('decode', {'bytes': compressed.toBytes()});
         final pcm = decoded?['pcm'];
         if (pcm is Uint8List && pcm.isNotEmpty) {
           // ignore: avoid_print

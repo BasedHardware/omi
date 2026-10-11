@@ -25,7 +25,10 @@ class AppListItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         margin: EdgeInsets.only(bottom: 8, top: index == 0 ? 16 : 0),
-        decoration: BoxDecoration(color: OmiColors.surface1.withValues(alpha: 0.3), borderRadius: OmiRadius.mdAll),
+        decoration: BoxDecoration(
+          color: OmiColors.surface1.withValues(alpha: 0.3),
+          borderRadius: OmiRadius.mdAll,
+        ),
         child: Row(
           children: [
             // App icon

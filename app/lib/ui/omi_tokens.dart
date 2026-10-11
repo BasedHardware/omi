@@ -16,29 +16,28 @@ import 'package:flutter/services.dart';
 /// Resolved values for one appearance. The dark values are the original Omi tokens.
 @immutable
 class OmiPalette {
-  const OmiPalette({
-    required this.surface0,
-    required this.surface1,
-    required this.surface2,
-    required this.surface3,
-    required this.chipSurface,
-    required this.messageSurface,
-    required this.categorySurface,
-    required this.conversationCard,
-    required this.sourceBadgeSurface,
-    required this.border,
-    required this.textPrimary,
-    required this.textSecondary,
-    required this.textTertiary,
-    required this.textDisabled,
-    required this.accent,
-    required this.onAccent,
-    required this.success,
-    required this.successSurface,
-    required this.warning,
-    required this.danger,
-    required this.dangerSurface,
-  });
+  const OmiPalette(
+      {required this.surface0,
+      required this.surface1,
+      required this.surface2,
+      required this.surface3,
+      required this.chipSurface,
+      required this.messageSurface,
+      required this.categorySurface,
+      required this.conversationCard,
+      required this.sourceBadgeSurface,
+      required this.border,
+      required this.textPrimary,
+      required this.textSecondary,
+      required this.textTertiary,
+      required this.textDisabled,
+      required this.accent,
+      required this.onAccent,
+      required this.success,
+      required this.successSurface,
+      required this.warning,
+      required this.danger,
+      required this.dangerSurface});
 
   final Color surface0;
   final Color surface1;
@@ -244,16 +243,10 @@ class OmiMotion {
   static const Curve standardCurve = Curves.easeInOut;
   static const Curve emphasizedCurve = Curves.easeOutCubic;
 
-  static const OmiMotion _full = OmiMotion._(
-    quick: quickDuration,
-    standard: standardDuration,
-    emphasized: emphasizedDuration,
-  );
-  static const OmiMotion _reduced = OmiMotion._(
-    quick: Duration.zero,
-    standard: Duration.zero,
-    emphasized: Duration.zero,
-  );
+  static const OmiMotion _full =
+      OmiMotion._(quick: quickDuration, standard: standardDuration, emphasized: emphasizedDuration);
+  static const OmiMotion _reduced =
+      OmiMotion._(quick: Duration.zero, standard: Duration.zero, emphasized: Duration.zero);
 
   /// The durations for this context: all [Duration.zero] when the user asked the system to remove
   /// animations.

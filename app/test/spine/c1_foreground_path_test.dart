@@ -18,15 +18,14 @@ void main() {
       world.disposeController();
       final effects = <String>[];
       final owner = CaptureSessionOwner(
-        coordinator: world.coordinator,
-        startForeground: () async {
-          effects.add('start');
-          await startGate.future;
-        },
-        stopForeground: () async {
-          effects.add('stop');
-        },
-      );
+          coordinator: world.coordinator,
+          startForeground: () async {
+            effects.add('start');
+            await startGate.future;
+          },
+          stopForeground: () async {
+            effects.add('stop');
+          });
       final p = composeCaptureProvider(dependencies(world: world, preferences: SharedPreferencesUtil(), owner: owner));
       final starting = p.streamRecording();
       await pumpEventQueue();

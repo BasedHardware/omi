@@ -133,9 +133,8 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
     _promptClosed!.complete();
     if (answer == null) return;
     const TypedEvents().emit(OnboardingSetupRatingPromptAnswered(answer: answer));
-    SharedPreferencesUtil().ratingAskAnswer = answer == OnboardingSetupRatingPromptAnsweredAnswer.support
-        ? 'yes'
-        : 'no';
+    SharedPreferencesUtil().ratingAskAnswer =
+        answer == OnboardingSetupRatingPromptAnsweredAnswer.support ? 'yes' : 'no';
     if (answer == OnboardingSetupRatingPromptAnsweredAnswer.support) {
       OmiHaptics.success();
       try {
@@ -194,8 +193,8 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
                             state: i < _completed
                                 ? _StepState.done
                                 : i == _completed
-                                ? _StepState.active
-                                : _StepState.pending,
+                                    ? _StepState.active
+                                    : _StepState.pending,
                           ),
                         const Spacer(flex: 3),
                       ],
@@ -246,22 +245,22 @@ class _SetupStepRow extends StatelessWidget {
                 ),
                 child: switch (state) {
                   _StepState.done => Container(
-                    key: const ValueKey('done'),
-                    decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                    child: Icon(Icons.check_rounded, size: 16, color: OmiColors.onAccent),
-                  ),
-                  _StepState.active => Padding(
-                    key: const ValueKey('active'),
-                    padding: const EdgeInsets.all(1),
-                    child: OmiSpinner(size: OmiSpinnerSize.regular, color: OmiColors.textPrimary),
-                  ),
-                  _StepState.pending => Container(
-                    key: const ValueKey('pending'),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: OmiColors.border, width: 1.5),
+                      key: const ValueKey('done'),
+                      decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                      child: Icon(Icons.check_rounded, size: 16, color: OmiColors.onAccent),
                     ),
-                  ),
+                  _StepState.active => Padding(
+                      key: const ValueKey('active'),
+                      padding: const EdgeInsets.all(1),
+                      child: OmiSpinner(size: OmiSpinnerSize.regular, color: OmiColors.textPrimary),
+                    ),
+                  _StepState.pending => Container(
+                      key: const ValueKey('pending'),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: OmiColors.border, width: 1.5),
+                      ),
+                    ),
                 },
               ),
             ),
