@@ -29,13 +29,12 @@ class ApiProblem {
   final int? statusCode;
   final Duration? retryAfter;
   bool get retryable => switch (kind) {
-        ApiProblemKind.transport ||
-        ApiProblemKind.authTransient ||
-        ApiProblemKind.rateLimited ||
-        ApiProblemKind.server =>
-          true,
-        _ => false,
-      };
+    ApiProblemKind.transport ||
+    ApiProblemKind.authTransient ||
+    ApiProblemKind.rateLimited ||
+    ApiProblemKind.server => true,
+    _ => false,
+  };
 
   @override
   String toString() => 'ApiProblem($kind, statusCode: $statusCode)';
@@ -77,22 +76,22 @@ class ApiExecutionSeams {
 }
 
 ApiProblemKind _kindForStatus(int statusCode) => switch (statusCode) {
-      401 => ApiProblemKind.authTerminal,
-      403 => ApiProblemKind.forbidden,
-      404 => ApiProblemKind.notFound,
-      402 => ApiProblemKind.paymentRequired,
-      422 => ApiProblemKind.unprocessable,
-      429 => ApiProblemKind.rateLimited,
-      >= 500 && <= 599 => ApiProblemKind.server,
-      _ => ApiProblemKind.rejected,
-    };
+  401 => ApiProblemKind.authTerminal,
+  403 => ApiProblemKind.forbidden,
+  404 => ApiProblemKind.notFound,
+  402 => ApiProblemKind.paymentRequired,
+  422 => ApiProblemKind.unprocessable,
+  429 => ApiProblemKind.rateLimited,
+  >= 500 && <= 599 => ApiProblemKind.server,
+  _ => ApiProblemKind.rejected,
+};
 
 ApiFailure<T> _authFailure<T>(AuthTokenResult result) {
   final transient = result is AuthTokenTransientFailure;
   return ApiFailure(ApiProblem(transient ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal));
 }
 
-Duration? _retryAfter(http.Response response, DateTime Function() now) {
+Duration? parseApiRetryAfter(http.Response response, DateTime Function() now) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   final seconds = int.tryParse(raw.trim());
@@ -126,7 +125,7 @@ ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) dec
     ApiProblem(
       kind,
       statusCode: response.statusCode,
-      retryAfter: kind == ApiProblemKind.rateLimited ? _retryAfter(response, now) : null,
+      retryAfter: kind == ApiProblemKind.rateLimited ? parseApiRetryAfter(response, now) : null,
     ),
   );
 }

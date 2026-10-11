@@ -4,43 +4,33 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/read_retry.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-Future<Memory?> createMemoryServer(
-  String content,
-  String visibility,
-  String category,
-) async {
+Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
-    body: json.encode({
-      'content': content,
-      'visibility': visibility,
-      'category': category,
-    }),
+    body: json.encode({'content': content, 'visibility': visibility, 'category': category}),
   );
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromGeneratedWireJson(
-      json.decode(response.body) as Map<String, dynamic>,
-    );
+    return Memory.fromGeneratedWireJson(json.decode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
 
-Future<bool> updateMemoryVisibilityServer(
-  String memoryId,
-  String visibility,
-) async {
+Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId/visibility?value=$visibility',
     headers: {},
@@ -188,11 +178,7 @@ GetMemoriesResult memoriesResultFromHttp({
   bool? beliefEnabled,
 }) {
   if (statusCode == null) {
-    return const GetMemoriesResult(
-      [],
-      true,
-      failureReason: MemoriesFetchFailureReason.noResponse,
-    );
+    return const GetMemoriesResult([], true, failureReason: MemoriesFetchFailureReason.noResponse);
   }
   if (statusCode == 200) {
     try {
@@ -205,20 +191,10 @@ GetMemoriesResult memoriesResultFromHttp({
         statusCode: 200,
       );
     } catch (_) {
-      return const GetMemoriesResult(
-        [],
-        true,
-        statusCode: 200,
-        failureReason: MemoriesFetchFailureReason.decodeError,
-      );
+      return const GetMemoriesResult([], true, statusCode: 200, failureReason: MemoriesFetchFailureReason.decodeError);
     }
   }
-  return GetMemoriesResult(
-    const [],
-    true,
-    statusCode: statusCode,
-    failureReason: MemoriesFetchFailureReason.httpError,
-  );
+  return GetMemoriesResult(const [], true, statusCode: statusCode, failureReason: MemoriesFetchFailureReason.httpError);
 }
 
 /// Builds the query used by GET /v3/memories.
@@ -250,12 +226,7 @@ String buildMemoriesListUrl({
 /// Builds the owner history route. Offset is used for the initial page and a
 /// server-issued cursor takes over only when the response supplies one.
 @visibleForTesting
-String buildLedgerHistoryUrl({
-  required String baseUrl,
-  int limit = 500,
-  int offset = 0,
-  String? cursor,
-}) {
+String buildLedgerHistoryUrl({required String baseUrl, int limit = 500, int offset = 0, String? cursor}) {
   final base = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
   final query = <String, String>{'limit': '$limit'};
   if (cursor == null) {
@@ -263,37 +234,48 @@ String buildLedgerHistoryUrl({
   } else {
     query['cursor'] = cursor;
   }
-  return Uri.parse('${base}v3/memories/ledger-history')
-      .replace(
-        queryParameters: query,
-      )
-      .toString();
+  return Uri.parse('${base}v3/memories/ledger-history').replace(queryParameters: query).toString();
 }
 
-void _reportMemoriesFetchFailure(GetMemoriesResult result) {
-  Logger.error(
-    'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}',
-  );
+@visibleForTesting
+Future<void> reportMemoriesFetchFailure(
+  GetMemoriesResult result, {
+  Future<void> Function(String)? supportLog,
+  void Function(Map<String, dynamic>)? productError,
+  Future<void> Function(Object, StackTrace, {required Map<String, String> userAttributes})? nonFatal,
+}) async {
+  final message = 'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason?.name}';
+  Logger.debug(message); // Avoid Talker's second Crashlytics event.
+  try {
+    await (supportLog ?? (message) => DebugLogManager.logError(message))(message);
+  } catch (_) {
+    // Support logging must not turn a handled fetch into an uncaught error.
+  }
+  final attributes = {
+    'response_status_code': result.statusCode?.toString() ?? '',
+    'failure_reason': result.failureReason?.name ?? '',
+  };
+  try {
+    (productError ?? (properties) => AnalyticsManager().track('Product Error', properties: properties))({
+      'error': message, // Bounded status/reason only, never response bodies or exception text.
+      'error_kind': 'memories_fetch',
+      'diagnostic_source': 'memories_fetch',
+      ...attributes,
+    });
+  } catch (_) {
+    // Analytics is supplemental to the primary non-fatal record.
+  }
   if (result.failureReason == MemoriesFetchFailureReason.noResponse) return;
-  PlatformManager.instance.crashReporter.reportCrash(
-    Exception(
-      'Failed to fetch memories: ${result.statusCode} ${result.failureReason}',
-    ),
+  await (nonFatal ?? PlatformManager.instance.crashReporter.reportNonFatal)(
+    Exception(message),
     StackTrace.current,
-    userAttributes: {
-      'response_status_code': result.statusCode?.toString() ?? '',
-      'failure_reason': result.failureReason?.name ?? '',
-    },
+    userAttributes: attributes,
   );
 }
 
 List<Memory> _decodeMemoriesResponse(String body) {
   return (json.decode(body) as List<dynamic>)
-      .map(
-        (memory) => Memory.fromGeneratedWireJson(
-          Map<String, dynamic>.from(memory as Map),
-        ),
-      )
+      .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
       .toList();
 }
 
@@ -304,12 +286,19 @@ Future<GetMemoriesResult> getMemoriesResult({
   bool thisDeviceOnly = false,
   MemoryReadView? view,
   bool forceView = false,
+  Future<http.Response?> Function(String url, Map<String, String> headers)? send,
+  ReadRetry? retry,
+  Future<void> Function(GetMemoriesResult)? reportFailure,
+  DateTime? deadline,
 }) async {
+  final policy = retry ?? ReadRetry();
+  final end = deadline ?? policy.now().add(ReadRetry.callerWindow);
   // Probe once per owner/environment before sending temporal query params.
   // The response header becomes the source of truth for later beta requests.
   final beliefCapability = memoryBeliefCapability;
-  final requestedView =
-      memoryBeliefBetaEnabled && (beliefCapability == true || forceView) ? (view ?? MemoryReadView.usefulNow) : null;
+  final requestedView = memoryBeliefBetaEnabled && (beliefCapability == true || forceView)
+      ? (view ?? MemoryReadView.usefulNow)
+      : null;
   final url = buildMemoriesListUrl(
     baseUrl: Env.apiBaseUrl ?? '',
     limit: limit,
@@ -318,11 +307,25 @@ Future<GetMemoriesResult> getMemoriesResult({
     thisDeviceOnly: thisDeviceOnly,
     view: requestedView,
   );
-  var response = await makeApiCall(
-    url: url,
-    headers: memoryBeliefBetaHeaders,
-    method: 'GET',
-    body: '',
+  final report = reportFailure ?? reportMemoriesFetchFailure;
+  http.Response? reportedResponse;
+  final response = await policy.run(
+    (timeout) => send != null
+        ? send(url, memoryBeliefBetaHeaders)
+        : makeApiCall(
+            url: url,
+            headers: memoryBeliefBetaHeaders,
+            method: 'GET',
+            body: '',
+            retries: 0,
+            timeout: timeout,
+            canSend: () => !policy.isClosed && policy.now().isBefore(end),
+          ),
+    deadline: end,
+    onRetry: (response) async {
+      reportedResponse = response;
+      await report(memoriesResultFromHttp(statusCode: response.statusCode));
+    },
   );
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
@@ -334,6 +337,10 @@ Future<GetMemoriesResult> getMemoriesResult({
       cursor: cursor,
       view: view,
       forceView: forceView,
+      send: send,
+      retry: policy,
+      deadline: end,
+      reportFailure: reportFailure,
     );
     return GetMemoriesResult(
       fallback.memories,
@@ -346,9 +353,7 @@ Future<GetMemoriesResult> getMemoriesResult({
     );
   }
   if (response != null && response.statusCode != 200) {
-    Logger.debug(
-      'getMemories error ${response.statusCode} body=${response.body}',
-    );
+    Logger.debug('getMemories error ${response.statusCode}');
   }
   final result = memoriesResultFromHttp(
     statusCode: response?.statusCode,
@@ -358,11 +363,8 @@ Future<GetMemoriesResult> getMemoriesResult({
     beliefEnabled: _memoryBeliefCapabilityFromResponse(response),
   );
   _rememberMemoryBeliefCapability(result.beliefEnabled);
-  if (!result.ok) {
-    if (result.failureReason == MemoriesFetchFailureReason.decodeError) {
-      Logger.error('Failed to decode memories 200 response');
-    }
-    _reportMemoriesFetchFailure(result);
+  if (!result.ok && (response == null || !identical(response, reportedResponse))) {
+    await report(result);
   }
   return result;
 }
@@ -406,18 +408,9 @@ class GetLedgerHistoryResult {
 /// Older backends do not expose this additive route; any non-200 response is
 /// therefore treated as an unavailable history projection while the current
 /// memories list remains usable.
-Future<GetLedgerHistoryResult> getLedgerHistory({
-  int limit = 500,
-  int offset = 0,
-  String? cursor,
-}) async {
+Future<GetLedgerHistoryResult> getLedgerHistory({int limit = 500, int offset = 0, String? cursor}) async {
   final response = await makeApiCall(
-    url: buildLedgerHistoryUrl(
-      baseUrl: Env.apiBaseUrl ?? '',
-      limit: limit,
-      offset: offset,
-      cursor: cursor,
-    ),
+    url: buildLedgerHistoryUrl(baseUrl: Env.apiBaseUrl ?? '', limit: limit, offset: offset, cursor: cursor),
     headers: memoryBeliefBetaHeaders,
     method: 'GET',
     body: '',
@@ -479,12 +472,7 @@ Future<bool> deleteMemoryServer(String memoryId) async {
 }
 
 Future<bool> deleteAllMemoriesServer() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v3/memories', headers: {}, method: 'DELETE', body: '');
   if (response == null) return false;
   Logger.debug('deleteAllMemories response: ${response.body}');
   return response.statusCode == 200;
@@ -509,33 +497,23 @@ class RevertMemoryResult {
 /// [operationId] is minted once by the provider for the user tap and remains
 /// stable for this request. The response must carry the appended authoritative
 /// replacement; callers must not infer success from the status code alone.
-Future<RevertMemoryResult> revertMemoryServer(
-  String memoryId,
-  String operationId,
-) async {
+Future<RevertMemoryResult> revertMemoryServer(String memoryId, String operationId) async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId/revert',
     headers: {},
     method: 'POST',
-    body: json.encode(
-      wire.GeneratedMemoryRevertRequest(operationId: operationId).toJson(),
-    ),
+    body: json.encode(wire.GeneratedMemoryRevertRequest(operationId: operationId).toJson()),
   );
   if (response == null || response.statusCode != 200) {
     return const RevertMemoryResult(persisted: false);
   }
   try {
-    final payload = wire.GeneratedMemoryEditResponse.fromJson(
-      json.decode(response.body) as Map<String, dynamic>,
-    );
+    final payload = wire.GeneratedMemoryEditResponse.fromJson(json.decode(response.body) as Map<String, dynamic>);
     if (payload.status != 'ok') {
       return const RevertMemoryResult(persisted: false);
     }
     final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
-    return RevertMemoryResult(
-      persisted: authoritativeMemory != null,
-      authoritativeMemory: authoritativeMemory,
-    );
+    return RevertMemoryResult(persisted: authoritativeMemory != null, authoritativeMemory: authoritativeMemory);
   } catch (error) {
     Logger.warning('revertMemory response decode failed: $error');
     return const RevertMemoryResult(persisted: false);
@@ -555,15 +533,11 @@ Future<EditMemoryResult> editMemoryServer(String memoryId, String value) async {
   try {
     final payload = json.decode(response.body) as Map<String, dynamic>;
     final rawMemory = payload['memory'];
-    final authoritativeMemory =
-        rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
-    Logger.debug(
-      'editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}',
-    );
-    return EditMemoryResult(
-      persisted: true,
-      authoritativeMemory: authoritativeMemory,
-    );
+    final authoritativeMemory = rawMemory is Map
+        ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory))
+        : null;
+    Logger.debug('editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}');
+    return EditMemoryResult(persisted: true, authoritativeMemory: authoritativeMemory);
   } catch (error) {
     Logger.warning('editMemory response decode failed: $error');
     return const EditMemoryResult(persisted: false);
@@ -612,24 +586,17 @@ Future<MemoryUseResult> useMemoryServer({
     headers: memoryBeliefBetaHeaders,
     method: 'POST',
     body: json.encode(
-      wire.GeneratedMemoryUseRequest(
-        action: _generatedMemoryUseAction(action),
-        feedbackId: feedbackId,
-      ).toJson(),
+      wire.GeneratedMemoryUseRequest(action: _generatedMemoryUseAction(action), feedbackId: feedbackId).toJson(),
     ),
   );
   if (response == null) return const MemoryUseResult(persisted: false);
 
   if (response.statusCode != 200) {
-    Logger.debug(
-      'useMemory response ${response.statusCode} body=${response.body}',
-    );
+    Logger.debug('useMemory response ${response.statusCode} body=${response.body}');
     return MemoryUseResult(persisted: false, statusCode: response.statusCode);
   }
   try {
-    final payload = wire.GeneratedMemoryUseResponse.fromJson(
-      json.decode(response.body) as Map<String, dynamic>,
-    );
+    final payload = wire.GeneratedMemoryUseResponse.fromJson(json.decode(response.body) as Map<String, dynamic>);
     final persisted = payload.status == 'ok' || payload.status == 'idempotent';
     final confirmedAction = _memoryUseActionFromGenerated(payload.action);
     if (!persisted || confirmedAction == null) {

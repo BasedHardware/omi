@@ -121,9 +121,10 @@ Future<String> getAuthHeader({
       jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = storedToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -196,7 +197,8 @@ Future<Map<String, String>> buildHeaders({
   // trusted while an override is active.
   if (Env.hasApiBaseUrlOverride && (url == null || !shouldAttachOmiCredentials(url))) {
     headers.removeWhere(
-        (name, _) => name.toLowerCase() == 'authorization' || name.toLowerCase() == 'x-account-generation');
+      (name, _) => name.toLowerCase() == 'authorization' || name.toLowerCase() == 'x-account-generation',
+    );
   }
 
   if (shouldAttachAccountGenerationHeader(
@@ -471,9 +473,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-        reason: AuthSessionExpirationReason.terminalTokenFailure,
-        code: code,
-      ),
+      reason: AuthSessionExpirationReason.terminalTokenFailure,
+      code: code,
+    ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -662,6 +664,7 @@ Future<http.Response?> makeApiCall({
   Duration? timeout,
   int? retries,
   bool signOutOn401 = true,
+  bool Function()? canSend,
 }) async {
   try {
     return await sendUncaughtApiCall(
@@ -672,6 +675,7 @@ Future<http.Response?> makeApiCall({
       timeout: timeout,
       retries: retries,
       signOutOn401: signOutOn401,
+      canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
@@ -1031,7 +1035,8 @@ Stream<String> makeStreamingApiCall({
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: method, headers: headers, body: body);
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1125,7 +1130,8 @@ Stream<String> makeMultipartStreamingApiCall({
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: 'POST', headers: headers, body: '');
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1140,14 +1146,14 @@ Stream<String> makeMultipartStreamingApiCall({
     Map<String, String> builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
 
     Future<http.MultipartRequest> buildRequest() => _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: 'POST',
-          abortTrigger: setupAbort.future,
-        );
+      url: url,
+      files: files,
+      headers: builtHeaders,
+      fields: fields,
+      fileFieldName: fileFieldName,
+      method: 'POST',
+      abortTrigger: setupAbort.future,
+    );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
 

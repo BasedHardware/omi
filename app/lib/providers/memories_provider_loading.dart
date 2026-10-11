@@ -1,6 +1,22 @@
 part of 'memories_provider.dart';
 
 extension _MemoriesProviderLoading on MemoriesProvider {
+  Future<GetMemoriesResult> _getMemoriesCursorPage({
+    int limit = 100,
+    int offset = 0,
+    bool thisDeviceOnly = false,
+    String? cursor,
+    MemoryReadView? view,
+  }) => getMemoriesResult(
+    limit: limit,
+    offset: offset,
+    thisDeviceOnly: thisDeviceOnly,
+    cursor: cursor,
+    view: view,
+    forceView: view != null,
+    retry: _memoriesReadRetry,
+  );
+
   Future<GetMemoriesResult> _fetchMemoryPage({
     required int limit,
     required int offset,
@@ -161,7 +177,8 @@ extension _MemoriesProviderLoading on MemoriesProvider {
             continue;
           }
           Logger.warning(
-              'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols');
+            'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols',
+          );
           break;
         }
         // Scope belongs to the successful current-page response. The separate

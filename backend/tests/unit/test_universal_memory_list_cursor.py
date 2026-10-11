@@ -19,6 +19,20 @@ from utils.memory.universal_list_cursor import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _memory_read_burst(monkeypatch):
+    # The cursor suite pages thousands of rows through MemoryService in well
+    # under a second. #21227's process-wide RetryAllowance defaults to 8
+    # tokens refilling 1/sec, so read-page loops exhaust admission
+    # deterministically (attempts=0 → MemoryReadAdmissionDenied). Raise the
+    # burst for this suite and give every test a fresh allowance — the shared
+    # module-global instance otherwise carries spent tokens between tests.
+    import utils.memory.read_resilience as _rr
+
+    monkeypatch.setenv("OMI_MEMORY_READ_RETRY_BURST", "64")
+    monkeypatch.setattr(_rr, "_retry_allowance", _rr.RetryAllowance())
+
+
 @pytest.fixture
 def service_mod(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED", "on")
