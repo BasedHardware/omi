@@ -216,8 +216,8 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-unit-tests.yml/backend-unit-shard": {
-      "budget_p50_minutes": 9,
-      "display_name": "Backend unit shard ${{ matrix.shard }}/4",
+      "budget_p50_minutes": 8,
+      "display_name": "Backend unit shard ${{ matrix.shard }}/6",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 119,
       "if": null,
@@ -226,17 +226,19 @@
           "1",
           "2",
           "3",
-          "4"
+          "4",
+          "5",
+          "6"
         ]
       },
-      "matrix_size": 4,
+      "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 118 until the next weekly audit",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 4
+        "linux": 6
       },
       "runs_on": "ubuntu-latest"
     },
