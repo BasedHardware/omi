@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-channel-action-receipt-liveness",
+  "violated_contract": "A messaging-channel action must confirm only its observed write, bind Undo to that specific receipt, and leave the chat able to accept another turn while an inverse performs slow domain cleanup or fails.",
+  "canonical_prevention": "Emit structured receipts from shared tool outcomes; render action-specific controls in adapters; atomically claim each durable inverse once without retaining the chat turn lease; fence ambiguous effects against replay and deliver a guarded error. Exercise the full message/callback/message sequence and duplicate claims against the Firestore emulator.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_messaging_live_qa.py",
+    "backend/tests/unit/test_messaging_adapters_firestore.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/messaging/",
+    "backend/tests/unit/test_messaging_live_qa.py"
+  ],
+  "status": "open"
+}

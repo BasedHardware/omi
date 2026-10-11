@@ -1693,19 +1693,25 @@ async def execute_agentic_chat_stream(
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
-            system_prompt = await run_blocking(
-                db_executor,
-                _get_agentic_qa_prompt,
-                uid,
-                app,
-                messages,
-                context=context,
-                tz=tz,
-                platform=platform,
-            )
-            system_prompt = append_jit_conversation_retrieval_prompt(
-                system_prompt, enabled=jit_conversation_retrieval_enabled
-            )
+            runtime = surface_runtime.get()
+            if runtime is not None and runtime.surface != 'app':
+                # Channels always use chat_mount; its runner ignores this legacy
+                # prompt. Avoid its redundant memory/context reads and prompt IO.
+                system_prompt = ''
+            else:
+                system_prompt = await run_blocking(
+                    db_executor,
+                    _get_agentic_qa_prompt,
+                    uid,
+                    app,
+                    messages,
+                    context=context,
+                    tz=tz,
+                    platform=platform,
+                )
+                system_prompt = append_jit_conversation_retrieval_prompt(
+                    system_prompt, enabled=jit_conversation_retrieval_enabled
+                )
 
             # Get prompt metadata for tracing/versioning
             prompt_name, prompt_commit, prompt_source = None, None, None

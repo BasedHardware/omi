@@ -23,6 +23,8 @@ from utils.messaging.memory_privacy import (
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
+from utils.messaging.projection import surface_runtime
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -313,6 +315,14 @@ def get_memories_tool(
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
         msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
+        runtime = surface_runtime.get()
+        if runtime is not None and runtime.surface != 'app':
+            msg = (
+                f"No memories are available to this chat for this query{date_info}. "
+                "Privacy, review, and temporal filters can withhold saved memories. "
+                "This does not prove the user has no saved personal facts. "
+                "Use any supplied activity context accurately and distinguish it from retrieved memories."
+            )
         if scan_truncated:
             msg += " The bounded scan reached its safety limit; more memories may exist."
         logger.info(f"⚠️ get_memories_tool - {msg}")

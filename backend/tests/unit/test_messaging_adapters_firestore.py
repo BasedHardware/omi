@@ -80,26 +80,28 @@ def test_undo_encrypted_scoped_expired_once_and_ambiguous_inverse(store, monkeyp
     token = surface_runtime.set(runtime)
     calls = []
     try:
-        manager.record('test', 'session', 'task', 'object', None, {'description': 'synthetic task'})
-        assert 'synthetic task' not in str(manager.ref('test', 'session').get().to_dict())
+        receipt = manager.record('test', 'session', 'task', 'object', None, {'description': 'synthetic task'})
+        assert 'synthetic task' not in str(manager.ref('test', 'session', receipt.id).get().to_dict())
         monkeypatch.setattr(undo, 'apply_inverse', lambda uid, payload: calls.append((uid, payload)))
-        assert 'no reversible' in manager.undo('other', 'session')
-        assert 'Undid' in manager.undo('test', 'session')
-        assert 'no reversible' in manager.undo('test', 'session')
+        assert manager.undo('other', 'session', receipt.id).status == 'unavailable'
+        assert manager.undo('test', 'session', receipt.id).status == 'undone'
+        assert manager.undo('test', 'session', receipt.id).status == 'already_undone'
         assert len(calls) == 1
-        manager.record('test', 'session', 'task', 'object', None, {})
-        manager.ref('test', 'session').update({'expires_at': datetime.now(timezone.utc) - timedelta(seconds=1)})
-        assert 'no reversible' in manager.undo('test', 'session')
-        manager.record('test', 'session', 'task', 'object', None, {})
+        receipt = manager.record('test', 'session', 'task', 'object', None, {})
+        manager.ref('test', 'session', receipt.id).update(
+            {'expires_at': datetime.now(timezone.utc) - timedelta(seconds=1)}
+        )
+        assert manager.undo('test', 'session', receipt.id).status == 'unavailable'
+        receipt = manager.record('test', 'session', 'task', 'object', None, {})
 
         def fail(*args):
             raise RuntimeError('ambiguous')
 
         monkeypatch.setattr(undo, 'apply_inverse', fail)
         with pytest.raises(RuntimeError):
-            manager.undo('test', 'session')
-        assert manager.ref('test', 'session').get().to_dict()['state'] == 'running'
-        assert 'no reversible' in manager.undo('test', 'session')
+            manager.undo('test', 'session', receipt.id)
+        assert manager.ref('test', 'session', receipt.id).get().to_dict()['state'] == 'running'
+        assert manager.undo('test', 'session', receipt.id).status == 'unavailable'
     finally:
         surface_runtime.reset(token)
 
@@ -139,3 +141,54 @@ def test_inverse_receipt_fences_revocation_and_never_recreates_session(store):
         assert not store.user('test').collection('chat_sessions').document(session['id']).get().exists
     finally:
         surface_runtime.reset(token)
+
+
+def test_specific_receipts_survive_later_writes_and_text_undo_rejects_multiwrite(store, monkeypatch):
+    store.db.collection('channel_identities').document('test-link').set(
+        {'active': True, 'uid': 'test', 'generation': 'generation'}
+    )
+    store.user('test').collection('chat_sessions').document('session').set(
+        {'channel_link_id': 'test-link', 'link_generation': 'generation'}
+    )
+    manager = UndoStore(store)
+    runtime = SurfaceRuntime('channel:test', '', Principal('test'), session_id='session', turn_id='turn-one')
+    token = surface_runtime.set(runtime)
+    calls = []
+    monkeypatch.setattr(undo, 'apply_inverse', lambda uid, payload: calls.append(payload['object_id']))
+    try:
+        first = manager.record('test', 'session', 'memory', 'memory-one', None, 'Synthetic fact')
+        second = manager.record('test', 'session', 'task', 'task-two', None, {'description': 'Synthetic task'})
+        assert manager.undo('test', 'session').status == 'unavailable'
+        manager.bind_bubble('test', 'session', first.id, '71')
+        result = manager.undo('test', 'session', first.id)
+        assert result.status == 'undone' and result.bubble_id == '71'
+        assert manager.ref('test', 'session', second.id).get().to_dict()['state'] == 'ready'
+        manager.mark_edited('test', 'session', first.id)
+        replay = manager.undo('test', 'session', first.id)
+        assert replay.status == 'already_undone' and replay.bubble_id is None
+        assert calls == ['memory-one']
+        assert manager.undo('test', 'session', second.id).status == 'undone'
+        assert calls == ['memory-one', 'task-two']
+    finally:
+        surface_runtime.reset(token)
+
+
+def test_duplicate_callback_race_claims_inverse_once(store, monkeypatch):
+    store.db.collection('channel_identities').document('test-link').set(
+        {'active': True, 'uid': 'test', 'generation': 'generation'}
+    )
+    store.user('test').collection('chat_sessions').document('session').set(
+        {'channel_link_id': 'test-link', 'link_generation': 'generation'}
+    )
+    manager = UndoStore(store)
+    token = surface_runtime.set(SurfaceRuntime('channel:test', '', Principal('test'), session_id='session'))
+    try:
+        receipt = manager.record('test', 'session', 'task', 'task-one', None, {'description': 'Synthetic task'})
+    finally:
+        surface_runtime.reset(token)
+    calls = []
+    monkeypatch.setattr(undo, 'apply_inverse', lambda uid, payload: calls.append(payload['object_id']))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: manager.undo('test', 'session', receipt.id), range(4)))
+    assert sum(result.status == 'undone' for result in results) == 1
+    assert calls == ['task-one']

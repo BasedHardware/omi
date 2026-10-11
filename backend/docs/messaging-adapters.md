@@ -101,17 +101,58 @@ primitive. No deploy, queue workflow or automatic ambiguous replay is added.
 
 ## Undo
 
-Memory preference and task creation/update, playbook/trigger creation, and standalone
-fact closure record a surface-scoped encrypted inverse receipt. User-visible text reports
-the write and a five-minute undo window; Telegram adds an undo callback. App behavior
-adds no inverse IO. Receipts are removed with their session on unlink/account deletion.
-Undo claims once; ambiguous inverse outcomes remain `running` and are never replayed.
-Task restoration compares the complete observed row inside a transaction and cancels or
-restores scheduled reminders. Memory inverses use the universal `MemoryService`; closed
-facts use its lineage-preserving reopen operation. Changed/historical memories fail closed.
-Calendar/external writes retain their existing tools and are outside these local inverse
-receipts. A memory content check can race a separate surface mutation before service entry;
-full conditional cross-surface memory inverse admission remains a rollout risk.
+Shared memory/task tools emit structured `ActionReceipt` values from the confirmed
+write's canonical object ID and outcome data. They reuse the in-app `memoryLink`
+(`MemoryLinkSpec`) and `taskCard` (`TaskCardSpec`) vocabulary. No model text is parsed
+into write authority. Memory preference and task creation/update, playbook/trigger
+creation, and standalone fact closure record an encrypted inverse per action.
+The assistant answer has no undo footer or controls. Each action gets a separate
+confirmation bubble. Telegram attaches `Undo` with that receipt's opaque ID, not a
+"last write" command. The adapter acknowledges every supported callback immediately.
+After successful undo it edits the persisted confirmation message to `— Undone` and
+removes its button. A second tap never repeats the inverse; an interrupted edit can
+be retried separately. Legacy unscoped Telegram controls cannot reverse a newer write.
+
+Linq has no inline buttons: it renders a plain action receipt and accepts text `undo`
+only when the latest write turn contains exactly one receipt. Multiple writes are
+ambiguous and fail closed. A subsequent write invalidates the text selector before
+mutation. Specific Telegram receipts survive later writes. The inverse admission
+window remains five minutes, without model narration of commands/time windows.
+App behavior adds no inverse IO. Receipts are removed with their session on unlink
+or account deletion.
+
+An inverse atomically claims its own receipt once. A tracked async coordinator runs
+that domain operation on `postprocess_executor`, outside the chat lease and DB worker
+pool, because canonical privacy cleanup may take minutes. Other chat turns can proceed.
+Inverse exceptions send a guarded short error and leave that inverse `running` for
+reconciliation; ambiguous effects are never replayed. Ordinary settled turn failures
+finish the inbox tombstone, try an error reply, and release the surface lease. Shutdown
+cancellation retains fencing when executor/provider work may still be alive.
+
+Task restoration compares the complete observed row inside a transaction and cancels
+or restores scheduled reminders. Memory inverses use the universal `MemoryService`;
+closed facts use its lineage-preserving reopen operation. Changed/historical memories
+fail closed. Calendar/external writes retain their existing tools and are outside these
+local inverse receipts. A memory content check can race a separate mutation before
+service entry; full conditional memory inverse admission remains a rollout risk.
+
+Dated reminders use the same `create_action_item_tool` and existing reminder data/push
+path as Omi chat. Delivery is through Omi's reminder system, not an unsolicited Telegram
+message (this rollout permits replies only). The channel skill explains that limit;
+a Telegram-only delivery request must get an explicit limitation, not a promise.
+
+## First-message feedback
+
+Typing begins immediately after linked-account admission, before session creation,
+media preparation, history/digest work and model setup. It refreshes every four seconds
+on Telegram; provider typing failures have a two-second budget and cannot abort the turn.
+A content-free `Messaging phase=typing` elapsed time is logged. First-use awareness reads
+only twenty recent messages; older context remains available through history/memory
+tools. Channels skip the unused legacy prompt/context load because `chat_mount` is their
+sole prompt authority. App prompt selection and bytes remain unchanged.
+
+The first live QA evidence and fixture measurements are recorded in
+[the channel runbook](runbooks/messaging-channels.md#first-live-qa-2026-10-11).
 
 ## Verification layers
 

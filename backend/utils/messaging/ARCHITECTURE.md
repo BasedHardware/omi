@@ -16,7 +16,8 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
   omit device charts, app retains its existing tools.
 - `history.py`, `app_awareness.py`: cross-surface append-only awareness and search.
 - `undo.py`: encrypted five-minute inverse receipts; reserves before supported writes,
-  reports outcomes, and delegates inverses to domain authorities.
+  emits shared memoryLink/taskCard action receipts, scopes inverse claims per action,
+  and delegates slow inverses to domain authorities without occupying the chat lease.
 - `adapters/base.py`: shared pacing, owned-file tools and media preparation.
 - `adapters/telegram.py`: private-chat Bot API verification, parsing, drafts and delivery.
 - `adapters/linq.py`: replaceable `IMessageProvider` and Linq implementation.

@@ -175,3 +175,45 @@ deletes the account.
 Live provider testing waits on David's bot and Linq setup. WhatsApp stays a
 local waitlist. Insights is stored and not honored. There is no clear-history
 route separate from unlink.
+
+
+## First live QA, 2026-10-11
+
+Read-only Cloud Logging evidence for 09:14–09:40 UTC showed revision
+`backend-433b2d6-38108932764-1`, rather than the earlier revision in the brief.
+All reported Telegram webhooks returned 202. The unanswered requests were admitted
+at 09:19:03, 09:22:33 and 09:22:45 UTC. CPU throttling was disabled; request-only CPU
+allocation does not explain this incident.
+
+On the instance handling the 09:17:23 callback, memory inverse vector cleanup was
+logged at 09:17:36, graph-citation pruning at 09:22:34, and the background messaging
+worker reported `ProviderError` at 09:25:06. This supports slow inverse cleanup
+holding the surface lease, followed by a settled send failure retaining that lease.
+The old gateway held its lease across `UndoStore.undo` and deliberately skipped
+release on every exception. Logs do not contain per-phase timings or a stack for
+that provider error, so they do not prove the precise cleanup substep or rejected
+provider method. No production data/leases were changed for this investigation.
+Existing stranded jobs/leases still require operator reconciliation before any reset.
+
+On the first user turn, `get_memories_tool` used the expected principal at 09:15:35,
+reported zero visible rows at 09:15:43, and memory search returned empty at 09:15:45.
+There was no logged retrieval exception in that window. The historical tool text
+suggested that no saved personal facts existed, although the channel digest supplied
+personal context. Channel-only empty-result guidance now distinguishes unavailable
+retrieval from absent knowledge. The logs cannot distinguish privacy/review/temporal
+filtering from an empty underlying store; this investigation did not read account data.
+
+Synthetic timing regressions, run through `backend/test.sh` on the original and
+changed source, measured first typing at **176.2 ms → 0.7 ms** with 80 ms session
+and 80 ms digest delays. The same fixture's full turn still takes about 170 ms;
+this is feedback timing, not a production model latency claim. A separate channel
+setup fixture with an 80 ms discarded legacy-prompt read measured **101.6 ms →
+16.9 ms**, and prompt reads **1 → 0**. These are local measurements, not deployed
+acceptance. Production phase instrumentation can verify feedback latency after rollout.
+
+`test_messaging_live_qa.py` exercises no-write callback → message, memory receipt →
+slow undo → another message, duplicate callbacks, provider/inverse errors, distinct
+confirmation bubbles, bounded bootstrap history, and a dated reminder through the
+real shared tool projection. `test_messaging_adapters_firestore.py` exercises encrypted
+per-action receipts, expiry, cross-session scope, multiwrite text-undo ambiguity and
+concurrent once-only claims against the loopback Firestore emulator.
