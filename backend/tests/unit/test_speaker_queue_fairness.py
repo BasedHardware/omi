@@ -309,21 +309,31 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     host.state.speaker_id_enabled = True
     host.state.speaker_id_done = asyncio.Event()
     host.request.uid = 'test-owner'
-    host.persistence = SimpleNamespace(call=AsyncMock(return_value={}))
+    rejected_finished = asyncio.Event()
+
+    async def authority(*args):
+        # Force the cheaper rejected task to finish while owner authority awaits.
+        await rejected_finished.wait()
+        return {}
+
+    host.persistence = SimpleNamespace(call=AsyncMock(side_effect=authority))
     matcher._profile_conversation_id = 'conversation'
     matcher._embedding_attempts[1] = 8
     matcher._socket_embedding_tokens = 1
     for i in range(80):
         matcher.queue.put_nowait(_work(1, start=0, seconds=5, segment=f'rejector-{i}'))
     matcher.queue.put_nowait(_work(2, start=6, seconds=5))
-    order = []
+    order, completed = [], []
     original = matcher.match
     finished = asyncio.Event()
 
     async def match(voice, work):
         order.append(voice)
         await original(voice, work)
-        if len(order) == 2:
+        completed.append(voice)
+        if voice == 1:
+            rejected_finished.set()
+        if len(completed) == 2:
             finished.set()
 
     monkeypatch.setattr(matcher, 'match', match)
@@ -332,6 +342,7 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     try:
         await asyncio.wait_for(finished.wait(), timeout=1)
         assert order == [2, 1]
+        assert completed == [1, 2]
         assert matcher.speaker_to_person[2] == ('user', 'User')
         assert matcher._embedding_attempts[2] == 1 and matcher._embedding_attempts[1] == 8
         assert matcher._socket_embedding_tokens == 0
