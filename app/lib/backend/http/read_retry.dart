@@ -8,9 +8,9 @@ import 'package:omi/backend/http/api_result.dart';
 /// Retry-After. Auth replay remains owned by shared.dart.
 class ReadRetry {
   ReadRetry({Future<void> Function(Duration)? wait, DateTime Function()? now, double Function()? random})
-    : _wait = wait,
-      now = now ?? DateTime.now,
-      random = random ?? Random().nextDouble;
+      : _wait = wait,
+        now = now ?? DateTime.now,
+        random = random ?? Random().nextDouble;
 
   static const callerWindow = Duration(seconds: 10); // Siri's smallest caller timeout.
   final Future<void> Function(Duration)? _wait;
@@ -60,13 +60,12 @@ class ReadRetry {
   }) async {
     final end = deadline ?? now().add(callerWindow);
     http.Response? lastResponse;
-    for (var attempt = 0; ; attempt++) {
+    for (var attempt = 0;; attempt++) {
       final started = now();
       final remaining = end.difference(started);
       if (_closed.isCompleted || remaining <= Duration.zero) return lastResponse;
-      final response = await send(
-        remaining,
-      ).then<http.Response?>((value) => value).timeout(remaining, onTimeout: () => null);
+      final response =
+          await send(remaining).then<http.Response?>((value) => value).timeout(remaining, onTimeout: () => null);
       final requestTime = now().difference(started);
       lastResponse = response;
       if (_closed.isCompleted ||

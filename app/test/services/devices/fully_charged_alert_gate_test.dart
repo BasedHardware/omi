@@ -293,10 +293,8 @@ void main() {
         final edge = harness.gate.chargeStartedAt!;
         harness.elapse(harness.dwell + const Duration(milliseconds: 1));
 
-        harness.sample(
-          100,
-          at: edge.subtract(FullyChargedAlertGate.preEdgeStaleTolerance + const Duration(milliseconds: 1)),
-        );
+        harness.sample(100,
+            at: edge.subtract(FullyChargedAlertGate.preEdgeStaleTolerance + const Duration(milliseconds: 1)));
         expect(harness.notifications, isEmpty, reason: 'earlier than the edge by more than the tolerance is pre-edge');
 
         harness.sample(100, at: edge.subtract(const Duration(milliseconds: 1)));

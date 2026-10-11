@@ -29,7 +29,8 @@ class _ResponseRetry extends ReadRetry {
     Future<http.Response?> Function(Duration) send, {
     required Future<void> Function(http.Response) onRetry,
     DateTime? deadline,
-  }) => super.run((_) => response(), onRetry: onRetry, deadline: deadline);
+  }) =>
+      super.run((_) => response(), onRetry: onRetry, deadline: deadline);
 }
 
 void main() {
@@ -69,37 +70,21 @@ void main() {
     });
   }
 
+  recoveryTest('429 honors Retry-After seconds', http.Response('', 429, headers: {'retry-after': '4'}),
+      const Duration(seconds: 4));
   recoveryTest(
-    '429 honors Retry-After seconds',
-    http.Response('', 429, headers: {'retry-after': '4'}),
-    const Duration(seconds: 4),
-  );
+      '503 honors Retry-After HTTP date',
+      http.Response('', 503, headers: {'retry-after': HttpDate.format(DateTime.utc(2026, 10, 11, 0, 0, 5))}),
+      const Duration(seconds: 5));
   recoveryTest(
-    '503 honors Retry-After HTTP date',
-    http.Response('', 503, headers: {'retry-after': HttpDate.format(DateTime.utc(2026, 10, 11, 0, 0, 5))}),
-    const Duration(seconds: 5),
-  );
-  recoveryTest(
-    '503 uses exponential base with the lower jitter bound',
-    http.Response('', 503),
-    const Duration(seconds: 1),
-  );
-  recoveryTest(
-    '503 uses exponential base with the upper jitter bound',
-    http.Response('', 503),
-    const Duration(milliseconds: 1249),
-    jitter: 0.999999,
-  );
-  recoveryTest(
-    'invalid Retry-After falls back to backoff',
-    http.Response('', 429, headers: {'retry-after': 'invalid'}),
-    const Duration(seconds: 1),
-  );
-  recoveryTest(
-    'negative Retry-After falls back to backoff',
-    http.Response('', 429, headers: {'retry-after': '-1'}),
-    const Duration(seconds: 1),
-  );
+      '503 uses exponential base with the lower jitter bound', http.Response('', 503), const Duration(seconds: 1));
+  recoveryTest('503 uses exponential base with the upper jitter bound', http.Response('', 503),
+      const Duration(milliseconds: 1249),
+      jitter: 0.999999);
+  recoveryTest('invalid Retry-After falls back to backoff', http.Response('', 429, headers: {'retry-after': 'invalid'}),
+      const Duration(seconds: 1));
+  recoveryTest('negative Retry-After falls back to backoff', http.Response('', 429, headers: {'retry-after': '-1'}),
+      const Duration(seconds: 1));
 
   test('503 gives up after three attempts with 1s then 2s backoff and reports each failure once', () {
     fakeAsync((clock) {
@@ -186,7 +171,10 @@ void main() {
 
   test('unexpected send errors propagate to the existing uncaught-error policy', () async {
     final error = StateError('programming defect');
-    await expectLater(getMemoriesResult(send: (_, __) async => throw error), throwsA(same(error)));
+    await expectLater(
+      getMemoriesResult(send: (_, __) async => throw error),
+      throwsA(same(error)),
+    );
   });
 
   test('review timing: 2s 503 plus Retry-After 8 does not start a doomed retry', () {
@@ -339,10 +327,13 @@ void main() {
   test('production provider default fetch shares owned retry and stops on disposal', () {
     fakeAsync((clock) {
       var sends = 0;
-      final retry = _ResponseRetry(() async {
-        sends++;
-        return http.Response('', 503);
-      }, now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed));
+      final retry = _ResponseRetry(
+        () async {
+          sends++;
+          return http.Response('', 503);
+        },
+        now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed),
+      );
       final provider = MemoriesProvider(memoriesReadRetry: retry);
       var completed = false;
       provider.loadMemories().then((_) => completed = true);

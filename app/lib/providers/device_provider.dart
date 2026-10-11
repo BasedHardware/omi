@@ -155,10 +155,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Duration? fullyChargedMinimumDwell,
     FullyChargedNotification? fullyChargedNotification,
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
-  }) : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-       _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
-       _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
-       _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
+        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _fullyChargedAlert = FullyChargedAlertGate(
       now: clock ?? DateTime.now,
       monotonicNow: monotonicNow,
@@ -289,8 +289,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
-    final endedDeviceWasLiveCapture =
-        endedDevice != null &&
+    final endedDeviceWasLiveCapture = endedDevice != null &&
         endedDevice.id == liveCaptureDevice?.id &&
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
@@ -441,15 +440,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device
-        .ensureConnection(device.id)
-        .timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            Logger.debug('DeviceProvider: Timed out finding the active device connection');
-            return null;
-          },
-        );
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        Logger.debug('DeviceProvider: Timed out finding the active device connection');
+        return null;
+      },
+    );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
@@ -509,12 +506,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = globalNavigatorKey.currentContext;
-          unawaited(
-            NotificationService.instance.createNotification(
-              title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
-              body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
-            ),
-          );
+          unawaited(NotificationService.instance.createNotification(
+            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+            body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
+          ));
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;
         }
@@ -662,9 +657,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed = _lastBatteryNotifyTime == null
-        ? const Duration(minutes: 999)
-        : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =

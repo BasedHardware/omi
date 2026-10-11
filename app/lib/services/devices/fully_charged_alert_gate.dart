@@ -38,9 +38,9 @@ class FullyChargedAlertGate {
     Duration? minimumDwell,
     required this.onFullyCharged,
     this.onLevelMismatch,
-  }) : _now = now ?? DateTime.now,
-       _monotonicNowOverride = monotonicNow,
-       minimumDwell = minimumDwell ?? minimumOnChargerDwell;
+  })  : _now = now ?? DateTime.now,
+        _monotonicNowOverride = monotonicNow,
+        minimumDwell = minimumDwell ?? minimumOnChargerDwell;
 
   static const Duration minimumOnChargerDwell = Duration(seconds: 60);
 

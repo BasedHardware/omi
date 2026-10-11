@@ -65,11 +65,11 @@ void main() {
         'error_kind': 'memories_fetch',
         'diagnostic_source': 'memories_fetch',
         'response_status_code': '503',
-        'failure_reason': 'httpError',
+        'failure_reason': 'httpError'
       },
     ]);
     expect(records, [
-      {'response_status_code': '503', 'failure_reason': 'httpError'},
+      {'response_status_code': '503', 'failure_reason': 'httpError'}
     ]);
   });
 
