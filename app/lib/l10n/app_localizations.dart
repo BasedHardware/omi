@@ -16983,6 +16983,12 @@ abstract class AppLocalizations {
   /// **'Fair-use limit reached — syncing will resume automatically'**
   String get syncCardRateLimited;
 
+  /// Offline Sync cooldown after a temporary request throttle; syncing resumes automatically, recording is unaffected.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing paused briefly — it will resume automatically'**
+  String get syncCardThrottlePaused;
+
   /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
   ///
   /// In en, this message translates to:

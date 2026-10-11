@@ -56,6 +56,16 @@ NORMALIZED_EXCLUDED_FILES = {
     ".github/scripts/deferred-work-marker-count.py",
     "AGENTS.md",
     "CLAUDE.md",
+    # Vendored BERT WordPiece vocabulary for the on-device tokenizer
+    # (app/android/app/src/main/assets/vocab.txt). Line 20579 is the legitimate
+    # token "hack", which comment_fragment() reads as a deferred-work marker
+    # because a line whose first word matches MARKER_RE is treated as a comment.
+    #
+    # Excluded rather than fixed in the PR that vendors it, because the file
+    # cannot be edited: its line index *is* the token id, so removing or
+    # reordering a row silently renumbers every token after it and changes what
+    # the tokenizer produces.
+    "app/android/app/src/main/assets/vocab.txt",
 }
 
 

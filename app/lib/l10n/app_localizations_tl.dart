@@ -9196,6 +9196,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync';
 
   @override
+  String get syncCardThrottlePaused => 'Pansamantalang naka-pause ang pag-sync — awtomatiko itong magpapatuloy';
+
+  @override
   String get syncCardBackendBusy =>
       'Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli';
 

@@ -9130,6 +9130,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardRateLimited => 'منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی';
 
   @override
+  String get syncCardThrottlePaused => 'سنک تھوڑی دیر کے لیے روک دیا گیا ہے — یہ خود بخود دوبارہ شروع ہوگا';
+
+  @override
   String get syncCardBackendBusy => 'Omi کے سرورز مصروف ہیں — گنجائش بحال ہوتے ہی آپ کی ریکارڈنگز سنک ہو جائیں گی';
 
   @override

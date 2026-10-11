@@ -9187,6 +9187,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncCardRateLimited => 'Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisierung kurz pausiert — sie wird automatisch fortgesetzt';
+
+  @override
   String get syncCardBackendBusy =>
       'Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist';
 

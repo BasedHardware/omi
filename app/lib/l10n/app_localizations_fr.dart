@@ -9194,6 +9194,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncCardRateLimited => 'Limite d\'utilisation atteinte — la synchronisation reprendra automatiquement';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisation brièvement suspendue — elle reprendra automatiquement';
+
+  @override
   String get syncCardBackendBusy =>
       'Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie';
 
