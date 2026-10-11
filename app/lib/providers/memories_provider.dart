@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:omi/services/client_device_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/read_retry.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -57,22 +58,6 @@ MemoryReadView _serverViewForCollection(MemoryCollectionView view) {
 Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
     const GetLedgerHistoryResult([], supported: false);
 
-Future<GetMemoriesResult> _getMemoriesCursorPage({
-  int limit = 100,
-  int offset = 0,
-  bool thisDeviceOnly = false,
-  String? cursor,
-  MemoryReadView? view,
-}) =>
-    getMemoriesResult(
-      limit: limit,
-      offset: offset,
-      thisDeviceOnly: thisDeviceOnly,
-      cursor: cursor,
-      view: view,
-      forceView: view != null,
-    );
-
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
   bool _loading = true;
@@ -102,7 +87,8 @@ class MemoriesProvider extends ChangeNotifier {
   int _loadSequence = 0;
   int _ledgerProjectionRevision = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
-  final FetchMemoriesCursorRequest? _fetchMemoriesCursorRequest;
+  late final FetchMemoriesCursorRequest? _fetchMemoriesCursorRequest;
+  ReadRetry _memoriesReadRetry;
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final FetchLedgerHistoryCursorRequest? _fetchLedgerHistoryCursorRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
@@ -157,9 +143,9 @@ class MemoriesProvider extends ChangeNotifier {
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
     MemoryUseRequest? memoryUseRequest,
+    ReadRetry? memoriesReadRetry,
   })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-        _fetchMemoriesCursorRequest =
-            fetchMemoriesCursorRequest ?? (fetchMemoriesRequest == null ? _getMemoriesCursorPage : null),
+        _memoriesReadRetry = memoriesReadRetry ?? ReadRetry(),
         _fetchLedgerHistoryRequest =
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
         _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
@@ -171,7 +157,10 @@ class MemoriesProvider extends ChangeNotifier {
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
         _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer,
-        _memoryUseRequest = memoryUseRequest ?? useMemoryServer;
+        _memoryUseRequest = memoryUseRequest ?? useMemoryServer {
+    _fetchMemoriesCursorRequest =
+        fetchMemoriesCursorRequest ?? (fetchMemoriesRequest == null ? _getMemoriesCursorPage : null);
+  }
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -395,6 +384,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _memoriesReadRetry.close();
+    _memoriesReadRetry = _memoriesReadRetry.newSession();
     _sessionGeneration++;
     // Break the load-coalescing join: a caller that arrives after the clear
     // must start a fresh load, not await the retired session's in-flight one
@@ -567,6 +558,7 @@ class MemoriesProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _memoriesReadRetry.close();
     _sessionGeneration++;
     _cancelDeletionTimer();
     _connectivityProvider?.removeListener(_onConnectivityChanged);
