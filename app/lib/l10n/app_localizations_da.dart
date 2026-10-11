@@ -9104,6 +9104,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncCardRateLimited => 'Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk';
 
   @override
+  String get syncCardThrottlePaused => 'Synkronisering er kortvarigt sat på pause — den genoptages automatisk';
+
+  @override
   String get syncCardBackendBusy => 'Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet';
 
   @override

@@ -2976,6 +2976,7 @@
     },
     "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.",
     "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek",
+    "syncCardThrottlePaused": "Senkronizasyon kısa süreliğine duraklatıldı — otomatik olarak devam edecek",
     "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek",
     "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor",
     "promoCode": "Promosyon kodu",

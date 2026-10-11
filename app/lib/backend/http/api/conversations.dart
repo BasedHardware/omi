@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -612,10 +613,12 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
 class UploadFilesResult {
   final String? jobId;
   final SyncLocalFilesResponse? completed;
+  final int pollAfterMs;
 
-  const UploadFilesResult._(this.jobId, this.completed);
-  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
-  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
+  const UploadFilesResult._(this.jobId, this.completed, this.pollAfterMs);
+  factory UploadFilesResult.queued(String jobId, {int pollAfterMs = 20000}) =>
+      UploadFilesResult._(jobId, null, pollAfterMs);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result, 0);
 
   bool get isQueued => jobId != null;
 }
@@ -633,8 +636,8 @@ class SyncUploadHttpException implements Exception {
 /// Server-provided classification for a sync upload HTTP 429.
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
-/// 429 is backend capacity unless the response carries Omi's explicit reason.
-enum SyncRateLimitKind { fairUse, backendCapacity }
+/// 429 is an edge throttle unless the response carries Omi's explicit capacity reason.
+enum SyncRateLimitKind { fairUse, backendCapacity, edgeThrottle }
 
 @visibleForTesting
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
@@ -738,10 +741,12 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Classifies a sync 429 without relying on human-readable error text.
 ///
 /// The application-generated restriction response carries this bounded header.
-/// Everything else remains a generic backend-capacity limit.
+/// Everything else is an unclassified throttle, not evidence of global capacity.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
   final reason = syncRateLimitReasonCode(response);
-  return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+  if (reason == 'fair_use') return SyncRateLimitKind.fairUse;
+  if (reason == 'backfill_capacity' || reason == 'backfill_paced') return SyncRateLimitKind.backendCapacity;
+  return SyncRateLimitKind.edgeThrottle;
 }
 
 /// Bounded `X-Omi-Rate-Limit-Reason` value, or null when the header is absent.
@@ -774,6 +779,34 @@ bool isPacedBackfillReasonCode(String? reasonCode) {
 bool isSyncUploadRateLimitResponse(http.Response response) {
   if (response.statusCode == 429) return true;
   return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
+}
+
+/// The server still owns these bytes; wait without spending recording retries.
+@visibleForTesting
+bool isSyncContentInProgressResponse(http.Response response) {
+  if (response.statusCode != 409) return false;
+  try {
+    final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'sync_content_in_progress';
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Optional owner id in the additive 409 contract; old servers omit it.
+@visibleForTesting
+UploadFilesResult? syncContentInProgressResult(http.Response response) {
+  if (!isSyncContentInProgressResponse(response)) return null;
+  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+    jsonDecode(response.body) as Map<String, dynamic>,
+  );
+  final id = body.jobId;
+  if (id == null || id.trim().isEmpty) return null;
+  final pollAfterMs = body.pollAfterMs ?? 20000;
+  return UploadFilesResult.queued(id,
+      pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)));
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -835,7 +868,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     if (start.jobId.isEmpty) {
       throw Exception('Upload accepted but no job id returned');
     }
-    return UploadFilesResult.queued(start.jobId);
+    return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
     throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
@@ -843,6 +876,14 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
     throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
+  } else if (isSyncContentInProgressResponse(response)) {
+    final existingJob = syncContentInProgressResult(response);
+    if (existingJob != null) return existingJob;
+    throw SyncRateLimitedException(
+      kind: SyncRateLimitKind.edgeThrottle,
+      retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
+      reasonCode: 'sync_content_in_progress',
+    );
   } else if (isSyncUploadRateLimitResponse(response)) {
     throw SyncRateLimitedException(
       kind: syncRateLimitKindForResponse(response),
@@ -860,11 +901,12 @@ Future<UploadFilesResult> uploadLocalFilesV2(
 /// Why a single job-status fetch did not yield a usable status.
 /// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
 ///                 for this job_id; the caller must fall back to re-upload.
+/// - [throttled] : 429 — stop the pass and honor the account cooldown.
 /// - [transient] : network/5xx/null — retry later, job may still be alive.
 ///                 Includes the 503 returned while backfill finalization is
 ///                 still retrying: the WAL stays `uploaded`, and this poll is
 ///                 not an upload failure.
-enum SyncJobFetchOutcome { ok, notFound, transient }
+enum SyncJobFetchOutcome { ok, notFound, transient, throttled }
 
 /// Maps a job-status HTTP code before the body is parsed.
 ///
@@ -874,6 +916,7 @@ enum SyncJobFetchOutcome { ok, notFound, transient }
 /// user-visible upload failures are minted only for admitted upload attempts.
 @visibleForTesting
 SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
+  if (statusCode == 429) return SyncJobFetchOutcome.throttled;
   if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
   if (statusCode != 200) return SyncJobFetchOutcome.transient;
   return SyncJobFetchOutcome.ok;
@@ -882,7 +925,11 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
 class SyncJobFetch {
   final SyncJobFetchOutcome outcome;
   final SyncJobStatusResponse? status;
-  const SyncJobFetch(this.outcome, [this.status]);
+  final SyncRateLimitedException? rateLimit;
+  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
+  const SyncJobFetch.throttled(this.rateLimit)
+      : outcome = SyncJobFetchOutcome.throttled,
+        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -899,6 +946,13 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
+  if (outcome == SyncJobFetchOutcome.throttled) {
+    return SyncJobFetch.throttled(SyncRateLimitedException(
+      kind: syncRateLimitKindForResponse(response),
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+      reasonCode: syncRateLimitReasonCode(response),
+    ));
+  }
   if (outcome == SyncJobFetchOutcome.notFound) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
       'jobId': jobId,

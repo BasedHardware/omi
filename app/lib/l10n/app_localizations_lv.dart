@@ -9137,6 +9137,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski';
 
   @override
+  String get syncCardThrottlePaused => 'Sinhronizācija īslaicīgi apturēta — tā atsāksies automātiski';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda';
 

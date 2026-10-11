@@ -174,6 +174,7 @@ SCHEMA_GROUPS = {
             'SyncLocalFilesResultResponse',
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',
+            'SyncContentInProgressResponse',
             'SyncJobStatusResponse',
             'RejectSpeakerRequest',
             'SyncCaptureManifestFile',

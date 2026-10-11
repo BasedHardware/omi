@@ -1750,11 +1750,44 @@ class GeneratedSyncRecoveryWindowExceededResponse {
   }
 }
 
+class GeneratedSyncContentInProgressResponse {
+  final String code;
+  final String detail;
+  final String? jobId;
+  final int? pollAfterMs;
+
+  const GeneratedSyncContentInProgressResponse({
+    required this.code,
+    this.detail = "The same audio is already processing",
+    this.jobId,
+    this.pollAfterMs,
+  });
+
+  factory GeneratedSyncContentInProgressResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncContentInProgressResponse(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      detail: _required(_readFieldValue<String>(_readField(json, const ["detail"]), "detail", _readString, requiredField: false, nullable: false, defaultValue: "The same audio is already processing"), "detail"),
+      jobId: _readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: false, nullable: true),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'detail': detail,
+      'job_id': jobId,
+      'poll_after_ms': pollAfterMs,
+    };
+  }
+}
+
 class GeneratedSyncJobStatusResponse {
   final String? error;
   final int failedSegments;
   final String jobId;
   final String lane;
+  final int? pollAfterMs;
   final int processedSegments;
   final String? reasonCode;
   final int? recordingAgeSeconds;
@@ -1769,6 +1802,7 @@ class GeneratedSyncJobStatusResponse {
     this.failedSegments = 0,
     required this.jobId,
     this.lane = "fresh",
+    this.pollAfterMs,
     this.processedSegments = 0,
     this.reasonCode,
     this.recordingAgeSeconds,
@@ -1785,6 +1819,7 @@ class GeneratedSyncJobStatusResponse {
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
       lane: _required(_readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: false, defaultValue: "fresh"), "lane"),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
       processedSegments: _required(_readFieldValue<int>(_readField(json, const ["processed_segments"]), "processed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "processed_segments"),
       reasonCode: _readFieldValue<String>(_readField(json, const ["reason_code"]), "reason_code", _readString, requiredField: false, nullable: true),
       recordingAgeSeconds: _readFieldValue<int>(_readField(json, const ["recording_age_seconds"]), "recording_age_seconds", _readInt, requiredField: false, nullable: true),
@@ -1802,6 +1837,7 @@ class GeneratedSyncJobStatusResponse {
       'failed_segments': failedSegments,
       'job_id': jobId,
       'lane': lane,
+      'poll_after_ms': pollAfterMs,
       'processed_segments': processedSegments,
       'reason_code': reasonCode,
       'recording_age_seconds': recordingAgeSeconds,

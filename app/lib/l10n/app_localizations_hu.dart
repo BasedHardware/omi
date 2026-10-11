@@ -9153,6 +9153,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
 
   @override
+  String get syncCardThrottlePaused => 'A szinkronizálás rövid időre szünetel — automatikusan folytatódik';
+
+  @override
   String get syncCardBackendBusy =>
       'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
 
