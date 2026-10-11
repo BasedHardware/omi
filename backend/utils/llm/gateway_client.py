@@ -742,7 +742,7 @@ def _openai_embedding_batches(texts: list[str]) -> list[list[str]]:
     current_tokens = 0
     changed = 0
     for text in texts:
-        fitted, token_count = _fit_openai_embedding_text(text if isinstance(text, str) else '')
+        fitted, token_count = _fit_openai_embedding_text(text)
         if fitted != text:
             changed += 1
         if current and (
