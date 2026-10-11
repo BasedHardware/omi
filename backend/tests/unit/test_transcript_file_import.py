@@ -2607,3 +2607,31 @@ def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job
 
     release.assert_called_once_with(UID, 'byte', 'reservation')
     assert job.store.docs == {}
+
+
+@pytest.mark.parametrize('extension', ['.srt', '.txt'])
+def test_cr_cr_lf_line_endings_do_not_split_every_cue_from_its_text(extension):
+    """A twice-converted Windows file ends lines with CR CR LF; it became blank-line separated single lines."""
+    lines = [
+        '1',
+        '00:00:01,000 --> 00:00:02,000',
+        'Alice: Hello',
+        '',
+        '2',
+        '00:00:03,000 --> 00:00:04,000',
+        'Bob: World',
+    ]
+    text = '\r\r\n'.join(lines) + '\r\r\n'
+
+    parsed = tf.parse_transcript_file(f'call{extension}', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text, cue.start, cue.end) for cue in parsed.cues] == [
+        ('Alice', 'Hello', 1.0, 2.0),
+        ('Bob', 'World', 3.0, 4.0),
+    ]
+
+
+@pytest.mark.parametrize('line_end', ['\n', '\r\n', '\r', '\r\r\n'])
+def test_every_line_ending_normalizes_to_one_newline(line_end):
+    assert tf._normalize(line_end.join(['a', 'b', '', 'c'])) == 'a\nb\n\nc'

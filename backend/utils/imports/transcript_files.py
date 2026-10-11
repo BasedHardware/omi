@@ -133,6 +133,7 @@ class ParsedTranscript:
 _TIMESTAMP = r'(?:\d{1,3}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
 _TIMESTAMP_RE = re.compile(r'(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
+_LINE_END_RE = re.compile(r'\r+\n|\r')
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
 # A whole label that is a generic placeholder, not a name: "Speaker 2", "SPEAKER_01",
 # "spk 3", "Participant 1", "Unknown Speaker". It is a speaker even as a one-off, and
@@ -187,7 +188,10 @@ def _seconds(value: str) -> Optional[float]:
 
 
 def _normalize(text: str) -> str:
-    return text.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
+    # A Windows text-mode writer that re-saves CRLF produces "\r\r\n" line ends;
+    # replacing "\r\n" first and the stray "\r" second would double every line
+    # break, and the blank lines that result split each cue's timing from its text.
+    return _LINE_END_RE.sub('\n', text.lstrip('﻿'))
 
 
 def _unescape(text: str) -> str:
