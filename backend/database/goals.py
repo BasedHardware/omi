@@ -88,6 +88,12 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
+class GoalValidationError(GoalStoreError):
+    """The caller's goal input is inconsistent with the stored goal (a bad request, not a server fault)."""
+
+    pass
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
@@ -296,6 +302,15 @@ def _metric_from_storage(data: dict[str, Any]) -> Optional[GoalMetric]:
         )
     except ValidationError:
         return None
+
+
+def _metric_validation_detail(exc: ValidationError) -> str:
+    """Client-showable reason for a rejected metric merge, without pydantic's internal framing."""
+    for error in exc.errors():
+        message = str(error.get('msg') or '').strip()
+        if message:
+            return message.removeprefix('Value error, ').strip() or 'invalid goal metric'
+    return 'invalid goal metric'
 
 
 def _metric_aliases(metric: Optional[GoalMetric]) -> dict[str, Any]:
@@ -596,14 +611,21 @@ def update_goal(
         metric = GoalMetric.model_validate(metric_value) if metric_value is not None else None
     elif any(key in patch for key in legacy_metric_keys):
         current_metric = _metric_from_storage(current) or GoalMetric(type=GoalType.scale, current=0, target=0)
-        metric = GoalMetric(
-            type=GoalType(patch.get('goal_type', current_metric.type.value)),
-            current=float(patch.get('current_value', current_metric.current)),
-            target=float(patch.get('target_value', current_metric.target)),
-            min=patch.get('min_value', current_metric.min),
-            max=patch.get('max_value', current_metric.max),
-            unit=patch.get('unit', current_metric.unit),
-        )
+        # Released clients patch one alias at a time, so the request alone can be valid while the
+        # merge with the stored metric is not (a new min above the stored max). That is the
+        # caller's input being rejected, so surface it as a typed domain error for the route to
+        # map to 4xx instead of letting the ValidationError escape as a 500.
+        try:
+            metric = GoalMetric(
+                type=GoalType(patch.get('goal_type', current_metric.type.value)),
+                current=float(patch.get('current_value', current_metric.current)),
+                target=float(patch.get('target_value', current_metric.target)),
+                min=patch.get('min_value', current_metric.min),
+                max=patch.get('max_value', current_metric.max),
+                unit=patch.get('unit', current_metric.unit),
+            )
+        except ValidationError as exc:
+            raise GoalValidationError(_metric_validation_detail(exc)) from exc
     else:
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
