@@ -35,6 +35,7 @@ import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// A parsed in-app link (`/conversation/abc?share=1`, `/apps/xyz`, `/settings/data-privacy`) as
@@ -60,6 +61,22 @@ class HomeDeepLink {
       id: segments.length > 1 ? segments[1] : null,
       query: uri?.queryParameters ?? const {},
     );
+  }
+
+  /// Private item links on the share host: `https://h.omi.me/conversation/<id>`,
+  /// `/task/<id>`, `/memory/<id>` (also as `omi://h.omi.me/…`, which the web
+  /// fallback page uses on iOS). Singular on purpose: the plural
+  /// `/conversations/<id>` and `/tasks/<token>` are public share pages with their
+  /// own handling. Returns the in-app route, or null for any other link.
+  static const itemLinkKinds = {'conversation', 'task', 'memory'};
+
+  static String? itemRouteFromAppLink(Uri uri, {String? shareBase}) {
+    final hosts = {'h.omi.me', Uri.tryParse(shareBaseUrl(shareBase))?.host};
+    if (!hosts.contains(uri.host.toLowerCase())) return null;
+    if (uri.scheme != 'https' && uri.scheme != 'omi') return null;
+    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segments.length != 2 || !itemLinkKinds.contains(segments[0])) return null;
+    return '/${segments[0]}/${Uri.encodeComponent(segments[1])}';
   }
 
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page

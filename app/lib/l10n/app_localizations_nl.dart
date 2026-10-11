@@ -9805,6 +9805,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get chatBlockMemory => 'Herinnering';
 
   @override
+  String get chatBlockPerson => 'Persoon';
+
+  @override
+  String get chatBlockUndone => 'Ongedaan gemaakt';
+
+  @override
+  String get chatBlockUndoFailed => 'Deze wijziging kon niet ongedaan worden gemaakt';
+
+  @override
   String get chatBlockQuestion => 'Vraag';
 
   @override

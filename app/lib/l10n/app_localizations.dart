@@ -18207,6 +18207,24 @@ abstract class AppLocalizations {
   /// **'Memory'**
   String get chatBlockMemory;
 
+  /// Caption on a chat card for a change to one of the user's people
+  ///
+  /// In en, this message translates to:
+  /// **'Person'**
+  String get chatBlockPerson;
+
+  /// Shown on a chat change receipt after the change was undone
+  ///
+  /// In en, this message translates to:
+  /// **'Undone'**
+  String get chatBlockUndone;
+
+  /// Error when undoing a change from chat fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t undo that change'**
+  String get chatBlockUndoFailed;
+
   /// Eyebrow label on a chat question card block
   ///
   /// In en, this message translates to:

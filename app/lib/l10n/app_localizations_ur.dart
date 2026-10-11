@@ -9795,6 +9795,15 @@ class AppLocalizationsUr extends AppLocalizations {
   String get chatBlockMemory => 'یاد';
 
   @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'کالعدم کر دیا گیا';
+
+  @override
+  String get chatBlockUndoFailed => 'یہ تبدیلی کالعدم نہیں ہو سکی';
+
+  @override
   String get chatBlockQuestion => 'سوال';
 
   @override

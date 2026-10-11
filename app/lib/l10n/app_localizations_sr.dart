@@ -9792,6 +9792,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get chatBlockMemory => 'Сећање';
 
   @override
+  String get chatBlockPerson => 'Особа';
+
+  @override
+  String get chatBlockUndone => 'Поништено';
+
+  @override
+  String get chatBlockUndoFailed => 'Ова промена није могла да се поништи';
+
+  @override
   String get chatBlockQuestion => 'Питање';
 
   @override

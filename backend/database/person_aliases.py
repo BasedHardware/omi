@@ -1,6 +1,7 @@
 """Stable person rename and bounded exact-alias retention."""
 
 from datetime import datetime, timezone
+from database import chat_edits
 from typing import Any
 
 from google.api_core.exceptions import NotFound
@@ -17,7 +18,9 @@ def normalized_person_alias(value: Any) -> str | None:
 
 
 @transactional
-def update_person_name_transaction(transaction: Any, person_ref: Any, name: str) -> bool:
+def update_person_name_transaction(
+    transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
+) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
 
     snapshot = person_ref.get(transaction=transaction)
@@ -25,6 +28,10 @@ def update_person_name_transaction(transaction: Any, person_ref: Any, name: str)
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
+    if expected_chat_state is not None:
+        fields = {key: data[key] for key in chat_edits.FIELDS['person'] if key in data}
+        if chat_edits.encode(fields) != expected_chat_state['before']:
+            raise PermissionError('Person changed before rename')
     normalized_name = normalized_person_alias(name)
     if normalized_name is None:
         return False
@@ -42,22 +49,22 @@ def update_person_name_transaction(transaction: Any, person_ref: Any, name: str)
     prior_name = normalized_person_alias(data.get('name'))
     if prior_name is not None and prior_name.casefold() not in seen:
         aliases.append(prior_name)
-    transaction.update(
-        person_ref,
-        {
-            'name': normalized_name,
-            'aliases': aliases[-24:],
-            'updated_at': datetime.now(timezone.utc),
-        },
-    )
+    patch = {'name': normalized_name, 'aliases': aliases[-24:], 'updated_at': datetime.now(timezone.utc)}
+    transaction.update(person_ref, patch)
+    if expected_chat_state is not None:
+        expected_chat_state['after'] = chat_edits.encode(patch)
     return True
 
 
-def rename_person_retaining_aliases(db_client: Any, uid: str, person_id: str, name: str) -> bool:
+def rename_person_retaining_aliases(
+    db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
+) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
 
     person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
     try:
+        if expected_chat_state is not None:
+            return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
         return update_person_name_transaction(db_client.transaction(), person_ref, name)
     except NotFound:
         return False

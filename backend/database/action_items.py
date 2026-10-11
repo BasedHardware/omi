@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from database import chat_edits
 from database.dream_dirty import after_write
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
@@ -959,7 +960,9 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 
 
 @after_write('action_items')
-def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
+def update_action_item(
+    uid: str, action_item_id: str, update_data: Dict[str, Any], *, expected_chat_state: Optional[Dict[str, Any]] = None
+) -> bool:
     """
     Update an action item.
 
@@ -1022,7 +1025,12 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     update_data['updated_at'] = datetime.now(timezone.utc)
 
     # Update the document
-    action_item_ref.update(update_data)
+    if expected_chat_state is not None:
+        expected_chat_state['after'] = chat_edits.apply_update(
+            uid, 'task', action_item_id, expected_chat_state['before'], update_data, firestore_client=db
+        )
+    else:
+        action_item_ref.update(update_data)
     if update_data.get('completed') is True:
         _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
