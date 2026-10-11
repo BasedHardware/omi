@@ -45,6 +45,7 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
                     showAppBar: false,
                     showShareButton: false,
                     initialZoom: 0.72,
+                    fitToBounds: true,
                   ),
                 ),
               ),
