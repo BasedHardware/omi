@@ -52,6 +52,13 @@ from utils.observability.owner_recognition import (
     record_live_speaker_rollover,
     record_owner_reconnect,
 )
+from utils.observability.speaker_embedding_budget import (
+    BUDGET_EXITS,
+    BUDGET_VOICES,
+    BUDGET_SOCKETS,
+    EMBEDDING_ATTEMPTS,
+)
+from routers.listen.speaker_queue import SpeakerMatchQueue
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +130,12 @@ def _read_file(path: str) -> bytes:
 class SpeakerMatcher:
     def __init__(self, host: Any):
         self.host = host
-        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
+        self.queue = SpeakerMatchQueue(
+            generation=lambda: self._generation,
+            attempts=lambda voice: self._embedding_attempts.get(voice, 0),
+            near_owner=lambda voice: voice in self._voice_decisions and owner_near_miss(self._voice_decisions[voice]),
+            clock=lambda: time.monotonic(),
+        )
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
@@ -158,6 +170,10 @@ class SpeakerMatcher:
         self._embedding_attempts: Dict[int, int] = {}
         self._socket_embedding_tokens = float(SOCKET_EMBEDDING_BURST)
         self._socket_embedding_refilled_at = time.monotonic()
+        # Voice incidence resets with generation; socket incidence never does.
+        # Diarized IDs share the same 128-voice inventory as the admission cap.
+        self._budget_blocked_voices: set[int] = set()
+        self._budget_socket_blocked = False
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
@@ -592,6 +608,8 @@ class SpeakerMatcher:
             await self._load_profiles()
             await self.continuity.start()
         while True:
+            if len(self.tasks) >= 16:
+                await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
@@ -601,26 +619,29 @@ class SpeakerMatcher:
                 if not state.active:
                     break
                 continue
-            if self._profile_conversation_id is not None and self._owner_load_failed:
-                await self.refresh_for_conversation(self._profile_conversation_id)
-            speaker_id = segment['speaker_id']
-            if should_spawn_speaker_match(
-                speaker_already_mapped=speaker_id in self.speaker_to_person,
-                duration=segment['duration'],
-                min_audio_seconds=0.0,
-            ):
-                if len(self.tasks) >= 16:
-                    await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
-                task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
-                self.tasks.add(task)
-                task.add_done_callback(self.tasks.discard)
-            else:
-                # Dropped before a match is attempted; count it with the same
-                # bounded vocabulary the match path uses.
-                self._record_exit(
-                    'already_mapped' if speaker_id in self.speaker_to_person else 'segment_shorter_than_minimum',
-                    speaker_id,
-                )
+            spawned = False
+            try:
+                if self._profile_conversation_id is not None and self._owner_load_failed:
+                    await self.refresh_for_conversation(self._profile_conversation_id)
+                speaker_id = segment['speaker_id']
+                if should_spawn_speaker_match(
+                    speaker_already_mapped=speaker_id in self.speaker_to_person,
+                    duration=segment['duration'],
+                    min_audio_seconds=0.0,
+                ):
+                    task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
+                    self.tasks.add(task)
+                    task.add_done_callback(self.tasks.discard)
+                    task.add_done_callback(lambda done, work=segment: self.queue.complete(work))
+                    spawned = True
+                else:
+                    self._record_exit(
+                        'already_mapped' if speaker_id in self.speaker_to_person else 'segment_shorter_than_minimum',
+                        speaker_id,
+                    )
+            finally:
+                if not spawned:
+                    self.queue.complete(segment)
         state.speaker_id_done.set()
 
     def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
@@ -649,7 +670,37 @@ class SpeakerMatcher:
     def _record_exit(self, reason: str, speaker_id: int) -> None:
         assert reason in SPEAKER_ID_EXIT_REASONS, reason
         OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=reason).inc()
-        logger.info('speaker_id_exit reason=%s speaker=%s session=%s', reason, speaker_id, self._session_log_id())
+        if reason != 'embedding_budget':
+            logger.info('speaker_id_exit reason=%s speaker=%s session=%s', reason, speaker_id, self._session_log_id())
+
+    def _record_budget_exit(self, cap: str, speaker_id: int, segment: Optional[dict[str, Any]]) -> None:
+        # This synchronous pair increments once per blocked reservation; no
+        # per-segment budget log. The one first-block log is attributable by UID.
+        BUDGET_EXITS.labels(cap=cap).inc()
+        self._record_exit('embedding_budget', speaker_id)
+        if not self._budget_socket_blocked:
+            self._budget_socket_blocked = True
+            BUDGET_SOCKETS.labels(cap=cap).inc()
+        if speaker_id in self._budget_blocked_voices:
+            return
+        self._budget_blocked_voices.add(speaker_id)
+        BUDGET_VOICES.labels(cap=cap).inc()
+        logger.info(
+            'speaker_id_budget_first_block uid=%s socket=%s recording=%s conversation=%s generation=%d '
+            'speaker=%s scope=%s attempts=%d tokens=%.3f evidence_seconds=%.3f pending_seconds=%.3f cap=%s',
+            getattr(self.host.request, 'uid', None),
+            getattr(self.host, 'session_id', None),
+            self._session_log_id(),
+            self._profile_conversation_id,
+            self._generation,
+            speaker_id,
+            (segment or {}).get('speaker_id_scope') or self._voice_scopes.get(speaker_id, ''),
+            self._embedding_attempts[speaker_id],
+            self._socket_embedding_tokens,
+            sum(seconds for _, seconds in self.speaker_evidence.get(speaker_id, ())),
+            sum(end - start for start, end in self._pending_audio.get(speaker_id, ())),
+            cap,
+        )
 
     async def _recover_person_embedding(self, person: Dict[str, Any]) -> Optional[Any]:
         """Rebuild a taught person's missing embedding from their stored samples.
@@ -707,7 +758,7 @@ class SpeakerMatcher:
         self._embedding_attempts.setdefault(speaker_id, 0)
         return self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
 
-    def _reserve_embedding(self, speaker_id: int) -> bool:
+    def _reserve_embedding(self, speaker_id: int, *, segment: Optional[dict[str, Any]] = None) -> bool:
         """Reserve synchronously before any await; failed requests spend tokens too."""
         now = time.monotonic()
         elapsed = max(0.0, now - self._socket_embedding_refilled_at)
@@ -716,14 +767,25 @@ class SpeakerMatcher:
             self._socket_embedding_tokens + elapsed * SOCKET_EMBEDDING_REFILL_PER_SECOND,
         )
         self._socket_embedding_refilled_at = max(now, self._socket_embedding_refilled_at)
-        if self._embedding_attempts[speaker_id] >= MAX_VOICE_EMBEDDING_ATTEMPTS or self._socket_embedding_tokens < 1:
+        voice_blocked = self._embedding_attempts[speaker_id] >= MAX_VOICE_EMBEDDING_ATTEMPTS
+        socket_blocked = self._socket_embedding_tokens < 1
+        if voice_blocked or socket_blocked:
+            self._record_budget_exit(
+                'both' if voice_blocked and socket_blocked else 'voice' if voice_blocked else 'socket',
+                speaker_id,
+                segment,
+            )
             return False
         self._socket_embedding_tokens -= 1
         self._embedding_attempts[speaker_id] += 1
+        EMBEDDING_ATTEMPTS.labels(outcome='reserved').inc()
         return True
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
         conversation_id = self._profile_conversation_id
+        if segment.get('_matcher_generation', self._generation) != self._generation:
+            self._record_exit('stale_generation', speaker_id)
+            return
         if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
             self._record_exit('stale_generation', speaker_id)
             return
@@ -931,7 +993,11 @@ class SpeakerMatcher:
                 self._record_exit('no_pcm', speaker_id)
                 return
             buffer_start, buffer_end = time_range
-            if segment['abs_end'] <= buffer_start or segment['abs_start'] >= buffer_end:
+            incoming_ranges = segment.get(
+                '_speaker_audio_ranges',
+                [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
+            )
+            if not any(end > buffer_start and start < buffer_end for start, end in incoming_ranges):
                 # The window does not intersect the retained audio at all —
                 # e.g. a provider stream whose timestamps restarted at zero
                 # after a failover while the window was still computed from
@@ -953,11 +1019,7 @@ class SpeakerMatcher:
             self._covered_audio[speaker_id] = covered
             # Retain interval metadata only; PCM stays in the bounded ring.
             # Coalesce provider repeats before subtracting successful evidence.
-            incoming = (
-                max(buffer_start, segment['abs_start']),
-                min(buffer_end, segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])),
-            )
-            ranges = self._pending_audio.get(speaker_id, []) + [incoming]
+            ranges = self._pending_audio.get(speaker_id, []) + incoming_ranges
             fresh = []
             for start, end in sorted(ranges):
                 start, end = max(start, buffer_start), min(end, buffer_end)
@@ -1024,28 +1086,13 @@ class SpeakerMatcher:
             if clip_seconds < needed:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
-            if not self._reserve_embedding(speaker_id):
-                self._record_exit('embedding_budget', speaker_id)
+            if not self._reserve_embedding(speaker_id, segment=segment):
                 return
-            samples = np.frombuffer(pcm, dtype=np.int16)
-            buffer = io.BytesIO()
-            container = av.open(buffer, mode='w', format='wav')
-            stream: Any = container.add_stream('pcm_s16le', rate=self.host.request.sample_rate)
-            stream.layout = 'mono'
-            frame = av.AudioFrame.from_ndarray(samples.reshape(1, -1), format='s16', layout='mono')
-            frame.rate = self.host.request.sample_rate
-            for packet in stream.encode(frame):
-                container.mux(packet)
-            for packet in stream.encode():
-                container.mux(packet)
-            container.close()
-            query = await run_blocking(
-                sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
-            )
+            query = await self._extract_query(pcm)
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
-            # Reserve only successful embeddings: a failed request may be retried.
+            # Cover only successful embeddings; failed requests still spend budget.
             covered.extend(selected)
             self._pending_audio.pop(speaker_id, None)
             evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
@@ -1265,6 +1312,29 @@ class SpeakerMatcher:
             if short_reconnect and not reconnect_recorded:
                 record_owner_reconnect('rejected', 'arbitration')
 
+    async def _extract_query(self, pcm: bytes) -> Any:
+        try:
+            samples = np.frombuffer(pcm, dtype=np.int16)
+            buffer = io.BytesIO()
+            container = av.open(buffer, mode='w', format='wav')
+            stream: Any = container.add_stream('pcm_s16le', rate=self.host.request.sample_rate)
+            stream.layout = 'mono'
+            frame = av.AudioFrame.from_ndarray(samples.reshape(1, -1), format='s16', layout='mono')
+            frame.rate = self.host.request.sample_rate
+            for packet in stream.encode(frame):
+                container.mux(packet)
+            for packet in stream.encode():
+                container.mux(packet)
+            container.close()
+            query = await run_blocking(
+                sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
+            )
+        except BaseException:
+            EMBEDDING_ATTEMPTS.labels(outcome='failed').inc()
+            raise
+        EMBEDDING_ATTEMPTS.labels(outcome='succeeded').inc()
+        return query
+
     def _publish_decisions(self, decisions: Mapping[int, SpeakerMatchDecision]) -> None:
         decisions = {
             voice: replace(decision, person_id=None) if voice in self._competition_only else decision
@@ -1405,6 +1475,7 @@ class SpeakerMatcher:
         self._covered_audio.clear()
         self._pending_audio.clear()
         self._embedding_attempts.clear()
+        self._budget_blocked_voices.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
         self._mapping_origin.clear()
