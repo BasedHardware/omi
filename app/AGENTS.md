@@ -1,6 +1,6 @@
 # App (Flutter) — Operational Playbook
 
-Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
+Inherits [`../AGENTS.md`](../AGENTS.md).
 UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 
 ## Build Bootstrap
@@ -62,7 +62,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
 - Two capture modes fixed at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Selection: `CaptureController.streamRecording` (explicit or offline fallback); `omibatchphoneauto` auto-uploads on reconnect
 
-Contracts: [on-device speech](../.github/agent-docs/on-device-speech.md); [Omi + OmiGlass together](../.github/agent-docs/multi-device-capture.md) (multi-connection, audio/photo roles).
+[Speech deadlines/cleanup](../.github/agent-docs/on-device-speech.md), [Omi/OmiGlass](../.github/agent-docs/multi-device-capture.md).
 
 ### MethodChannel (On-device tool surface)
 - `com.omi.device_tools` (`lib/services/device_tools/device_tool_surface.dart`, iOS `DeviceToolsService.swift`): `search_contacts`, `propose_message`, `request_permission`. iOS verb is **propose** — the compose sheet is the approval; cancelled ≠ delivered. Rides `device_tools` on `POST /v2/messages` + `tool:` SSE frames, never surfaced to chat UI. Contract: `desktop/macos/docs/device-tool-surface.md`.
