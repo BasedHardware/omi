@@ -206,7 +206,7 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     monkeypatch.setattr(dream_tools, 'suggest_spelling', lambda *a: 'suggestion_cap')
     applied = []
     monkeypatch.setattr(dream_tools, 'apply_edit', lambda uid, edit, records: applied.append(edit.target) or 'applied')
-    result = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps(edits=1)))
+    result = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps(edits=1), turn=AsyncMock()))
     assert result['status'] == 'complete'
     assert applied == ['conversations/empty']
 
