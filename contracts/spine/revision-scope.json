@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "oracle_paths": [
+    ".github/checks-manifest.yaml",
+    "app/AGENTS.md",
+    "app/lib/backend/http/API_RESULTS.md",
+    "app/lib/services/capture/OWNERSHIP.md",
+    "app/lib/services/dev_controls/ADDRESSABILITY.md",
+    "app/lib/services/dev_controls/REGISTRATION.md",
+    "app/lib/utils/analytics/registry/REGISTRY.md",
+    "app/test/support/spine/contract.dart",
+    "app/test/support/spine/widgets.dart",
+    "backend/AGENTS.md",
+    "backend/testing/e2e/test_client_compat_replay.py",
+    "contracts/analytics/TRACKING_PLAN.md",
+    "contracts/client-compat/README.md",
+    "contracts/session/README.md",
+    "scripts/check_spine_contracts.py",
+    "scripts/dev-harness/AGENTS.md",
+    "scripts/dev-harness/CLIENT_COMPAT.md",
+    "scripts/dev-harness/LIVE_SESSIONS.md",
+    "scripts/dev-harness/MOBILE_SESSIONS.md",
+    "scripts/dev-harness/MOBILE_VERIFY.md",
+    "scripts/dev-harness/PENDING_CONTRACTS.md",
+    "scripts/dev-harness/contracts/live/README.md",
+    "scripts/dev-harness/tests/test_spine_mechanism.py"
+  ],
+  "scaffolding": {
+    ".github/scripts/check_agents_md_lean.py": [
+      "97b8db3b62ecd06d4de351a862001cc66e60c1f1dbda2d9f9ef9e34d40e0cf64"
+    ],
+    ".github/scripts/dead_code/flutter.allowlist.json": [
+      "0cebf48e9c07e6832b6b7da6f637f592d98cfc723103e959ac199ba662c64403",
+      "feaf1fb61a196a3c6469e4cc4991a4b3a2c6841727e6b6a1592b4811ea373c29"
+    ],
+    "app/contracts/addressability/adopted-files.json": [
+      "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    ],
+    "app/contracts/addressability/catalog.json": [
+      "ff3654c939dc9602c3d8d2c5eab7f9d0dc320d267fe87caa847d388f4be5472c"
+    ],
+    "app/contracts/addressability/route-registry-v1.schema.json": [
+      "ddeec0210926638c248392143f2432641f66ce9ce2feb8979bf4370219670224"
+    ],
+    "app/contracts/addressability/semantic-controls-v2.schema.json": [
+      "540ec58ed756970a71cc8680b12b4cc7217045e88ca97bbb1215b37e3a6b1efa"
+    ],
+    "app/contracts/addressability/unkeyed-baseline.json": [
+      "152ca02c0d795cb4bd5fcdf8310c7c2b4eb459df10e47e36eeab2e3c751f2ee2"
+    ],
+    "app/contracts/api-result/boundary-baseline.json": [
+      "264865e72c650cd9ee204aacf50b57960278ab993a851e6e5815881a0c2f7f19"
+    ],
+    "app/contracts/capture/boundary-baseline.json": [
+      "32147ae5fd4a30b88f54e1d83e7d85912d9c357095ea72c272094345e08191cb"
+    ],
+    "app/integration_test/journeys/support/fixture_backend.dart": [
+      "5c83f2172d16f4d7cdf86137944d505a183e85eb45f454d3b013dead36993e40"
+    ],
+    "app/lib/backend/http/api_fallback.dart": [
+      "fa6da61c49d586136a52bf5bc73eb50f7a50c2866c67222c75c001351188e296"
+    ],
+    "app/lib/backend/http/api_presentation.dart": [
+      "87bc6a3cc159ebf98ac8d24df1d24718e3fa830370fc0b0241acac421e00ffde"
+    ],
+    "app/lib/backend/http/api_result.dart": [
+      "2636f388be236984a6fd0ffa4fe9f0cf18e06ec63d36aeec18a71ff02c735957"
+    ],
+    "app/lib/backend/http/conversation_api_contract.dart": [
+      "48d699647804cb5911eb65739813cdba8c33b3b3b1765185552022e0fadbd24e"
+    ],
+    "app/lib/services/capture/capture_composition.dart": [
+      "d202fb23e318cce55f56fb5d555f83d9632fd78e8a9ee5ff50ebdf75ea6c0f02"
+    ],
+    "app/lib/services/capture/capture_lifetime.dart": [
+      "bc97bfeaa5040bd856816efbe99efb4b331815de1bcfb960bc5d7484dffccd85"
+    ],
+    "app/lib/services/capture/capture_session_owner.dart": [
+      "6337a8d701656276def6261ba7d0746ba1cac03455321eb83c8ad3defe6639ae"
+    ],
+    "app/lib/services/dev_controls/addressability.dart": [
+      "3d2d57b47cf59e6ddfa0ad3dbd9dfaf732b5255dfcf27794b7af6c425dcd6084"
+    ],
+    "app/lib/services/dev_controls/addressability_catalog.dart": [
+      "d724d516f2639fc9d6f2ea23b071f5ed8d5ae1113f350021516481ba1eaa1f29"
+    ],
+    "app/lib/services/dev_controls/journey_faults.dart": [
+      "2eb51d5b1237cccf1b198ad71e54655f5468bcbc6f2bae265bf7fd521b19aedf"
+    ],
+    "app/lib/services/dev_controls/semantic_controls.dart": [
+      "b934013112d87625e32687d4ae0eab2abe16a834e0829ff88d92b0b26a1d4cdd"
+    ],
+    "app/lib/utils/analytics/analytics_manager.dart": [
+      "ec370c889eea4d228581ff3d128911da1caa33930a5168813a9568f0224c6a16"
+    ],
+    "app/lib/utils/analytics/registry/events.g.dart": [
+      "4c9ad9ff2ffdfbcd2fb11b3e8741f6b9c2927a37827e25529624b0a3dc9df9ac"
+    ],
+    "app/lib/utils/analytics/registry/typed_events.dart": [
+      "eeac233abbf8cbb85cc26bbecd7493339b7d4a7cb6b099a304c5964fb073e030"
+    ],
+    "app/test.sh": [
+      "680eccefd3ebbdb7bcb51d33ff830b80051ed51a5612425f0a3f82fcda38db87"
+    ],
+    "app/test/support/addressability_fixture.dart": [
+      "33b1bac28b2b088243002832b228fc90695521d9a28d0e51f8c55b81fd5ef8df"
+    ],
+    "app/test/support/addressability_widgets.dart": [
+      "bf80ca3c8fa58fe964e8215f5857b6a9f849582eb07c863bd73f6a72a2f0fdf6"
+    ],
+    "app/test/support/typed_conversation_screen.dart": [
+      "c8bc2e641913ad767be3b0b69fc67443c2a8cbbfa5da9b2f681109e1c1f199e1"
+    ],
+    "app/test/unit/journey_fixture_http_fault_test.dart": [
+      "fb7bd7ad8e9bf3810d41e422e0f04e7192890c59759cae292ba102448c1bab16"
+    ],
+    "app/test/unit/semantic_controls_guard_test.dart": [
+      "23901983b34f5024300fd5258fb22634a06ec7031a1d23a4037aaa0bd90601d0"
+    ],
+    "contracts/analytics/consumers/mobile-instrumentation-presence.json": [
+      "2f43e0d3c26ab18bd9f4c14e86c3d36efeb646cab9a1e597302672b271b37ed9"
+    ],
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql": [
+      "2d1eb88f18b900e52ae60b216ed414cadd237332c5c7c3143a36db50629d2952"
+    ],
+    "contracts/analytics/events.json": [
+      "d2952dafcd5ae3533235365b43914ebf2eb755a91b5c79a417006d0708995de9"
+    ],
+    "contracts/client-compat/candidate-source.json": [
+      "601afffa067777531aad643200a9a36e871bb4f45f27ac3403b4a6ff9f08262e"
+    ],
+    "contracts/client-compat/case.schema.json": [
+      "42cc90f9e41ffe2af97f8ee7885a5ddc73231bdc62f7d42a9f405d461729b204"
+    ],
+    "contracts/client-compat/catalog.json": [
+      "617ef5b1555a83202f45f8cfd8bf6fb7349fe03c929b9ce39c54366ada7506b5"
+    ],
+    "contracts/client-compat/support-policy.json": [
+      "ea88f0ad792d35e022519674dccf6aed8d8aa802891704166e71633fc072e295"
+    ],
+    "contracts/session/session-evidence-v1.schema.json": [
+      "530043f94cd00afb4fd5ca8461899d5ddc4261d29e4e7f51d38d2080bc0c38f5"
+    ],
+    "docs/doc/developer/Contribution.mdx": [
+      "1994392151850bf455c7ed28eab94f06e419f55689beb5f1b46e87346f677057",
+      "c0c9b7e8b7fcd28231311a804c0930addaba539a8e943e508924afa92b850d41",
+      "db39ca83cb4d54701985302ee93d42261c2858b61e56bafa9b983b63431aca4a",
+      "f79eec1d2229c7a4d4ab4d454adb5d088370c7fdab3efe124ede3a10789e9260"
+    ],
+    "scripts/check_app_addressability.py": [
+      "933fbc49097edc46d3588c5a476848fda9d69d2e1ca2456b910261ed875dd5e8"
+    ],
+    "scripts/check_client_compat.py": [
+      "ee1bd7e50fe30aa7c1ef2ab018245046a7329eb2b33b2211b87271ed9651cdb1"
+    ],
+    "scripts/check_event_registry.py": [
+      "158d8fe2e3a319a0d4dacc1a95c66cc3ce97ff06b85c6efa13aeda734b219870"
+    ],
+    "scripts/check_mobile_boundaries.py": [
+      "a62fe096308fa28c178f2d2a1b2a997fbb7157e94aea34f2c1f42ce6f7882d9c"
+    ],
+    "scripts/dev-harness/contracts/live/live-session-v1.schema.json": [
+      "fe097aaa01773f4715f9b12e4e988b7e786e0fd701da0d95ce215fa568843008"
+    ],
+    "scripts/dev-harness/dev_harness/client_compat.py": [
+      "7705f938df8e2d18a9521f65845affc8286de8a947ddb5a5f224cf84404fd368"
+    ],
+    "scripts/dev-harness/dev_harness/live_session.py": [
+      "f44fba0511e008b214884f6ab8945fda80e9b78e5d01daedd8dc8961f96cade0",
+      "bd8d0bb0187231459cd0e93e49c188b93644f07c02b89b1cb2fee5027f210c67"
+    ],
+    "scripts/dev-harness/dev_harness/mobile_session.py": [
+      "e2fc30c20ff5ff369ef6e52dbec48a8c963b7f4b52c33f72febcb2aff11db4ec"
+    ],
+    "scripts/dev-harness/dev_harness/mobile_verify.py": [
+      "e744b8db6b7ad037ab8cbac2402d1e87cf10a9b256ceca174ae6c699b43bbbab"
+    ],
+    "scripts/dev-harness/dev_harness/session_evidence.py": [
+      "769f15b665a3ff9e6348a69f9b063155035af75117ebf936b1d2872952215e50"
+    ],
+    "scripts/dev-harness/tests/test_client_compat_catalog.py": [
+      "e4ceeb84badab3610c7ca3258523dae94834be2fcd749f11009d6cb189500d2e"
+    ],
+    "scripts/dev-harness/tests/test_event_registry.py": [
+      "c292ea2e787d093ab3a65c9a98f92acb5380cb9362ad02453f69ee23002f1cad"
+    ],
+    "scripts/dev-harness/tests/test_live_skeleton.py": [
+      "5781320d913a1499ab11fcbb8b19e7b1ff2af7f99a5c5e13b785a07726142171"
+    ],
+    "scripts/test_check_app_addressability.py": [
+      "ae0112c700580c849b2b6ee8d581d3efad0ead17b6c632f30b7da7e7a4683f99"
+    ],
+    "scripts/test_check_mobile_boundaries.py": [
+      "74690df1e21fbc589521e621f8fafb5ef8517b7f6e11b0f17ec4c18e8c781ad7",
+      "7cc448656c63bbc795456fe99db686e3ad1a96ab2a92d766565168734db02be8"
+    ]
+  },
+  "grandfathered_revisions": {
+    "contracts/spine/revisions/001-v1-capabilities.json": [
+      "684520ace6c99f63805591b45c1b5fa06ac1f68b85b70dd8d2d3e2271f188429"
+    ],
+    "contracts/spine/revisions/002-b1-surface-scope.json": [
+      "5f18bf0dd1351a138b95196cf72b7a9b5e8cb01c86096b6aa18dcd6fe7e570db"
+    ],
+    "contracts/spine/revisions/003-v1-builder-review.json": [
+      "bd778a47f13f545e6ab422614c7bc384ba101495fe2ced6d45a5246c1f8e8dfd"
+    ],
+    "contracts/spine/revisions/004-v1-navigate-payload.json": [
+      "21daae06fec43a82fd496bd878fae6059f2186e26f3247041f534d811c1e9400"
+    ],
+    "contracts/spine/revisions/005-c1-adoption-test.json": [
+      "1eebdd14549e70faef4007014caa613835a89b0cd6a91d6a50e2c2b36522f216"
+    ],
+    "contracts/spine/revisions/005-c1-composition-test.json": [
+      "b8ebbeeef0fbda26fc652394e443516a45dd2c4cf7735ce1e3401c90ce656954"
+    ],
+    "contracts/spine/revisions/005-c1-location-completion-test.json": [
+      "1e4b92205995dab8fd9bae80559a3d55525a9224d40922ca4f46caf23e3a9af3"
+    ],
+    "contracts/spine/revisions/005-c1-ownership-test.json": [
+      "e263f5218d254b526b2825f34ffe8de7272a2e91c35f4b501a7d17c96a043c70"
+    ],
+    "contracts/spine/revisions/005-c1-persistence-test.json": [
+      "673cac2ec2ddca44d769e084a63cb5abea3c6f3a9bd35af50519d185044c50e5"
+    ],
+    "contracts/spine/revisions/006-c3-conversation-test.json": [
+      "53ee3920653dbc8c49db4eb7f8d12069cad04995a7b66736612ba424bf982793"
+    ],
+    "contracts/spine/revisions/006-c3-projection-test.json": [
+      "ce7a96d222e27efba2ced8ff59aec0233ee0013e088a79be32ae22e03a850954"
+    ],
+    "contracts/spine/revisions/006-c3-result-test.json": [
+      "3065cb3242a316ff4e0b5cd88e39ab6911c23092682049636eb7062b4b82ae0e"
+    ],
+    "contracts/spine/revisions/007-fake-flutter-identity.json": [
+      "0ecadaff265281789503c0288c432d49483c7f4f358cbe1298cbec6e164adac2"
+    ],
+    "contracts/spine/revisions/007-test-live-session-identity.json": [
+      "101965f73634889790a05911d92ed0e9ffd83c38d120af404b46b7b927995ce2"
+    ],
+    "contracts/spine/revisions/008-c1-extraction-scope.json": [
+      "8c9cfeb543a311a23e61b2de1e28dd2c87b79cfde9a5cdcc66d749794ac35566"
+    ],
+    "contracts/spine/revisions/009-c7-payload-comparison.json": [
+      "891b7ac77a8f8b084727beafecd3920dbe9ff6cf1d8b9f5548b7ab5fe1c480cf"
+    ],
+    "contracts/spine/revisions/010-c10-supported-scope.json": [
+      "ef0acbecffab9d5c4b6f9f7f6c37f1ff40dd57486f7f95fe300c0129bc250cfa"
+    ],
+    "contracts/spine/revisions/011-c10-supported-scope.json": [
+      "a9e0c16e3cdaa5dfce6e2bd98074a8b21fc3a52fb55d0fb2903bde0844d1cbb8"
+    ],
+    "contracts/spine/revisions/012-v1-wire-profile.json": [
+      "3968d95aa691c2b9819fe0c3e21ecefaad9607ed6766ea0e85182c79319abd74"
+    ]
+  }
+}

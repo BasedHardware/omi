@@ -84,6 +84,68 @@ function createCapabilityBroker(store: SqliteAgentStore): RunToolCapabilityBroke
 }
 
 describe("agent control tools", () => {
+  it("reads an exact owned task session beyond the newest-page limit and preserves run generation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const target = store.insertSession({
+      ownerId: "owner", surfaceKind: "workstream", externalRefKind: "workstream",
+      externalRefId: "old-credit-thread", defaultAdapterId: "acp",
+    });
+    store.execute("UPDATE sessions SET last_activity_at_ms = 1, created_at_ms = 1, updated_at_ms = 1 WHERE session_id = ?", [target.sessionId]);
+    store.insertRun({
+      sessionId: target.sessionId, clientId: "fixture", requestId: "failed-credit-turn",
+      status: "failed", mode: "act", profileGeneration: 1,
+    });
+    for (let i = 0; i < 205; i++) {
+      store.insertSession({ ownerId: "owner", surfaceKind: "workstream", defaultAdapterId: "pi-mono" });
+    }
+    const input = { sessionId: target.sessionId, surfaceKind: "workstream", limit: 1 };
+    const first = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", input));
+    expect(first, JSON.stringify(first)).toMatchObject({ ok: true, sessions: expect.any(Array) });
+    expect(first.sessions).toMatchObject([{
+      session: { sessionId: target.sessionId, ownerId: "owner", executionProfileGeneration: 1 },
+      latestRun: { sessionId: target.sessionId, status: "failed", profileGeneration: 1 },
+      activeRun: null,
+    }]);
+    const foreign = store.insertSession({ ownerId: "other-owner", surfaceKind: "workstream", defaultAdapterId: "acp" });
+    const denied = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ...input, sessionId: foreign.sessionId,
+    }));
+    expect(denied.sessions).toEqual([]);
+    kernel.migrateSessionExecutionProfile({
+      ownerId: "owner", sessionId: target.sessionId, expectedProfileGeneration: 1,
+      adapterId: "pi-mono", reason: "user_requested",
+    });
+    const migrated = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", input));
+    expect(migrated.sessions).toMatchObject([{
+      session: { executionProfileGeneration: 2 }, latestRun: { profileGeneration: 1 },
+    }]);
+    store.close();
+  });
+
+  it("prepares task threads with the owner's selected provider instead of implicit Claude billing", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    kernel.configureDefaultExecutionProfile({
+      ownerId: "owner",
+      adapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      workingDirectory: "/tmp/task-workspace",
+    });
+    const prepared = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "prepare_workstream_continuity", {
+        workstreamId: "task-credit-report",
+        taskIds: ["task-credit-report"],
+      }),
+    );
+    const sessionId = (prepared.session as { agentSessionId: string }).agentSessionId;
+    expect(kernel.sessionExecutionProfile(sessionId, "owner")).toMatchObject({
+      adapterId: "pi-mono",
+      credentialScope: "managed_cloud",
+      modelProfile: "omi-sonnet",
+      workingDirectory: "/tmp/task-workspace",
+    });
+    store.close();
+  });
+
   it("bridges workstream migration, artifact versioning, checkpointing, and idempotent replay", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const context = ownerContext(kernel);
@@ -2778,12 +2840,12 @@ describe("agent control tools", () => {
       terminalStatus: "succeeded",
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
     const completed = await execution;
     expect(JSON.parse(store.getRow("SELECT result_json FROM runs WHERE run_id = ?", [completed.run.runId]).result_json)).toMatchObject({
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
 
     const inspected = parseToolResult(await handleAgentControlToolCall(
@@ -2794,10 +2856,10 @@ describe("agent control tools", () => {
     expect(inspected.run).toMatchObject({
       requestedModelId: "omi-sonnet",
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
       result: {
         providerTargets: ["openai-codex"],
-        modelsUsed: ["gpt-5.6-luna"],
+        modelsUsed: ["gpt-6-luna"],
       },
     });
     store.close();

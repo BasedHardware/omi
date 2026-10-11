@@ -41,6 +41,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import pytest
@@ -50,38 +51,23 @@ from routers.listen.conversations import LiveConversationController
 
 
 class OutOfMemoryError(Exception):
-    """Shape-matched to redis.exceptions.OutOfMemoryError by class name.
-
-    Defined locally (not imported) so the name-match logic in
-    ``_cache_set_fail_open`` — which cannot import the type from redis-py
-    typings — is exercised exactly as it runs in production.
-    """
+    """Local stand-in for supervisor tests that raise outside the Redis matcher."""
 
 
 class _MaxMemorySocket:
-    """Redis socket at maxmemory: every write command raises OOM."""
+    """Redis socket at maxmemory: every write command raises redis-py OOM."""
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def expire(self, key: str, ttl: int) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def get(self, key: str) -> Optional[bytes]:
         return None
 
     def delete(self, key: str) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
-
-
-class _ExpireOnlyOOMSocket(_MaxMemorySocket):
-    """SET lands (memory freed mid-incident) but EXPIRE still raises OOM."""
-
-    def __init__(self) -> None:
-        self.store: Dict[str, Any] = {}
-
-    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        self.store[key] = value
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
 
 class _RecordingSocket:
@@ -93,6 +79,8 @@ class _RecordingSocket:
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         self.store[key] = value.encode() if isinstance(value, str) else value
+        if ex is not None:
+            self.ttls[key] = ex
 
     def expire(self, key: str, ttl: int) -> None:
         self.ttls[key] = ttl
@@ -170,6 +158,7 @@ class _Host:
         self.storage_calls: List[str] = []
         self.transcripts = SimpleNamespace(flush_speaker_assignments=self._flush_speakers)
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         index = min(self._wait_index, len(self._wait_returns) - 1)
@@ -433,6 +422,7 @@ async def test_prepare_stale_pointer_rolls_over_under_maxmemory():
     stale = {
         'id': 'conv-old',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc) - timedelta(seconds=600),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=stale)
@@ -450,6 +440,7 @@ async def test_prepare_attach_existing_never_writes_pointer():
     fresh = {
         'id': 'conv-1',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=fresh)
@@ -513,6 +504,41 @@ async def test_create_new_survives_maxmemory_on_desktop_meeting_write():
     assert 'set_conversation_meeting_id' in host.storage_calls
 
 
+async def test_create_new_skips_malformed_meetings_without_crashing():
+    """A meeting record with a naive datetime, an ISO string, a ``None``
+    ``start_time``, or a missing ``id`` must not raise (#19153) — the
+    previous ``meeting['start_time'] - now`` subtraction crashed on the first
+    three and ``closest['id']`` crashed on the fourth. A valid meeting among
+    them is still linked."""
+    malformed = [
+        {'id': 'meeting-naive', 'start_time': datetime.now() - timedelta(minutes=1)},
+        {'id': 'meeting-string', 'start_time': (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+        {'id': 'meeting-none', 'start_time': None},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed + [_overlapping_meeting()], source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' in host.storage_calls
+
+
+async def test_create_new_skips_meeting_write_when_all_meetings_malformed():
+    """No meeting qualifies (unparseable ``start_time`` or missing ``id``) ->
+    the pointer write is skipped entirely, not crashed into with a bogus id."""
+    malformed = [
+        {'id': 'meeting-unparseable', 'start_time': 'not-a-date'},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed, source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' not in host.storage_calls
+
+
 async def test_create_new_healthy_control_writes_both_pointers():
     socket = _RecordingSocket()
     host = _Host(socket, meetings=[_overlapping_meeting()], source='desktop')
@@ -548,14 +574,14 @@ def test_healthy_pointer_read_returns_conversation_id():
         assert redis_db.get_in_progress_conversation_id('uid-1') == 'conv-1'
 
 
-def test_expire_oom_also_fails_open():
-    """Maxmemory denies EXPIRE just as readily as SET: the second command of
-    the pointer write must not raise either (partial write: key present, no
-    TTL — the degraded state, honestly asserted)."""
-    socket = _ExpireOnlyOOMSocket()
+def test_atomic_write_leaves_no_partial_write_on_oom():
+    """Pointer writes are one atomic ``SET ... EX`` command (#11302): a
+    maxmemory denial mid-incident cannot leave a key without a TTL — the
+    degraded state is 'key absent', which every reader already handles."""
+    socket = _MaxMemorySocket()
     with _swap_redis_socket(socket):
-        redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')
-        assert socket.store.get('users:uid-1:in_progress_memory_id') is not None
+        redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')  # must not raise
+        assert redis_db.get_in_progress_conversation_id('uid-1') == ''
 
 
 def test_real_redis_oom_exception_class_fails_open():
@@ -651,7 +677,7 @@ def test_meeting_context_reader_survives_raising_redis():
 
     class _RaisingGetSocket(_MaxMemorySocket):
         def get(self, key: str) -> Optional[bytes]:
-            raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+            raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     conversation = Conversation(
         id='conv-1',

@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 
 void main() {
-  // Regression test: FaIcon (unlike material Icon) has no internal Center, so
-  // without an alignment on the fixed-size circle container the glyph painted
-  // at the top-left, outside the circle.
+  // Regression test: a glyph in a fixed-size circle must be centered, not painted at the
+  // top-left (FaIcon has no internal Center; the rows now use the Recordings-sheet material
+  // icons, which the same check covers).
   testWidgets('record option icons are centered inside their circles', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -27,7 +26,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final icons = find.byType(FaIcon);
+    // The two source glyphs (20pt), not the rows' chevrons.
+    final icons = find.byWidgetPredicate((w) => w is Icon && w.size == 20);
     expect(icons, findsNWidgets(2));
 
     for (final icon in icons.evaluate()) {

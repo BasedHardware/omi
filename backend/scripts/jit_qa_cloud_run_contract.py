@@ -75,6 +75,8 @@ _FORBIDDEN_CREDENTIAL_ENV = frozenset(
         "SERVICE_ACCOUNT_JSON",
         "GOOGLE_APPLICATION_CREDENTIALS",
         "FIREBASE_AUTH_CREDENTIALS_PATH",
+        # The keyless customer-data pin: the isolated plane must never select it.
+        "OMI_CUSTOMER_DATA_PROJECT",
     }
 )
 _ALLOWED_SECRET_BINDINGS = {

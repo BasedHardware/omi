@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -35,12 +36,14 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) {
     return messageProvider.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: onFirstChunkRecived,
+      onNoSpeech: onNoSpeech,
       codec: codec,
       playResponseAudio: playResponseAudio,
     );
@@ -70,6 +73,11 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   Future<Person?> createPerson(String name) {
     return peopleProvider.createPersonProvider(name);
   }
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
+      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
+          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
 
   @override
   Future<void> refreshPeople() {

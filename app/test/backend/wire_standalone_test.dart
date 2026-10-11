@@ -1,5 +1,7 @@
 /// Standalone wire decode test that imports ONLY generated types from gen/.
 /// Avoids the full app compilation chain (pre-existing FaIconData errors block flutter test).
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items;
 import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as api_keys;

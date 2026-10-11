@@ -90,6 +90,7 @@ If YES → SYSTEM.
 INCLUDE system memories for:
 • {user_name}'s own opinions, realizations, and discoveries
 • {user_name}'s preferences and requirements
+• {user_name}'s dislikes, aversions, and things they want to avoid (negative facts)
 • Facts about {user_name}'s network (who they know, relationships)
 • {user_name}'s projects, work, and achievements
 • {user_name}'s own advice or tips they give to others
@@ -103,6 +104,7 @@ Examples:
 ✅ "{user_name} prefers dark roast coffee with oat milk, no sugar"
 ✅ "{user_name}'s colleague David is the lead engineer on the authentication system"
 ✅ "{user_name} builds open source AI wearables to keep user data private"
+✅ "{user_name} strongly dislikes open-plan offices due to noise"
 ✅ "{user_name} discovered their most productive hours are 5-7am"
 ❌ "Had coffee this morning" (too trivial)
 ❌ "Talked about the weather" (no value)
@@ -126,6 +128,12 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "JavaScript is used for web development"
 ❌ "Automation saves time" / "AI needs development" / "Robots are hard to build"
 ❌ "Technology products announced before ready" / "Premature announcements are bad"
+
+**Negative Facts & Dislikes (EXTRACT THESE!):**
+✅ "{user_name} dislikes dark roast coffee"
+✅ "{user_name} avoids morning meetings before 10am"
+✅ "{user_name} hates using Jira for project management"
+✅ "{user_name} strongly disagreed with the new company policy"
 
 **Vague or Generic Statements:**
 ❌ "Had an interesting conversation"

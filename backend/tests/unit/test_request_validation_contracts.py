@@ -69,6 +69,12 @@ def test_parse_sync_filename_timestamp_accepts_fractional_vad_segment_names():
     assert parse_sync_filename_timestamp('/tmp/vad/1704067200.5.wav') == 1_704_067_200.5
 
 
+def test_parse_sync_filename_timestamp_accepts_fractional_and_collision_bin_names():
+    stem = 'audio_pendant1_opus_16000_1_fs100_1735689600.6'
+    assert parse_sync_filename_timestamp(f'{stem}.bin') == 1_735_689_600.6
+    assert parse_sync_filename_timestamp(f'audio_pendant1_opus_16000_1_fs100_u0_1735689600.6.bin') == 1_735_689_600.6
+
+
 @pytest.mark.parametrize(
     'filename',
     [

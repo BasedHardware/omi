@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -137,3 +138,37 @@ def test_create_routes_do_not_publish_generic_persistence_value_errors_as_422(
 
     with pytest.raises(ValueError, match="internal persistence detail"):
         handler(payload, uid="user-1")
+
+
+def test_create_mcp_key_passes_explicit_people_cleanup_opt_in(monkeypatch):
+    created = routes.McpApiKey(
+        id="key-1",
+        name="cleanup",
+        key_prefix="omi_mcp_abcd...1234",
+        created_at=datetime.now(timezone.utc),
+        scopes=["people.cleanup"],
+    )
+    create = MagicMock(return_value=("raw-key", created))
+    monkeypatch.setattr(routes.mcp_api_key_db, "create_mcp_key", create)
+
+    response = routes.create_mcp_key(
+        routes.McpApiKeyCreate(name="cleanup", scopes=["people.cleanup"]),
+        uid="user-1",
+    )
+
+    assert response.key == "raw-key"
+    create.assert_called_once_with("user-1", "cleanup", scopes=["people.cleanup"])
+
+
+def test_create_mcp_key_rejects_unknown_scope_before_persistence(monkeypatch):
+    create = MagicMock()
+    monkeypatch.setattr(routes.mcp_api_key_db, "create_mcp_key", create)
+
+    with pytest.raises(HTTPException) as caught:
+        routes.create_mcp_key(
+            routes.McpApiKeyCreate(name="unsafe", scopes=["people.delete"]),
+            uid="user-1",
+        )
+
+    assert caught.value.status_code == 400
+    create.assert_not_called()

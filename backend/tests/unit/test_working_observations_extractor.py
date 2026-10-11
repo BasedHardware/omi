@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage
 from models.memory_contracts import L1MemoryArchiveClass, L1MemoryArchiveItem
 from models.transcript_segment import TranscriptSegment
 from utils.llm import working_observations
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.memories import extract_canonical_l1_memory_candidates
 from utils.llm.working_observations import (
     MAX_WORKING_OBSERVATION_ITEMS,
@@ -22,6 +22,8 @@ from utils.llm.usage_tracker import get_current_context
 
 
 class FakeLLM:
+    model_name = "gpt-6-luna"
+
     def __init__(self, content):
         self.content = content
         self.calls = []
@@ -45,6 +47,20 @@ def _l1_system_prompt() -> str:
         "A source transcript long enough for prompt construction.",
         "Return the requested JSON schema.",
     )[0][1]
+
+
+def _invoked_system_prompt(fake_llm) -> str:
+    """Read the static system text out of the first invoked message.
+
+    The cacheable prefix is a dict message whose content may be a plain string or a
+    list of text blocks carrying the cache breakpoint; the legacy shape was a
+    (role, text) tuple. Tests assert on the text, not on that envelope.
+    """
+    message = fake_llm.calls[0][0]
+    content = message['content'] if isinstance(message, dict) else message[1]
+    if isinstance(content, list):
+        return ''.join(block.get('text', '') for block in content)
+    return content
 
 
 def test_l1_prompt_teaches_owner_attribution_gates():
@@ -259,9 +275,8 @@ def test_l1_rejection_examples_stay_after_the_shared_prompt_cache_breakpoint():
     )
 
     messages = fake_llm.calls[0]
-    assert messages[1]["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
-    assert rejected_text not in str(messages[:2])
-    assert rejected_text not in str(messages[2])
+    assert messages[0]["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert rejected_text not in str(messages[:3])
     assert rejected_text in str(messages[3])
 
 
@@ -604,7 +619,7 @@ def test_l1_archive_extractor_deterministically_bounds_dense_provider_output():
         f"Distinct observation {index}" for index in range(MAX_WORKING_OBSERVATION_ITEMS)
     ]
     assert [item.archive_id for item in second] == [item.archive_id for item in first]
-    assert f"at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items" in fake_llm.calls[0][0][1].lower()
+    assert f"at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items" in _invoked_system_prompt(fake_llm).lower()
 
 
 def test_l1_archive_extractor_deduplicates_within_subject_without_collapsing_other_speakers():
@@ -664,7 +679,7 @@ def test_l1_prompt_omits_belief_instructions_when_flag_off(monkeypatch):
         persist_route_outcomes=False,
         llm=fake_llm,
     )
-    prompt = fake_llm.calls[0][0][1]
+    prompt = _invoked_system_prompt(fake_llm)
     assert "belief_class" not in prompt
     assert "half_life_days" not in prompt
     assert "subject_scope" not in prompt
@@ -681,7 +696,7 @@ def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
         persist_route_outcomes=False,
         llm=fake_llm,
     )
-    prompt = fake_llm.calls[0][0][1]
+    prompt = _invoked_system_prompt(fake_llm)
     assert "belief_class" in prompt
     assert "half_life_days" in prompt
     assert "subject_scope" in prompt

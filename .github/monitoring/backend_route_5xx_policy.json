@@ -1,0 +1,30 @@
+{
+  "displayName": "Backend single-route 5xx regression",
+  "documentation": {
+    "content": "A backend route family has more than 15 server errors in a rolling 900-second window for 600 seconds. Route identity is method + route: the optional version and up to three complete lowercase path segments, stopping at the first invalid segment. All matching non-empty families page without a fixed route list. Status codes and revisions are summed, but families and methods are not. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/backend-route-5xx.md. Lowercase slugs and some all-letter IDs can pass this shape-based normalization; see the runbook for cardinality limitations.",
+    "mimeType": "text/markdown"
+  },
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [],
+  "conditions": [
+    {
+      "displayName": "One route exceeds 15 5xx in 15 minutes for 10 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/backend_route_5xx\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND metric.labels.method != \"\" AND metric.labels.route != \"\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 15,
+        "duration": "600s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "900s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": ["metric.label.method", "metric.label.route"]
+          }
+        ],
+        "trigger": {"count": 1}
+      }
+    }
+  ]
+}

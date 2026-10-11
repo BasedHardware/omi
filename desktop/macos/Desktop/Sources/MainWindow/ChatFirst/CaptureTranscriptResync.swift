@@ -171,8 +171,9 @@ extension ServerConversation {
       structured: structured, transcriptSegments: segments, transcriptSegmentsIncluded: transcriptSegmentsIncluded,
       geolocation: geolocation, photos: photos, appsResults: appsResults, source: source, language: language,
       audioFiles: audioFiles, conversationAudio: conversationAudio, status: status, discarded: discarded,
-      deleted: deleted, isLocked: isLocked, starred: starred, folderId: folderId, inputDeviceName: inputDeviceName,
-      deferred: deferred)
+      deleted: deleted, isLocked: isLocked, visibility: visibility, starred: starred, folderId: folderId,
+      inputDeviceName: inputDeviceName,
+      deferred: deferred, captureGroup: captureGroup)
   }
 }
 

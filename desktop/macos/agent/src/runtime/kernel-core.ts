@@ -562,7 +562,15 @@ export class KernelCore {
           throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run is terminal without an attempt");
         }
         attempt = attemptFromRow(latestAttemptRow);
-        return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+        return {
+          ownerId,
+          sessionId,
+          surfaceKind: session.surfaceKind,
+          turnId,
+          runId: run.runId,
+          attemptId: attempt.attemptId,
+          duplicate,
+        };
       }
       const latestAttempt = latestAttemptRow ? attemptFromRow(latestAttemptRow) : undefined;
       if (run.status === "orphaned" || !latestAttempt || TERMINAL_STATUSES.includes(latestAttempt.status)) {
@@ -620,7 +628,15 @@ export class KernelCore {
       this.markExternalAttemptRunning(session, attempt);
     }
     this.toolCapabilities.register({ ownerId, sessionId, runId: run.runId, attemptId: attempt.attemptId });
-    return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+    return {
+      ownerId,
+      sessionId,
+      surfaceKind: session.surfaceKind,
+      turnId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      duplicate,
+    };
   }
 
   authorizeExternalSurfaceToolInvocation(input: {

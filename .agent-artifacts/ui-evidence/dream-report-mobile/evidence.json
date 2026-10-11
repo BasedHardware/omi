@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-dream-report-latest-pass.png",
+      "platform": "mobile-android",
+      "description": "Dream Report: preview banner, Run Now, newest pass expanded with fixes, a question, a task, learned words and diagnostics",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-dream-report-older-passes.png",
+      "platform": "mobile-android",
+      "description": "Dream Report scrolled: older scheduled pass collapsed and a failed pass with its error type",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-dream-report-light.png",
+      "platform": "mobile-android",
+      "description": "Dream Report in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-dream-report-empty.png",
+      "platform": "mobile-android",
+      "description": "Dream Report before the first pass",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

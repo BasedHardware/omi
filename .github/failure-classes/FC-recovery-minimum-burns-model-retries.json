@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-recovery-minimum-burns-model-retries",
+  "violated_contract": "A server recovery that produces only a deterministic minimum must not repeatedly pay for the same notes request or leave the captured transcript in processing. Provider and parser faults must remain retryable.",
+  "canonical_prevention": "Apply the normal deterministic relevance rule before paid recovery notes, then close a typed minimum-only result in the lease-fenced terminal transition while retaining a visible transcript. Keep transient provider and parser errors on the durable retry budget.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_recovery_rule_skip.py",
+    "backend/tests/unit/test_listen_finalization_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/recovery.py",
+    "backend/routers/conversation_finalization.py"
+  ],
+  "status": "open"
+}

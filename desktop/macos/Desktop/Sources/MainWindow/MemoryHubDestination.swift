@@ -34,7 +34,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "brain.head.profile"
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
-    case .activity: return "clock.arrow.circlepath"
+    // Activity and Rewind used to share `clock.arrow.circlepath`; that glyph belongs to Rewind.
+    case .activity: return "calendar.day.timeline.leading"
     case .rewind: return "clock.arrow.circlepath"
     }
   }

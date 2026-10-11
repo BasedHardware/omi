@@ -71,9 +71,8 @@ The catalog's own values always use the typed representation. D2 deletes the ove
 The backend enum is the closest existing root, but even it has two shapes: six `PlanType` values and a four-value
 `Subscription.plan` schema (`backend/models/users.py`, origin/main lines 82-95 and 129-133). The backend then rebuilds
 paid, mobile, and desktop sets (`backend/utils/subscription.py`, lines 28-37), plan cards and price environment keys
-(lines 426-494), display names (lines 872-880), and limits (lines 1059-1118). Desktop proactivity is another
-independent table (`backend/routers/desktop_proactivity.py`, lines 41-54). This is not an ownership graph; it is a
-collection of peers.
+(lines 426-494), display names (lines 872-880), and limits (lines 1059-1118). Legacy desktop proactivity also had an independent quota table; it was retired on 2026-10-03.
+The v2 budget now projects the catalog through `backend/config/proactivity_v2.py`.
 
 Stripe cannot be selected as the intended-price authority merely because it is currently the only place an amount
 can be observed. The repository creates subscription Checkout sessions, but its only product/price creation helpers
@@ -353,7 +352,7 @@ dependencies land without changing a decision. “Judgment” means one owner mu
    - D3b transcription/fair use: `backend/utils/subscription.py`, `backend/utils/fair_use.py`, listen/sync admission,
      and their tests. Depends on D1 for B1. Acceptance: plan selection and defaults contain no manual plan table;
      operational anti-abuse switches remain feature-owned and cannot change a plan entitlement silently.
-   - D3c desktop/phone: `backend/routers/desktop_proactivity.py`, `backend/database/phone_call_config.py`, and
+   - D3c desktop/phone: `backend/config/proactivity_v2.py`, `backend/database/phone_call_config.py`, and
      `backend/utils/phone_calls.py`. Acceptance: Firestore overrides are surfaced as declared effective overlays with
      telemetry; defaults and plan membership are catalog-only.
 

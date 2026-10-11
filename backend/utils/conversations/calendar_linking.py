@@ -92,6 +92,9 @@ def select_overlapping_calendar_event(
     for event in events:
         if require_accepted and event_attendance_excluded(event):
             continue
+        start_raw = event.get('start')
+        if not isinstance(start_raw, dict) or 'dateTime' not in start_raw:
+            continue
 
         event_start, event_end = parse_event_times(event)
         if event_start is None or event_end is None:

@@ -9,10 +9,12 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
+from models.daily_sweep_dispatch import SweepDispatchScope
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
@@ -20,6 +22,7 @@ from utils.prompts import extract_memories_prompt, extract_learnings_prompt, ext
 from utils.llms.memory import get_prompt_memories
 from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import Features, track_usage
+from utils.observability.fallback import record_fallback
 from .clients import get_llm
 import logging
 
@@ -195,6 +198,8 @@ def extract_canonical_l1_memory_candidates(
     # must not transitively import the working-observation provider stack.
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
+    # This is a cache candidate, not provider admission: the extractor resolves
+    # memory_l1 through get_llm before marking content, including BYOK profiles.
     items = extract_l1_memory_archive_items_from_text(
         uid=uid,
         source_id=source_id,
@@ -205,7 +210,7 @@ def extract_canonical_l1_memory_candidates(
         persist_route_outcomes=False,
         strict=strict,
         prompt_prefix=prompt_prefix,
-        prompt_cache_enabled=bool(prompt_prefix and shared_conversation_cache_supported()),
+        prompt_cache_enabled=shared_conversation_cache_supported(),
         rejected_memory_examples=tuple(rejected_memory_examples),
     )
     owner_evidence = OwnerAttributionEvidence.from_segments(segments)
@@ -279,12 +284,8 @@ def new_memories_extractor(
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
-    # TODO: make it more strict?
-
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_memories_prompt | get_llm('memories') | parser
@@ -415,9 +416,8 @@ def extract_memories_from_text(
     if not text or len(text) == 0:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         with track_usage(uid, Features.MEMORIES):
             prompt_input = {
@@ -479,9 +479,8 @@ def new_learnings_extractor(
     if not content or len(content) < 100:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=Learnings)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_learnings_prompt | get_llm('learnings') | parser
@@ -817,6 +816,73 @@ def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str
     return "\n".join(f"[{conversation_id}] {_neutralize_fences(text)}" for conversation_id, text in summary_rows)
 
 
+_INPUT_BUDGET_TRUNCATION_MARKER = "[truncated]"
+_DISPATCH_FAILURE_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,80}$")
+_DISPATCH_FAILURE_CAUSE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,80}$")
+_SUMMARY_LINE_TIME_RE = re.compile(r"^\[(?P<id>[^\]]+)\]\s+(?P<hour>\d{2}):(?P<minute>\d{2})\b")
+
+
+def _note_daily_sweep_dispatch_failure(
+    dispatch_evidence: Optional[MutableMapping[str, Any]],
+    reason: str,
+    *,
+    cause_class: Optional[str] = None,
+) -> None:
+    """Record a content-free failure token on QA dispatch evidence."""
+
+    if dispatch_evidence is None:
+        return
+    if _DISPATCH_FAILURE_REASON_RE.fullmatch(reason):
+        dispatch_evidence["failure_reason"] = reason
+    if cause_class and _DISPATCH_FAILURE_CAUSE_RE.fullmatch(cause_class):
+        dispatch_evidence["failure_cause"] = cause_class
+
+
+def _summary_line_recency_key(line: str) -> tuple[int, int, str]:
+    match = _SUMMARY_LINE_TIME_RE.match(line)
+    if match:
+        return (int(match.group("hour")), int(match.group("minute")), match.group("id"))
+    return (-1, -1, line)
+
+
+def _shrink_daily_sweep_prompt_input(prompt_input: Dict[str, Any]) -> bool:
+    """Drop oldest spine rows, then clamp remaining text, then memories_str.
+
+    Returns True when the prompt shrank. Newest rows (HH:MM in the spine line)
+    are kept first; lines without a timestamp are dropped first. memories_str
+    is the remaining variable block after the spine is gone — the parser
+    instructions plus template leave only a few kilobytes under the QA byte
+    cap, so a full profile can overflow even a one-row day.
+    """
+
+    summaries = str(prompt_input.get("summaries_block") or "")
+    lines = [line for line in summaries.split("\n") if line.strip() and line.strip() != _INPUT_BUDGET_TRUNCATION_MARKER]
+    if len(lines) > 1:
+        lines.sort(key=_summary_line_recency_key, reverse=True)
+        prompt_input["summaries_block"] = _INPUT_BUDGET_TRUNCATION_MARKER + "\n" + "\n".join(lines[:-1])
+        return True
+    if len(lines) == 1:
+        line = lines[0]
+        prefix_match = re.match(r"^\[[^\]]+\]\s*", line)
+        prefix = prefix_match.group(0) if prefix_match else ""
+        body = line[len(prefix) :]
+        if len(body) <= 64:
+            prompt_input["summaries_block"] = _INPUT_BUDGET_TRUNCATION_MARKER
+            return True
+        prompt_input["summaries_block"] = (
+            _INPUT_BUDGET_TRUNCATION_MARKER + "\n" + prefix + body[: max(1, len(body) // 2)]
+        )
+        return True
+    memories = str(prompt_input.get("memories_str") or "")
+    if memories.strip() and memories.strip() != _INPUT_BUDGET_TRUNCATION_MARKER:
+        if len(memories) <= 16:
+            prompt_input["memories_str"] = _INPUT_BUDGET_TRUNCATION_MARKER
+            return True
+        prompt_input["memories_str"] = memories[: max(1, len(memories) // 2)]
+        return True
+    return False
+
+
 def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_folder_ids: Sequence[str]) -> str:
     if not folder_options or not needs_folder_ids:
         return "Folder task: none. folder_assignments must be empty."
@@ -860,6 +926,7 @@ def _daily_sweep_request_body_bytes(
         return fallback
 
 
+@SweepDispatchScope.certify_pre_dispatch
 def run_daily_sweep_summary_agent(
     uid: str,
     summary_rows: Sequence[tuple[str, str]],
@@ -883,8 +950,9 @@ def run_daily_sweep_summary_agent(
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
-    Strict by design: the sweep treats any raise as an indeterminate invocation
-    (source incomplete, no cursor advance) rather than attesting an empty day.
+    Strict by design: failures keep the source incomplete with no cursor advance.
+    Within a fenced claim, the wrapper certifies preparation failures only until
+    the first dispatch latch; later or unknown failures stay indeterminate.
     ``memory_searcher(query) -> Sequence[str]`` is a read-only seam over the
     user's prior memory ledger; absent or failing lookups degrade to an empty
     result block, never to a failed day.  Both phases share one byte-identical
@@ -921,6 +989,7 @@ def run_daily_sweep_summary_agent(
 
     def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
         model = llm if llm is not None else get_llm('memories', cache_key=cache_key, max_retries=max_provider_retries)
+        prompt_input = dict(prompt_input)
         prompt_value = prompt.invoke(prompt_input)
         request_id = str(uuid4()) if dispatch_evidence is not None else None
         invoke_kwargs: Dict[str, Any] = {}
@@ -951,8 +1020,36 @@ def run_daily_sweep_summary_agent(
             invoke_kwargs,
             require_payload_builder=jit_run_id is not None,
         )
-        if max_input_tokens is not None and input_bytes > max_input_tokens:
-            raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        truncated = False
+        if max_input_tokens is not None:
+            while input_bytes > max_input_tokens:
+                if not _shrink_daily_sweep_prompt_input(prompt_input):
+                    break
+                truncated = True
+                prompt_value = prompt.invoke(prompt_input)
+                input_bytes = _daily_sweep_request_body_bytes(
+                    model,
+                    prompt_value,
+                    invoke_kwargs,
+                    require_payload_builder=jit_run_id is not None,
+                )
+            if truncated and input_bytes <= max_input_tokens:
+                common['summaries_block'] = prompt_input.get('summaries_block', common.get('summaries_block'))
+                common['memories_str'] = prompt_input.get('memories_str', common.get('memories_str'))
+                if dispatch_evidence is not None:
+                    dispatch_evidence['truncated'] = True
+                record_fallback(
+                    component='other',
+                    from_mode='full_input',
+                    to_mode='truncated_input',
+                    reason='quota',
+                    outcome='degraded',
+                    log=logger,
+                )
+            if input_bytes > max_input_tokens:
+                _note_daily_sweep_dispatch_failure(dispatch_evidence, 'daily_sweep_summary_input_budget')
+                raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        SweepDispatchScope.mark_provider_dispatch()
         request_evidence: Dict[str, Any] | None = None
         if dispatch_evidence is not None:
             request_evidence = {
@@ -1067,7 +1164,16 @@ def run_daily_sweep_summary_agent(
         )
         sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates, lookup_ids=lookup_memory_ids)
         return sanitized
+    except MemoryExtractionError as error:
+        _note_daily_sweep_dispatch_failure(dispatch_evidence, error.extractor)
+        logger.error("Daily sweep summary agent failed: %s", error.extractor)
+        raise
     except Exception as error:
+        _note_daily_sweep_dispatch_failure(
+            dispatch_evidence,
+            "daily_sweep_summary_agent",
+            cause_class=type(error).__name__,
+        )
         logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
         raise MemoryExtractionError("daily_sweep_summary_agent") from error
 

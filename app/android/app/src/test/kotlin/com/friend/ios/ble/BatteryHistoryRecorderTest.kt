@@ -13,12 +13,12 @@ class BatteryHistoryRecorderTest {
         val first = recorder()
         first.record("device", 80, 0)
         repeat(1000) { first.record("device", 79, it.toLong()) }
-        assertEquals(1, reads)
-        assertEquals(1, writes)
-        recorder().record("device", 79, 60_000)
         assertEquals(2, reads)
-        assertEquals(1, writes)
-        assertEquals(1, JSONArray(stored).length())
+        assertEquals(2, writes)
+        recorder().record("device", 79, 60_000)
+        assertEquals(3, reads)
+        assertEquals(2, writes)
+        assertEquals(2, JSONArray(stored).length())
     }
 
     @Test fun `interval delta and both low threshold boundaries persist`() {
@@ -61,7 +61,7 @@ class BatteryHistoryRecorderTest {
     @Test fun `just below interval and delta limits stay sampled and history stays capped`() {
         var writes = 0
         val unchanged = BatteryHistoryRecorder({ """[{"ts":0,"level":80}]""" }, { _, _ -> writes++ })
-        unchanged.record("device", 76, 899_999)
+        unchanged.record("device", 80, 899_999)
         assertEquals(0, writes)
         val entries = JSONArray()
         repeat(2000) { entries.put(org.json.JSONObject().put("ts", it).put("level", 80)) }
@@ -82,4 +82,16 @@ class BatteryHistoryRecorderTest {
         assertEquals(100L, history.getJSONObject(0).getLong("ts"))
     }
 
+    @Test fun `provenance is frozen at insertion including unknown firmware`() {
+        var stored = "[]"
+        val recorder = BatteryHistoryRecorder({ stored }, { _, value -> stored = value })
+        recorder.record("device", 80, 1, appBuild = "old+1", firmware = "fw1")
+        recorder.record("device", 79, 2, appBuild = "new+2")
+        recorder.backfillCharging("device", true, 3)
+        val history = JSONArray(stored)
+        assertEquals("old+1", history.getJSONObject(0).getString("app_build"))
+        assertEquals("fw1", history.getJSONObject(0).getString("firmware"))
+        assertEquals("new+2", history.getJSONObject(1).getString("app_build"))
+        assertTrue(history.getJSONObject(1).isNull("firmware"))
+    }
 }

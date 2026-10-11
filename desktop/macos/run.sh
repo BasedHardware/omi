@@ -160,6 +160,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=fast-dev-bundle.sh
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
+# shellcheck source=desktop-build-identity.sh
+source "$SCRIPT_DIR/scripts/desktop-build-identity.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
 # shellcheck source=jit-qa-target.sh
@@ -210,17 +212,8 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-macos_copy_tree() {
-    local src="$1"
-    local dest="$2"
-    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
-        ditto --norsrc "$src" "$dest"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-        cp -R -X "$src" "$dest"
-    else
-        cp -R "$src" "$dest"
-    fi
-}
+# shellcheck source=scripts/macos-copy-tree.sh
+source "$SCRIPT_DIR/scripts/macos-copy-tree.sh"
 
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
@@ -1293,7 +1286,7 @@ fi
 
 if [ "$FAST_BUNDLE" = "1" ]; then
     step "Building Swift app (swift build -c debug)..."
-    xcrun swift build -c debug --package-path Desktop
+    xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
     step "Patching installed app executable..."
     PATCHED_BINARY="$(mktemp "$APP_PATH/Contents/MacOS/.omi-fast-executable.XXXXXX")"
@@ -1302,6 +1295,8 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
     rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+    step "Embedding App Intents metadata..."
+    ./scripts/embed-app-intents-metadata.sh Desktop "$APP_PATH" Debug "$(uname -m)"
     if [ "$LOCAL_PROFILE" = true ]; then
         EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
         omi_write_local_profile_env "$APP_PATH/Contents/Resources/.env"
@@ -1310,6 +1305,9 @@ if [ "$FAST_BUNDLE" = "1" ]; then
         update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
         omi_write_jit_qa_bundle_env "$APP_PATH/Contents/Resources/.env" || exit $?
     fi
+
+    step "Stamping source identity..."
+    omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_PATH/Contents/Info.plist"
 
     step "Signing updated app with hardened runtime..."
     sign_app_bundle "$APP_PATH" false
@@ -1345,7 +1343,7 @@ if [ -f scripts/check_schema_docs.sh ]; then
 fi
 
 step "Building Swift app (swift build -c debug)..."
-xcrun swift build -c debug --package-path Desktop
+xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
 step "Creating app bundle..."
 substep "Removing prior bundle (if any)"
@@ -1357,6 +1355,8 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 substep "Copying binary ($(du -h "Desktop/.build/debug/$BINARY_NAME" 2>/dev/null | cut -f1))"
 cp -f "Desktop/.build/debug/$BINARY_NAME" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+substep "Embedding App Intents metadata"
+./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Debug "$(uname -m)"
 
 substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
@@ -1410,6 +1410,7 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
+omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_BUNDLE/Contents/Info.plist"
 
 substep "Copying GoogleService-Info.plist"
 if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
@@ -1771,8 +1772,8 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_BUCKET_WORKSTREAMS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_WORKSTREAMS=$OMI_FORCE_BUCKET_WORKSTREAMS")
     fi
-    if [ -n "${OMI_FORCE_MEETING_NOTE_SCREENSHOTS:-}" ]; then
-        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_MEETING_NOTE_SCREENSHOTS=$OMI_FORCE_MEETING_NOTE_SCREENSHOTS")
+    if [ -n "${OMI_FORCE_EXPERIMENT_VARIANT:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_EXPERIMENT_VARIANT=$OMI_FORCE_EXPERIMENT_VARIANT")
     fi
     # Forward automation token overrides when the caller already pinned them
     # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin

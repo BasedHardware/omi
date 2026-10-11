@@ -37,8 +37,7 @@ struct QueryAnswerThread: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
         messages: chatProvider.messages,
-        conversationIdentity: chatProvider.currentSessionId
-          ?? ChatConversationIdentity.mainChatDefault,
+        conversationIdentity: ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -86,6 +85,7 @@ struct QueryAnswerThread: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
+        postcardFirstLanding: DesktopExperimentCoordinator.shared.isMemoryV1,
         // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
         // opener is composed by the provider the moment onboarding finishes — a greeting by name
         // and tappable starters — and its only renderer was the deleted chat page and the legacy
@@ -182,20 +182,12 @@ private struct QueryAnswerFailureNotice: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
       if classified.retryable {
-        Button("Try again", action: onRetry)
+        Button("Try Again", action: onRetry)
           .buttonStyle(.plain)
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(Ink.accent)
       }
-      Button {
-        onDismiss()
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundStyle(Ink.secondary)
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Dismiss")
+      DismissButton(action: { onDismiss() }, accessibilityLabel: "Dismiss", size: .compact)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)

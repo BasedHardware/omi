@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-late-pop-after-route-left",
+  "violated_contract": "Navigator.pop() removes whatever route is on top, not the route whose page called it. A page that awaits and then pops assumes it is still the top route. A back swipe (or any other pop) during the await removes the route first, but its State stays mounted through the exit transition, so the mounted re-check passes and the late pop removes the route beneath. When that route is Home, the root navigator is left empty and the app shows a black screen until it is force-quit.",
+  "canonical_prevention": "After an await, pop only when the page's own route is still the current one (ModalRoute.of(context)?.isCurrent). mounted alone is not enough: it stays true while a popped route animates out. The guard test pumps the production ConversationCapturingPage over a Home stand-in on the iOS page route, pops the route while Finish is awaited, completes the finish mid-transition, and asserts Home is still on screen.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/capturing_finish_swipe_back_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/**",
+    "app/test/widgets/**"
+  ],
+  "status": "open"
+}

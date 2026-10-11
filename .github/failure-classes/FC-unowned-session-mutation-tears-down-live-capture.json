@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-unowned-session-mutation-tears-down-live-capture",
+  "violated_contract": "A session-scoped mutation (conversation rotation, device re-pin, admission stop) that cannot proceed right now must defer or coalesce — it may not surface as an error that tears the live capture session down. When two rotation callers race on the session epoch the loser must see 'already handled', and a device reappearance must re-pin capture in place; both otherwise emit a Recording Stopped/Started pair and fragment one conversation into many.",
+  "canonical_prevention": "Serialize session-scoped mutations behind a single in-flight guard whose contended result is a distinct non-error outcome (callers requeue their intent instead of stopping), route device re-pins through an in-place capture swap that preserves session and attempt identity, and bound every forced terminalization with an enum-backed finalization reason so the loop self-attributes in telemetry.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/RecordingStopRestartLoopTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/AppState/",
+    "desktop/macos/Desktop/Sources/Audio/"
+  ],
+  "status": "open"
+}

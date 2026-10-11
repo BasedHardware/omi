@@ -324,7 +324,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
   static let schemaVersion = 1
   static let safeDefault = ProactiveTaskInterruptionConfiguration(
     userOptedIn: false,
-    shippedCohortsEnabled: false,
     dailyLimit: 2,
     minimumSpacing: 90 * 60,
     allowedPreparationKinds: []
@@ -332,21 +331,18 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
 
   let schemaVersion: Int
   var userOptedIn: Bool
-  var shippedCohortsEnabled: Bool
   var dailyLimit: Int
   var minimumSpacing: TimeInterval
   var allowedPreparationKinds: Set<String>
 
   init(
     userOptedIn: Bool,
-    shippedCohortsEnabled: Bool,
     dailyLimit: Int,
     minimumSpacing: TimeInterval,
     allowedPreparationKinds: Set<String>
   ) {
     self.schemaVersion = Self.schemaVersion
     self.userOptedIn = userOptedIn
-    self.shippedCohortsEnabled = shippedCohortsEnabled
     self.dailyLimit = max(0, dailyLimit)
     self.minimumSpacing = max(0, minimumSpacing)
     self.allowedPreparationKinds = allowedPreparationKinds
@@ -354,10 +350,7 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
 
   func isEnrolled(cohort: ProactiveTaskCohort) -> Bool {
     guard userOptedIn else { return false }
-    switch cohort {
-    case .dogfood: return true
-    case .beta, .production: return shippedCohortsEnabled
-    }
+    return cohort == .dogfood
   }
 }
 
@@ -373,7 +366,6 @@ enum ProactiveTaskInterruptionSettings {
     else { return .safeDefault }
     return ProactiveTaskInterruptionConfiguration(
       userOptedIn: config.userOptedIn,
-      shippedCohortsEnabled: config.shippedCohortsEnabled,
       dailyLimit: config.dailyLimit,
       minimumSpacing: config.minimumSpacing,
       allowedPreparationKinds: config.allowedPreparationKinds
@@ -826,7 +818,6 @@ actor TaskContextualResurfacingService {
   private let debounceInterval: TimeInterval
   private let deviceID: () -> String
   private let ownerID: @Sendable () -> String?
-  private let contextBucketsEnabled: @Sendable () async -> Bool
   private let interruptionSender:
     @MainActor @Sendable (
       _ candidate: TaskInterruptionCandidate,
@@ -850,9 +841,6 @@ actor TaskContextualResurfacingService {
     debounceInterval: TimeInterval = 2,
     deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
     ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
-    contextBucketsEnabled: @escaping @Sendable () async -> Bool = {
-      await MainActor.run { ContextBucketsFeature.isEnabled }
-    },
     interruptionSender:
       @escaping @MainActor @Sendable (
         TaskInterruptionCandidate,
@@ -868,7 +856,6 @@ actor TaskContextualResurfacingService {
     self.debounceInterval = debounceInterval
     self.deviceID = deviceIDProvider
     self.ownerID = ownerIDProvider
-    self.contextBucketsEnabled = contextBucketsEnabled
     self.interruptionSender = interruptionSender
   }
 
@@ -889,12 +876,6 @@ actor TaskContextualResurfacingService {
   }
 
   func observe(_ event: TaskLocalContextEvent) async {
-    if await contextBucketsEnabled() {
-      // ContextProactivityEngine owns flag-on resurfacing and the delivery ledger.
-      // Cancel any legacy debounce that was already scheduled before the flag flipped.
-      resetOwnerState()
-      return
-    }
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()
@@ -925,11 +906,6 @@ actor TaskContextualResurfacingService {
   private func flush(lease: OwnerLease) async {
     debounceTask?.cancel()
     debounceTask = nil
-    if await contextBucketsEnabled() {
-      // Flag flipped on while the debounce was sleeping — abandon legacy flush.
-      resetOwnerState()
-      return
-    }
     guard isCurrent(lease), activeLease == lease else {
       resetOwnerState()
       return

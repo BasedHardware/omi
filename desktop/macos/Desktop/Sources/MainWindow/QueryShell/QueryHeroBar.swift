@@ -241,7 +241,7 @@ struct QueryHeroBar: View {
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("query-shell-ask-hint")
           .accessibilityLabel("Send")
-          .help("Send — ⏎")
+          .help("Send (⏎)")
       }
     }
   }
@@ -298,7 +298,7 @@ struct QueryHeroBar: View {
           .accessibilityLabel("Send")
           // **The key hint is help text, not paint.** `⏎ Send` written across the control was the
           // widest thing in the row and the reason it needed a pill to sit in at all.
-          .help("Send — ⏎")
+          .help("Send (⏎)")
       }
     }
   }

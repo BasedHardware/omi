@@ -149,6 +149,8 @@ extension APIClient {
     completed: Bool? = nil,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
+    conversationId: String? = nil,
+    isLocked: Bool? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
@@ -167,7 +169,7 @@ extension APIClient {
     let wire = OmiAPI.ActionItemCreateRequest(
       appleReminderId: nil,
       completed: completed,
-      conversationId: nil,
+      conversationId: conversationId,
       description_: description,
       dueAt: dueAt.map { formatter.string(from: $0) },
       dueConfidence: dueConfidence,
@@ -176,7 +178,7 @@ extension APIClient {
       exported: nil,
       goalId: goalId,
       indentLevel: indentLevel,
-      isLocked: nil,
+      isLocked: isLocked,
       owner: owner.flatMap(OmiAPI.TaskOwner.init(rawValue:)),
       priority: priority.flatMap(OmiAPI.TaskPriority.init(rawValue:)),
       provenance: provenance,

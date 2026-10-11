@@ -8,6 +8,8 @@ import openai
 import httpx
 from dotenv import load_dotenv
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -17,7 +19,7 @@ app = Flask(__name__)
 APP_ID = "01JPP8Y2PA2YWQPTMDAFHXWX8E"
 API_KEY = "get_this_api_key_in_omi_app"
 # USER_ID is now extracted dynamically from requests rather than being hardcoded
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
 # OpenAI API configuration
 # Set your OpenAI API key in environment variables for security
@@ -297,7 +299,7 @@ def submit_memories():
             # Print the full memory with no truncation
             print(f"\n🔍 MEMORY #{memory_count} ({len(memory)} chars): {memory}")
 
-            # Create the facts data according to existing structure (API still uses "facts")
+            # Create the memories data according to v2 endpoint structure
             memory_data = {"text": memory, "text_source": "other", "text_source_spec": "learning_notes"}
 
             # Print full request data without truncation
@@ -307,8 +309,8 @@ def submit_memories():
             if memory_count > 1:
                 time.sleep(0.5)  # Half second delay between requests
 
-            # Send the request to OMI API with dynamic user_id (still using the facts endpoint)
-            response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data))
+            # Send the request to OMI API with dynamic user_id
+            response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data), timeout=REQUEST_TIMEOUT)
 
             # Record result
             result = {

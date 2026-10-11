@@ -1,17 +1,8 @@
 package com.friend.ios.phonemic
 
-import android.Manifest
 import android.app.Application
-import android.content.Context
-import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.media.AudioRecordingConfiguration
-import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
-import android.util.Log
-import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
 
 /**
  * The phone-mic capture state machine — the Kotlin port of iOS `PhoneMicController`.
@@ -20,32 +11,37 @@ import java.util.concurrent.Executors
  * self-heal on stall/read-error, and the drain-ordered teardown that finalizes the
  * batch file before stop() resolves. The other PhoneMic classes are mechanism only.
  *
+ * Every OS effect (main loop, permissions, audio mode, recording-config callbacks,
+ * foreground service, engine, batch pipeline, logging) is injected through
+ * [PhoneMicControllerPorts] so the JVM replay harness drives this exact policy
+ * with the canonical phone-mic-native-events/v1 vectors.
+ *
  * Threading (the load-bearing constraint):
- *  - ALL control state below is confined to the MAIN thread. Pigeon host handlers,
- *    the heartbeat/resume/rebuild timers, and the AudioRecordingCallback are all
+ *  - ALL control state below is confined to the MAIN loop. Pigeon host handlers,
+ *    the heartbeat/resume/rebuild timers, and the recording-config listener are all
  *    delivered on main, so plain (non-atomic) fields are correct. [start]/[stop] hop
  *    to main defensively via [runOnMain] in case they are ever called off-main.
  *  - [PhoneMicCaptureEngine] owns one read thread; it hands chunks back on that thread.
- *  - [audioExecutor] is one serial thread that does chunk fan-out (encode + write for
+ *  - the audio task queue is serial and does chunk fan-out (encode + write for
  *    batch, or hand to the emitter for stream) and the encoder/writer close+destroy.
- *    INVARIANT: no audioExecutor task ever blocks on main — every hop back to main is a
- *    fire-and-forget `mainHandler.post`, so stop() never deadlocks on the file finalize.
+ *    INVARIANT: no audioQueue task ever blocks on main — every hop back to main is a
+ *    fire-and-forget `main.post`, so stop() never deadlocks on the file finalize.
  *  - [emissionGated] is the ONLY cross-thread flag: written on main, read on the
- *    audioExecutor to drop audio captured while the mic is silenced.
+ *    audio queue to drop audio captured while the mic is silenced.
  *
  * Recovery is self-healing and native: Dart is only told the state so it can keep its
  * own recording flag / UI in sync — it never re-arms capture on an interruption (its
  * batch watchdog stays an outer safety net that calls stop()+start()). Every outbound
- * message goes through [emitter]; the controller never touches [PhoneMicFlutterApi].
+ * message goes through [emitter]; the controller never touches the Pigeon api.
  */
-class PhoneMicController private constructor(private val application: Application) {
+class PhoneMicController private constructor(private val ports: PhoneMicControllerPorts) {
 
     /** Why we are in [PhoneMicCaptureState.INTERRUPTED], which decides how we resume. */
     private enum class Cause {
         /** Not interrupted (running / idle / etc.). */
         NONE,
 
-        /** AudioRecordingCallback reports our session is being silenced (call/assistant
+        /** RecordingConfig listener reports our session is being silenced (call/assistant
          *  took the mic). Engine stays alive; resume in place when the flag clears. */
         SILENCED,
 
@@ -59,20 +55,15 @@ class PhoneMicController private constructor(private val application: Applicatio
         REBUILD,
     }
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val emitter = PhoneMicEventEmitter(mainHandler)
-    private val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val main = ports.main
+    private val emitter = PhoneMicEventEmitter(main)
+    private val audioQueue = ports.audioQueue
 
-    /** Single serial thread for chunk encode/write + encoder-destroy; see class note. */
-    private val audioExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "PhoneMicAudio")
-    }
-
-    // ── Control state (MAIN thread only) ──
+    // ── Control state (MAIN loop only) ──
     private var state: PhoneMicCaptureState = PhoneMicCaptureState.IDLE
     private var mode: PhoneMicCaptureMode = PhoneMicCaptureMode.STREAM
     // Dart-minted identity for the live session (main only). Every emitted event
-    // carries it; a start() onto a live session adopts the new caller's id so future
+    // carries it; a start() onto a live session adopts the new id so future
     // events converge to that caller's Dart session.
     private var currentSessionId: Long = 0L
     private var pendingStop = false
@@ -92,45 +83,45 @@ class PhoneMicController private constructor(private val application: Applicatio
     private var startRetriesUsed = 0
     private var consecutiveRebuilds = 0
     private var interruptionCause = Cause.NONE
-    private var engine: PhoneMicCaptureEngine? = null
+    private var engine: PhoneMicEngineHandle? = null
 
     // Batch-mode sink. `mode` is fixed on the idle->starting edge; encoder+writer are
     // created once at bring-up and survive every rebuild (the opus byte stream must stay
     // contiguous across interruptions), released only at stop/failStart after the
-    // audioExecutor has drained.
-    private var encoder: PhoneMicOpusEncoder? = null
-    private var writer: PhoneMicBatchAudioWriter? = null
+    // audio queue has drained.
+    private var encoder: PhoneMicEncoderHandle? = null
+    private var writer: PhoneMicWriterHandle? = null
     private var batchMarker = "omibatchphone"
 
-    /** Set true on main when the mic is silenced; read on the audioExecutor to drop the
-     *  zeros a silenced AudioRecord delivers. The one and only cross-thread flag. */
+    /** Set true on main when the mic is silenced; read on the audio queue to drop the
+     * zeros a silenced AudioRecord delivers. The one and only cross-thread flag. */
     @Volatile
     private var emissionGated = false
 
     /** Latest client-silencing verdict for the live session (main only). Read by the
-     *  heartbeat stall rule so we never "rebuild" a session that is merely muted. */
+     * heartbeat stall rule so we never "rebuild" a session that is merely muted. */
     private var silenced = false
 
     /** Whether the current engine's session has appeared in the recording-config list at
-     *  least once. Until it has, an absent config means "not registered yet", not
-     *  "preempted" — so a transient startup callback cannot fake a silencing. */
+     * least once. Until it has, an absent config means "not registered yet", not
+     * "preempted" — so a transient startup callback cannot fake a silencing. */
     private var sawCurrentSession = false
 
-    private var recordingCallback: AudioManager.AudioRecordingCallback? = null
+    private var recordingListenerRegistered = false
 
     // Timers (main). Each guarded by an armed flag so a callback already dispatched
     // before cancel() drops harmlessly.
     private var heartbeatArmed = false
-    private val heartbeatRunnable = Runnable { runHeartbeat() }
+    private val heartbeatToken = Any()
     private var resumeTickerArmed = false
-    private val resumeTickerRunnable = Runnable { runResumeTick() }
+    private val resumeTickerToken = Any()
     private var rebuildScheduled = false
-    private val rebuildRunnable = Runnable { runScheduledRebuild() }
+    private val rebuildToken = Any()
 
     // MARK: - Public surface (main-confined)
 
     fun bindFlutterApi(api: PhoneMicFlutterApi) {
-        emitter.bind(api)
+        emitter.bind(PhoneMicFlutterApiEventSink(api))
     }
 
     /**
@@ -147,10 +138,16 @@ class PhoneMicController private constructor(private val application: Applicatio
         if (state != PhoneMicCaptureState.IDLE || stopDrainInFlight) {
             handleStop {}
         } else {
-            PhoneMicForegroundService.stop(application)
+            ports.stopForegroundService()
         }
         emitter.unbind()
     }
+
+    /** Test-only: bind the event sink directly (JVM replay harness). */
+    internal fun bindEventSinkForReplay(sink: PhoneMicEventSink) {
+        emitter.bind(sink)
+    }
+
 
     fun start(mode: PhoneMicCaptureMode, sessionId: Long, callback: (Result<Unit>) -> Unit) = runOnMain {
         handleStart(mode, sessionId, callback)
@@ -161,7 +158,7 @@ class PhoneMicController private constructor(private val application: Applicatio
     }
 
     /** Host handler runs on main; a plain field read is correct. Non-idle == "busy" for
-     *  the arbiter (includes STARTING, unlike iOS — see the module notes). */
+     * the arbiter (includes STARTING, unlike iOS — see the module notes). */
     val isRecording: Boolean
         get() = state != PhoneMicCaptureState.IDLE
 
@@ -214,7 +211,7 @@ class PhoneMicController private constructor(private val application: Applicatio
                 interruptionCause = Cause.NONE
                 pendingStartCallbacks.add(callback)
                 enterState(PhoneMicCaptureState.STARTING)
-                Log.i(TAG, "starting mode=${if (mode == PhoneMicCaptureMode.BATCH) "batch" else "stream"}")
+                info("starting mode=${if (mode == PhoneMicCaptureMode.BATCH) "batch" else "stream"}")
                 beginStartSequence()
             }
         }
@@ -253,9 +250,7 @@ class PhoneMicController private constructor(private val application: Applicatio
     private fun beginStartSequence() {
         // (1) Permission pre-check. Dart requests RECORD_AUDIO before calling start(), so
         // here it is a hard gate, not an async prompt.
-        if (ContextCompat.checkSelfPermission(application, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!ports.checkRecordAudioPermission()) {
             failStart("permission_denied", "RECORD_AUDIO permission is not granted")
             return
         }
@@ -271,7 +266,7 @@ class PhoneMicController private constructor(private val application: Applicatio
 
         // (3) Foreground service. A rejected promotion is non-fatal — capture continues
         // foreground-only rather than failing the start.
-        if (!PhoneMicForegroundService.start(application)) {
+        if (!ports.startForegroundService()) {
             emitter.emitError(
                 "foreground_service_failed",
                 "foreground service promotion was rejected; capturing foreground-only",
@@ -298,8 +293,8 @@ class PhoneMicController private constructor(private val application: Applicatio
         }
         if (startRetriesUsed < MAX_START_RETRIES) {
             startRetriesUsed++
-            Log.w(TAG, "bring-up failed ($failure), retry $startRetriesUsed")
-            mainHandler.postDelayed({ performBringUp() }, BRING_UP_RETRY_DELAY_MS)
+            warn("bring-up failed ($failure), retry $startRetriesUsed")
+            main.postDelayed(retryToken(), BRING_UP_RETRY_DELAY_MS) { performBringUp() }
         } else {
             failStart(failure, "engine bring-up failed after retries")
         }
@@ -316,14 +311,14 @@ class PhoneMicController private constructor(private val application: Applicatio
         // Capture the session id alongside the epoch: a frame belongs to the session
         // that was current when this engine (its epoch) was built.
         val sid = currentSessionId
-        val newEngine = PhoneMicCaptureEngine(
-            onChunk = { chunk -> audioExecutor.execute { handleChunkOnAudio(chunk, epoch, sid) } },
-            onReadError = { code -> mainHandler.post { handleReadError(code) } },
+        val newEngine = ports.makeEngine(
+            { chunk -> audioQueue.execute { handleChunkOnAudio(chunk, epoch, sid) } },
+            { code -> main.post { handleReadError(code) } },
         )
         try {
             newEngine.start()
         } catch (t: Throwable) {
-            Log.w(TAG, "engine.start() failed", t)
+            warn("engine.start() failed", t)
             newEngine.teardown()
             return "engine_start_failed"
         }
@@ -350,7 +345,7 @@ class PhoneMicController private constructor(private val application: Applicatio
     }
 
     private fun failStart(code: String, message: String) {
-        Log.w(TAG, "start failed: $code ($message)")
+        warn("start failed: $code ($message)")
         emitter.generation.invalidate()
         cancelHeartbeat()
         cancelResumeTicker()
@@ -360,7 +355,7 @@ class PhoneMicController private constructor(private val application: Applicatio
         engine = null
         // Null the batch fields synchronously (state goes IDLE synchronously below, so a
         // fast re-start must not reuse a to-be-destroyed encoder); finalize+destroy the
-        // captured refs on the audioExecutor.
+        // captured refs on the audio queue.
         val w = writer
         val enc = encoder
         writer = null
@@ -373,12 +368,12 @@ class PhoneMicController private constructor(private val application: Applicatio
         resolvePendingStarts(Result.failure(PhoneMicPigeonError(code, message, null)))
         resolvePendingStops(Result.success(Unit)) // a stop pending during STARTING now succeeds
         if (w != null || enc != null) {
-            audioExecutor.execute {
+            audioQueue.execute {
                 w?.closeNow("aborted")
                 enc?.destroy()
             }
         }
-        PhoneMicForegroundService.stop(application)
+        ports.stopForegroundService()
         emitter.emitState(PhoneMicCaptureState.IDLE, currentSessionId)
     }
 
@@ -386,7 +381,7 @@ class PhoneMicController private constructor(private val application: Applicatio
 
     /**
      * Async, drain-ordered stop. Main never blocks on I/O: teardown the engine (bounded
-     * join), then finalize on the audioExecutor and flip to IDLE + resolve the callbacks
+     * join), then finalize on the audio queue and flip to IDLE + resolve the callbacks
      * on the main hop after. Ordering guarantees:
      *  - executor FIFO puts closeNow after every pending chunk write;
      *  - main FIFO puts the IDLE emission after every already-posted (epoch-dead) frame;
@@ -404,18 +399,18 @@ class PhoneMicController private constructor(private val application: Applicatio
         teardownEngine()
         val w = writer
         val enc = encoder
-        audioExecutor.execute {
+        audioQueue.execute {
             w?.closeNow("manual")
             enc?.destroy()
-            mainHandler.post {
+            main.post {
                 writer = null
                 encoder = null
                 silenced = false
                 emissionGated = false
-                PhoneMicForegroundService.stop(application)
+                ports.stopForegroundService()
                 enterState(PhoneMicCaptureState.IDLE)
                 stopDrainInFlight = false
-                Log.i(TAG, "stopped")
+                info("stopped")
                 resolvePendingStops(Result.success(Unit))
                 val restartMode = restartModeAfterStop
                 val restartSessionId = restartSessionIdAfterStop
@@ -433,7 +428,7 @@ class PhoneMicController private constructor(private val application: Applicatio
         }
     }
 
-    // MARK: - Chunk fan-out (audioExecutor)
+    // MARK: - Chunk fan-out (audio queue)
 
     private fun handleChunkOnAudio(chunk: ByteArray, epoch: Long, sessionId: Long) {
         if (emissionGated) return // drop the zeros a silenced mic delivers
@@ -459,22 +454,22 @@ class PhoneMicController private constructor(private val application: Applicatio
     private fun startHeartbeatIfNeeded() {
         if (heartbeatArmed) return
         heartbeatArmed = true
-        mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS)
+        main.postDelayed(heartbeatToken, HEARTBEAT_INTERVAL_MS) { runHeartbeat() }
     }
 
     private fun cancelHeartbeat() {
         heartbeatArmed = false
-        mainHandler.removeCallbacks(heartbeatRunnable)
+        main.cancel(heartbeatToken)
     }
 
     private fun runHeartbeat() {
         if (!heartbeatArmed) return
         onHeartbeatTick()
-        if (heartbeatArmed) mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS)
+        if (heartbeatArmed) main.postDelayed(heartbeatToken, HEARTBEAT_INTERVAL_MS) { runHeartbeat() }
     }
 
     private fun onHeartbeatTick() {
-        val audioMode = audioManager.mode
+        val audioMode = ports.audioMode()
 
         // Rule 2 (resume): a mode-poll interruption whose call mode has cleared -> rebuild.
         if (interruptionCause == Cause.MODE && !inCall(audioMode)) {
@@ -486,7 +481,7 @@ class PhoneMicController private constructor(private val application: Applicatio
         run {
             val eng = engine ?: return@run
             if (state != PhoneMicCaptureState.RUNNING) return@run
-            val stale = SystemClock.uptimeMillis() - eng.lastDataUptimeMs >= STALL_THRESHOLD_MS
+            val stale = main.uptimeMillis() - eng.lastDataUptimeMs >= STALL_THRESHOLD_MS
             if (!stale) return@run
             when {
                 // Rule 2: a call mode is up and data stalled -> interruption, not a rebuild.
@@ -502,11 +497,11 @@ class PhoneMicController private constructor(private val application: Applicatio
         // Rule 3 (batch progress + storage-full edge): async double-hop, never blocks main.
         if (mode == PhoneMicCaptureMode.BATCH && state != PhoneMicCaptureState.IDLE) {
             val w = writer ?: return
-            val sid = currentSessionId // read on main before the executor hop
-            audioExecutor.execute {
+            val sid = currentSessionId // read on main before the queue hop
+            audioQueue.execute {
                 val frames = w.sessionFramesWritten
                 val edge = w.consumeStorageFullTransition()
-                mainHandler.post {
+                main.post {
                     if (edge) emitter.emitError("batch_storage_full", "free space below the batch writer minimum", sid)
                     // 320 samples per opus frame @16kHz == 20ms == 0.02s.
                     emitter.emitBatchProgress(frames * 0.02, sid)
@@ -518,52 +513,47 @@ class PhoneMicController private constructor(private val application: Applicatio
     private fun inCall(audioMode: Int): Boolean =
         audioMode == AudioManager.MODE_IN_CALL || audioMode == AudioManager.MODE_IN_COMMUNICATION
 
-    // MARK: - Interruption via client silencing (AudioManager recording callback)
+    // MARK: - Interruption via client silencing (recording-config listener)
 
     /**
      * Registered once per session, kept across rebuilds. An unprivileged app only sees its
      * own recording configs, and every rebuild mints a NEW session id, so the handler
-     * always re-matches against the CURRENT engine's [PhoneMicCaptureEngine.audioSessionId]
-     * read live. Callbacks are delivered on [mainHandler].
+     * always re-matches against the CURRENT engine's [PhoneMicEngineHandle.audioSessionId]
+     * read live. Callbacks are delivered on main.
      */
     private fun ensureRecordingCallbackRegistered() {
-        if (recordingCallback != null) return
-        val cb = object : AudioManager.AudioRecordingCallback() {
-            override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
-                onRecordingConfigsChanged(configs)
-            }
-        }
-        recordingCallback = cb
-        audioManager.registerAudioRecordingCallback(cb, mainHandler)
+        if (recordingListenerRegistered) return
+        recordingListenerRegistered = true
+        ports.setRecordingConfigListener { configs -> onRecordingConfigsChanged(configs) }
     }
 
     private fun unregisterRecordingCallback() {
-        recordingCallback?.let { audioManager.unregisterAudioRecordingCallback(it) }
-        recordingCallback = null
+        if (!recordingListenerRegistered) return
+        recordingListenerRegistered = false
+        ports.setRecordingConfigListener(null)
     }
 
     /** Seed [silenced] for a freshly brought-up session. Absence here means "not
-     *  registered yet" (assume healthy), unlike the live callback below. Does NOT touch
-     *  [emissionGated] — [enterRunning] re-checks [silenced] to gate if truly muted. */
+     * registered yet" (assume healthy), unlike the live callback below. Does NOT touch
+     * [emissionGated] — [enterRunning] re-checks [silenced] to gate if truly muted. */
     private fun seedSilenceState() {
         sawCurrentSession = false
         val eng = engine ?: return
-        val ours = audioManager.activeRecordingConfigurations
-            .firstOrNull { it.clientAudioSessionId == eng.audioSessionId }
+        val ours = ports.activeRecordingConfigs().firstOrNull { it.clientAudioSessionId == eng.audioSessionId }
         if (ours != null) {
             sawCurrentSession = true
-            silenced = ours.isClientSilenced
+            silenced = ours.clientSilenced
         } else {
             silenced = false
         }
     }
 
-    private fun onRecordingConfigsChanged(configs: List<AudioRecordingConfiguration>) {
+    private fun onRecordingConfigsChanged(configs: List<PhoneMicRecordingConfig>) {
         val eng = engine ?: return
         val ours = configs.firstOrNull { it.clientAudioSessionId == eng.audioSessionId }
         val nowSilenced = if (ours != null) {
             sawCurrentSession = true
-            ours.isClientSilenced
+            ours.clientSilenced
         } else {
             // Full preemption can drop our entry entirely instead of flipping the flag —
             // but only treat absence as silenced once we have actually seen the session,
@@ -591,16 +581,16 @@ class PhoneMicController private constructor(private val application: Applicatio
     // MARK: - State transitions
 
     /** Enter interruption. The engine STAYS ALIVE for SILENCED (drops zeros, batch progress
-     *  freezes = iOS semantics) and for MODE (starved but rebuilt on resume); for REBUILD
-     *  it was already torn down by [beginRebuild]. */
+     * freezes = iOS semantics) and for MODE (starved but rebuilt on resume); for REBUILD
+     * it was already torn down by [beginRebuild]. */
     private fun enterInterrupted(cause: Cause) {
         interruptionCause = cause
         enterState(PhoneMicCaptureState.INTERRUPTED)
         if (cause == Cause.SILENCED) {
             emissionGated = true
-            audioExecutor.execute { encoder?.discardPartial() } // never splice across the gap
+            audioQueue.execute { encoder?.discardPartial() } // never splice across the gap
         }
-        Log.i(TAG, "interrupted (cause=$cause)")
+        info("interrupted (cause=$cause)")
     }
 
     /** In-place resume from a SILENCED interruption — the engine never died, so no rebuild. */
@@ -610,7 +600,7 @@ class PhoneMicController private constructor(private val application: Applicatio
         emissionGated = false
         consecutiveRebuilds = 0
         enterState(PhoneMicCaptureState.RUNNING)
-        Log.i(TAG, "resumed after silencing")
+        info("resumed after silencing")
     }
 
     /**
@@ -632,9 +622,9 @@ class PhoneMicController private constructor(private val application: Applicatio
     }
 
     /** Self-heal from a RUNNING stall / read error: drop to REBUILDING and rebuild after a
-     *  short backoff so the HAL can settle before we reacquire the AudioRecord. */
+     * short backoff so the HAL can settle before we reacquire the AudioRecord. */
     private fun beginRebuild(reason: String) {
-        Log.i(TAG, "rebuilding ($reason)")
+        info("rebuilding ($reason)")
         emissionGated = false
         interruptionCause = Cause.NONE
         enterState(PhoneMicCaptureState.REBUILDING)
@@ -645,12 +635,12 @@ class PhoneMicController private constructor(private val application: Applicatio
     private fun scheduleRebuild() {
         if (rebuildScheduled) return
         rebuildScheduled = true
-        mainHandler.postDelayed(rebuildRunnable, REBUILD_BACKOFF_MS)
+        main.postDelayed(rebuildToken, REBUILD_BACKOFF_MS) { runScheduledRebuild() }
     }
 
     private fun cancelRebuildSchedule() {
         rebuildScheduled = false
-        mainHandler.removeCallbacks(rebuildRunnable)
+        main.cancel(rebuildToken)
     }
 
     private fun runScheduledRebuild() {
@@ -676,7 +666,7 @@ class PhoneMicController private constructor(private val application: Applicatio
         // Stale errors from a torn-down engine arrive with state != RUNNING and are ignored;
         // a genuine read failure on the live engine self-heals.
         if (state != PhoneMicCaptureState.RUNNING) return
-        Log.w(TAG, "read error ($code)")
+        warn("read error ($code)")
         beginRebuild("read_error")
     }
 
@@ -685,19 +675,19 @@ class PhoneMicController private constructor(private val application: Applicatio
     private fun armResumeTicker() {
         cancelResumeTicker()
         resumeTickerArmed = true
-        mainHandler.postDelayed(resumeTickerRunnable, RESUME_TICK_INTERVAL_MS)
+        main.postDelayed(resumeTickerToken, RESUME_TICK_INTERVAL_MS) { runResumeTick() }
     }
 
     private fun cancelResumeTicker() {
         resumeTickerArmed = false
-        mainHandler.removeCallbacks(resumeTickerRunnable)
+        main.cancel(resumeTickerToken)
     }
 
     private fun runResumeTick() {
         if (!resumeTickerArmed) return
         attemptResume() // success -> enterRunning -> cancelResumeTicker
         if (resumeTickerArmed && state == PhoneMicCaptureState.INTERRUPTED) {
-            mainHandler.postDelayed(resumeTickerRunnable, RESUME_TICK_INTERVAL_MS)
+            main.postDelayed(resumeTickerToken, RESUME_TICK_INTERVAL_MS) { runResumeTick() }
         }
     }
 
@@ -706,30 +696,28 @@ class PhoneMicController private constructor(private val application: Applicatio
     /**
      * Invalidate the epoch (happens-before the emitter drops in-flight frames), tear down
      * the engine (stop -> bounded join -> release), then discard the encoder's sub-frame
-     * remainder on the audioExecutor. The discardPartial is enqueued AFTER the read thread
+     * remainder on the audio queue. The discardPartial is enqueued AFTER the read thread
      * is joined, so it lands between epochs and pre/post-gap audio is never spliced.
      */
     private fun teardownEngine() {
         emitter.generation.invalidate()
         engine?.teardown()
         engine = null
-        audioExecutor.execute { encoder?.discardPartial() }
+        audioQueue.execute { encoder?.discardPartial() }
     }
 
     // MARK: - Batch resources
 
     /** Idempotent: created on the first bring-up, reused across rebuilds/resumes, released
-     *  only at stop/failStart. Returns an error code on failure (a missing dir or
-     *  unbuildable encoder won't fix on retry, but the code surfaces as the start error). */
+     * only at stop/failStart. Returns an error code on failure (a missing dir or
+     * unbuildable encoder won't fix on retry, but the code surfaces as the start error). */
     private fun ensureBatchResources(): String? {
         if (encoder != null && writer != null) return null
-        val prefs = application.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        val dir = prefs.getString("flutter.batchAudioDir", null)
-        if (dir.isNullOrEmpty()) return "batch_dir_unavailable"
-        val enc = PhoneMicOpusEncoder.create() ?: return "opus_init_failed"
-        batchMarker = if (prefs.getBoolean("flutter.phoneBatchAuto", false)) "omibatchphoneauto" else "omibatchphone"
+        val dir = ports.batchDirectory() ?: return "batch_dir_unavailable"
+        val enc = ports.makeEncoder() ?: return "opus_init_failed"
+        batchMarker = if (ports.batchAutoMarker()) "omibatchphoneauto" else "omibatchphone"
         encoder = enc
-        writer = PhoneMicBatchAudioWriter(application, dir)
+        writer = ports.makeWriter(dir)
         return null
     }
 
@@ -763,8 +751,15 @@ class PhoneMicController private constructor(private val application: Applicatio
     }
 
     private fun runOnMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post { block() }
+        if (main.isCurrent) block() else main.post { block() }
     }
+
+    private fun info(message: String) = ports.log(PhoneMicLogLevel.INFO, TAG, message, null)
+
+    private fun warn(message: String, error: Throwable? = null) = ports.log(PhoneMicLogLevel.WARN, TAG, message, error)
+
+    /** Per-attempt retry token (the armed state machine makes exact cancel non-critical). */
+    private fun retryToken(): Any = retryScratch
 
     companion object {
         private const val TAG = "PhoneMic.Controller"
@@ -777,6 +772,8 @@ class PhoneMicController private constructor(private val application: Applicatio
         private const val REBUILD_BACKOFF_MS = 200L
         private const val MAX_CONSECUTIVE_REBUILDS = 3
         private const val STALL_THRESHOLD_MS = 2000L
+
+        private val retryScratch = Any()
 
         @Volatile
         private var _instance: PhoneMicController? = null
@@ -791,10 +788,13 @@ class PhoneMicController private constructor(private val application: Applicatio
             if (_instance == null) {
                 synchronized(this) {
                     if (_instance == null) {
-                        _instance = PhoneMicController(application)
+                        _instance = PhoneMicController(PhoneMicControllerPorts.production(application))
                     }
                 }
             }
         }
+
+        /** Test-only construction: the JVM replay harness injects its ports. */
+        internal fun forReplay(ports: PhoneMicControllerPorts): PhoneMicController = PhoneMicController(ports)
     }
 }

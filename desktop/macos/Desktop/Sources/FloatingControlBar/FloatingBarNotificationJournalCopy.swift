@@ -97,7 +97,7 @@ enum ProactiveNotificationCopy {
       return ["memory", "memory saved"]
     case .integration:
       return ["integration"]
-    case .general, .functional, .trial, .onboarding, .dailyRecap:
+    case .general, .functional, .trial, .onboarding, .dailyRecap, .proactivityV2:
       return ["notification"]
     }
   }

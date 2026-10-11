@@ -1,0 +1,7 @@
+{
+  "version": "0.12.359",
+  "date": "2026-09-17",
+  "changes": [
+    "Fixed deferred realtime answers completing silently instead of becoming available to the next voice turn."
+  ]
+}

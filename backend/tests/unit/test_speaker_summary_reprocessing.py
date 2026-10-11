@@ -1,0 +1,54 @@
+"""Opt-in reprocessing sends corrected identity through real prompt formatting."""
+
+from contextlib import nullcontext
+from datetime import datetime, timezone
+
+from models.conversation import Conversation
+from models.other import Person
+from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
+from utils.conversations import process_conversation as pc
+from utils.conversations import speaker_resolution as stage
+from utils.conversations import transcript_for_llm
+
+
+def test_corrected_person_reaches_summary_provider(monkeypatch):
+    now = datetime(2026, 9, 21, tzinfo=timezone.utc)
+    conversation = Conversation(
+        id='c',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(id='s', text='Synthetic meeting text', speaker_id=4, is_user=False, start=0, end=5)
+        ],
+        private_cloud_sync_enabled=False,
+    )
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda uid, cid: {'speakers': {'4': {'generation': 1, 'person_id': 'correct', 'is_user': False}}},
+    )
+    stage.resolve_speakers_for_processing('synthetic', conversation)
+    assert conversation.get_person_ids() == ['correct']
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *a, **k: 'Owner')
+    monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
+    prompts = []
+
+    def summarize(prefix, *a, **k):
+        prompts.append(prefix.context)
+        return Structured(overview='Updated summary')
+
+    monkeypatch.setattr(pc, 'get_conversation_notes', summarize)
+    result, discarded = pc._get_structured(
+        'synthetic',
+        'en',
+        conversation,
+        people=[Person(id='correct', name='Correct Name')],
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
+    )
+    assert not discarded and result.overview == 'Updated summary'
+    assert len(prompts) == 1 and 'Correct Name' in prompts[0] and 'Synthetic meeting text' in prompts[0]

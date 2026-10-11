@@ -190,7 +190,7 @@ def prepare_for_write(
     return decorator
 
 
-def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]) -> Callable[[F], F]:
+def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Optional[Dict[str, Any]]]) -> Callable[[F], F]:
     """
     Decorator to decrypt data after reading from the database.
     It processes the return value of the decorated function. If the return value is a dict or
@@ -211,8 +211,8 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
 
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _process(item: Any) -> Any:
                 if isinstance(item, dict):
@@ -265,8 +265,8 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
             # Execute the original function to get the conversation data
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _fetch_and_attach_photos(conversation_data: Any) -> Any:
                 if not isinstance(conversation_data, dict) or 'id' not in conversation_data:

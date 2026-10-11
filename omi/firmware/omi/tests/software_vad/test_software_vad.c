@@ -70,6 +70,46 @@ static void test_software_vad_preroll_and_transitions(void)
     assert(log.first_sample[4] == 200);
 }
 
+static void test_software_vad_full_ring_onset_burst(void)
+{
+    struct software_vad_state state;
+    const struct software_vad_config config = {
+        .amplitude_threshold = 100U,
+        .debounce_frames = 3U,
+        .hold_ms = 1000,
+    };
+    struct emit_log log = {.fail_at = SIZE_MAX};
+    int16_t block[SOFTWARE_VAD_MAX_SAMPLES];
+
+    software_vad_init(&state, &config, 0);
+    fill_block(block, 0);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1000, capture_emit, &log) == 0);
+    for (int i = 1; i <= 8; ++i) {
+        fill_block(block, (int16_t) i);
+        assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1000 + i * 100, capture_emit, &log) == 0);
+    }
+    size_t emits_before = log.count;
+    for (int i = 0; i < 3; ++i) {
+        fill_block(block, (int16_t) (200 + i));
+        assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 1900 + i * 100, capture_emit, &log) == 0);
+        if (i < 2) {
+            assert(log.count == emits_before);
+        }
+    }
+    /* The triggering live block is already in the ring: five emits, not six. */
+    const int16_t expected[] = {7, 8, 200, 201, 202};
+    assert(log.count == emits_before + SOFTWARE_VAD_PREROLL_FRAMES);
+    for (size_t i = 0; i < SOFTWARE_VAD_PREROLL_FRAMES; ++i) {
+        assert(log.first_sample[emits_before + i] == expected[i]);
+    }
+    assert(state.preroll_count == 0U);
+    assert(state.metrics.replayed_blocks == SOFTWARE_VAD_PREROLL_FRAMES);
+    fill_block(block, 203);
+    assert(software_vad_process(&state, block, SOFTWARE_VAD_MAX_SAMPLES, 2200, capture_emit, &log) == 0);
+    assert(log.count == emits_before + SOFTWARE_VAD_PREROLL_FRAMES + 1U);
+    assert(log.first_sample[log.count - 1] == 203);
+}
+
 static void test_software_vad_on_hardware_wake(void)
 {
     struct software_vad_state state;
@@ -126,6 +166,7 @@ static void test_software_vad_emit_failure_stays_active(void)
 int main(void)
 {
     test_software_vad_preroll_and_transitions();
+    test_software_vad_full_ring_onset_burst();
     test_software_vad_on_hardware_wake();
     test_software_vad_emit_failure_stays_active();
     puts("software_vad host tests passed");

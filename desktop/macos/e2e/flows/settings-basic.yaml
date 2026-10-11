@@ -4,6 +4,9 @@ tier: manual
 description: Settings navigation smoke — open Settings via gear icon, navigate all 9 sections (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsSelection.swift
+  - desktop/macos/Desktop/Sources/LaunchAtLoginManager.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/HiddenSettingsSurfacesPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
@@ -23,6 +26,9 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+GlassTransparency.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
+  # S6b opens and dismisses the real save panel, exercising the visible account export row
+  # and the export view's idle/progress/error region without writing an export file.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportView.swift
 preconditions:
   - auth_ready
 
@@ -104,6 +110,13 @@ steps:
     expect:
       text_visible:
         - Notifications & Privacy
+
+  - id: S6b
+    name: Open and cancel the account export save panel
+    do: "In Notifications & Privacy, click 'Export All Data…'. Verify the system Save panel opens. Cancel the panel and verify it closes, the export button is enabled again, and no progress or error message remains in the export status area."
+    expect:
+      text_visible:
+        - Export All Data
 
   - id: S7
     name: Navigate to Rewind section

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, MessageSquare, Bug, X, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,16 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
     onDismiss();
   };
 
+  // Escape is the third way out, alongside the button and the backdrop. Every
+  // path runs the same `onDismiss`, which is what writes the seen flag.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onDismiss]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -62,41 +73,49 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4"
       onClick={handleClose}
     >
-      {/* Modal */}
+      {/* Modal. The enter/exit offsets are `y` and `scale` numbers, not a
+          `transform` string: `transform: 'none'` is interpolated as an
+          all-zero matrix, which collapsed this dialog to 0×0 behind a
+          screen-filling backdrop. `relative` keeps the close button in the
+          dialog's corner, and the height cap keeps the button reachable on a
+          phone. */}
       <motion.div
         initial={{
           opacity: 0,
-          transform: reduceMotion ? 'none' : 'translateY(20px) scale(0.95)',
+          y: reduceMotion ? 0 : 20,
+          scale: reduceMotion ? 1 : 0.95,
         }}
-        animate={{ opacity: 1, transform: 'none' }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{
           opacity: 0,
-          transform: reduceMotion ? 'none' : 'translateY(12px) scale(0.97)',
+          y: reduceMotion ? 0 : 12,
+          scale: reduceMotion ? 1 : 0.97,
         }}
         transition={{ duration: reduceMotion ? 0.16 : 0.22, ease: [0.23, 1, 0.32, 1] }}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'w-full max-w-md bg-bg-secondary rounded-2xl',
-          'shadow-xl border border-bg-tertiary',
-          'overflow-hidden',
+          'relative w-full max-w-md rounded-2xl bg-bg-secondary',
+          'border border-bg-tertiary shadow-xl',
+          'max-h-[calc(100dvh-2rem)] overflow-y-auto',
         )}
       >
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-bg-tertiary transition-colors z-10"
+          aria-label="Close"
+          className="absolute right-3 top-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
-          <X className="w-5 h-5 text-text-tertiary" />
+          <X className="h-5 w-5" />
         </button>
 
         {/* Header with gradient */}
-        <div className="relative px-6 pt-8 pb-6 text-center">
+        <div className="relative px-6 pb-6 pt-8 text-center">
           <div className="absolute inset-0 bg-gradient-to-b from-white/[0.06] to-transparent" />
           <div className="relative">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/[0.14] mb-4">
-              <Sparkles className="w-8 h-8 text-text-primary" />
+            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/[0.14]">
+              <Sparkles className="h-8 w-8 text-text-primary" />
             </div>
-            <h2 className="text-2xl font-semibold text-text-primary mb-2">
+            <h2 className="mb-2 text-2xl font-semibold text-text-primary">
               Welcome to Omi Web Beta
             </h2>
             <p className="text-text-tertiary">Thanks for being an early adopter!</p>
@@ -104,12 +123,12 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
         </div>
 
         {/* Content */}
-        <div className="px-6 pb-6 space-y-4">
+        <div className="space-y-4 px-6 pb-6">
           {/* Feature list */}
           <div className="space-y-3">
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-bg-tertiary/50">
-              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-text-primary" />
+            <div className="flex items-start gap-3 rounded-xl bg-bg-tertiary/50 p-3">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
+                <Sparkles className="h-4 w-4 text-text-primary" />
               </div>
               <div>
                 <p className="text-sm font-medium text-text-primary">
@@ -121,9 +140,9 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-bg-tertiary/50">
-              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center">
-                <Bug className="w-4 h-4 text-text-primary" />
+            <div className="flex items-start gap-3 rounded-xl bg-bg-tertiary/50 p-3">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
+                <Bug className="h-4 w-4 text-text-primary" />
               </div>
               <div>
                 <p className="text-sm font-medium text-text-primary">Error Tracking</p>
@@ -133,9 +152,9 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-bg-tertiary/50">
-              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 text-text-primary" />
+            <div className="flex items-start gap-3 rounded-xl bg-bg-tertiary/50 p-3">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
+                <MessageSquare className="h-4 w-4 text-text-primary" />
               </div>
               <div>
                 <p className="text-sm font-medium text-text-primary">
@@ -149,25 +168,25 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
           </div>
 
           {/* Feedback links */}
-          <div className="pt-2 space-y-2">
+          <div className="space-y-2 pt-2">
             <p className="text-xs text-text-quaternary">Share your feedback:</p>
             <div className="flex items-center gap-4">
               <a
                 href="https://feedback.omi.me"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors"
+                className="flex items-center gap-1.5 text-sm text-text-tertiary transition-colors hover:text-text-primary"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
                 <span>feedback.omi.me</span>
               </a>
               <a
                 href="http://discord.omi.me"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors"
+                className="flex items-center gap-1.5 text-sm text-text-tertiary transition-colors hover:text-text-primary"
               >
-                <DiscordIcon className="w-3.5 h-3.5" />
+                <DiscordIcon className="h-3.5 w-3.5" />
                 <span>Discord</span>
               </a>
             </div>
@@ -177,7 +196,7 @@ export function BetaWelcomeModal({ onDismiss }: BetaWelcomeModalProps) {
           <div className="pt-4">
             <button
               onClick={handleClose}
-              className="block w-full py-3 px-4 rounded-xl bg-text-primary text-bg-primary text-center font-medium hover:bg-text-primary/90 transition-colors"
+              className="block w-full rounded-xl bg-text-primary px-4 py-3 text-center font-medium text-bg-primary transition-colors hover:bg-text-primary/90"
             >
               Got it, let&apos;s go!
             </button>

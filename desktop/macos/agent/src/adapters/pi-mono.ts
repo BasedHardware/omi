@@ -1,3 +1,4 @@
+import { AdapterRuntimeError, isRuntimeFailureCode, type RuntimeFailureCode } from "../runtime/failures.js";
 // PiMonoAdapter — pi-mono harness adapter using SDK in-process
 //
 // Uses createAgentSession() from pi-mono SDK to run the agent loop
@@ -255,6 +256,13 @@ function resolveBundledExtension(): string {
 }
 
 const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is required and available for this fresh public request. Use a live public-web or search tool before answering. Base time-sensitive claims only on that lookup and identify the source. Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless the user explicitly asks for it.</omi_retrieval_policy>";
+
+// EXP-002 `memory_v1`: Omi is the user's memory, not their assistant. The arm
+// starves generic public-web routing — no turn may be flagged as requiring a
+// live web lookup, so the backend keeps the turn on the chat-agent lane
+// instead of swapping to the web-search lane. Personal retrieval is unaffected:
+// it flows through context sources and Omi tools, not this routing prefix.
+const MEMORY_IDENTITY_VARIANT = "memory_v1";
 
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
@@ -542,8 +550,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     jitProactivity: boolean;
   } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false, jitProactivity: false };
   private readonly sessionPrefix: string;
-  /** True when a token refresh was deferred because a prompt was active */
-  private pendingTokenRefresh = false;
+  /** Numeric HTTP classification correlated with the active provider request. */
+  private providerFailureCode: RuntimeFailureCode | undefined;
+  private providerRequestId: string | undefined;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
@@ -578,22 +587,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       args.push("--system-prompt", this.currentSystemPrompt);
     }
 
-    // SECURITY: require a Firebase ID token. We MUST NOT fall back to
-    // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
-    // one here would leak the upstream secret to api.omi.me.
-    if (!this.config.authToken) {
-      throw new Error(
-        "pi-mono adapter requires config.authToken (Firebase ID token)"
-      );
+    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    for (const key of Object.keys(env)) {
+      if (["ANTHROPIC_API_KEY", "OMI_AUTH_TOKEN", "OMI_API_KEY"].includes(key) || key.startsWith("OMI_BYOK_")) delete env[key];
     }
-
-    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
-    // accidentally read it as a credential. pi-mono talks to api.omi.me with
-    // OMI_API_KEY only.
-    const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
-    };
-    delete env.ANTHROPIC_API_KEY;
 
     // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
     // Scrub it from the subprocess env, then only re-inject when explicitly
@@ -606,10 +603,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       process.stderr.write("[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n");
     }
 
-    // Pass the raw Firebase ID token. pi's openai-completions client already
-    // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
-    // prefix here would produce a malformed `Bearer Bearer <token>` header.
-    env.OMI_API_KEY = this.config.authToken;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
@@ -889,6 +882,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
+    this.providerFailureCode = undefined;
+    this.providerRequestId = relayContext?.requestId;
     this.activePromptGeneration = generation;
 
     if (signal) {
@@ -1068,45 +1063,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     return true;
   }
 
-  /** Update auth token by restarting the subprocess when idle.
-   *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
-   *  to refresh is to restart the process. If a prompt is active, marks a
-   *  pending restart that handleTurnEnd will execute after the prompt completes.
-   *  Returns true if restart happened immediately, false if deferred. */
-  async updateAuthToken(token: string): Promise<boolean> {
-    this.config.authToken = token;
-    if (this.pendingRequests.size > 0) {
-      this.pendingTokenRefresh = true;
-      process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
-      return false;
-    }
-    await this.stop();
-    await this.start();
-    this.config.onRestart?.("token_refresh");
-    this.pendingTokenRefresh = false;
-    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
-    return true;
-  }
-
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0;
   }
 
-  /** Whether a deferred restart is pending (token or system prompt) */
+  /** Whether a system-prompt restart is pending. */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh;
+    return this.pendingSystemPromptRefresh;
   }
 
   /** Execute the deferred restart (call after prompt completes).
-   *  Handles both token refresh and system-prompt change — both baked at
-   *  spawn time, both requiring a restart. */
+   *  System prompts are baked at spawn time. Credentials are request-scoped. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return;
+    if (!this.pendingSystemPromptRefresh) return;
     const reasons: string[] = [];
-    if (this.pendingTokenRefresh) reasons.push("token");
     if (this.pendingSystemPromptRefresh) reasons.push("systemPrompt");
-    this.pendingTokenRefresh = false;
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
@@ -1235,6 +1207,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     switch (event.type) {
+      case "omi_provider_status":
+        if (!this.activePromptGeneration || event.requestId !== this.providerRequestId) return;
+        this.providerFailureCode = isRuntimeFailureCode(event.failureCode) ? event.failureCode : undefined;
+        return;
       case "message_update":
         this.handleMessageUpdate(event);
         break;
@@ -1652,7 +1628,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
       this.activePublicWebTurn = null;
-      pending.reject(new Error(errorMessage));
+      pending.reject(this.providerFailureCode ? new AdapterRuntimeError({
+        code: this.providerFailureCode === "authentication" ? "omi_session_authentication" : "omi_provider_failed",
+        failureCode: this.providerFailureCode,
+        provider: "omi",
+        adapterId: "pi-mono",
+        source: "adapter_execution",
+        userMessage: this.providerFailureCode === "authentication" ? "Your session expired. Sign in to continue." : errorMessage,
+        technicalMessage: errorMessage,
+        retryable: !["authentication", "provider_setup_needed", "quota_exceeded"].includes(this.providerFailureCode),
+      }) : new Error(errorMessage));
+      this.providerFailureCode = undefined;
       this.clearJitUsage();
       this.eventHandler = null;
       this.toolExecutor = null;

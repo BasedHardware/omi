@@ -71,23 +71,26 @@ void main() {
     provider.setLoading(true);
     provider.setLoading(false);
     await tester.pump();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Continue'));
+    await tester.tap(find.byKey(const Key('permissions_interstitial_continue')));
     await tester.idle();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(analytics.events, ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
+    expect(_legacyEvents(analytics.events), ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(app());
     await AnalyticsManager.flushPending(force: true);
 
-    expect(analytics.events, [
+    expect(_legacyEvents(analytics.events), [
       'Permissions Interstitial Shown',
       'Permissions Interstitial Completed',
       'Permissions Interstitial Shown',
     ]);
   });
 }
+
+List<String> _legacyEvents(Iterable<String> events) =>
+    events.where((event) => !event.startsWith('Product Journey ')).toList();
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {
   final List<String> events = [];
@@ -109,6 +112,9 @@ class _TestAnalyticsAdapter implements AnalyticsAdapter {
 
   @override
   void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void registerSuperProperties(Map<String, Object> properties) {}
 
   @override
   void enable() {}

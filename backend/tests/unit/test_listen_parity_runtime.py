@@ -144,7 +144,7 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
             fair_use_dg_budget_exhausted=False,
         )
 
-    async def create_stt_socket(_receiver, callback, _sample_rate, modulate_callback=None):
+    async def create_stt_socket(_receiver, callback, _sample_rate, modulate_callback=None, epoch=None):
         socket = _FakeSTTSocket(callback)
         stt_sockets.append(socket)
         return socket

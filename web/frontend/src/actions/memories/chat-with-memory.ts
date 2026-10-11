@@ -14,11 +14,28 @@ interface ChatWithMemoryRequest {
   conversationId: string;
   question: string;
   history: ChatMessage[];
+  userIdToken?: string;
 }
 
+export type ChatLimitReason =
+  | 'free_questions_exhausted'
+  | 'conversation_daily'
+  | 'global_minute'
+  | 'global_daily'
+  | 'subject_minute'
+  | 'signed_user_daily'
+  | 'signed_global_daily'
+  | 'no_omi_account'
+  | 'invalid_token';
+
 export type ChatWithMemoryResponse =
-  | { status: 'ok'; message: string }
-  | { status: 'rate_limited'; message: string; retryAfterSeconds?: number }
+  | { status: 'ok'; message: string; remainingFreeQuestions?: number }
+  | {
+      status: 'rate_limited';
+      message: string;
+      reason: ChatLimitReason;
+      retryAfterSeconds?: number;
+    }
   | { status: 'unavailable'; message: string };
 
 const FRONTEND_CLOUD_RUN_SERVICE = 'frontend';
@@ -70,7 +87,27 @@ async function mintIdentityToken(audience: string): Promise<string | null> {
 function retryAfterSeconds(value: string | null): number | undefined {
   if (!value || !/^\d+$/.test(value)) return undefined;
   const seconds = Number.parseInt(value, 10);
-  return seconds >= 1 && seconds <= 3600 ? seconds : undefined;
+  return seconds >= 1 && seconds <= 86400 ? seconds : undefined;
+}
+
+const LIMIT_REASONS = new Set<ChatLimitReason>([
+  'free_questions_exhausted',
+  'conversation_daily',
+  'global_minute',
+  'global_daily',
+  'subject_minute',
+  'signed_user_daily',
+  'signed_global_daily',
+  'no_omi_account',
+  'invalid_token',
+]);
+
+function parsedReason(payload: unknown): ChatLimitReason | null {
+  if (!payload || typeof payload !== 'object' || !('reason' in payload)) return null;
+  const reason = payload.reason;
+  return typeof reason === 'string' && LIMIT_REASONS.has(reason as ChatLimitReason)
+    ? (reason as ChatLimitReason)
+    : null;
 }
 
 export default async function chatWithMemory(
@@ -94,6 +131,7 @@ export default async function chatWithMemory(
         Authorization: `Bearer ${identityToken}`,
         'Content-Type': 'application/json',
         'X-Omi-Public-Chat-Subject': opaqueSubject,
+        ...(data.userIdToken ? { 'X-Omi-User-Id-Token': data.userIdToken } : {}),
       },
       body: JSON.stringify({
         conversation_id: data.conversationId,
@@ -104,13 +142,15 @@ export default async function chatWithMemory(
       signal: AbortSignal.timeout(20_000),
     });
 
-    if (response.status === 429) {
+    if (response.status === 429 || response.status === 403 || response.status === 401) {
+      const payload: unknown = await response.json().catch(() => null);
+      const reason = parsedReason(payload);
+      if (!reason) return UNAVAILABLE;
       const retryAfter = retryAfterSeconds(response.headers.get('Retry-After'));
       return {
         status: 'rate_limited',
-        message: retryAfter
-          ? `Too many requests. Please try again in ${retryAfter} seconds.`
-          : 'Too many requests. Please try again shortly.',
+        message: 'Keep asking with Omi.',
+        reason,
         ...(retryAfter ? { retryAfterSeconds: retryAfter } : {}),
       };
     }
@@ -126,7 +166,18 @@ export default async function chatWithMemory(
     ) {
       return UNAVAILABLE;
     }
-    return { status: 'ok', message: payload.message.trim() };
+    const remaining =
+      'remaining_free_questions' in payload ? payload.remaining_free_questions : null;
+    return {
+      status: 'ok',
+      message: payload.message.trim(),
+      ...(typeof remaining === 'number' &&
+      Number.isInteger(remaining) &&
+      remaining >= 0 &&
+      remaining <= 3
+        ? { remainingFreeQuestions: remaining }
+        : {}),
+    };
   } catch {
     return UNAVAILABLE;
   }

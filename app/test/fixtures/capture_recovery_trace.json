@@ -1,0 +1,427 @@
+[
+  {
+    "event": "launch"
+  },
+  {
+    "event": "ready"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-1",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 0,
+      "phase": "inactive",
+      "reason": "inactive",
+      "reconnect_spent": false,
+      "recovery_outcome": "none",
+      "recovery_spent": false,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-1",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 0,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": false,
+      "recovery_outcome": "none",
+      "recovery_spent": false,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-1",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 0,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": false,
+      "recovery_outcome": "none",
+      "recovery_spent": false,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "read"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-1",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 30000,
+      "phase": "repairing",
+      "reason": "repair_subscription",
+      "reconnect_spent": false,
+      "recovery_outcome": "repair_subscription",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "repair"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-1",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 30000,
+      "phase": "repairing",
+      "reason": "repair_confirmed",
+      "reconnect_spent": false,
+      "recovery_outcome": "repair_subscription",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "launch"
+  },
+  {
+    "event": "ready"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-2",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 30000,
+      "phase": "inactive",
+      "reason": "inactive",
+      "reconnect_spent": false,
+      "recovery_outcome": "repair_subscription",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-2",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 30000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": false,
+      "recovery_outcome": "repair_subscription",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-2",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 30000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": false,
+      "recovery_outcome": "repair_subscription",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "read"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-2",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 60000,
+      "phase": "reconnecting",
+      "reason": "fresh_connection_requested",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_connection_requested",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "disconnect_requested"
+  },
+  {
+    "event": "disconnected"
+  },
+  {
+    "event": "connect"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-2",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 60000,
+      "phase": "reconnecting",
+      "reason": "disconnected",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_connection_requested",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "ready"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-3",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 60000,
+      "phase": "unverified",
+      "reason": "fresh_link",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_connection_requested",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-3",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 60000,
+      "phase": "unverified",
+      "reason": "fresh_link",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-3",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 60000,
+      "phase": "unverified",
+      "reason": "fresh_link",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-3",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 90000,
+      "phase": "quiet",
+      "reason": "fresh_subscription_quiet",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "launch"
+  },
+  {
+    "event": "ready"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-4",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 90000,
+      "phase": "inactive",
+      "reason": "inactive",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-4",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 90000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-4",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 90000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "read"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-4",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 120000,
+      "phase": "quiet",
+      "reason": "budget_spent_quiet",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "launch"
+  },
+  {
+    "event": "ready"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-5",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 120000,
+      "phase": "inactive",
+      "reason": "inactive",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-5",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 120000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": false,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-5",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 120000,
+      "phase": "unverified",
+      "reason": "capture_authorized",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  },
+  {
+    "event": "read"
+  },
+  {
+    "event": "health",
+    "snapshot": {
+      "generation": "connection-5",
+      "keep_link_after_exhaustion": true,
+      "last_audio_at_ms": 0,
+      "observed_at_ms": 150000,
+      "phase": "quiet",
+      "reason": "budget_spent_quiet",
+      "reconnect_spent": true,
+      "recovery_outcome": "fresh_subscription_confirmed",
+      "recovery_spent": true,
+      "subscription_confirmed": true,
+      "unverified_since_ms": 0,
+      "valid_until_ms": 0
+    }
+  }
+]

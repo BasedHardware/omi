@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from testing.import_isolation import load_module_fresh
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -28,6 +30,37 @@ def test_keeps_plain_text_and_intra_word_punctuation() -> None:
 
 def test_empty_body_is_unchanged() -> None:
     assert to_plain_text('') == ''
+
+
+@pytest.mark.parametrize(
+    (
+        'body',
+        'expected',
+    ),
+    [
+        ('```omi start```', 'omi start'),
+        ('````omi start````', 'omi start'),
+        ('```omi start``` before continuing.', 'omi start before continuing.'),
+        ('Next step:\n```omi start```', 'Next step:\nomi start'),
+        ('   ```XYZ```', 'XYZ'),
+        ('```ABC```\r\nDone.', 'ABC\r\nDone.'),
+    ],
+)
+def test_keeps_line_initial_code_spans(body: str, expected: str) -> None:
+    assert to_plain_text(body) == expected
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        '```\nomi start\n```',
+        '```sh\nomi start\n```',
+        '````sh\nomi start\n````',
+        '```sh\r\nomi start\r\n```',
+    ],
+)
+def test_still_strips_fenced_code_block_markers(body: str) -> None:
+    assert to_plain_text(body) == 'omi start'
 
 
 def test_keeps_single_line_triple_backtick_inline_code() -> None:

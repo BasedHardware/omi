@@ -218,7 +218,6 @@ class Stack:
                 'HTTP_SYNC_JOBS_RUN_TIMEOUT': '30',
                 'FAIR_USE_ENABLED': 'true',
                 'MAX_DAILY_AUDIO_HOURS': '30',
-                'TRIAL_PAYWALL_ENABLED': 'false',
                 'STT_PRERECORDED_MODEL': 'parakeet',
                 'STT_SERVICE_MODELS': 'parakeet',
                 'HOSTED_PARAKEET_API_URL': 'http://127.0.0.1:1',
@@ -643,7 +642,11 @@ def _assert_durable_success(stack: Stack, uid: str, job_id: str) -> str:
     if not isinstance(content_id, str):
         raise StackFailure('task content id is missing')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict) or ledger_data.get('status') != 'completed':
@@ -722,7 +725,11 @@ def _content_ledger_data(stack: Stack, uid: str, task: dict[str, Any]) -> dict[s
     if not isinstance(content_id, str):
         raise StackFailure('Sync task omitted durable content identity')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict):
@@ -853,34 +860,36 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
         raise StackFailure('concurrent delivery ran the provider pipeline more than once')
 
 
-def _persistence_fenced_backfill_is_terminal(stack: Stack) -> None:
-    """A lifecycle-fenced processor result is not a Cloud Tasks retry."""
-    uid = stack.scenario_uid('persistence-fenced-backfill')
+def _nonprod_legacy_backfill_is_acked_before_worker_state(stack: Stack) -> None:
+    """A dev-style legacy backfill delivery cannot reach shared worker state."""
+    uid = stack.scenario_uid('nonprod-legacy-backfill')
     job_id, task = _submit_and_capture_task(stack, uid)
     body = task.get('body')
     if not isinstance(body, dict):
         raise StackFailure('captured backfill task body is missing')
     backfill_task = {**task, 'body': {**body, 'lane': 'backfill'}}
-    slot_key = f'sync_backfill:inflight:{uid}'
+    slot_key = f'offline:sync_backfill:inflight:{uid}'
     worker_redis = redis.Redis(host='127.0.0.1', port=stack.redis_port)
     worker_redis.set(slot_key, job_id)
+    prod_sequencer_keys = set(worker_redis.keys('sync_backfill:uid_sequencer:*'))
 
     first = _deliver_task(backfill_task, retry_count=0)
-    if first.status_code != 200 or first.json() != {'status': 'superseded'}:
-        raise StackFailure('lifecycle-fenced backfill worker was retried instead of terminally ACKed')
-    status = _poll_terminal_job(stack, uid, job_id)
-    if status.get('status') != 'completed':
-        raise StackFailure('lifecycle-fenced backfill worker did not publish its terminal superseded outcome')
-    if worker_redis.get(slot_key) is not None:
-        raise StackFailure('lifecycle-fenced backfill worker did not release its exact backfill slot')
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('lifecycle-fenced worker did not run the real pipeline boundary exactly once')
+    if first.status_code != 200 or first.json() != {'status': 'foreign_stage'}:
+        raise StackFailure('non-prod legacy backfill delivery was not ACKed before worker state')
+    if _job_status(stack, uid, job_id).get('status') != 'queued':
+        raise StackFailure('non-prod legacy backfill delivery changed the queued job')
+    if worker_redis.get(slot_key) != job_id.encode():
+        raise StackFailure('non-prod legacy backfill delivery touched the backfill slot')
+    if set(worker_redis.keys('sync_backfill:uid_sequencer:*')) != prod_sequencer_keys:
+        raise StackFailure('non-prod legacy backfill delivery wrote a production sequencer key')
+    if _stt_invocation_count(stack, job_id) != 0:
+        raise StackFailure('non-prod legacy backfill delivery entered the provider pipeline')
 
     duplicate = _deliver_task(backfill_task, retry_count=1)
-    if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
-        raise StackFailure('duplicate lifecycle-fenced task was not safely ACKed after terminalization')
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('duplicate lifecycle-fenced task re-ran the provider pipeline')
+    if duplicate.status_code != 200 or duplicate.json() != {'status': 'foreign_stage'}:
+        raise StackFailure('duplicate non-prod legacy backfill delivery was not ACKed')
+    if _stt_invocation_count(stack, job_id) != 0:
+        raise StackFailure('duplicate non-prod legacy backfill delivery entered the provider pipeline')
 
 
 def _ambiguous_enqueue_and_expired_blob(stack: Stack) -> None:
@@ -993,9 +1002,8 @@ def main() -> int:
         _run_scenario(state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully)
         _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
         _run_scenario(
-            state_dir / 'persistence-fenced-backfill',
-            process_persistence_fenced=True,
-            scenario=_persistence_fenced_backfill_is_terminal,
+            state_dir / 'nonprod-legacy-backfill',
+            scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
         )
         _run_scenario(state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob)
         succeeded = True

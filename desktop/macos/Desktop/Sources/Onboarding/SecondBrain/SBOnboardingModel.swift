@@ -88,6 +88,9 @@ final class SBOnboardingModel: ObservableObject {
   typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
 
   @Published var step: Step = .promise
+  /// Every step shown before `step`, oldest first. Back pops it; the progress band counts it.
+  /// See `SBOnboardingModel+History.swift`.
+  var shownStepHistory: [Step] = []
   @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
   @Published var streamingText: String?
@@ -298,7 +301,7 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .promise:
       return
-        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
+        "Hey, I'm Omi, your second brain. I listen to your conversations, remember the important parts, and help with follow-ups. Three quick things:"
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
@@ -329,7 +332,7 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .notifications:
       return
-        "Turn on Notifications, so I can tell you the moment I notice something — a mistake before you hit send, a meeting about to start, a follow-up you're about to miss."
+        "Turn on Notifications, so I can remind you about meetings that are about to start and follow-ups you might miss."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
@@ -478,6 +481,7 @@ final class SBOnboardingModel: ObservableObject {
       }
       // Skip a resumed permission step the user granted while away.
       let target = firstUnaskedStep(from: effective)
+      shownStepHistory = predictedShownSteps(before: target)
       step = target
       streamMessage(for: target)
       return
@@ -596,17 +600,18 @@ final class SBOnboardingModel: ObservableObject {
     // the first step that still needs an answer.
     let target = firstUnaskedStep(from: next)
     recordJumpedPermissionSteps(from: next, to: target)
+    recordShownStep(movingTo: target)
     step = target
     UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: target)
   }
 
-  /// Return to the immediately preceding onboarding stage without discarding
-  /// any answer the user already supplied. The conversational transcript stays
+  /// Return to the stage shown before this one (never a skipped permission step)
+  /// without discarding any answer the user already supplied. The conversational transcript stays
   /// intact; the re-rendered widget is the editable source of truth for that
   /// stage, so a user can revise (for example) Student to Founder.
   func goBack() {
-    guard let previous = Step(rawValue: step.rawValue - 1) else { return }
+    guard let previous = popShownStep() else { return }
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
     rehydrateDrafts()
@@ -616,7 +621,7 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   var canGoBack: Bool {
-    step != .promise
+    previousShownStep != nil
   }
 
   /// The full-onboarding escape hatch stays unavailable until both required shortcut stages have

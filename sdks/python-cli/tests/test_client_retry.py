@@ -10,7 +10,7 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import USER_AGENT, OmiClient
+from omi_cli.client import USER_AGENT, OmiClient, _parse_retry_after
 from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
 
 
@@ -297,6 +297,42 @@ def test_param_filtering_drops_none(authed_profile, respx_mock) -> None:
     request = route.calls.last.request
     assert "categories" not in request.url.params
     assert request.url.params["limit"] == "25"
+
+
+def test_parse_retry_after_rejects_non_finite_numbers() -> None:
+    assert _parse_retry_after("12") == 12.0
+    assert _parse_retry_after("  300  ") == 300.0
+    assert _parse_retry_after("inf") is None
+    assert _parse_retry_after("Infinity") is None
+    assert _parse_retry_after("1e999") is None
+    assert _parse_retry_after("NaN") is None
+    assert _parse_retry_after("nan") is None
+    assert _parse_retry_after("9" * 400) is None
+
+
+@pytest.mark.parametrize("value", ["-5", "+30", "1.5", ".5", "5.", "1e2", "1_000", "\uff16\uff10", "0x10", "12 s"])
+def test_parse_retry_after_rejects_non_rfc_delay_seconds(value: str) -> None:
+    """RFC 9110 delay-seconds is ``1*DIGIT``; other float() syntax is not a cooldown."""
+    assert _parse_retry_after(value) is None
+
+
+def test_non_rfc_retry_after_falls_back_to_backoff(authed_profile, respx_mock, monkeypatch) -> None:
+    """``1e2`` is not delay-seconds, so it must not abort retries as a 100s cooldown."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "1e2"}, json={"detail": "slow down"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+    assert result == []
+    assert route.call_count == 2
+    assert len(sleeps) == 1
+    assert sleeps[0] < 100.0
 
 
 def test_429_with_retry_after_waits_at_least_that_long(authed_profile, respx_mock, monkeypatch) -> None:

@@ -105,9 +105,30 @@ jobs:
         with:
           ref: ${{ needs.admit.outputs.source_sha }}
           fetch-depth: 1
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+      - name: Verify serving Firestore indexes
+        if: inputs.mode == 'prove'
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ needs.admit.outputs.source_sha }}
+          project_id: ${{ env.QA_PROJECT }}
+          database: ${{ env.QA_FIRESTORE_DATABASE }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
       - uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v3
       - name: Validate source, target, and upstream Typesense digest
         env:
@@ -254,7 +275,9 @@ jobs:
           python3 "$helper" --help >/dev/null
       - uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v3
       - name: Verify the named QA database and runtime identity
         run: |
@@ -362,7 +385,9 @@ jobs:
           fetch-depth: 1
       - uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v3
       - name: Deploy exactly one QA Typesense instance
         env:
@@ -412,7 +437,9 @@ jobs:
     steps:
       - uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v3
       - name: Authenticate Docker to Artifact Registry
         run: gcloud auth configure-docker gcr.io --quiet
@@ -469,7 +496,9 @@ jobs:
     steps:
       - uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v3
       - name: Verify the service is healthy but intentionally unready
         env:

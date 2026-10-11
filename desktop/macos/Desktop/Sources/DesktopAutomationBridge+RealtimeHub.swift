@@ -9,6 +9,7 @@ extension DesktopAutomationActionRegistry {
     // "Open the doors" button), so agents can exercise the demo without the cursor.
     register(
       name: "onboarding_open_doors",
+      effects: [.localState],
       summary: "Onboarding screen-demo step: open the three-doors page (same path as the Open the doors button)"
     ) { _ in
       await MainActor.run {
@@ -22,6 +23,7 @@ extension DesktopAutomationActionRegistry {
     // can be exercised without waiting for the shared key to actually throttle.
     register(
       name: "realtime_failover",
+      effects: [.localState, .networkOrModel],
       summary: "Fail the realtime hub over to the alternate provider via the production path (non-prod).",
       params: []
     ) { _ in
@@ -44,6 +46,7 @@ extension DesktopAutomationActionRegistry {
     // 10-minute walk-away. Everything downstream is the production path.
     register(
       name: "realtime_presence",
+      effects: [.localState],
       summary: "Override the realtime hub's user-idle sample (non-prod): idle_seconds=<n> or reset.",
       params: ["idle_seconds"]
     ) { params in

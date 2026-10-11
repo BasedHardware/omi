@@ -111,7 +111,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
     XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
-    let authBlock = try XCTUnwrap(authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions"))
+    let authBlock = try XCTUnwrap(authExtension.range(of: "sessionDidAuthenticate — reloading main chat"))
     let snippet = String(authExtension[authBlock.lowerBound...]).prefix(350)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }

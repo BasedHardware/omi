@@ -422,6 +422,14 @@ final class RatingPromptManager: ObservableObject {
 
 // MARK: - View
 
+/// Shared geometry for the prompt bars. The dismiss control is the one the
+/// user reaches for when they do not want to answer, so it carries a hit area
+/// larger than its glyph.
+enum RatingPromptLayout {
+  /// Square hit area for the bar's dismiss control, in points.
+  static let dismissHitSide: CGFloat = 22
+}
+
 enum RatingPromptButtonStyle {
   static let referralKind: OmiButtonStyle.Kind = .primary
   static let referralSize: OmiButtonStyle.Size = .compact
@@ -555,6 +563,12 @@ struct RatingPromptBar: View {
       Image(systemName: "xmark")
         .font(.system(size: 11, weight: .semibold))
         .foregroundColor(.secondary)
+        // A plain button is hit-testable only where it draws, and an 11pt
+        // glyph draws an 11pt target: a click a few points off dismissed
+        // nothing and looked like a dead control. The frame is the hit area,
+        // the glyph keeps its size.
+        .frame(width: RatingPromptLayout.dismissHitSide, height: RatingPromptLayout.dismissHitSide)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Dismiss rating prompt")

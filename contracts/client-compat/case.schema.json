@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "C10 initial HTTP case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "platform", "request", "decoder", "observations", "status"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "platform": {"enum": ["ios", "android"]},
+    "decoder": {"type": "string", "minLength": 1},
+    "status": {"type": "integer", "minimum": 100, "maximum": 599},
+    "observations": {"type": "object", "minProperties": 1},
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "path", "query", "headers", "body"],
+      "properties": {
+        "method": {"enum": ["GET"]},
+        "path": {"enum": ["/v1/conversations", "/v3/memories", "/v2/messages", "/v1/action-items"]},
+        "query": {"$ref": "#/$defs/pairs"},
+        "headers": {"$ref": "#/$defs/pairs"},
+        "body": {"const": ""}
+      }
+    }
+  },
+  "$defs": {
+    "pairs": {"type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}}
+  }
+}

@@ -7,6 +7,7 @@ injectable modules under ``utils.translation_core``.
 
 from __future__ import annotations
 
+from threading import BoundedSemaphore
 from typing import Callable
 
 from config.translation import TranslationProfile, TranslationProvider, resolve_translation_profile
@@ -15,6 +16,7 @@ from utils.translation_core.cache import (
     CachedTranslation,
     TranslationCache,
     get_default_translation_store,
+    viewed_cache_fingerprint,
 )
 from utils.translation_core.engine import (
     TranslationEngine,
@@ -40,6 +42,10 @@ from utils.translation_language import (
     detect_language_with_confidence,
     split_into_sentences,
 )
+
+# Detail pages reserve only six of eight viewed slots so live work can enter.
+VIEWED_PROVIDER_CAPACITY = BoundedSemaphore(8)
+VIEWED_REST_CAPACITY = BoundedSemaphore(6)
 
 
 class TranslationService:
@@ -85,16 +91,42 @@ class TranslationService:
         source_language: str = '',
         *,
         mode: TranslationMode = TranslationMode.sentence,
+        profile: TranslationProfile | None = None,
     ) -> list[TranslationOutcome]:
         canonical_units = [
             TranslationUnit(ordinal=ordinal, unit_id=unit_id, text=text)
             for ordinal, (unit_id, text) in enumerate(units)
         ]
+        if profile is not None and profile.policy_version == 'viewed_v1':
+            if not VIEWED_PROVIDER_CAPACITY.acquire(blocking=False):
+                return [
+                    TranslationOutcome(
+                        unit.ordinal,
+                        unit.unit_id,
+                        unit.text,
+                        unit.text,
+                        '',
+                        TranslationStatus.failed,
+                        'provider_saturated',
+                    )
+                    for unit in canonical_units
+                ]
+            try:
+                return self._engine.translate(
+                    canonical_units,
+                    target_language=dest_language,
+                    source_language=source_language,
+                    mode=mode,
+                    profile=profile,
+                )
+            finally:
+                VIEWED_PROVIDER_CAPACITY.release()
         return self._engine.translate(
             canonical_units,
             target_language=dest_language,
             source_language=source_language,
             mode=mode,
+            profile=profile,
         )
 
     def translate_units_batch(
@@ -157,8 +189,24 @@ class TranslationService:
     def get_negative_cache(self, fingerprint: str, target_language: str) -> bool:
         return self.cache.is_negative(fingerprint, target_language)
 
-    def set_negative_cache(self, fingerprint: str, target_language: str) -> None:
-        self.cache.put_negative(fingerprint, target_language, self._profile_resolver())
+    def set_negative_cache(
+        self,
+        fingerprint: str,
+        target_language: str,
+        *,
+        profile: TranslationProfile | None = None,
+        source_language: str = '',
+        mode: TranslationMode = TranslationMode.whole_text,
+    ) -> None:
+        selected = profile or self._profile_resolver()
+        key = (
+            fingerprint
+            if selected.policy_version == 'legacy'
+            else viewed_cache_fingerprint(
+                fingerprint, source_language, target_language, mode.value, selected.policy_version
+            )
+        )
+        self.cache.put_negative(key, target_language, selected)
 
     def clear_session_cache(self) -> None:
         """Release per-session translation state while retaining shared Redis data."""

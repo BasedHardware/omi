@@ -16,7 +16,6 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindCitationFocusState.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift

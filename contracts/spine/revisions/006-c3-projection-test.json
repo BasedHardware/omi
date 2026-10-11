@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c3_projection_test.dart",
+  "owner": "C3",
+  "before": "5e17245b0fb8b504b8bc28da1678fdf0ef931043b4f6a2733794fd46a1741a91",
+  "after": "ec479fa35d4562216971032e9bbb198ba56b1c2d94c80268a776c81904000220",
+  "reason": "Spine A turn 5 App core review: exact first-load and stale-data projection matrix, shared fallback fields without C7 vocabulary, programmer-error boundary, and actual ConversationsPage outage behavior replacing lexical widget-presence claim. Existing success/decode assertions are retained; new production execution acceptance exercises 401 refresh/replay."
+}

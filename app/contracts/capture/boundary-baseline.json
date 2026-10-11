@@ -1,0 +1,90 @@
+{
+  "rules": [
+    {
+      "id": "singleton-reads",
+      "pattern": "SharedPreferencesUtil\\s*\\(|ServiceManager\\s*\\.\\s*instance\\s*\\(|PlatformManager\\s*\\.\\s*instance|AuthService\\s*\\.\\s*instance|BleBridge\\s*\\.\\s*instance|RecordingTransferCoordinator\\s*\\.\\s*instance|ForegroundUtil\\s*\\.",
+      "paths": [
+        "app/lib/services/capture/",
+        "app/lib/providers/capture_provider.dart",
+        "app/lib/providers/sync_provider.dart",
+        "app/lib/providers/device_provider.dart",
+        "app/lib/services/wals/local_wal_sync.dart",
+        "app/lib/providers/memories_provider.dart",
+        "app/lib/utils/audio/foreground.dart"
+      ],
+      "remedy": "Pass constructor dependencies through CaptureProvider; production defaults belong only in capture_composition.dart. See app/lib/services/capture/OWNERSHIP.md.",
+      "except": [
+        "app/lib/services/capture/capture_composition.dart"
+      ]
+    },
+    {
+      "id": "global-wake",
+      "pattern": "\\.\\s*instance\\s*\\.\\s*wake\\s*\\(",
+      "paths": [
+        "app/lib/"
+      ],
+      "remedy": "Inject CaptureRecoveryRequests and requestRecovery(trigger); only CaptureSessionOwner may wake recovery. See app/lib/services/capture/OWNERSHIP.md."
+    },
+    {
+      "id": "unowned-resources",
+      "pattern": "\\bTimer\\s*(?:\\.\\s*(?:periodic|run))?\\s*\\(|\\.\\s*(?:listen|addListener|addBatchRecordingFinalizedListener)\\s*\\(",
+      "paths": [
+        "app/lib/services/capture/",
+        "app/lib/providers/capture_provider.dart",
+        "app/lib/providers/sync_provider.dart",
+        "app/lib/providers/device_provider.dart",
+        "app/lib/services/wals/local_wal_sync.dart",
+        "app/lib/providers/memories_provider.dart",
+        "app/lib/utils/audio/foreground.dart"
+      ],
+      "remedy": "Acquire timers/streams/listeners through CaptureLifetime; see app/lib/services/capture/OWNERSHIP.md.",
+      "except": [
+        "app/lib/services/capture/capture_lifetime.dart",
+        "app/lib/services/capture/capture_seams.dart"
+      ]
+    }
+  ],
+  "baseline": {
+    "app/lib/providers/sync_provider.dart": {
+      "singleton-reads": 6,
+      "global-wake": 2,
+      "unowned-resources": 2
+    },
+    "app/lib/providers/memories_provider.dart": {
+      "singleton-reads": 18,
+      "unowned-resources": 2
+    },
+    "app/lib/providers/device_provider.dart": {
+      "singleton-reads": 48,
+      "global-wake": 1,
+      "unowned-resources": 1
+    },
+    "app/lib/services/capture/capture_metrics_tracker.dart": {
+      "unowned-resources": 1
+    },
+    "app/lib/services/capture/transcription_allowance_cache.dart": {
+      "singleton-reads": 4
+    },
+    "app/lib/services/capture/capture_controller.dart": {
+      "singleton-reads": 112,
+      "global-wake": 1,
+      "unowned-resources": 2
+    },
+    "app/lib/services/capture/capture_seams.dart": {
+      "singleton-reads": 2
+    },
+    "app/lib/services/capture/free_tier_on_device_stt_flag.dart": {
+      "singleton-reads": 1
+    },
+    "app/lib/services/wals/sync_reconciler.dart": {
+      "global-wake": 2
+    },
+    "app/lib/services/wals/local_wal_sync.dart": {
+      "singleton-reads": 2
+    },
+    "app/lib/pages/conversations/auto_sync_page.dart": {
+      "global-wake": 1
+    }
+  },
+  "adopted": {}
+}

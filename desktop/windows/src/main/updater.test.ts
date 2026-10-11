@@ -237,6 +237,8 @@ describe('installUpdateNow', () => {
 
     expect(getPendingUpdate()).toEqual({ version: '2.0.0' })
     expect(installUpdateNow()).toBe(true)
-    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true)
+    await vi.waitFor(() =>
+      expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true)
+    )
   })
 })

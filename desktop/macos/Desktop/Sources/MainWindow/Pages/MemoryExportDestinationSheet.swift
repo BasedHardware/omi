@@ -82,7 +82,8 @@ struct ExportsSection: View {
       lastExportedAt: nil,
       detailText: nil,
       isConfigured: false,
-      hasConnection: false)
+      hasConnection: false,
+      needsUpdate: false)
 
     switch destination {
     case .claude:
@@ -104,7 +105,8 @@ struct ExportsSection: View {
       lastExportedAt: values.compactMap(\.lastExportedAt).max(),
       detailText: values.compactMap(\.detailText).first,
       isConfigured: values.contains(where: \.hasConnection),
-      hasConnection: values.contains(where: \.hasConnection)
+      hasConnection: values.contains(where: \.hasConnection),
+      needsUpdate: values.contains(where: \.needsUpdate)
     )
   }
 
@@ -153,6 +155,7 @@ struct MemoryExportRow: View {
       return showsConnectedState ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
+      if status.needsUpdate { return "Update" }
       return showsConnectedState ? "Connected" : "Connect"
     }
     switch destination {
@@ -172,10 +175,16 @@ struct MemoryExportRow: View {
     if status.exportedCount > 0 {
       return "\(status.exportedCount.formatted()) memories exported"
     }
+    if status.needsUpdate {
+      return "Needs update"
+    }
     return status.hasConnection ? "Connected" : "Not connected"
   }
 
   private var rowSecondaryText: String {
+    if status.needsUpdate, status.exportedCount == 0, !status.hasConnection {
+      return "Using the old endpoint — update to the new URL"
+    }
     if status.exportedCount > 0 || status.hasConnection {
       if let lastExportedAt = status.lastExportedAt {
         let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
@@ -306,7 +315,9 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     defer { isTestingAgentConnection = false }
 
     do {
-      let key = try await MemoryExportService.shared.ensureMCPKey()
+      guard let key = await MemoryExportService.shared.storedMCPKey() else {
+        throw MemoryExportError.requestFailed("Copy the setup prompt before testing the connection.")
+      }
       let localToken = try LocalAgentAPISettings.enable()
       mcpKey = key
       let result = try await MemoryExportService.shared.testAgentConnections(
@@ -586,9 +597,6 @@ struct MemoryExportDestinationSheet: View {
     .task {
       await model.loadConfiguration()
       statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
-      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
-        await model.generateMCPKey()
-      }
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()

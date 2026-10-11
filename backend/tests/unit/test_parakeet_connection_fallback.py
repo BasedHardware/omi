@@ -9,6 +9,20 @@ import pytest
 from utils.stt import streaming
 
 
+@pytest.fixture(autouse=True)
+def _fresh_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate the module-level breakers per test.
+
+    The breakers are singletons; leg-level circuit gating now makes cross-test
+    state consequential (an earlier file's serve-death opened the Deepgram
+    circuit, and later files' fallback legs were filtered by it).
+    """
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
+
+    for name in ('_deepgram_circuit', '_modulate_circuit', '_parakeet_circuit', '_soniox_circuit'):
+        monkeypatch.setattr(streaming, name, ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30.0))
+
+
 @pytest.mark.asyncio
 async def test_capacity_rejection_falls_back_to_modulate_without_poisoning_circuit():
     circuit = MagicMock()
@@ -20,6 +34,7 @@ async def test_capacity_rejection_falls_back_to_modulate_without_poisoning_circu
 
     with patch.object(streaming, '_parakeet_circuit', circuit), patch.object(streaming, 'record_fallback') as record:
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=streaming.STTService.parakeet,
             connect_primary=rejected_parakeet,
             connect_modulate=AsyncMock(return_value=fallback_socket),
@@ -47,6 +62,7 @@ async def test_open_parakeet_circuit_skips_connection_and_uses_modulate():
 
     with patch.object(streaming, '_parakeet_circuit', circuit), patch.object(streaming, 'record_fallback'):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=streaming.STTService.parakeet,
             connect_primary=connect_primary,
             connect_modulate=AsyncMock(return_value=fallback_socket),
@@ -67,6 +83,7 @@ async def test_unhealthy_parakeet_connection_records_failure_before_fallback():
 
     with patch.object(streaming, '_parakeet_circuit', circuit), patch.object(streaming, 'record_fallback'):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=streaming.STTService.parakeet,
             connect_primary=unavailable_parakeet,
             connect_modulate=AsyncMock(return_value=object()),
@@ -84,6 +101,7 @@ async def test_fallback_failure_is_reported_as_exhausted():
     with patch.object(streaming, '_parakeet_circuit', circuit), patch.object(streaming, 'record_fallback') as record:
         with pytest.raises(RuntimeError, match='modulate unavailable'):
             await streaming.connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=streaming.STTService.parakeet,
                 connect_primary=AsyncMock(),
                 connect_modulate=AsyncMock(side_effect=RuntimeError('modulate unavailable')),

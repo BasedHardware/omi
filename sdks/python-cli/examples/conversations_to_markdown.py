@@ -17,6 +17,38 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    writing the rendered note raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the note export.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+
+
+def is_completed(value: Any) -> bool:
+    """Normalize completed status for loosely typed API / LLM exports.
+
+    Native booleans, non-zero numbers, and loose strings ('true', 'yes', '1',
+    'done', 'completed') evaluate to True. String representations of falsy values
+    ('false', 'no', '0', '') evaluate to False rather than falling victim to
+    standard Python truthiness coercion.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in DONE_WORDS
+    return False
+
+
 def format_timestamp(seconds: float | int | None) -> str:
     """Format seconds into MM:SS or HH:MM:SS format."""
     if seconds is None:
@@ -68,20 +100,20 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = category.lower().replace(" ", "-")
+    category_tag = strip_surrogates(category).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
         "---",
-        f"id: {json.dumps(str(conv_id))}",
-        f"title: {json.dumps(str(title))}",
-        f"category: {json.dumps(str(category))}",
-        f"date: {json.dumps(str(started_at))}",
-        f"source: {json.dumps(str(source))}",
+        f"id: {json.dumps(strip_surrogates(str(conv_id)))}",
+        f"title: {json.dumps(strip_surrogates(str(title)))}",
+        f"category: {json.dumps(strip_surrogates(str(category)))}",
+        f"date: {json.dumps(strip_surrogates(str(started_at)))}",
+        f"source: {json.dumps(strip_surrogates(str(source)))}",
         "tags:",
         "  - omi",
         "  - conversation",
-        f"  - {json.dumps(category_tag)}",
+        f"  - {json.dumps(strip_surrogates(category_tag))}",
         "---",
         "",
         f"# {title}",
@@ -100,18 +132,20 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         ])
 
     # Action items checklist
-    if action_items:
+    if action_items and isinstance(action_items, list):
         lines.extend([
             "## Action Items",
             "",
         ])
         for item in action_items:
             if isinstance(item, dict):
-                desc = item.get("description") or item.get("title") or ""
-                completed = item.get("completed", False)
+                desc = str(item.get("description") or item.get("title") or "").strip().replace("\r\n", " ").replace("\n", " ")
+                if not desc:
+                    desc = "Untitled action item"
+                completed = is_completed(item.get("completed", False))
                 box = "[x]" if completed else "[ ]"
-                lines.append(f"- {box} {desc.strip()}")
-            elif isinstance(item, str):
+                lines.append(f"- {box} {desc}")
+            elif isinstance(item, str) and item.strip():
                 lines.append(f"- [ ] {item.strip()}")
         lines.append("")
 
@@ -139,7 +173,78 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
             lines.pop()
         lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    return strip_surrogates("\n".join(lines)).rstrip() + "\n"
+
+
+def export_conversations(
+    items: List[Dict[str, Any]],
+    output_dir: Path,
+    overwrite: bool = False,
+) -> List[Path]:
+    """Convert a list of conversation dicts to Markdown files in output_dir."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    exported_paths: List[Path] = []
+    used_paths: set[Path] = set()
+
+    for count, conv in enumerate(items):
+        if not isinstance(conv, dict):
+            continue
+        conv_id = conv.get("id", f"conv_{count}")
+        started_at = conv.get("started_at") or ""
+
+        # Validate date_prefix strictly against YYYY-MM-DD to avoid path traversal
+        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(started_at))
+        date_prefix = date_match.group(1) if date_match else "undated"
+
+        structured = conv.get("structured") or {}
+        title = structured.get("title") if isinstance(structured, dict) else ""
+        slug = slugify(title or "conversation")
+
+        # Sanitize unique suffix to avoid silent overwrites for duplicate title/date pairs
+        short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
+
+        base_name = f"{date_prefix}_{slug}_{short_id}"
+        filepath = output_dir / f"{base_name}.md"
+
+        if not overwrite:
+            counter = 1
+            while filepath in used_paths or filepath.exists():
+                counter += 1
+                filepath = output_dir / f"{base_name}_{counter}.md"
+
+        used_paths.add(filepath)
+
+        md_content = conversation_to_markdown(conv)
+        filepath.write_text(md_content, encoding="utf-8")
+        print(f"Exported: {filepath}")
+        exported_paths.append(filepath)
+
+    return exported_paths
+
+
+def extract_conversations(data: Any) -> List[Dict[str, Any]]:
+    """Unwrap conversation list from bare arrays, wrapped dictionaries, or single objects.
+
+    Supports:
+    - Bare arrays: [ {...}, {...} ]
+    - Wrapped dicts: {"conversations": [...]}, {"items": [...]}, {"data": [...]}
+    - Single conversation dict: { "id": "...", ... }
+
+    Ensures that empty envelopes or invalid dict payloads (such as API error responses
+    like {"detail": "..."}) return an empty list instead of falling through and
+    creating phantom conversation files.
+    """
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ("conversations", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [item for item in val if isinstance(item, dict)]
+        if any(key in data for key in ("id", "transcript_segments", "structured", "started_at", "created_at")):
+            return [data]
+        return []
+    return []
 
 
 def main() -> None:
@@ -157,53 +262,37 @@ def main() -> None:
         default=Path("./conversations_md"),
         help="Directory to write markdown files (default: ./conversations_md).",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Overwrite existing markdown files if filenames collide (default: False).",
+    )
     args = parser.parse_args()
+
+    # Progress messages include filenames, which may contain non-ASCII text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
 
     # Read input with UTF-8 BOM protection
     if args.input == "-":
-        raw_data = sys.stdin.read().lstrip("\ufeff")
+        raw_data = sys.stdin.buffer.read().decode("utf-8-sig")
     else:
         raw_data = Path(args.input).read_text(encoding="utf-8-sig")
 
     data = json.loads(raw_data)
-    items: List[Dict[str, Any]]
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        items = [data]
-    else:
+    if not isinstance(data, (list, dict)):
         sys.exit("Error: Expected JSON object or array.")
 
-    output_dir: Path = args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    items = extract_conversations(data)
 
-    count = 0
-    for conv in items:
-        if not isinstance(conv, dict):
-            continue
-        conv_id = conv.get("id", f"conv_{count}")
-        started_at = conv.get("started_at") or ""
+    exported = export_conversations(
+        items,
+        output_dir=args.output_dir,
+        overwrite=args.overwrite,
+    )
 
-        # Validate date_prefix strictly against YYYY-MM-DD to avoid path traversal
-        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(started_at))
-        date_prefix = date_match.group(1) if date_match else "undated"
-
-        structured = conv.get("structured") or {}
-        title = structured.get("title") if isinstance(structured, dict) else ""
-        slug = slugify(title or "conversation")
-
-        # Sanitize unique suffix to avoid silent overwrites for duplicate title/date pairs
-        short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
-
-        filename = f"{date_prefix}_{slug}_{short_id}.md"
-        filepath = output_dir / filename
-
-        md_content = conversation_to_markdown(conv)
-        filepath.write_text(md_content, encoding="utf-8")
-        print(f"Exported: {filepath}")
-        count += 1
-
-    print(f"\nSuccessfully exported {count} conversation(s) to {output_dir}/")
+    print(f"\nSuccessfully exported {len(exported)} conversation(s) to {args.output_dir}/")
 
 
 if __name__ == "__main__":

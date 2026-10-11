@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-virtual-idle-before-durable-io",
+  "violated_contract": "A harness that advances virtual time and then observes durable filesystem state must not declare quiescence from in-memory coordinator-idle or an event-queue drain while a timer callback it fired still has an unawaited Future performing the write. CaptureReplayWorld.settle() returned when RecordingTransferCoordinator.hasInFlight was false; LocalWalSync's async periodic flush Future was discarded by ManualScheduler, so process-kill reconstruction could reload empty WALs even though writeAsBytes completed milliseconds later.",
+  "canonical_prevention": "ManualScheduler tracks the Future returned by each fired timer callback and exposes waitForCallbackIo. CaptureReplayWorld.settle and dispose await that Future set in addition to coordinator idle, with no wall-clock sleep. A unit test parks an async periodic callback on a Completer across elapse and asserts hasInFlightIo until waitForCallbackIo.",
+  "canonical_prevention_artifact": [
+    "app/test/support/capture/virtual_capture_time.dart",
+    "app/test/unit/virtual_capture_time_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/test/support/capture/**",
+    "app/test/unit/capture_recovery_replay_scenarios_test.dart",
+    "app/integration_test/journeys/j5_capture_interruption_reconnect_test.dart"
+  ],
+  "status": "open"
+}

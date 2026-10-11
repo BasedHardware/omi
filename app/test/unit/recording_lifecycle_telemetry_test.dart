@@ -56,12 +56,82 @@ void main() {
     telemetry.complete();
 
     expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
       RecordingLifecycleTelemetry.startedEvent,
       RecordingLifecycleTelemetry.completedEvent,
     ]);
     expect(events.first.properties, {'recording_id': 'recording-1', 'recording_source': 'phone_mic_live'});
-    expect(events.last.properties, {...events.first.properties, 'duration_seconds': 2.75, 'reason': 'user_stopped'});
+    expect(events.last.properties, {
+      ...events.first.properties,
+      'duration_seconds': 2.75,
+      'reason': 'user_stopped',
+      'audio_observed': false,
+      'audio_observation_coverage': 'dart_ingress',
+      'transcript_observed': false,
+      'audio_bytes_observed': 0,
+      'socket_bytes_submitted': 0,
+      'socket_error_count': 0,
+      'socket_connection_count': 0,
+    });
     expect(telemetry.recordingId, isNull);
+  });
+
+  test('observations aggregate once and fence a recording across accounts', () {
+    var epoch = 1;
+    final events = <Map<String, dynamic>>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (_, properties) => events.add(properties),
+      identityEpoch: () => epoch,
+    );
+    telemetry.prepare(source: 'phone_mic_live');
+    telemetry.markStarted();
+    telemetry.observeAudio(120);
+    telemetry.observeAudio(240);
+    telemetry.observeSent(100);
+    telemetry.observeTranscript();
+    telemetry.observeTranscript();
+    telemetry.observeSocketError();
+    telemetry.complete();
+    expect(events.where((e) => e['stage'] == 'audio'), hasLength(1));
+    expect(events.where((e) => e['stage'] == 'transcript'), hasLength(1));
+    expect(events.last['audio_bytes_observed'], 360);
+    expect(events.last['socket_bytes_submitted'], 100);
+    expect(events.last['socket_error_count'], 1);
+    telemetry.prepare(source: 'phone_mic_live');
+    telemetry.markStarted();
+    final before = events.length;
+    epoch++;
+    telemetry.observeAudio(10);
+    telemetry.complete();
+    expect(events.length, before);
+  });
+
+  test('native batch coverage explicitly distinguishes unobserved audio from empty capture', () {
+    for (final source in ['phone_mic_batch', 'phone_mic_batch_auto']) {
+      final events = <Map<String, dynamic>>[];
+      final telemetry = RecordingLifecycleTelemetry(emitter: (_, properties) => events.add(properties));
+      telemetry.prepare(source: source);
+      telemetry.markStarted();
+      telemetry.complete();
+      expect(events.last['audio_observed'], false);
+      expect(events.last['audio_observation_coverage'], 'native_batch_unavailable');
+      expect(events.last, isNot(contains('outcome')));
+      expect(events.last, isNot(contains('audio_lost')));
+    }
+  });
+
+  test('zero and negative byte callbacks do not manufacture ingress evidence', () {
+    final events = <Map<String, dynamic>>[];
+    final telemetry = RecordingLifecycleTelemetry(emitter: (_, properties) => events.add(properties));
+    telemetry.prepare(source: 'phone_mic_live');
+    telemetry.markStarted();
+    telemetry.observeAudio(0);
+    telemetry.observeAudio(-1);
+    telemetry.observeSent(-1);
+    telemetry.complete();
+    expect(events.last['audio_bytes_observed'], 0);
+    expect(events.last['socket_bytes_submitted'], 0);
+    expect(events.where((event) => event['stage'] == 'audio'), isEmpty);
   });
 
   test('failStart without a prepared session emits nothing', () {
@@ -87,8 +157,11 @@ void main() {
     telemetry.prepare(source: 'phone_mic_batch');
     telemetry.failStart(failureClass: 'permission_denied');
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties, {
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties, {
       'recording_id': 'recording-denied',
       'recording_source': 'phone_mic_batch',
       'failure_class': 'permission_denied',
@@ -105,8 +178,11 @@ void main() {
     telemetry.prepare(source: 'pendant_live');
     telemetry.failStart(failureClass: 'capture_unavailable');
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties, {
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties, {
       'recording_id': 'recording-unavailable',
       'recording_source': 'pendant_live',
       'failure_class': 'capture_unavailable',
@@ -123,8 +199,21 @@ void main() {
     telemetry.prepare(source: 'pendant_live');
     telemetry.complete();
 
-    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
-    expect(events.single.properties['failure_class'], 'pipeline_closed');
+    expect(events.map((event) => event.name), [
+      RecordingLifecycleTelemetry.requestedEvent,
+      RecordingLifecycleTelemetry.startFailedEvent,
+    ]);
+    expect(events.last.properties['failure_class'], 'pipeline_closed');
+  });
+
+  test('silent capture remains an attempted recording and repeated prepare is idempotent', () {
+    final events = <String>[];
+    final telemetry = RecordingLifecycleTelemetry(emitter: (name, _) => events.add(name));
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.subscriptionFailed();
+    telemetry.complete();
+    expect(events, ['Recording Requested', 'Recording Subscription Failed', 'Recording Start Failed']);
   });
 
   test('the recording UUID is attached to the authoritative listen request', () {

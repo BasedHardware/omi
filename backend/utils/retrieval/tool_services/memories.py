@@ -8,12 +8,12 @@ from typing import Any, List, Optional
 
 import database.notifications as notification_db
 from database._client import db as firestore_db
-from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
+from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 import logging
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,7 @@ def get_memories_text(
                     as_of=as_of,
                 )
                 batch = page.memories
+                scan_truncated = scan_truncated or getattr(page, 'truncated', False)
                 cursor = page.next_cursor
                 if not batch:
                     if not cursor:
@@ -113,7 +114,7 @@ def get_memories_text(
                     visible.append(memory)
                 if not cursor:
                     break
-            scan_truncated = bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
+            scan_truncated = scan_truncated or bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
         else:
             while scan_offset < max_scan and len(visible) < target_end:
                 batch_limit = min(500, max_scan - scan_offset)
@@ -152,8 +153,38 @@ def get_memories_text(
         suffix = " The bounded scan reached its safety limit; more memories may exist." if scan_truncated else ""
         return f"No memories found{date_info}.{suffix}"
 
+    title = "User Memories"
+    if effective_view != 'released':
+        title += f" ({effective_view} view; dates are evidence time)"
+    if scan_truncated:
+        title += " (bounded scan; more may exist)"
+    records = []
+    for memory in memories:
+        # Preserve the existing list formatter's preference for the evidence clock.
+        stamp = _memory_read_date(memory, temporal=True)
+        if stamp and stamp.tzinfo is not None:
+            stamp = stamp.astimezone(timezone.utc)
+        date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
+        records.append(
+            format_memory_evidence(
+                memory.content,
+                suffix=f'date: {date_str}',
+                subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
+            )
+        )
+    included_indices: list[int] = []
+    result = render_memory_evidence(
+        records,
+        title=title,
+        max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+        more_available=scan_truncated or len(memories) >= limit,
+        offset=None if scan_truncated else offset,
+        included_indices=included_indices,
+    )
+
     if source_sink is not None:
-        for memory in memories[:128]:
+        for index in included_indices[:128]:
+            memory = memories[index]
             source_sink.append(
                 {
                     'kind': 'memory',
@@ -166,12 +197,7 @@ def get_memories_text(
                 }
             )
 
-    title = "User Memories"
-    if effective_view != 'released':
-        title += f" ({effective_view} view; dates are evidence time)"
-    if scan_truncated:
-        title += " (bounded scan; more may exist)"
-    return f"{title} ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}".strip()
+    return result
 
 
 def search_memories_text(
@@ -215,7 +241,7 @@ def search_memories_text(
         ]
         if not matches:
             return f"No memories found matching '{query}'."
-        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        records = []
         for match in matches:
             memory = match.memory
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
@@ -232,11 +258,25 @@ def search_memories_text(
                 suffix += f", as_of: {evidence_date_str}"
                 if effective_view == 'history':
                     suffix += ", historical: true"
-            result += f"- {memory.content} ({suffix})\n"
+            records.append(
+                format_memory_evidence(
+                    memory.content,
+                    suffix=suffix,
+                    subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
+                )
+            )
+
+        included_indices: list[int] = []
+        result = render_memory_evidence(
+            records,
+            title=f"Memories matching '{query}'",
+            max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+            included_indices=included_indices,
+        )
 
         if source_sink is not None:
-            for match in matches[:128]:
-                memory = match.memory
+            for index in included_indices[:128]:
+                memory = matches[index].memory
                 source_sink.append(
                     {
                         'kind': 'memory',
@@ -249,7 +289,7 @@ def search_memories_text(
                     }
                 )
 
-        return result.strip()
+        return result
 
     except Exception as e:
         logger.error(f"search_memories_text error: {e}")

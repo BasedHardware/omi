@@ -16,7 +16,24 @@ The candidate release probe must pass the runtime marker and a real, bounded Gem
 
 ## Privacy-safe terminal evidence
 
-The Python proxy writes exactly one `desktop_gemini_proxy_terminal` JSON event for each accepted request. Allowed dimensions are request ID, trace, release/revision, provider route, credential source, model allowlist value, region, action, attempt, phase, outcome, status classes, retryability, payload-size/part-count buckets, and elapsed milliseconds.
+The Python proxy writes exactly one `desktop_gemini_proxy_terminal` JSON event for each accepted request. Allowed dimensions are canonical UUID request ID, bounded lane/workload/client platform, trace, release/revision, provider route, credential source, model allowlist value, region, action, attempt, phase, outcome, status classes, retryability, payload-size/part-count buckets, and elapsed milliseconds.
+
+Desktop transports send `X-Omi-Client-Platform` for telemetry only; they must not
+send `X-App-Platform`, which activates auth-side platform persistence. The proxy
+normalizes Linux to `other`, invalid values to `unknown`, and falls back to the
+existing client-kind resolver when the telemetry header is absent. Accepted
+`X-Omi-Request-Id` / `X-Request-Id` values must be canonical UUIDs; other values
+are replaced with a generated UUID before logging or forwarding.
+
+The gateway receives that request ID plus the generated lane/platform enums.
+Both gateway and direct provider attempts persist `product_lane` and
+`client_platform` in `llm_gateway_attempts`, alongside the existing
+`feature=desktop_proactivity` and `app_platform=desktop` dimensions. The enum
+vocabulary is owned by `backend/config/desktop_gemini_attribution.json`; keep it
+stable for later per-user lane budgets. Join terminal events to attempt rows by
+`request_id` for actual served model, payer, retry usage and rate-card cost;
+terminal request counts alone do not establish lane spend. Missing tags on
+older ledger rows remain unattributed; this change does not backfill them.
 
 Never log Firebase UID, prompts, system instructions, inline media, generated text, URLs, headers, API keys, bearer tokens, raw exceptions, or provider response bodies.
 

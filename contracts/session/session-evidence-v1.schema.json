@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.dev/contracts/session/session-evidence-v1.schema.json",
+  "title": "Omi mobile session evidence v1",
+  "description": "Frozen V8 mobile session evidence. Validation structure is immutable; see README.md. The optional live section was added before freeze. No credentials may appear anywhere.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "source",
+    "target",
+    "endpoints",
+    "fixtures",
+    "runners",
+    "timestamps",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "session_id": { "$ref": "#/$defs/session_id" },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional V1 broker evidence. Top-level source/artifact retain cold-build identity. Loaded identity advances only after successful reload and readiness.",
+      "required": [
+        "generation",
+        "operation_id",
+        "operation",
+        "outcome",
+        "requested_source",
+        "loaded_source",
+        "loaded_sequence",
+        "restart_sha256",
+        "started_at",
+        "finished_at",
+        "elapsed_ms"
+      ],
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9-]{1,80}$"
+        },
+        "operation": {
+          "enum": [
+            "start",
+            "reload",
+            "restart",
+            "screenshot",
+            "logs",
+            "controls",
+            "status",
+            "stop",
+            "verify"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "rejected",
+            "restart-required",
+            "blocked"
+          ]
+        },
+        "requested_source": {
+          "$ref": "#/$defs/live_source"
+        },
+        "loaded_source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/live_source"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loaded_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restart_sha256": {
+          "$ref": "#/$defs/hex64"
+        },
+        "daemon_code": {
+          "type": "integer"
+        },
+        "started_at": {
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "screenshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/relative_path"
+            },
+            "sha256": {
+              "$ref": "#/$defs/hex64"
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git_sha", "dirty_digest", "repo"],
+      "properties": {
+        "git_sha": { "$ref": "#/$defs/hex40" },
+        "dirty_digest": {
+          "description": "\"clean\", or \"dirty:sha256:<64 hex>\" binding the exact uncommitted diff.",
+          "type": "string",
+          "pattern": "^(clean|dirty:sha256:[0-9a-f]{64})$"
+        },
+        "repo": { "type": "string", "minLength": 1 }
+      }
+    },
+    "artifact": {
+      "description": "Built app identity. Required in states ready/running; the running app must be this artifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256", "git_sha"],
+      "properties": {
+        "kind": { "enum": ["apk", "ios-app-bundle"] },
+        "sha256": { "$ref": "#/$defs/hex64" },
+        "git_sha": { "$ref": "#/$defs/hex40" },
+        "path": { "$ref": "#/$defs/relative_path" },
+        "flavor": { "enum": ["dev", "prod"] },
+        "built_from_source": { "type": "boolean" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "app_id", "flavor", "profile"],
+      "properties": {
+        "platform": { "enum": ["android", "ios-simulator", "ios-device"] },
+        "device": { "type": ["string", "null"] },
+        "os": { "type": ["string", "null"] },
+        "app_id": { "type": "string", "minLength": 1 },
+        "flavor": { "enum": ["dev", "prod"] },
+        "profile": { "enum": ["local_dev", "local_prod"] }
+      }
+    },
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_base_url", "auth_emulator_host", "firestore_emulator_host", "egress_policy"],
+      "properties": {
+        "api_base_url": { "$ref": "#/$defs/loopback_http_url" },
+        "auth_emulator_host": { "$ref": "#/$defs/loopback_host_port" },
+        "firestore_emulator_host": { "$ref": "#/$defs/loopback_host_port" },
+        "redis_url": { "type": "string" },
+        "egress_policy": { "const": "loopback-only" }
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_version"],
+      "properties": {
+        "fixture_version": { "pattern": "^v[0-9]+$" },
+        "auth_uid": { "type": "string", "minLength": 1 },
+        "scenario": { "type": "string" }
+      }
+    },
+    "runners": {
+      "description": "Name -> version for every runner that produced this evidence (session CLI, harness, flutter, doctor).",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_at"],
+      "properties": {
+        "created_at": { "$ref": "#/$defs/rfc3339_utc" },
+        "started_at": { "$ref": "#/$defs/rfc3339_utc" },
+        "ended_at": { "$ref": "#/$defs/rfc3339_utc" }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "enum": ["creating", "ready", "running", "blocked", "stopped", "released", "failed"]
+        },
+        "blocked_reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executed"],
+      "properties": {
+        "executed": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logs": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+        "screenshots": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } },
+        "assertions": { "type": "array", "items": { "$ref": "#/$defs/relative_path" } }
+      }
+    }
+  },
+  "$defs": {
+    "live_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_sha",
+        "dirty_digest",
+        "inputs_sha256"
+      ],
+      "properties": {
+        "git_sha": {
+          "$ref": "#/$defs/hex40"
+        },
+        "dirty_digest": {
+          "type": "string",
+          "pattern": "^(clean|dirty:sha256:[0-9a-f]{64})$"
+        },
+        "inputs_sha256": {
+          "$ref": "#/$defs/hex64"
+        }
+      }
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^oms-[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "hex40": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "hex64": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "rfc3339_utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "relative_path": { "type": "string", "pattern": "^[^/].*", "description": "Relative to the session directory; never absolute, never parent-escaping." },
+    "loopback_http_url": {
+      "type": "string",
+      "pattern": "^http://(127\\.0\\.0\\.1|localhost|\\[::1\\])(:[0-9]+)?/",
+      "description": "Loopback HTTP only; an https or non-loopback URL is invalid evidence by construction."
+    },
+    "loopback_host_port": {
+      "type": "string",
+      "pattern": "^(127\\.0\\.0\\.1|localhost|\\[::1\\]):[0-9]+$"
+    }
+  }
+}

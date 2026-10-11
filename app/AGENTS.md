@@ -1,6 +1,7 @@
 # App (Flutter) — Operational Playbook
 
 Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
+UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 
 ## Build Bootstrap
 
@@ -9,14 +10,14 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 - **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; `scripts/rayban_dat.sh` excludes mcumgr only for that transaction, then restores the default graph.
 
-### Generated Files (never edit manually)
-| Generator | Source | Output | Command |
-|-----------|--------|--------|---------|
-| envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
-| json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
-| pigeon | `lib/pigeon_interfaces.dart` | `lib/gen/pigeon_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
-| flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
-| flutter_localizations | `lib/l10n/*.arb` | `lib/gen_l10n/app_localizations*.dart` | `flutter gen-l10n` |
+### Version string
+`pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
+
+### Release
+Daily train (`scripts/mobile_daily_train.py`, 14:00 UTC): newest TestFlight build → App Review (MANUAL release), newest Play build → production draft; a human releases. `--dry-run` = plan only. Contract: `.github/agent-docs/mobile-release-process.md`.
+
+### Generated Files (never edit)
+envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
 ### Setup Sequence
 ```bash
@@ -56,13 +57,15 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 ### Pigeon (Phone Mic — conversation capture)
 - Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
 - Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
-- iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
-- Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
-- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
-- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops events with a foreign id so a stale native event can't clobber a fresh session; `start()` onto a live native session adopts the new id and re-emits state so the caller converges; `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
-- Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit iOS, libopus JNI shim Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or auto offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
+- Modules: iOS `ios/Runner/PhoneMic/` (self-healing AVAudioEngine capture; interruptions/routes recover natively); Android `android/app/src/main/kotlin/com/friend/ios/phonemic/` (AudioRecord with self-healing rebuild + silencing detection; `PhoneMicForegroundService` keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus)
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` arbitrates the two stacks
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
+- Two capture modes fixed at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Selection: `CaptureController.streamRecording` (explicit or offline fallback); `omibatchphoneauto` auto-uploads on reconnect
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
+
+### MethodChannel (On-device tool surface)
+- `com.omi.device_tools` (`lib/services/device_tools/device_tool_surface.dart`, iOS `DeviceToolsService.swift`): `search_contacts`, `propose_message`, `request_permission`. iOS verb is **propose** — the compose sheet is the approval; cancelled ≠ delivered. Rides `device_tools` on `POST /v2/messages` + `tool:` SSE frames, never surfaced to chat UI. Contract: `desktop/macos/docs/device-tool-surface.md`.
 
 ## Permission Matrix
 
@@ -75,49 +78,46 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Calendar | READ/WRITE_CALENDAR | NSCalendarsUsageDescription | Calendar integration |
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
-| Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
-
-Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
+| Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
 ## Test Strategy
 
 ### Test Structure
-- `test/unit/` — Auth, tokens, preferences, audio utils
+- `test/spine/` — [protected contracts](../scripts/dev-harness/PENDING_CONTRACTS.md); `test/unit/` — auth and utilities
 - `test/widgets/` — UI components (shimmer, waveform, transcript)
 - `test/providers/` — State management (capture_provider, device_provider)
 - `test/utils/` — Utility functions (localization helpers)
 
 ### Running Tests
 ```bash
-bash test.sh           # runs all tests
-flutter test           # same thing
-flutter test test/unit/  # specific directory
-# Android native tests: JDK 21, SDK 36, Flutter bootstrap
-(cd android && ./gradlew :app:testDevDebugUnitTest)
+bash test.sh            # all unit/widget tests (hermetic)
+flutter test test/unit/ # specific directory
+make mobile-verify ARGS="fast --paths <changed-file>"  # focused product journeys
+make mobile-verify ARGS="fast --all"                   # full hermetic journey suite
+(cd android && ./gradlew :app:testDevDebugUnitTest)     # Android JVM: JDK 21, SDK 36
 ```
 
-`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+`test.sh` bootstraps missing inputs with empty `API_BASE_URL`. Journey selection/receipts/CI: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
-Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs the production Swift writers (macOS manifest, local + CI).
+Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-CI runs `flutter test` and `app/scripts/analyze_ratchet.sh`: errors fail; new info/warning occurrences above `app/analysis_baseline.json` fail. Run the ratchet before committing Dart changes. Update intentional baselines with `--update-baseline` in that PR.
+CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
+- Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
+- HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
-- A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test needs the prod API default. State in the PR how you ran it; it can't be the only evidence the change works.
-- Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
+- Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
+- Coverage: root `AGENTS.md` → Testing.
 
 ## Localization (l10n)
 
-- All user-facing strings must use `context.l10n.keyName`
-- 49 locales: English (template) + 48 translations in `lib/l10n/` — never trust a remembered count; enumerate with `ls lib/l10n/app_*.arb`.
-- Template: `lib/l10n/app_en.arb`
-- Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
-- Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
-- Regenerate after changes: `flutter gen-l10n`; done only when it emits zero "untranslated message(s)" warnings. To get the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
+- All user-facing strings use `context.l10n.keyName`. Template: `lib/l10n/app_en.arb`. Never hardcode a locale count; `python3 scripts/l10n.py template` lists every locale the tree has.
+- Add/change/remove a key with `scripts/l10n.py` (`add`/`set`/`remove`). Do not edit ARB files by hand or with `jq`. The caller supplies translations (no network); the tool writes every locale, runs `flutter gen-l10n`, formats generated Dart, and refuses a partial or placeholder-mismatched change.
+- `python3 scripts/l10n.py check` is the fast consistency gate (parse, key-set, placeholders, generated freshness). Ready for a pre-push hook; not wired in this package.
 
 ## Auth & Security
 
@@ -138,13 +138,6 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
 - Prod: configured in `.prod.env` → `Env.apiBaseUrl`
-
-## Codegen Rules
-
-- Run `flutter pub run build_runner build` after changing: env files, model annotations, pigeon contracts, or pubspec assets
-- Run `flutter gen-l10n` after changing ARB files
-- Never edit files ending in `.g.dart` or `.gen.dart`
-- If build_runner fails with conflicts: `flutter pub run build_runner build --delete-conflicting-outputs`
 
 ## App Flows & E2E
 
@@ -167,4 +160,3 @@ Key rules:
 - Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
 - Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
-- Full command reference: `agent-flutter schema`.

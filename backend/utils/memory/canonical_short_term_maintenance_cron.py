@@ -40,25 +40,11 @@ from utils.memory.promotion_flex import (
     PromotionFlexDeferred,
     PromotionFlexRunRouter,
 )
-from scripts.enrich_historical_memory_graph import (
-    MAX_PAGE_SIZE,
-    MAX_STRUCTURED_SCAN_SIZE,
-    run_enrichment,
-)
 
 logger = logging.getLogger(__name__)
 
 MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
 MEMORY_CANONICAL_MAINTENANCE_FLEX_ENV = "MEMORY_CANONICAL_MAINTENANCE_FLEX"
-MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED"
-MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE"
-MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE"
-DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
-# The historical planner has a hard 20-second deadline per candidate.  Keep
-# the scheduled scan to a small, page-relative look-ahead so one account
-# cannot exhaust the Cloud Run Job's one-hour budget before later users run.
-GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
-DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
@@ -466,51 +452,6 @@ def canonical_maintenance_enabled() -> bool:
     return raw.lower() == "true"
 
 
-def canonical_graph_backfill_enabled() -> bool:
-    """Keep graph migration work opt-in until the deployment contract enables it."""
-    return os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "false").lower() == "true"
-
-
-def canonical_graph_backfill_page_size() -> int:
-    """Return the bounded per-user assertion-enrichment budget for one cron run."""
-    raw = os.getenv(
-        MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV,
-        str(DEFAULT_GRAPH_BACKFILL_PAGE_SIZE),
-    )
-    try:
-        value = int(raw)
-    except ValueError:
-        return DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
-    return min(MAX_PAGE_SIZE, max(1, value))
-
-
-def canonical_graph_backfill_scan_size(*, page_size: int | None = None) -> int:
-    """Return the cursor scan window, bounded to a small current-page multiple.
-
-    The durable keyset cursor advances after every completed scan, so the cron
-    no longer needs a corpus-sized candidate window to avoid rereading writes.
-    Keep enough look-ahead to skip temporarily ineligible rows, but cap both
-    the default and an explicit override at five current apply pages.  This
-    bounds serial 20-second planner calls while retaining the global
-    ``MAX_STRUCTURED_SCAN_SIZE`` ceiling.
-    """
-    current_page_size = page_size if page_size is not None else canonical_graph_backfill_page_size()
-    current_page_size = min(MAX_PAGE_SIZE, max(1, current_page_size))
-    maximum = min(
-        MAX_STRUCTURED_SCAN_SIZE,
-        current_page_size * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER,
-    )
-    raw = os.getenv(
-        MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV,
-        str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE),
-    )
-    try:
-        value = int(raw)
-    except ValueError:
-        value = DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
-    return min(maximum, max(current_page_size, value))
-
-
 @dataclass
 class CanonicalShortTermMaintenanceCronSummary:
     run_id: str
@@ -536,8 +477,6 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_retryable_failures_total: int = 0
     outbox_dead_letters_total: int = 0
     outbox_ack_failures_total: int = 0
-    graph_enriched_total: int = 0
-    graph_enrichment_blocked_total: int = 0
     completed_uids: tuple[str, ...] = ()
     errors: list[str] = field(default_factory=_empty_errors)
 
@@ -838,33 +777,6 @@ def run_universal_short_term_maintenance(
             skipped,
         )
 
-        if not canonical_graph_backfill_enabled():
-            continue
-        try:
-            graph_page_size = canonical_graph_backfill_page_size()
-            graph_report = run_enrichment(
-                uid=uid,
-                # The database client is injected above; this is retained only
-                # for the CLI contract and is never used by this cron path.
-                firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
-                limit=graph_page_size,
-                apply=True,
-                confirm_uid=uid,
-                structured_only=False,
-                apply_limit=graph_page_size,
-                scan_limit=canonical_graph_backfill_scan_size(page_size=graph_page_size),
-                db_client=client,
-            )
-            graph_outcomes = graph_report.get("outcomes", {})
-            summary.graph_enriched_total += int(graph_outcomes.get("committed", 0))
-            summary.graph_enrichment_blocked_total += sum(
-                int(value) for key, value in graph_outcomes.items() if key not in {"committed", "idempotent_skip"}
-            )
-        except Exception as exc:
-            message = f"uid={uid}: graph_enrichment:{type(exc).__name__}"
-            summary.errors.append(message)
-            logger.warning("canonical_short_term_maintenance_cron: %s", message)
-
     last_completed_registry_uid: Optional[str] = None
     for registry_uid in registry_uids:
         if registry_uid not in completed_uids:
@@ -891,7 +803,7 @@ def run_universal_short_term_maintenance(
         "flex_deferred=%s expiry_urgent_users=%d expiry_urgent_items=%d "
         "expired_active_candidates_total=%d "
         "expired_without_terminal_disposition_total=%d expired_with_recorded_disposition_total=%d "
-        "expired_terminal_dispositions_total=%d graph_enriched_total=%d graph_enrichment_blocked_total=%d "
+        "expired_terminal_dispositions_total=%d "
         "skipped_users=%d errors=%d",
         effective_run_id,
         summary.user_count,
@@ -908,8 +820,6 @@ def run_universal_short_term_maintenance(
         summary.expired_without_terminal_disposition_total,
         summary.expired_with_recorded_disposition_total,
         summary.expired_terminal_dispositions_total,
-        summary.graph_enriched_total,
-        summary.graph_enrichment_blocked_total,
         summary.skipped_users,
         len(summary.errors),
     )

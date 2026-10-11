@@ -2167,7 +2167,7 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
-    private static func renderOmiTranscript(_ full: OmiFullConversation) -> String {
+    static func renderOmiTranscript(_ full: OmiFullConversation) -> String {
         let conversation = full.conversation
         let start = conversation.startedAt ?? 0
 
@@ -2181,6 +2181,13 @@ extension Tools {
             "**\(collapse(conversation.title))**",
             meta.joined(separator: " · "),
         ]
+        if full.truncated {
+            out.append("")
+            out.append("""
+            **This transcript is partial** — the Omi response was truncated, so anything after the \
+            last line shown here is missing.
+            """)
+        }
         let overview = collapse(conversation.overview)
         if !overview.isEmpty {
             out.append("")
@@ -2189,10 +2196,17 @@ extension Tools {
 
         if full.segments.isEmpty {
             out.append("")
-            out.append("""
-            Omi kept the summary above but no transcript for this conversation, so nothing here can \
-            be quoted as an exact line.
-            """)
+            if full.truncated {
+                out.append("""
+                No transcript lines arrived before the cut, so Omi may hold lines this response \
+                never carried.
+                """)
+            } else {
+                out.append("""
+                Omi kept the summary above but no transcript for this conversation, so nothing here can \
+                be quoted as an exact line.
+                """)
+            }
         } else {
             out.append("")
             for segment in full.segments {

@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ConversationDisplaySettings extends StatefulWidget {
@@ -21,156 +22,27 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
     PlatformManager.instance.analytics.conversationDisplaySettingsOpened();
   }
 
-  Widget _buildSectionContainer({required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-      child: Column(children: children),
-    );
-  }
+  Widget _buildThresholdSegments(ConversationProvider provider) {
+    const thresholds = [60, 120, 180, 240, 300];
 
-  Widget _buildSectionHeader(String title, {String? subtitle}) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 6),
-            Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleItem({
-    required String title,
-    required String description,
-    required FaIconData icon,
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-            child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 2),
-                Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              ],
+          for (final seconds in thresholds) ...[
+            if (seconds != thresholds.first) const SizedBox(width: OmiSpacing.xs),
+            Expanded(
+              child: _ThresholdSegment(
+                label: context.l10n.minLabel(seconds ~/ 60),
+                selected: provider.shortConversationThreshold == seconds,
+                onTap: () {
+                  provider.setShortConversationThreshold(seconds);
+                  PlatformManager.instance.analytics.shortConversationThresholdChanged(seconds);
+                  setState(() {});
+                },
+              ),
             ),
-          ),
-          Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildThresholdSelector(ConversationProvider provider) {
-    String getThresholdLabel(int seconds) {
-      final minutes = seconds ~/ 60;
-      return context.l10n.minLabel(minutes);
-    }
-
-    final thresholds = [
-      (60, context.l10n.minLabel(1)),
-      (120, context.l10n.minLabel(2)),
-      (180, context.l10n.minLabel(3)),
-      (240, context.l10n.minLabel(4)),
-      (300, context.l10n.minLabel(5)),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade400, size: 16)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.durationThreshold,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      context.l10n.durationThresholdDesc,
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(8)),
-                child: Text(
-                  getThresholdLabel(provider.shortConversationThreshold),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: thresholds.map((threshold) {
-              final isSelected = provider.shortConversationThreshold == threshold.$1;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    provider.setShortConversationThreshold(threshold.$1);
-                    PlatformManager.instance.analytics.shortConversationThresholdChanged(threshold.$1);
-                    setState(() {});
-                  },
-                  child: Container(
-                    margin: EdgeInsets.only(right: threshold != thresholds.last ? 8 : 0),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFF22C55E).withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
-                      borderRadius: BorderRadius.circular(8),
-                      border: isSelected ? Border.all(color: const Color(0xFF22C55E), width: 1) : null,
-                    ),
-                    child: Text(
-                      threshold.$2,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        color: isSelected ? Colors.white : Colors.grey.shade400,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+          ],
         ],
       ),
     );
@@ -179,68 +51,106 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          context.l10n.conversationDisplay,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationDisplay)),
       body: Consumer<ConversationProvider>(
         builder: (context, provider, child) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSectionHeader(context.l10n.visibility, subtitle: context.l10n.visibilitySubtitle),
-                _buildSectionContainer(
-                  children: [
-                    _buildToggleItem(
-                      icon: FontAwesomeIcons.clock,
-                      title: context.l10n.showShortConversations,
-                      description: context.l10n.showShortConversationsDesc,
-                      value: provider.showShortConversations,
-                      onChanged: (_) {
-                        provider.toggleShortConversations();
-                        PlatformManager.instance.analytics.showShortConversationsToggled(
-                          provider.showShortConversations,
-                        );
-                      },
-                    ),
-                    const Divider(height: 1, color: Color(0xFF3C3C43)),
-                    _buildToggleItem(
-                      icon: FontAwesomeIcons.trash,
-                      title: context.l10n.showDiscardedConversations,
-                      description: context.l10n.showDiscardedConversationsDesc,
-                      value: provider.showDiscardedConversations,
-                      onChanged: (_) {
-                        provider.toggleDiscardConversations();
-                        PlatformManager.instance.analytics.showDiscardedConversationsToggled(
-                          provider.showDiscardedConversations,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                _buildSectionHeader(
-                  context.l10n.shortConversationThreshold,
-                  subtitle: context.l10n.shortConversationThresholdSubtitle,
-                ),
-                _buildSectionContainer(children: [_buildThresholdSelector(provider)]),
-                const SizedBox(height: 32),
-              ],
-            ),
+          return ListView(
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            children: [
+              OmiSettingsGroup(
+                header: context.l10n.visibility,
+                headerSubtitle: context.l10n.visibilitySubtitle,
+                children: [
+                  OmiSettingsRow.toggle(
+                    leading: const FaIcon(FontAwesomeIcons.clock),
+                    title: context.l10n.showShortConversations,
+                    subtitle: context.l10n.showShortConversationsDesc,
+                    value: provider.showShortConversations,
+                    onChanged: (_) {
+                      provider.toggleShortConversations();
+                      PlatformManager.instance.analytics.showShortConversationsToggled(
+                        provider.showShortConversations,
+                      );
+                    },
+                  ),
+                  OmiSettingsRow.toggle(
+                    leading: const FaIcon(FontAwesomeIcons.trash),
+                    title: context.l10n.showDiscardedConversations,
+                    subtitle: context.l10n.showDiscardedConversationsDesc,
+                    value: provider.showDiscardedConversations,
+                    onChanged: (_) {
+                      provider.toggleDiscardConversations();
+                      PlatformManager.instance.analytics.showDiscardedConversationsToggled(
+                        provider.showDiscardedConversations,
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: OmiSpacing.xxl),
+              OmiSettingsGroup(
+                header: context.l10n.shortConversationThreshold,
+                headerSubtitle: context.l10n.shortConversationThresholdSubtitle,
+                children: [
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OmiSettingsRow(
+                        leading: const FaIcon(FontAwesomeIcons.clock),
+                        title: context.l10n.durationThreshold,
+                        subtitle: context.l10n.durationThresholdDesc,
+                        value: context.l10n.minLabel(provider.shortConversationThreshold ~/ 60),
+                      ),
+                      _buildThresholdSegments(provider),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: OmiSpacing.xxl),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// One option of the short-conversation threshold picker: white when selected (INV-UI-1).
+class _ThresholdSegment extends StatelessWidget {
+  const _ThresholdSegment({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? OmiColors.accent : OmiColors.surface2,
+        borderRadius: OmiRadius.smAll,
+        child: InkWell(
+          borderRadius: OmiRadius.smAll,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs, vertical: OmiSpacing.xs),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: OmiType.footnote.copyWith(
+                    color: selected ? OmiColors.onAccent : OmiColors.textSecondary,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

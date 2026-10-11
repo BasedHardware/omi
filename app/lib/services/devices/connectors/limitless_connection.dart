@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class LimitlessDeviceConnection extends DeviceConnection {
+  static const Duration _defaultStreamHealthWindow = Duration(seconds: 8);
+  static const Duration _defaultStorageStatusTimeout = Duration(seconds: 3);
+
   int _messageIndex = 0;
   int _requestId = 0;
 
@@ -17,6 +21,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
   final _buttonController = StreamController<List<int>>.broadcast();
   final _rawDataBuffer = <int>[];
   int? _firstFlashPageTimestampMs;
+
+  /// Pendant RTC minus phone wall clock (ms), measured from a Type-8 RX clock
+  /// notification before [SetCurrentTime]. Applied to flash-page timestamps so
+  /// batch uploads align with real-time conversations (#5734).
+  int? _clockDriftOffsetMs;
+  bool _timeSynced = false;
+  Completer<void>? _clockDriftCompleter;
 
   // Fragment reassembly: index -> {seq -> payload}
   final Map<int, Map<int, List<int>>> _fragmentBuffer = {};
@@ -30,6 +41,18 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _isReinitializing = false;
   bool _pendingReinit = false;
   bool _isBatchMode = false;
+  final Duration _streamHealthWindow;
+  final Duration _storageStatusTimeout;
+  Timer? _streamHealthTimer;
+  int _streamHealthGeneration = 0;
+  int _rxPacketsSinceStreamActivation = 0;
+  int _audioFramesSinceStreamActivation = 0;
+  int _streamReactivationAttempts = 0;
+  bool _streamHealthCheckInFlight = false;
+
+  /// Drift of pendant RTC vs phone at connect, before forward clock sync.
+  /// Null when no Type-8 clock was observed (fail-open: no correction).
+  int? get clockDriftOffsetMs => _clockDriftOffsetMs;
 
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
@@ -39,7 +62,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
   static const int _buttonLongPress = 2;
   static const int _buttonDoublePress = 3;
 
-  LimitlessDeviceConnection(super.device, super.transport);
+  LimitlessDeviceConnection(
+    super.device,
+    super.transport, {
+    Duration streamHealthWindow = _defaultStreamHealthWindow,
+    Duration storageStatusTimeout = _defaultStorageStatusTimeout,
+  })  : _streamHealthWindow = streamHealthWindow,
+        _storageStatusTimeout = storageStatusTimeout;
 
   /// Injected in main.dart; true while Transcribe Later keeps the pendant recording to flash.
   static bool Function()? realtimeSuppressionPolicy;
@@ -48,13 +77,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
+    _resetClockDriftCapture();
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     await Future.delayed(const Duration(seconds: 1));
 
     _attachRxSubscription();
 
-    await Future.delayed(const Duration(seconds: 1));
+    // Wait the same 1s settle window as before, but return early if a Type-8
+    // clock arrives so we measure drift before SetCurrentTime (#5734).
+    await _awaitPreSyncClock(const Duration(seconds: 1));
 
     await _initialize();
 
@@ -65,6 +97,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   @override
   Future<void> disconnect() async {
+    _cancelStreamHealthWatch();
     await _transportReconnectSubscription?.cancel();
     _transportReconnectSubscription = null;
     await _rxSubscription?.cancel();
@@ -100,24 +133,41 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _reinitializeAfterReconnect() async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
-    // Re-enabling streaming here is the same msg8 that toggles drain mode, so it
-    // must not fire mid-drain or while Transcribe Later keeps the pendant on flash.
-    if (_isBatchMode || _realtimeSuppressed) return;
+    // The native drain engine owns the control characteristic during a flash drain.
+    if (_isBatchMode) return;
     try {
-      final dataStreamCmd = _encodeEnableDataStream();
-      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
-      DebugLogManager.logInfo('Limitless device re-initialized after reconnect');
+      _resetProtocolSessionForReconnect();
+
+      // A Bluetooth reconnect is also a Pendant session restart. Resend time
+      // before selecting the capture mode; the firmware reports a red error
+      // state when recording restarts with an invalid clock.
+      final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
+      await Future.delayed(const Duration(milliseconds: 400));
+
+      if (!_realtimeSuppressed) {
+        final dataStreamCmd = _encodeEnableDataStream();
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+      }
+      DebugLogManager.logInfo('Limitless device re-initialized after reconnect', {
+        'timeSynced': true,
+        'realtimeEnabled': !_realtimeSuppressed,
+      });
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
+      DebugLogManager.logError(e, null, 'Limitless reconnect initialization failed');
     }
   }
 
   Future<void> setRealtimeAudioSuppressed(bool suppressed) async {
     _realtimeSuppressed = suppressed;
+    if (suppressed) _cancelStreamHealthWatch();
     if (!_isInitialized || _isBatchMode) return;
     try {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!suppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
       DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
     } catch (e) {
       Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
@@ -137,9 +187,62 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await unpairWithoutReset();
   }
 
+  void _resetClockDriftCapture() {
+    _clockDriftOffsetMs = null;
+    _timeSynced = false;
+    _clockDriftCompleter = Completer<void>();
+  }
+
+  Future<void> _awaitPreSyncClock(Duration timeout) async {
+    if (_clockDriftOffsetMs != null || _timeSynced) return;
+    final completer = _clockDriftCompleter;
+    if (completer == null || completer.isCompleted) {
+      await Future.delayed(timeout);
+      return;
+    }
+    try {
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      // Fail-open: proceed to SetCurrentTime without a measured offset.
+    }
+  }
+
+  /// Records pendant−phone drift from a Type-8 clock notification.
+  ///
+  /// Only the first pre-sync reading is kept; later Type-8s (post SetCurrentTime)
+  /// would show ~0 drift and must not overwrite the offline-page correction.
+  void _tryCaptureClockDrift(List<int> data) {
+    if (_timeSynced || _clockDriftOffsetMs != null) return;
+
+    final pendantEpochMs = LimitlessClockDrift.extractType8PendantEpochMs(data);
+    if (pendantEpochMs == null) return;
+
+    final phoneEpochMs = DateTime.now().millisecondsSinceEpoch;
+    final drift = LimitlessClockDrift.measureClockDriftOffsetMs(
+      pendantEpochMs: pendantEpochMs,
+      phoneEpochMs: phoneEpochMs,
+    );
+    if (drift == null) return;
+
+    _clockDriftOffsetMs = drift;
+    DebugLogManager.logEvent('limitless_clock_drift_measured', {
+      'pendantEpochMs': pendantEpochMs,
+      'phoneEpochMs': phoneEpochMs,
+      'driftOffsetMs': drift,
+    });
+    final completer = _clockDriftCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
   Future<void> _initialize() async {
     try {
-      // Command 1: Time sync
+      // Freeze drift capture *before* SetCurrentTime leaves the phone so a
+      // Type-8 arriving during the write cannot be mistaken for pre-sync RTC (#5734).
+      _timeSynced = true;
+      // Command 1: Time sync (forward-only). Drift was measured from any Type-8
+      // pendant-clock RX during the connect listen window above.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       await Future.delayed(const Duration(seconds: 1));
@@ -152,7 +255,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       _isInitialized = true;
+      if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'initial_connect');
       DebugLogManager.logInfo('Limitless device initialized successfully');
+      DebugLogManager.logInfo('Limitless device initialized successfully', {
+        if (_clockDriftOffsetMs != null) 'clockDriftOffsetMs': _clockDriftOffsetMs,
+      });
     } catch (e) {
       Logger.debug('Limitless: Initialization failed: $e');
       DebugLogManager.logError(e, null, 'Limitless initialization failed');
@@ -162,9 +269,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _handleNotification(List<int> data) {
     if (data.isEmpty) return;
+    if (_rxPacketsSinceStreamActivation == 0) {
+      Logger.debug('Limitless: First RX packet observed after stream activation');
+      DebugLogManager.logEvent('limitless_first_rx_packet', {'bytes': data.length});
+    }
+    _rxPacketsSinceStreamActivation++;
 
     _tryParseButtonStatus(data);
     _tryParseDeviceStatus(data);
+    // Type-8 clock may be a bare payload or a BLE-wrapped single fragment.
+    _tryCaptureClockDrift(data);
 
     // Parse BLE packet to get fragmentation info
     final packet = _parseBlePacket(data);
@@ -203,6 +317,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       _fragmentBuffer.remove(index);
 
+      // Reassembled payload: Type-8 clock lives inside wrapper field 4.
+      _tryCaptureClockDrift(completePayload);
+
       if (_isBatchMode) {
         _handlePendantMessage(completePayload);
       } else {
@@ -217,17 +334,107 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final frames = _extractOpusFramesFromFlashPage(payload);
 
     if (frames.isNotEmpty) {
-      for (final frame in frames) {
-        _audioController.add(frame);
-      }
+      _publishAudioFrames(frames);
     } else {
       final result = _extractOpusFrames(payload);
       final extractedFrames = result[0] as List<List<int>>;
       if (extractedFrames.isNotEmpty) {
-        for (final frame in extractedFrames) {
-          _audioController.add(frame);
-        }
+        _publishAudioFrames(extractedFrames);
       }
+    }
+  }
+
+  void _publishAudioFrames(List<List<int>> frames) {
+    if (frames.isEmpty) return;
+    if (_audioFramesSinceStreamActivation == 0) {
+      Logger.debug('Limitless: First decoded audio frame observed after stream activation');
+      DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
+    }
+    _audioFramesSinceStreamActivation += frames.length;
+    _streamHealthTimer?.cancel();
+    _streamHealthTimer = null;
+    for (final frame in frames) {
+      _audioController.add(frame);
+    }
+  }
+
+  void _resetProtocolSessionForReconnect() {
+    _rawDataBuffer.clear();
+    _fragmentBuffer.clear();
+    _storageState = null;
+    final pendingStatus = _storageStateCompleter;
+    if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(null);
+    _storageStateCompleter = null;
+    _cancelStreamHealthWatch();
+  }
+
+  void _cancelStreamHealthWatch() {
+    _streamHealthGeneration++;
+    _streamHealthTimer?.cancel();
+    _streamHealthTimer = null;
+    _streamHealthCheckInFlight = false;
+  }
+
+  void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
+    _streamHealthGeneration++;
+    final generation = _streamHealthGeneration;
+    _streamHealthTimer?.cancel();
+    _rxPacketsSinceStreamActivation = 0;
+    _audioFramesSinceStreamActivation = 0;
+    if (resetAttempts) _streamReactivationAttempts = 0;
+    _streamHealthTimer = Timer(
+      _streamHealthWindow,
+      () => unawaited(_checkStreamHealth(generation: generation, reason: reason)),
+    );
+  }
+
+  Future<void> _checkStreamHealth({required int generation, required String reason}) async {
+    if (generation != _streamHealthGeneration || _streamHealthCheckInFlight) return;
+    if (!_isInitialized || _isBatchMode || _realtimeSuppressed || _audioFramesSinceStreamActivation > 0) return;
+
+    _streamHealthCheckInFlight = true;
+    final rxPackets = _rxPacketsSinceStreamActivation;
+    final stage = rxPackets == 0 ? 'no_rx_packets' : 'rx_without_audio_frames';
+    Logger.debug(
+      'Limitless: Realtime stream silent ($stage, reason=$reason, rxPackets=$rxPackets, '
+      'reactivationAttempts=$_streamReactivationAttempts)',
+    );
+    DebugLogManager.logWarning('Limitless realtime stream is silent', {
+      'reason': reason,
+      'stage': stage,
+      'rxPackets': rxPackets,
+      'reactivationAttempts': _streamReactivationAttempts,
+    });
+
+    try {
+      // A status round-trip distinguishes a dead notify/control path from a
+      // firmware that accepts commands but does not emit realtime audio.
+      final status = await getStorageStatus();
+      if (generation != _streamHealthGeneration || _isBatchMode || _realtimeSuppressed) return;
+      DebugLogManager.logEvent('limitless_stream_health_probe', {
+        'stage': stage,
+        'statusReceived': status != null,
+        'storedPages': status == null
+            ? null
+            : ((status['newest_flash_page'] ?? -1) - (status['oldest_flash_page'] ?? 0) + 1).clamp(0, 1 << 31),
+        'freePages': status?['free_capture_pages'],
+      });
+      Logger.debug(
+        'Limitless: Stream health status response=${status != null}, '
+        'freePages=${status?['free_capture_pages']}',
+      );
+
+      if (_streamReactivationAttempts == 0 && _audioFramesSinceStreamActivation == 0) {
+        _streamReactivationAttempts = 1;
+        final dataStreamCmd = _encodeEnableDataStream();
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        DebugLogManager.logInfo('Limitless realtime stream reactivation sent after silent start');
+        _armStreamHealthWatch(reason: 'silent_start_retry', resetAttempts: false);
+      }
+    } catch (e) {
+      DebugLogManager.logError(e, null, 'Limitless stream health probe failed', {'stage': stage});
+    } finally {
+      _streamHealthCheckInFlight = false;
     }
   }
 
@@ -983,20 +1190,27 @@ class LimitlessDeviceConnection extends DeviceConnection {
       return null;
     }
 
+    final pendingStatus = _storageStateCompleter;
+    if (pendingStatus != null && !pendingStatus.isCompleted) {
+      return pendingStatus.future.timeout(_storageStatusTimeout, onTimeout: () => _storageState);
+    }
+
     try {
-      _storageStateCompleter = Completer<Map<String, int>?>();
+      _storageState = null;
+      final statusCompleter = Completer<Map<String, int>?>();
+      _storageStateCompleter = statusCompleter;
 
       // Send GetDeviceStatus command
       final statusCmd = _encodeGetDeviceStatus();
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, statusCmd);
 
       // Wait for response with timeout
-      final result = await _storageStateCompleter!.future.timeout(
-        const Duration(seconds: 3),
+      final result = await statusCompleter.future.timeout(
+        _storageStatusTimeout,
         onTimeout: () => _storageState,
       );
 
-      _storageStateCompleter = null;
+      if (identical(_storageStateCompleter, statusCompleter)) _storageStateCompleter = null;
       final status = result ?? _storageState;
       if (status != null) {
         DebugLogManager.logEvent('limitless_storage_status', {
@@ -1037,6 +1251,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
+      _cancelStreamHealthWatch();
       // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();
       _fragmentBuffer.clear();
@@ -1073,6 +1288,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
 
       _isBatchMode = false;
+      if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disabled');
       DebugLogManager.logInfo('Limitless batch mode disabled', {
         'pendingPagesCleared': pendingPages,
         'pendingFragmentsCleared': pendingFragments,
@@ -1194,7 +1410,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
         return {
           'opus_frames': <List<int>>[],
-          'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+          // Leave phone-now out so WAL sync can skip drift on a missing page RTC.
+          'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs,
           'max_index': maxIndex,
           'did_start_session': didStartSession,
           'did_stop_session': didStopSession,
@@ -1220,7 +1437,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       return {
         'opus_frames': allFrames,
-        'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+        // Raw pendant RTC (or null). WAL sync applies clockDriftOffsetMs.
+        'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs,
         'did_start_session': didStartSession,
         'did_stop_session': didStopSession,
         'did_start_recording': didStartRecording,
@@ -1479,7 +1697,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
               final storageState = _parseStorageStateFromDeviceStatus(data, innerPos, innerPos + statusLength);
               if (storageState != null && storageState.isNotEmpty) {
                 _storageState = storageState;
-                _storageStateCompleter?.complete(storageState);
+                final pendingStatus = _storageStateCompleter;
+                if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(storageState);
               }
               return;
             }

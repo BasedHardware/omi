@@ -1,8 +1,6 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly MAIN_VITE_GOOGLE_CLIENT_ID?: string
-  readonly MAIN_VITE_GOOGLE_CLIENT_SECRET?: string
   /** Sentry DSN for main-process error reporting. Unset → reporting disabled. */
   readonly MAIN_VITE_SENTRY_DSN?: string
   /** Omi backend base URL (shared VITE_ prefix — visible to all processes).

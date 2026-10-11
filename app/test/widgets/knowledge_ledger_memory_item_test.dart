@@ -306,16 +306,16 @@ void main() {
     }
 
     await pump(_fact(invalidAt: DateTime.utc(2026, 8, 24)));
-    expect(find.text("Don't use"), findsNothing);
+    expect(find.text("Don't Use"), findsNothing);
 
     await pump(_fact(supersededBy: 'replacement'));
-    expect(find.text("Don't use"), findsNothing);
+    expect(find.text("Don't Use"), findsNothing);
 
     await pump(_fact(ledgerStatus: 'hidden'));
-    expect(find.text("Don't use"), findsNothing);
+    expect(find.text("Don't Use"), findsNothing);
 
     await pump(_fact(ledgerStatus: 'active'));
-    expect(find.text("Don't use"), findsOneWidget);
+    expect(find.text("Don't Use"), findsOneWidget);
 
     await pump(
       _fact(ledgerStatus: 'active')
@@ -323,7 +323,7 @@ void main() {
           'memory_use': {'suppressed': true},
         },
     );
-    expect(find.text('Allow use'), findsOneWidget);
+    expect(find.text('Allow Use'), findsOneWidget);
   });
 
   testWidgets('current and rejected facts are editable but superseded history is read-only', (tester) async {

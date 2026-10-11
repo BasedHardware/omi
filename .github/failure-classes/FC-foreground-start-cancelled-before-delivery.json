@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-foreground-start-cancelled-before-delivery",
+  "violated_contract": "An accepted Android foreground-service start must be promoted before cancellation is delivered. Calling Context.stopService before the pending start callbacks run can crash the process with ForegroundServiceDidNotStartInTimeException even when onCreate subsequently promotes.",
+  "canonical_prevention": "Queue cancellation as an ordinary service start command, promote before inspecting each delivered command, and stop using that command's startId so an older cancellation cannot terminate a newer queued start. Exercise the production service in hermetic lifecycle tests and an isolated Android 16 emulator probe.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/test/kotlin/com/friend/ios/sync/SyncTransferForegroundServiceTest.kt",
+    "app/scripts/android_fgs_probe.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/android/app/src/main/kotlin/com/friend/ios/sync/"],
+  "status": "open"
+}

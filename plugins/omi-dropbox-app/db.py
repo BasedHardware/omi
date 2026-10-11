@@ -4,7 +4,7 @@ Supports Redis (production) with file fallback (local development).
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 # Try to import redis, but make it optional
@@ -118,7 +118,7 @@ def get_dropbox_tokens(uid: str) -> Optional[Dict[str, Any]]:
         return tokens.get(uid)
 
 
-def update_dropbox_tokens(uid: str, access_token: str, expires_at: str):
+def update_dropbox_tokens(uid: str, access_token: str, expires_at: str, refresh_token: Optional[str] = None):
     """Update access token after refresh."""
     tokens = get_dropbox_tokens(uid)
     if not tokens:
@@ -126,7 +126,9 @@ def update_dropbox_tokens(uid: str, access_token: str, expires_at: str):
 
     tokens["access_token"] = access_token
     tokens["expires_at"] = expires_at
-    tokens["updated_at"] = datetime.utcnow().isoformat()
+    if refresh_token:
+        tokens["refresh_token"] = refresh_token
+    tokens["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     r = _get_redis()
     if r:

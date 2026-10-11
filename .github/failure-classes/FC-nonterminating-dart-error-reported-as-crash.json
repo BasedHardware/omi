@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-nonterminating-dart-error-reported-as-crash",
+  "violated_contract": "A Dart error that does not terminate an already-started Flutter app must remain reported without being counted as a fatal crash. Boot failures that prevent full startup remain fatal, and native crash reporting is unaffected.",
+  "canonical_prevention": "Route zone and platform-dispatcher errors through one process-local startup-aware reporting policy, snapshot severity and origin when the handler is invoked, and guard pre-startup, post-startup, and retry behavior with Firebase-free contract tests.",
+  "canonical_prevention_artifact": [
+    "app/lib/startup/startup_error_router.dart",
+    "app/test/unit/startup_error_router_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/main.dart",
+    "app/lib/startup/",
+    "app/test/unit/startup_error_router_test.dart"
+  ],
+  "status": "open"
+}

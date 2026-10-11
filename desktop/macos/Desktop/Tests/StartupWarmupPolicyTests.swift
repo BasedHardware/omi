@@ -108,17 +108,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertEqual(StartupWarmupPolicy.floatingBarPlanFetchDelay, 0)
   }
 
-  func testMCPKeyWarmupRunsAfterInteractiveLoadButBeforeDeferredWarmup() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.mcpKeyWarmupDelay,
-      StartupWarmupPolicy.immediateWarmupDelay
-    )
-    XCTAssertLessThan(
-      StartupWarmupPolicy.mcpKeyWarmupDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testInitialSettingsSyncWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.initialSettingsSyncDelay,
@@ -263,7 +252,12 @@ final class StartupWarmupPolicyTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
-    XCTAssertTrue(source.contains("scheduleSessionWarmup(id: .mcpKeyWarmup"))
+    // omi-test-quality: source-inspection -- static contract: startup wiring cannot reference credential issuance.
+    // Assert the removed APIs are absent rather than banning the type wholesale: a
+    // harmless MemoryExportService status refresh at startup is fine, issuing keys is not.
+    XCTAssertFalse(source.contains("mcpKeyWarmup"))
+    XCTAssertFalse(source.contains("warmMCPKeyForCurrentUser"))
+    XCTAssertFalse(source.contains("createMCPKey"))
     XCTAssertTrue(source.contains("guard self.isCurrentSession(scope) else"))
     XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
     XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
@@ -285,6 +279,11 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
     XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups()"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
+    // omi-test-quality: source-inspection -- same no-credential-issuance-at-startup
+    // contract as the coordinator check above, enforced on this wiring surface too.
+    XCTAssertFalse(source.contains("mcpKeyWarmup"))
+    XCTAssertFalse(source.contains("warmMCPKeyForCurrentUser"))
+    XCTAssertFalse(source.contains("createMCPKey"))
   }
 
   @MainActor

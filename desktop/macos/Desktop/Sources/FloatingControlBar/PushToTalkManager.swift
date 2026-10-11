@@ -419,10 +419,22 @@ class PushToTalkManager: ObservableObject {
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
-    if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm(userInitiated: true)
-    }
+    // Launch is not a key press: plan-gated accounts must not mint a managed
+    // session just because the app started. PTT still uses `userInitiated: true`.
+    Self.warmHubOnLaunchIfNeeded(
+      localProfileEnabled: DesktopLocalProfile.isEnabled)
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Launch keep-warm. Not a key press: the plan gate still applies. Tests pin
+  /// this symbol at the `setup` callsite so a revert to `ensureWarm()` fails.
+  static func warmHubOnLaunchIfNeeded(
+    localProfileEnabled: Bool,
+    hub: RealtimeHubController = .shared
+  ) {
+    if !localProfileEnabled {
+      hub.prepareAutomaticWarm()
+    }
   }
 
   func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
@@ -705,7 +717,7 @@ class PushToTalkManager: ObservableObject {
       break
 
     case .pendingLockDecision:
-      stopListening(endInterjectHold: false)
+      stopListening()
       enterLockedListening()
 
     case .lockedRecording:
@@ -824,7 +836,6 @@ class PushToTalkManager: ObservableObject {
       micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = captureTurnScreenEvidence()
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     log("PushToTalkManager: started listening (mode=\(mode))")
@@ -882,7 +893,6 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
     log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
@@ -894,10 +904,7 @@ class PushToTalkManager: ObservableObject {
     updateBarState()
   }
 
-  private func stopListening(endInterjectHold: Bool = true) {
-    if endInterjectHold {
-      FloatingControlBarManager.shared.interjectPushToTalkDidCancel()
-    }
+  private func stopListening() {
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     {
@@ -1346,7 +1353,6 @@ class PushToTalkManager: ObservableObject {
   }
 
   func finalize() {
-    FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
     guard phase?.isRecording == true else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.publish(.finalize(turnID: turnID))
@@ -3570,7 +3576,7 @@ class PushToTalkManager: ObservableObject {
         area: "voice_typing", from: "llm_polish", to: "local_format", reason: "policy", outcome: .recovered)
     }
     if !text.isEmpty, polishPolicy == .required, allowNetwork, NetworkReachability.shared.isOnline,
-      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, workload: .interactive)
+      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, lane: .dictation, workload: .interactive)
     {
       do {
         if let polished = try await DictationPolisher.polish(text, context: context, using: client) {

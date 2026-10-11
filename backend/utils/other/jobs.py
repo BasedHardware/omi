@@ -1,16 +1,12 @@
-import time
-
 from utils.executors import db_executor, run_blocking
 from utils.other.notifications import should_run_job as should_run_daily_notification_job
 from utils.other.notifications import start_cron_job as start_cron_notification_job
 from utils.redis_memory_health import run_scheduled_check as run_redis_memory_check
 from utils.task_intelligence.chat_first_materialization_health import run_scheduled_check
-from utils.x_connector import should_run_x_sync_job, run_x_sync_job
 
 
 async def start_job():
-    job_started_at = time.monotonic()
-    # Notification
+    # Notification / daily summary only. X connector sync lives on x-connector-sync-job.
     if should_run_daily_notification_job():
         await start_cron_notification_job()
 
@@ -20,7 +16,3 @@ async def start_job():
 
     # Read-only Redis INFO. Log line is the Cloud Monitoring 90% used_memory alarm.
     await run_blocking(db_executor, run_redis_memory_check)
-
-    # X (Twitter) connector — incremental background sync every few hours.
-    if should_run_x_sync_job():
-        await run_x_sync_job(job_started_at=job_started_at)

@@ -339,17 +339,27 @@ def collect_day3_candidates(
     'macos'``, matches zero documents forever and silently: the experiment
     would enroll nobody and nothing would say why.
 
-    The Firestore filter therefore uses the value actually written
-    (``'desktop'``), which is as narrow as an indexed equality can get here,
-    and the macOS narrowing happens in ``evaluate_candidate`` against
-    ``signup_os``. A Windows signup is fetched and then rejected as
-    ``'not_macos'`` — slightly wasteful per run, but bounded by the same page
-    limit and honest about where the decision lives.
+    ## Why the narrowing has to happen in the query
 
-    Note that ``signup_os`` is **not** canonicalized (see
-    ``MACOS_SIGNUP_OS_VALUES``): only the coarse bucket goes through the alias
-    table, so the raw header value lands here verbatim and matching a single
-    literal would drop real macOS users.
+    Matching a single literal against ``signup_os`` would drop real macOS
+    users, because only the coarse bucket goes through the alias table. But the
+    set of values that can produce the ``'desktop'`` bucket *for a Mac* is
+    closed and known — ``MACOS_SIGNUP_OS_VALUES`` — and ``_normalize_platform``
+    lowercases the header before writing, so an indexed ``in`` over that set
+    matches exactly the same rows ``evaluate_candidate`` would keep.
+
+    Leaving the narrowing to ``evaluate_candidate`` instead is not merely
+    wasteful: ``limit`` is applied to the raw stream, so Windows rows consume
+    page slots and then get thrown away as ``'not_macos'``. Once a 24h cohort
+    holds more than ``MAX_USERS_PER_RUN`` desktop signups, every eligible macOS
+    user past that slot is never evaluated — and because the job runs once a
+    day (``0 15 * * *``) against a window exactly one day wide, the next run
+    has already aged them out as ``'too_late'``. They are skipped permanently,
+    and the funnel counts cannot show it because the rows never arrived.
+
+    ``evaluate_candidate`` still re-checks ``signup_os``; the predicate stays
+    the source of truth for eligibility, and the query is now an indexed
+    prefilter that cannot starve it.
     """
     client = firestore_client or db
     window_start = now - timedelta(hours=SEND_WINDOW_END_HOURS)
@@ -358,7 +368,12 @@ def collect_day3_candidates(
     query = (
         DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY.build(
             client.collection('users'),
-            {'signup_platform': 'desktop', 'start': window_start, 'end': window_end},
+            {
+                'signup_platform': 'desktop',
+                'signup_os_values': sorted(MACOS_SIGNUP_OS_VALUES),
+                'start': window_start,
+                'end': window_end,
+            },
             field_filter_factory=FieldFilter,
         )
         .order_by('signup_platform_at')

@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Mapping, Optional
 
 import click
 import typer
@@ -28,7 +28,9 @@ from omi_cli import config as cfg
 from omi_cli.auth.api_key import validate_api_key_format
 from omi_cli.client import OmiClient
 from omi_cli.commands import action_item as action_item_cmd
+from omi_cli.commands import app as app_cmd
 from omi_cli.commands import auth as auth_cmd
+from omi_cli.commands import chat as chat_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
@@ -77,21 +79,20 @@ class AppContext:
         profile = config.get_profile(self.profile_name)
         if self.api_base_override:
             profile.api_base = self.api_base_override
-        # Allow OMI_API_KEY to take effect even if the on-disk profile has no key.
-        # Validate the prefix here so an obviously-bad env value fails fast with the
-        # same friendly UsageError the paste flow uses, instead of bouncing off the
-        # API as a cryptic 401.
-        env_key = os.environ.get(cfg.ENV_API_KEY)
-        if env_key and not profile.api_key:
-            profile.auth_method = "api_key"
-            profile.api_key = validate_api_key_format(env_key)
         env_base = os.environ.get(cfg.ENV_API_BASE)
         if env_base and not self.api_base_override:
             profile.api_base = env_base
         return profile
 
     def make_client(self) -> OmiClient:
-        return OmiClient(self.get_profile(), verbose=self.verbose)
+        profile = self.get_profile()
+        # Apply the per-command key only to cloud API requests. Local Desktop
+        # commands and saved-profile management use their own credentials.
+        env_key = os.environ.get(cfg.ENV_API_KEY)
+        if env_key:
+            profile.api_key = validate_api_key_format(env_key)
+            profile.auth_method = "api_key"
+        return OmiClient(profile, verbose=self.verbose)
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
@@ -104,6 +105,7 @@ def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"omi-cli {__version__}")
         raise typer.Exit(code=0)
+
 
 def _profile_completion(incomplete: str) -> list[str]:
     """Return configured profile names matching the partially typed value."""
@@ -177,13 +179,44 @@ def ask(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
         return
-    payload = result or {}
-    typer.echo(payload.get("answer", ""))
-    sources = payload.get("sources") or []
-    if sources:
-        typer.echo("\nSources:")
-        for s in sources:
-            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+    if not isinstance(result, Mapping):
+        if result is not None:
+            typer.echo(str(result))
+        return
+
+    answer = result.get("answer")
+    if answer is not None:
+        typer.echo(str(answer))
+
+    raw_sources = result.get("sources")
+    if isinstance(raw_sources, list) and raw_sources:
+        rendered_sources: list[str] = []
+        for s in raw_sources:
+            if isinstance(s, Mapping):
+                title = str(s.get("title") or "Untitled")
+                created_at = s.get("created_at")
+                source_id = s.get("id")
+                created_part = f" ({created_at})" if created_at else ""
+                id_part = f"  [{source_id}]" if source_id is not None else ""
+                rendered_sources.append(f"  - {title}{created_part}{id_part}")
+            elif isinstance(s, str) and s:
+                rendered_sources.append(f"  - Untitled  [{s}]")
+        if rendered_sources:
+            typer.echo("\nSources:")
+            for line in rendered_sources:
+                typer.echo(line)
+
+
+@app.command(help="Chat with Omi in your terminal, with streaming replies and shared history.")
+def chat(
+    typer_ctx: typer.Context,
+    prompt: Optional[str] = typer.Argument(None, help="One message to send; omit for interactive chat."),
+    history: bool = typer.Option(False, "--history", help="Show recent shared chat messages."),
+    clear: bool = typer.Option(False, "--clear", help="Clear shared chat history across clients."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Confirm --clear without a prompt."),
+    limit: int = typer.Option(20, "--limit", min=1, max=1000, help="Messages shown by --history or /history."),
+) -> None:
+    chat_cmd.run(typer_ctx.obj, prompt=prompt, history=history, clear=clear, yes=yes, limit=limit)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +230,7 @@ app.add_typer(conversation_cmd.app, name="conversation", help="Conversations —
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
 app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
+app.add_typer(app_cmd.app, name="app", help="Build and test Omi apps: webhook events, samples, local receiver.")
 
 
 # ---------------------------------------------------------------------------
@@ -241,8 +275,17 @@ def main() -> None:
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
         # Click's own usage errors (unknown flag, missing argument, etc.).
-        # Let Click format it the way users expect; honor its exit_code.
-        exc.show()
+        # In JSON mode, emit a structured JSON error object on stderr so
+        # agents and scripts parsing stderr get valid JSON. In pretty mode,
+        # let Click format it the way users expect. Preserve exit_code.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        if renderer.json_mode:
+            message = exc.format_message() or "Usage error."
+            renderer.error(message)
+        else:
+            exc.show()
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
@@ -257,7 +300,13 @@ def main() -> None:
         sys.stderr.write("\nAborted.\n")
         sys.exit(130)
     except Exception as exc:  # noqa: BLE001 — last-chance handler
-        sys.stderr.write(f"omi: unexpected error: {exc}\n")
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        if renderer.json_mode:
+            renderer.error(f"unexpected error: {exc}")
+        else:
+            sys.stderr.write(f"omi: unexpected error: {exc}\n")
         sys.exit(1)
 
 

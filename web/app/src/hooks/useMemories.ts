@@ -343,7 +343,16 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           memoryView === 'useful_now'
             ? await getCachedMemories(memoryView, memoryCacheScope)
             : null;
-        if (!isCurrentRequest() || !isQueryCurrent()) return;
+        if (!isCurrentRequest() || !isQueryCurrent()) {
+          // A same-scope query change can abandon this warmup before the
+          // network fetch's finally block. Release the shared fetch lock so
+          // the latest query can retry on the next idle tick.
+          if (isCurrentRequest()) {
+            fetchingRef.current = false;
+            setFetchIdleTick((tick) => tick + 1);
+          }
+          return;
+        }
         if (indexedDBMemories && indexedDBMemories.length > 0) {
           console.log('[useMemories] Loaded from IndexedDB');
           setMemories(indexedDBMemories);

@@ -474,6 +474,10 @@ struct ChatBubble: View {
       Text("This turn didn't finish")
         .scaledFont(size: OmiType.micro, weight: .medium)
         .foregroundColor(PageGlass.warning)
+    case .sessionExpired:
+      Text("Session expired")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(PageGlass.warning)
     case .truncatedAnswer:
       HStack(spacing: OmiSpacing.xxs) {
         Text("\u{2026}")

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-live-activity-paused.png",
+      "platform": "mobile-ios",
+      "description": "ImageRenderer composite (not a system screenshot) of the production widget views on the iOS 27 simulator, in harness frames sized like the iPhone 17 Pro island and Lock Screen: user pause",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-activity-pendant-unheard.png",
+      "platform": "mobile-ios",
+      "description": "ImageRenderer composite (not a system screenshot) of the production widget views on the iOS 27 simulator, in harness frames sized like the iPhone 17 Pro island and Lock Screen: pendant unheard for over two minutes",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-activity-pendant-battery-low.png",
+      "platform": "mobile-ios",
+      "description": "ImageRenderer composite (not a system screenshot) of the production widget views on the iOS 27 simulator, in harness frames sized like the iPhone 17 Pro island and Lock Screen: pendant battery at or below 15 percent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-live-activity-phone-recording.png",
+      "platform": "mobile-ios",
+      "description": "ImageRenderer composite (not a system screenshot) of the production widget views on the iOS 27 simulator, in harness frames sized like the iPhone 17 Pro island and Lock Screen: user-started phone recording; landscape compact clock falls back to a dot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

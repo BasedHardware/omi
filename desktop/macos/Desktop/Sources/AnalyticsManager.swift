@@ -62,12 +62,8 @@ class AnalyticsManager {
   /// at the same production boundary as PostHog so tests can assert the real
   /// event payload without initializing analytics or exposing a mutable global.
   private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
-  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
   /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
   /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
-  private var recordedInsightDeliveryIDSet: Set<UUID> = []
-  private var recordedInsightDeliveryIDOrder: [UUID] = []
-  private static let maxRecordedInsightDeliveryIDs = 512
 
   func setSuggestionAssistantTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -81,19 +77,6 @@ class AnalyticsManager {
 
   /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
   /// production boundary as PostHog; production leaves it nil.
-  func setInsightAssistantTelemetryCaptureForTests(
-    _ capture: (@MainActor (String, [String: Any]) -> Void)?
-  ) {
-    if capture != nil {
-      recordedInsightDeliveryIDSet.removeAll()
-      recordedInsightDeliveryIDOrder.removeAll()
-    }
-    insightAssistantTelemetryCaptureForTests = capture
-  }
-
-  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
-    insightAssistantTelemetryCaptureForTests?(event, properties)
-  }
 
   /// Test observer for integration-connect telemetry. Mirrors the
   /// MemoryAssistant seam: nil in production; tests install a scoped capture
@@ -131,6 +114,21 @@ class AnalyticsManager {
   /// capture to observe the real event/payload `NotificationService` emits when
   /// it drops a notification for lack of authorization.
   private var notificationDeliveryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  /// Capture-attempt outcome seam: nil in production; tests install a scoped
+  /// capture to observe the real event/payload the ambient-capture lifecycle
+  /// emits at `AnalyticsManager`'s PostHog boundary.
+  private var captureAttemptTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setCaptureAttemptTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    captureAttemptTelemetryCaptureForTests = capture
+  }
+
+  private func captureCaptureAttemptTelemetryForTests(_ event: String, properties: [String: Any]) {
+    captureAttemptTelemetryCaptureForTests?(event, properties)
+  }
 
   func setNotificationDeliveryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -452,17 +450,40 @@ class AnalyticsManager {
 
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
     // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
     if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
       return
     }
     lastTranscriptionStartedAt = Date()
-    PostHogManager.shared.transcriptionStarted()
+    PostHogManager.shared.transcriptionStarted(attemptId: attemptId, mode: mode, intent: intent)
   }
 
-  func transcriptionStopped(wordCount: Int) {
-    PostHogManager.shared.transcriptionStopped(wordCount: wordCount)
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
+    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId, reason: reason)
+  }
+
+  /// Terminal outcome of one armed ambient-capture attempt. Observes the
+  /// acceptance registry first so `conversation_accepted` reflects every
+  /// accepted conversation of this attempt observed before emission.
+  func captureAttemptOutcome(
+    _ attempt: inout CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) {
+    if CaptureAttemptAcceptanceRegistry.consumeAccepted(attempt.attemptId) {
+      attempt.noteConversationAccepted()
+    }
+    let properties = PostHogManager.captureAttemptOutcomeProperties(attempt, finalizationReason: finalizationReason)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
+  }
+
+  /// Mid-flight process death discovered by next-run crash recovery: only the
+  /// persisted join key is knowable, so the payload is deliberately minimal.
+  func captureAttemptPendingOutcome(attemptId: String) {
+    let properties = PostHogManager.captureAttemptPendingProperties(attemptId: attemptId)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
   }
 
   func recordingError(
@@ -833,9 +854,17 @@ class AnalyticsManager {
   // Note: The event is named "Memory Created" in analytics for historical reasons,
   // but it actually tracks when a conversation/recording is created, not a "memory".
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(
+    conversationId: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
+    if let attemptId {
+      CaptureAttemptAcceptanceRegistry.noteAccepted(attemptId)
+    }
     PostHogManager.shared.conversationCreated(
-      conversationId: conversationId, source: source, durationSeconds: durationSeconds)
+      conversationId: conversationId, source: source, durationSeconds: durationSeconds, attemptId: attemptId)
   }
 
   func memoryDeleted(conversationId: String) {
@@ -939,14 +968,6 @@ class AnalyticsManager {
     PostHogManager.shared.chatCleared()
   }
 
-  func chatSessionCreated() {
-    PostHogManager.shared.track("chat_session_created", properties: [:])
-  }
-
-  func chatSessionDeleted() {
-    PostHogManager.shared.track("chat_session_deleted", properties: [:])
-  }
-
   func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
     // `source` splits the admin thumbs-ratio chart: "text" = main-window
@@ -954,22 +975,6 @@ class AnalyticsManager {
     // existed chart as the combined series only.
     PostHogManager.shared.track(
       "message_rated", properties: ["rating": ratingString, "source": surface])
-  }
-
-  func initialMessageGenerated(hasApp: Bool) {
-    PostHogManager.shared.track("initial_message_generated", properties: ["has_app": hasApp])
-  }
-
-  func sessionTitleGenerated() {
-    PostHogManager.shared.track("session_title_generated", properties: [:])
-  }
-
-  func chatStarredFilterToggled(enabled: Bool) {
-    PostHogManager.shared.track("chat_starred_filter_toggled", properties: ["enabled": enabled])
-  }
-
-  func sessionRenamed() {
-    PostHogManager.shared.track("session_renamed", properties: [:])
   }
 
   // MARK: - Claude Agent Events
@@ -1346,53 +1351,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
   }
 
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    let properties: [String: Any] = {
-      var value: [String: Any] = [:]
-      if let category = InsightAssistantTelemetry.boundedCategory(category) {
-        value["category"] = category
-      }
-      if let deliveryID {
-        value["delivery_id"] = deliveryID.uuidString
-      }
-      return value
-    }()
-    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
-    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
-  }
-
   /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
   /// absorbs racing presentation callbacks without allowing process-lifetime growth.
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
-    recordedInsightDeliveryIDOrder.append(deliveryID)
-    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
-      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
-      recordedInsightDeliveryIDSet.remove(evicted)
-    }
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
-      outcome,
-      reason: reason,
-      identity: identity,
-      surface: surface
-    )
-    captureInsightAssistantTelemetryForTests(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: payload
-    )
-    PostHogManager.shared.insightAssistantDeliveryOutcome(
-      outcome,
-      reason: reason,
-      deliveryID: deliveryID,
-      surface: surface
-    )
-  }
 
   // MARK: - Apps Events
 
@@ -1502,15 +1462,11 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
-      if let attention {
-        properties["attention"] = attention.rawValue
-      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1522,62 +1478,8 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
-      suggestionIdentity: suggestionIdentity,
-      attention: attention
-    )
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    if let suggestionIdentity {
-      captureSuggestionAssistantTelemetryForTests(
-        "Notification Hovered",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      )
-    }
-    PostHogManager.shared.notificationHovered(
-      notificationId: notificationId,
-      assistantId: assistantId,
       suggestionIdentity: suggestionIdentity
     )
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    if let suggestionIdentity {
-      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      properties["verb"] = verb
-      appendInterjectFeedbackProvenance(provenance, to: &properties)
-      captureSuggestionAssistantTelemetryForTests(
-        "Suggestion Feedback Recorded",
-        properties: properties
-      )
-    }
-    PostHogManager.shared.suggestionFeedbackRecorded(
-      verb: verb,
-      suggestionIdentity: suggestionIdentity,
-      provenance: provenance
-    )
-  }
-
-  private func appendInterjectFeedbackProvenance(
-    _ provenance: InterjectFeedbackProvenance?,
-    to properties: inout [String: Any]
-  ) {
-    guard let provenance else { return }
-    // Owner identity remains in the local owner fence and is never sent as an
-    // analytics property. The opaque delivery/candidate joins are enough to
-    // correlate the event with the bounded JIT receipt.
-    properties["feedback_lane"] = provenance.lane
-    properties["feedback_delivery_id"] = provenance.deliveryID
-    properties["feedback_candidate_id"] = provenance.candidateID
-    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

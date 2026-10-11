@@ -42,6 +42,14 @@ const PERMISSION_TYPES: ReadonlyArray<{ type: string; phrases: readonly string[]
   { type: "accessibility", phrases: ["accessibility permission", "accessibility access"] },
   { type: "automation", phrases: ["automation permission", "automation access"] },
   { type: "full_disk_access", phrases: ["full disk access"] },
+  // The device tool surface advertises these four in request_permission and
+  // names them in its failure hints. Without an entry here the request is
+  // rejected as permission_route_rejected before it reaches Swift, so the
+  // recovery path the tools point the model at could never be taken.
+  { type: "contacts", phrases: ["contacts permission", "contacts access", "address book"] },
+  { type: "calendars", phrases: ["calendar permission", "calendars permission", "calendar access"] },
+  { type: "reminders", phrases: ["reminders permission", "reminders access"] },
+  { type: "photos", phrases: ["photos permission", "photo library", "photos access"] },
 ];
 
 const PERMISSION_CAPABILITY_SUBJECTS = new Set([
@@ -72,7 +80,28 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
   "automation access",
   "full disk access",
   "full disk access permission",
+  "contacts",
+  "contacts permission",
+  "contacts access",
+  "address book",
+  "calendars",
+  "calendar permission",
+  "calendars permission",
+  "calendar access",
+  "reminders",
+  "reminders permission",
+  "reminders access",
+  "photos",
+  "photo library",
+  "photos permission",
+  "photos access",
 ]);
+
+const PERMISSION_PHRASE_PATTERN = PERMISSION_TYPES
+  .flatMap(({ phrases }) => phrases)
+  .sort((left, right) => right.length - left.length)
+  .map((phrase) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
 
 const DIRECTED_PROVIDER_TARGETS = [
   { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
@@ -355,8 +384,17 @@ const MEMORY_GROUNDING_STOP_WORDS = new Set([
   "keep", "remember", "save", "store",
 ]);
 
+/**
+ * The desktop chat runtime prefixes every run input with a machine-generated
+ * clock preamble (ChatPrompts.currentTimePrompt: "# Current Time\n<iso>
+ * (<tz>)\n\n"). Authorization must judge the raw current user turn that
+ * follows it, so strip exactly that prefix and nothing else; any other
+ * leading text is treated as user text.
+ */
+const RUNTIME_CLOCK_PREAMBLE_PATTERN = /^# Current Time\n[^\n]*\n\n/;
+
 export function hasExplicitMemorySaveIntent(prompt: string): boolean {
-  const text = prompt.toLowerCase().trim();
+  const text = prompt.replace(RUNTIME_CLOCK_PREAMBLE_PATTERN, "").toLowerCase().trim();
   if (!text) return false;
 
   // Keep these patterns identical to ChatToolExecutor.isExplicitMemorySaveIntent.
@@ -485,10 +523,10 @@ function hasExplicitExternalPermissionTarget(
   for (const narrative of [originatingPrompt, objective]) {
     const normalized = narrative.toLowerCase();
     const candidates = [
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+needs\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)(?:\s+permissions?|\s+access)?\s+for\s+([a-z0-9._ -]+?)(?:[?.!,]|$)/g),
-      ...captures(normalized, /\b(?:grant|allow|enable|give|check)\s+([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)['’]s\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+needs\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:${PERMISSION_PHRASE_PATTERN})(?:\\s+permissions?|\\s+access)?\\s+for\\s+([a-z0-9._ -]+?)(?:[?.!,]|$)`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:grant|allow|enable|give|check)\\s+([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
     ];
     for (const candidate of candidates) {
       const cleaned = normalizeTarget(candidate);

@@ -7,8 +7,9 @@ free-text line:
 
 | Frame | Typed reason | Owner | Severity |
 |---|---|---|---|
-| 400 `invalid_request` "No audio received" | `soniox_idle_timeout` | this session's VAD pattern | WARNING |
-| 402 `organization_balance_exhausted` | `soniox_account_state` | the provider/account | **ERROR** |
+| 400 `invalid_request` "No audio received" during an active session | `soniox_idle_timeout` | this session's VAD pattern | WARNING |
+| 400 `invalid_request` "No audio received" after teardown starts | `soniox_no_audio_teardown` | clean session teardown | metric only; no failure/failover |
+| 402 `organization_balance_exhausted` / `organization_monthly_budget_exhausted` / `project_monthly_budget_exhausted` | `provider_budget_exhausted` | the provider/account | **ERROR** |
 | 413 `max_duration_reached` | `soniox_rotation` | documented protocol rotation | WARNING |
 
 ## What was broken
@@ -40,16 +41,28 @@ free-text line:
   reason so the VAD gate cannot erase it.
 - `live_stt_terminal_reason(socket, fallback)` lets every terminal funnel
   report the provider's type instead of its own vantage point.
-- Severity follows fault ownership: only a 402 account-state refusal stays at
+- Severity follows fault ownership: a 402 / monthly-budget refusal stays at
   ERROR (`Soniox streaming error:`); idle-timeout and rotation log
   `Soniox stream closed:` at WARNING. Never mute a signature without
   classifying fault origin first — see `ws-auth-rejection-severity.md` for the
-  same rule at the auth boundary.
+  same rule at the auth boundary. `organization_monthly_budget_exhausted`
+  used to miss the typed set and log at WARNING as `connection_lost`.
 - Fleet evidence: `note_typed_provider_death` at the failover seam (and
-  `soniox_account_state` in the terminal path) opens the provider's
+  `provider_budget_exhausted` in the terminal path) opens the provider's
   process-local selection circuit for one cooldown. Session-scoped reasons
   deliberately do not — an idle timeout is this session's VAD pattern, not a
   provider fault.
+- Vendor close frames increment `omi_stt_stream_close_total` with a bounded
+  `reason` (`provider_budget_exhausted`, idle/rotation/hint/teardown, else
+  `connection_lost`). Raw vendor messages are never label values.
+- The active-session idle rejection does not follow a keepalive gap in the
+  current adapter: `_send_loop` sends a keepalive after each 10 seconds without
+  queued audio, below Soniox's documented 20-second idle close. VAD starvation
+  still remains visible as `soniox_idle_timeout`; keepalive is not audio.
+- Teardown sends Soniox's empty end-of-audio frame only after at least one audio
+  payload reached the provider. A zero-audio finish closes without that frame
+  or a wait for `finished`; a teardown-phase no-audio rejection is counted as
+  `soniox_no_audio_teardown` and is not latched as a socket death.
 - `_fallback_failure_reason` classifies `exhausted`/`balance` text as `quota`;
   `bounded_provider` accepts the live-path provider tokens.
 

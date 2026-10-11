@@ -66,7 +66,7 @@ private object PigeonCommunicatorPigeonUtils {
     }
     return a == b
   }
-      
+
 }
 
 /**
@@ -193,7 +193,7 @@ data class BleDisconnectEvent (
    * RSSI trajectory over the ~15s before this event. One of:
    *   "fading"  — signal declined ≥10 dB before the drop (walk-away)
    *   "sudden"  — signal stable then link died (interference/stall/device off)
-   *   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+   *   "gap"     — no recent RSSI samples (radio read unavailable)
    *   "unknown" — insufficient samples to classify
    * Empty string on legacy records written before this field existed.
    */
@@ -290,8 +290,10 @@ data class BleDeviceDiagnostics (
    * silent-failure path separately from established-then-dropped disconnects.
    */
   val failToConnectCount: Long,
-  /** BLE bytes consumed by native offline writers since the app most recently
-   * entered the background. These packets intentionally never reach Dart. */
+  /**
+   * BLE bytes consumed by native offline writers since the app most recently
+   * entered the background. These packets intentionally never reach Dart.
+   */
   val nativeBackgroundBytesConsumed: Long,
   /** BLE notification packets represented by [nativeBackgroundBytesConsumed]. */
   val nativeBackgroundPacketsConsumed: Long
@@ -767,7 +769,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingStopped(callback: (Result<Unit>) -> Unit)
@@ -784,7 +786,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioData(audioDataArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -801,7 +803,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioChunk(audioChunkArg: ByteArray, chunkIndexArg: Long, isLastArg: Boolean, sampleRateArg: Double, callback: (Result<Unit>) -> Unit)
@@ -818,7 +820,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingError(errorArg: String, callback: (Result<Unit>) -> Unit)
@@ -835,7 +837,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -852,7 +854,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMainAppMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -869,7 +871,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onWatchBatteryUpdate(batteryLevelArg: Double, batteryStateArg: Long, callback: (Result<Unit>) -> Unit)
@@ -886,7 +888,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -903,8 +905,10 @@ interface BleHostApi {
   fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit)
   fun readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, callback: (Result<ByteArray>) -> Unit)
   fun writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: ByteArray, callback: (Result<Unit>) -> Unit)
-  fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
+  fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, callback: (Result<Unit>) -> Unit)
   fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
+  /** iOS Omi ingress recovery; Android leaves this cut disabled. */
+  fun setCaptureAuthorized(uuid: String, authorized: Boolean)
   fun getBluetoothState(): String
   /**
    * (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
@@ -915,6 +919,8 @@ interface BleHostApi {
   fun startRssiStreaming(uuid: String)
   fun stopRssiStreaming(uuid: String)
   fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit)
+  /** Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads. */
+  fun getExtendedDeviceDiagnostics(uuid: String, callback: (Result<String>) -> Unit)
   fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit)
   /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
@@ -1074,13 +1080,14 @@ interface BleHostApi {
             val peripheralUuidArg = args[0] as String
             val serviceUuidArg = args[1] as String
             val characteristicUuidArg = args[2] as String
-            val wrapped: List<Any?> = try {
-              api.subscribeCharacteristic(peripheralUuidArg, serviceUuidArg, characteristicUuidArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            api.subscribeCharacteristic(peripheralUuidArg, serviceUuidArg, characteristicUuidArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(null))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)
@@ -1096,6 +1103,25 @@ interface BleHostApi {
             val characteristicUuidArg = args[2] as String
             val wrapped: List<Any?> = try {
               api.unsubscribeCharacteristic(peripheralUuidArg, serviceUuidArg, characteristicUuidArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.setCaptureAuthorized$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            val authorizedArg = args[1] as Boolean
+            val wrapped: List<Any?> = try {
+              api.setCaptureAuthorized(uuidArg, authorizedArg)
               listOf(null)
             } catch (exception: Throwable) {
               PigeonCommunicatorPigeonUtils.wrapError(exception)
@@ -1213,6 +1239,26 @@ interface BleHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            api.getExtendedDeviceDiagnostics(uuidArg) { result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -1292,7 +1338,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDiscovered(peripheralArg: BlePeripheral, callback: (Result<Unit>) -> Unit)
@@ -1309,7 +1355,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onDeviceReady(peripheralUuidArg: String, servicesArg: List<BleService>, callback: (Result<Unit>) -> Unit)
@@ -1326,7 +1372,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDisconnected(peripheralUuidArg: String, errorArg: String?, callback: (Result<Unit>) -> Unit)
@@ -1343,7 +1389,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCharacteristicValueUpdated(peripheralUuidArg: String, serviceUuidArg: String, characteristicUuidArg: String, valueArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -1360,7 +1406,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRssiUpdate(peripheralUuidArg: String, rssiArg: Long, callback: (Result<Unit>) -> Unit)
@@ -1377,7 +1423,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onStateRestored(peripheralUuidsArg: List<String>, callback: (Result<Unit>) -> Unit)
@@ -1394,7 +1440,25 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
+    }
+  }
+  /** Native ingress evidence and bounded recovery. Contains no audio payload. */
+  fun onCaptureHealth(peripheralUuidArg: String, snapshotArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCaptureHealth$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(peripheralUuidArg, snapshotArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      }
     }
   }
   /**
@@ -1415,7 +1479,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -1803,7 +1867,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onGlassesDiscovered(glassesArg: RayBanMetaGlasses, callback: (Result<Unit>) -> Unit)
@@ -1820,7 +1884,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onConnectionStateChanged(deviceIdArg: String, stateArg: String, callback: (Result<Unit>) -> Unit)
@@ -1837,7 +1901,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic. */
@@ -1855,7 +1919,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** Whether the glasses' HFP mic is the active input route right now. */
@@ -1873,7 +1937,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** JPEG bytes plus clockwise orientation in degrees (0/90/180/270). */
@@ -1891,7 +1955,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** 'stopped' | 'starting' | 'streaming' | 'paused'. */
@@ -1909,7 +1973,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCameraPermissionChanged(statusArg: String, callback: (Result<Unit>) -> Unit)
@@ -1926,7 +1990,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onError(codeArg: String, messageArg: String, callback: (Result<Unit>) -> Unit)
@@ -1943,7 +2007,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }

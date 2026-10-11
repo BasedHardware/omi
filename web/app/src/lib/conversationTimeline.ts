@@ -1,5 +1,7 @@
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
+import { dayKeyOf, parseLocalDay } from '@/lib/localDay';
 
 /**
  * A single tile in the Timeline gallery. Conversations and daily recaps share
@@ -35,21 +37,6 @@ export interface BuildTimelineOptions {
   recaps: DailySummary[];
   /** Injectable clock so `Today` / `Yesterday` labels are testable. */
   now?: Date;
-}
-
-function pad2(value: number): string {
-  return value < 10 ? `0${value}` : `${value}`;
-}
-
-/** Local calendar day key for a Date — not UTC, so late-evening items stay put. */
-export function dayKeyOf(date: Date): string {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-/** Parse a backend `YYYY-MM-DD` recap date as a local date rather than UTC. */
-export function parseLocalDay(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
 }
 
 export function dayLabel(date: Date, now: Date): string {
@@ -161,7 +148,7 @@ export function conversationSignals(conversation: Conversation): ConversationSig
   }
 
   return {
-    excerpt: (structured.overview ?? '').trim(),
+    excerpt: selectConversationSummary(conversation).content,
     category,
     actionItemCount: structured.action_items?.length ?? 0,
     speakerCount: speakers.size,

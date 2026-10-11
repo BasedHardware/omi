@@ -12,6 +12,7 @@ abstract interface class CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   });
@@ -25,6 +26,8 @@ abstract interface class CaptureExternalActions {
   bool hasConversation(String conversationId);
 
   Future<Person?> createPerson(String name);
+
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId});
 
   Future<void> refreshPeople();
 
@@ -48,6 +51,7 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {}
@@ -66,6 +70,10 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   Future<Person?> createPerson(String name) async => null;
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) async =>
+      false;
 
   @override
   Future<void> refreshPeople() async {}

@@ -11,6 +11,7 @@ import 'package:omi/services/devices/connectors/fieldy_connection.dart';
 import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/connectors/omiglass_connection.dart';
 import 'package:omi/services/devices/connectors/plaud_connection.dart';
@@ -75,19 +76,57 @@ class RingInfo {
   final int droppedPackets; // u64 BE — incremented when ring overwrites old data
   final int packetSize; // u16 BE — current packet_size (444 in fw 3.0.20)
 
+  final int advertisedCaps;
+
+  final int contractVersion;
+
+  final int? ringId;
+
+  final int infoBytes;
+
   RingInfo({
     required this.readSeq,
     required this.writeSeq,
     required this.capacityPackets,
     required this.droppedPackets,
     required this.packetSize,
+    this.advertisedCaps = 0,
+    this.contractVersion = 0,
+    this.ringId,
+    this.infoBytes = 31,
   });
 
   int get unreadPackets => writeSeq - readSeq;
 
+  int get effectiveCaps => (infoBytes >= 41 && contractVersion == 1 && ringId != null && ringId != 0)
+      ? advertisedCaps & RingProtocol.capMaskV1
+      : 0;
+
+  bool get capAppAckReclaim => effectiveCaps & RingProtocol.capAppAckReclaim != 0;
+  bool get capLivePersist => effectiveCaps & RingProtocol.capLivePersist != 0;
+  bool get capAdvanceIdempotent => effectiveCaps & RingProtocol.capAdvanceIdempotent != 0;
+  bool get capRingId => effectiveCaps & RingProtocol.capRingId != 0;
+
   @override
   String toString() =>
-      'RingInfo(read=$readSeq, write=$writeSeq, cap=$capacityPackets, dropped=$droppedPackets, pktSize=$packetSize)';
+      'RingInfo(read=$readSeq, write=$writeSeq, cap=$capacityPackets, dropped=$droppedPackets, pktSize=$packetSize, '
+      'caps=0x${advertisedCaps.toRadixString(16)}, ver=$contractVersion, ring=${ringId ?? "none"}, eff=0x${effectiveCaps.toRadixString(16)})';
+}
+
+class RingCommandAck {
+  final int status;
+
+  final int? grantedCaps;
+
+  const RingCommandAck({required this.status, this.grantedCaps});
+
+  bool get isOk => status == RingProtocol.ackOk;
+  bool get isInvalidCommand => status == RingProtocol.ackInvalidCommand;
+  bool get isSeqOutOfRange => status == RingProtocol.ackSeqOutOfRange;
+  bool get isRingIdMismatch => status == RingProtocol.ackRingIdMismatch;
+
+  @override
+  String toString() => 'RingCommandAck(status=$status, grantedCaps=$grantedCaps)';
 }
 
 class DeviceConnectionFactory {
@@ -178,12 +217,27 @@ abstract class DeviceConnection {
 
   StreamSubscription<DeviceTransportState>? _transportStateSubscription;
 
+  int _connectionEpoch = 0;
+  int get connectionEpoch => _connectionEpoch;
+
+  @protected
+  void onPhysicalConnectionEstablished() {}
+
+  @protected
+  void onPhysicalConnectionLost() {}
+
   DeviceConnection(this.device, this.transport) {
     // Listen to transport state changes
     _transportStateSubscription = transport.connectionStateStream.listen((transportState) {
       final deviceState = _mapTransportStateToDeviceState(transportState);
       if (_connectionState != deviceState) {
         _connectionState = deviceState;
+        if (deviceState == DeviceConnectionState.connected) {
+          _connectionEpoch++;
+          onPhysicalConnectionEstablished();
+        } else if (deviceState == DeviceConnectionState.disconnected) {
+          onPhysicalConnectionLost();
+        }
         _connectionStateChangedCallback?.call(device.id, _connectionState);
       }
     });
@@ -225,6 +279,7 @@ abstract class DeviceConnection {
 
   Future<void> disconnect() async {
     _connectionState = DeviceConnectionState.disconnected;
+    onPhysicalConnectionLost();
     if (_connectionStateChangedCallback != null) {
       _connectionStateChangedCallback!(device.id, _connectionState);
       _connectionStateChangedCallback = null;
@@ -484,6 +539,46 @@ abstract class DeviceConnection {
   Future<bool> performAdvanceRing(int newReadSeq) async {
     return false;
   }
+
+  int get ringCustodyEpoch => connectionEpoch;
+
+  Future<void> get ringCustodyReady => Future.value();
+
+  Future<RingCommandAck?> advanceRingCustody(
+    int newReadSeq, {
+    required int expectedEpoch,
+    required int? expectedRingId,
+  }) async {
+    if (await isConnected()) {
+      return await performAdvanceRingCustody(newReadSeq, expectedEpoch: expectedEpoch, expectedRingId: expectedRingId);
+    }
+    return null;
+  }
+
+  Future<RingCommandAck?> performAdvanceRingCustody(
+    int newReadSeq, {
+    required int expectedEpoch,
+    required int? expectedRingId,
+  }) async {
+    return null;
+  }
+
+  Future<RingCommandAck?> enableRingCustody(int requestedCaps) async {
+    if (await isConnected()) {
+      return await performEnableRingCustody(requestedCaps);
+    }
+    return null;
+  }
+
+  Future<RingCommandAck?> performEnableRingCustody(int requestedCaps) async {
+    return null;
+  }
+
+  RingInfo? get lastRingInfo => null;
+
+  int get ringEffectiveCaps => lastRingInfo?.effectiveCaps ?? 0;
+
+  bool get ringLivePersistEnabled => false;
 
   Future<bool> clearRing() async {
     if (await isConnected()) {

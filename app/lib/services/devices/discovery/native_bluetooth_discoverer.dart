@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -13,6 +14,8 @@ import 'device_discoverer.dart';
 /// iOS: CoreBluetooth. Android: BluetoothLeScanner + CompanionDeviceManager.
 class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   final BleHostApi _hostApi = BleHostApi();
+  Timer? _timeoutTimer;
+  Completer<void>? _scanCompleter;
 
   @override
   String get name => 'NativeBluetooth';
@@ -27,6 +30,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     }
     final List<BlePeripheral> results = [];
     final completer = Completer<void>();
+    _scanCompleter = completer;
 
     final previousCallback = BleBridge.instance.peripheralDiscoveredCallback;
 
@@ -41,8 +45,8 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     try {
       _hostApi.startScan(timeout, []);
 
-      // Wait for scan to complete
-      Timer(Duration(seconds: timeout), () {
+      _timeoutTimer?.cancel();
+      _timeoutTimer = Timer(Duration(seconds: timeout), () {
         if (!completer.isCompleted) completer.complete();
       });
       await completer.future;
@@ -54,20 +58,40 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
       return DeviceDiscoveryResult(devices: devices);
     } finally {
+      _timeoutTimer?.cancel();
+      _timeoutTimer = null;
+      if (identical(_scanCompleter, completer)) {
+        _scanCompleter = null;
+      }
       BleBridge.instance.peripheralDiscoveredCallback = previousCallback;
     }
   }
 
   @override
   Future<void> stop() async {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+    final completer = _scanCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
     try {
-      _hostApi.stopScan();
+      await _hostApi.stopScan();
     } catch (e) {
       Logger.debug('NativeBluetoothDiscoverer: stop scan error: $e');
     }
   }
 
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
+
+  @visibleForTesting
+  static bool isSupportedPeripheral(BlePeripheral p) => _isSupportedPeripheral(p);
+
+  @visibleForTesting
+  static bool isPlaud(BlePeripheral p) => _isPlaud(p);
+
+  @visibleForTesting
+  static BtDevice peripheralToDevice(BlePeripheral p) => _peripheralToDevice(p);
 
   static bool _isSupportedPeripheral(BlePeripheral p) {
     return _isBee(p) || _isPlaud(p) || _isFieldy(p) || _isFriendPendant(p) || _isLimitless(p) || _isOmi(p);
@@ -78,7 +102,8 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   }
 
   static bool _isPlaud(BlePeripheral p) {
-    return p.name.toUpperCase().startsWith('PLAUD');
+    final name = p.name.toLowerCase();
+    return name.startsWith('plaud') || name.contains('notepin') || _hasService(p, plaudServiceUuid);
   }
 
   static bool _isFieldy(BlePeripheral p) {

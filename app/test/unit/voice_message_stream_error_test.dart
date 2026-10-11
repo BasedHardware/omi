@@ -15,6 +15,20 @@ void main() {
       expect(chunk!.messageId, 'voice-message-id');
       expect(chunk.type, MessageChunkType.error);
       expect(chunk.text, 'Transcription is temporarily unavailable. Please try again.');
+      expect(chunk.errorCode, 'stt_upstream_error');
+    });
+
+    test('retains the no-speech code for localized client recovery', () {
+      final chunk = parseVoiceMessageStreamChunk(
+        'error: {"error":"no_speech","outcome":"expected_silence","provider":"parakeet",'
+            '"retryable":true,"message":"No speech was detected."}',
+        'voice-message-id',
+      );
+
+      expect(chunk, isNotNull);
+      expect(chunk!.type, MessageChunkType.error);
+      expect(chunk.errorCode, 'no_speech');
+      expect(chunk.text, 'No speech was detected.');
     });
 
     test('preserves the legacy quota error payload', () {

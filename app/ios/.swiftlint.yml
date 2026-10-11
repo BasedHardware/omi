@@ -1,0 +1,48 @@
+# Safety rules for handwritten iOS Swift. Generated Pigeon sources are excluded.
+only_rules:
+  - custom_rules
+  - fatal_error_message
+  - force_cast
+  - force_try
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+included:
+  - Runner
+  - BatteryWidget
+  - ImageNotification
+  - omiWatchApp
+excluded:
+  - Runner/PigeonCommunicator.g.swift
+  - Runner/PhoneMic/PhoneMicPigeon.g.swift
+  - Runner/SiriIntegration/SiriPigeon.g.swift
+custom_rules:
+  omi_direct_json_serialization:
+    regex: 'JSONSerialization\.data\s*\(\s*withJSONObject\s*:'
+    excluded:
+      - Runner/SafeFoundationSinks.swift
+    message: 'Use SafeJSON.data(withJSONObject:) before the Objective-C JSON sink'
+  omi_nsnull:
+    regex: 'NSNull\s*\('
+    message: 'Do not pass NSNull through type-erased native data; omit absent fields'
+  omi_as_any:
+    regex: '\bas\s+Any\b'
+    excluded:
+      - Runner/SafeFoundationSinks.swift
+    message: 'Avoid erasing an optional before a native persistence or JSON sink'
+  omi_raw_defaults_set:
+    regex: '\.set\s*\(\s*(?!true\b|false\b|nil\b|["0-9])'
+    excluded:
+      - Runner/SafeFoundationSinks.swift
+    message: 'Use SafeDefaults for nonliteral values'
+  omi_float_to_int:
+    regex: '\bInt(?:64)?\s*\(\s*(?:Double|Float)\s*\(|\bInt(?:64)?\s*\([^\n]*timeIntervalSince1970'
+    excluded:
+      - Runner/SafeFoundationSinks.swift
+    message: 'Use CheckedIntegerConversion for floating point values'
+  omi_duplicate_key_trap:
+    regex: '\buniqueKeysWithValues\s*:'
+    message: 'Use a duplicate-tolerant dictionary initializer'
+  omi_main_sync:
+    regex: 'DispatchQueue\.main\.sync\s*(?:\{|\()'
+    message: 'Avoid synchronous dispatch to the main queue'
+baseline: .swiftlint-baseline.json

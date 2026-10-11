@@ -1,6 +1,6 @@
 import json
 import struct
-from typing import Any, Deque, Dict, List, Optional, TypedDict, TypeVar
+from typing import Any, Deque, Dict, List, NotRequired, Optional, TypedDict, TypeVar
 
 from utils.metrics import PUSHER_QUEUE_DROPPED_BYTES, PUSHER_QUEUE_DROPS
 from utils.observability.journeys import JourneyOutcome
@@ -10,6 +10,23 @@ MIN_SAMPLE_RATE = 8000
 MAX_SAMPLE_RATE = 48000
 BUFFERED_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS = PRIVATE_CLOUD_QUEUE_MAX_SIZE
+
+# Audio-timeline v2 wire contract. The opt-in is a bounded WebSocket query
+# parameter (an old pusher ignores an unknown key); the answer is a dedicated
+# pusher->listen acknowledgment opcode with a fixed version. No new
+# listen->pusher opcode exists during negotiation because an old pusher
+# rejects unknown opcodes outright.
+AUDIO_TIMELINE_QUERY_PARAM = 'audio_timeline'
+AUDIO_TIMELINE_PROTOCOL = 2
+PUSHER_AUDIO_TIMELINE_ACK_OPCODE = 202
+
+
+def audio_timeline_ack_frame() -> bytes:
+    """The pusher->listen v2 acknowledgment frame (opcode 202 + JSON)."""
+    return struct.pack('<I', PUSHER_AUDIO_TIMELINE_ACK_OPCODE) + json.dumps(
+        {'type': 'audio_timeline_ack', 'version': AUDIO_TIMELINE_PROTOCOL}
+    ).encode('utf-8')
+
 
 _QueueItem = TypeVar('_QueueItem')
 
@@ -117,7 +134,14 @@ class AudioBytesQueueItem(TypedDict):
     data: bytearray
 
 
+class PrivateCloudSpan(TypedDict):
+    samples: int
+    sample_rate: int
+
+
 class PrivateCloudChunk(TypedDict):
     data: bytes
     conversation_id: str
     timestamp: float
+    # Audio-timeline v2 only: the chunk's authoritative PCM sample count.
+    span: NotRequired[PrivateCloudSpan]

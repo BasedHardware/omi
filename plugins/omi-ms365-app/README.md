@@ -102,10 +102,14 @@ Open `http://localhost:8080/setup/ms365?uid=test-user` to walk the OAuth flow.
 Verify a tool:
 
 ```bash
-curl -X POST http://localhost:8080/tools/get_me \
+curl -X POST http://localhost:8080/tools/search_emails \
   -H "Content-Type: application/json" \
-  -d '{"uid":"test-user","args":{}}'
+  -d '{"uid":"test-user","query":"invoice","limit":5}'
 ```
+
+Tool parameters travel flat at the top level of the body next to `uid`, which is
+how the Omi backend calls every chat tool. Run the hermetic dispatch tests with
+`python3 test_tool_dispatch.py` (no credentials or network).
 
 ## API endpoints
 
@@ -114,21 +118,21 @@ curl -X POST http://localhost:8080/tools/get_me \
 | Tool | Description |
 |---|---|
 | `get_me` | Current user profile |
-| `list_mail` | List recent mail |
-| `search_mail` | Full-text search mail |
-| `read_mail` | Read a single message |
-| `send_mail` | Send a message |
-| `list_calendar_events` | List upcoming events |
-| `create_calendar_event` | Create event (optionally a Teams meeting) |
+| `list_recent_emails` | List recent mail (`limit`, `unread_only`) |
+| `search_emails` | Full-text search mail (`query`, `limit`) |
+| `read_email` | Read a single message (`message_id`) |
+| `send_email` | Send a message (`to`, `subject`, `body`, `body_type`, `cc`) |
+| `list_upcoming_events` | List upcoming events |
+| `create_event` | Create event (optionally a Teams meeting) |
 | `find_free_slots` | Find free slots across attendees |
-| `list_chats` | List Teams chats |
+| `list_recent_chats` | List Teams chats |
 | `send_chat_message` | Send a Teams chat message |
-| `list_teams` | List Teams the user is a member of |
+| `list_my_teams` | List Teams the user is a member of |
 | `create_online_meeting` | Create a standalone Teams meeting |
 | `list_recent_files` | Recent OneDrive / SharePoint files |
 | `search_files` | Search files across OneDrive / SharePoint |
 | `upload_text_file` | Upload a text file |
-| `read_file_content` | Read a file's content |
+| `read_file_text` | Read a file's content |
 
 ### OAuth & setup (GET)
 

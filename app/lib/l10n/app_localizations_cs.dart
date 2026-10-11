@@ -27,8 +27,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteConversationTitle => 'Smazat konverzaci?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tím se také smažou související vzpomínky, úkoly a zvukové soubory. Tuto akci nelze vrátit zpět.';
+  String get deleteConversationMessage => 'Tím se také smažou související vzpomínky, úkoly a zvukové soubory.';
 
   @override
   String get confirm => 'Potvrdit';
@@ -112,10 +111,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get remaining => 'Zbývá';
 
   @override
-  String get loading => 'Načítání...';
+  String get loading => 'Načítání…';
 
   @override
-  String get loadingDuration => 'Načítání délky...';
+  String get loadingDuration => 'Načítání délky…';
 
   @override
   String secondsCount(int count) {
@@ -135,7 +134,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get createPersonHint => 'Vytvořte novou osobu a naučte Omi rozpoznat i její řeč!';
 
   @override
-  String get speechProfile => 'Řečový Profil';
+  String get speechProfile => 'Hlasový profil';
 
   @override
   String sampleNumber(int number) {
@@ -152,7 +151,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get selectLanguage => 'Vybrat jazyk';
 
   @override
-  String get deleting => 'Mazání...';
+  String get deleting => 'Mazání…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -180,7 +179,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get disconnected => 'Odpojeno';
 
   @override
-  String get searching => 'Vyhledávání...';
+  String get searching => 'Vyhledávání';
 
   @override
   String get connectDevice => 'Připojit zařízení';
@@ -241,10 +240,10 @@ class AppLocalizationsCs extends AppLocalizations {
       'Chcete-li konverzaci označit hvězdičkou, otevřete ji a klepněte na ikonu hvězdičky v záhlaví.';
 
   @override
-  String get searchConversations => 'Hledat konverzace...';
+  String get searchConversations => 'Hledat konverzace';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Vybráno: $count';
   }
 
@@ -272,7 +271,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noMessagesYet => 'Zatím žádné zprávy!\nProč nezačít konverzaci?';
 
   @override
-  String get deletingMessages => 'Mazání vašich zpráv z paměti Omi...';
+  String get deletingMessages => 'Mazání vašich zpráv z paměti Omi…';
 
   @override
   String get messageCopied => '✨ Zpráva zkopírována do schránky';
@@ -284,7 +283,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reportMessage => 'Nahlásit zprávu';
 
   @override
-  String get reportMessageConfirm => 'Opravdu chcete nahlásit tuto zprávu?';
+  String get reportMessageConfirm => 'Nahlásit tuto zprávu?';
 
   @override
   String get messageReported => 'Zpráva úspěšně nahlášena.';
@@ -296,7 +295,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearChat => 'Vymazat chat';
 
   @override
-  String get clearChatConfirm => 'Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.';
+  String get clearChatConfirm => 'Všechny zprávy v tomto chatu budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String get maxFilesLimit => 'Najednou můžete nahrát pouze 4 soubory';
@@ -317,10 +316,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get createYourOwnApp => 'Vytvořte si vlastní aplikaci';
 
   @override
-  String get buildAndShareApp => 'Vytvořte a sdílejte vlastní aplikaci';
-
-  @override
-  String get searchApps => 'Hledat aplikace...';
+  String get searchApps => 'Hledat aplikace';
 
   @override
   String get myApps => 'Vytvořeno mnou';
@@ -348,9 +344,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get joinCommunity => 'Připojte se ke komunitě!';
 
   @override
-  String get membersAndCounting => '8000+ členů a stále přibývá.';
-
-  @override
   String get deleteAccountTitle => 'Smazat účet';
 
   @override
@@ -360,10 +353,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cannotBeUndone => 'Toto nelze vrátit zpět.';
 
   @override
-  String get allDataErased => 'Všechny vaše vzpomínky a konverzace budou trvale smazány.';
+  String get allDataErased => 'Vaše vzpomínky a konverzace budou vymazány.';
 
   @override
-  String get appsDisconnected => 'Vaše aplikace a integrace budou okamžitě odpojeny.';
+  String get appsDisconnected => 'Vaše aplikace a integrace budou odpojeny.';
 
   @override
   String get exportBeforeDelete => 'Před smazáním účtu si můžete exportovat data, ale po smazání je nelze obnovit.';
@@ -438,6 +431,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
 
   @override
+  String get omiButtonActions => 'Akce tlačítka Omi';
+
+  @override
   String get deviceSettings => 'Nastavení zařízení';
 
   @override
@@ -471,18 +467,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get yourPrivacyYourControl => 'Vaše soukromí, vaše kontrola';
 
   @override
-  String get privacyIntro =>
-      'V Omi se zavazujeme chránit vaše soukromí. Tato stránka vám umožňuje kontrolovat, jak jsou vaše data ukládána a používána.';
-
-  @override
-  String get learnMore => 'Dozvědět se více...';
+  String get learnMore => 'Dozvědět se více…';
 
   @override
   String get dataProtectionLevel => 'Úroveň ochrany dat';
-
-  @override
-  String get dataProtectionDesc =>
-      'Vaše data jsou standardně zabezpečena silným šifrováním. Níže si prohlédněte svá nastavení a budoucí možnosti ochrany soukromí.';
 
   @override
   String get appAccess => 'Přístup aplikací';
@@ -648,7 +636,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get developerSettingsTitle => 'Nastavení pro vývojáře';
 
   @override
-  String get saving => 'Ukládání...';
+  String get saving => 'Ukládání…';
 
   @override
   String get beta => 'BETA';
@@ -657,19 +645,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcription => 'Přepis';
 
   @override
-  String get transcriptionConfig => 'Nakonfigurovat poskytovatele STT';
-
-  @override
   String get conversationTimeout => 'Časový limit konverzace';
 
   @override
-  String get conversationTimeoutConfig => 'Nastavit, kdy konverzace automaticky skončí';
+  String get conversationTimeoutConfig => 'Jak dlouho Omi čeká na tichu, než konverzaci ukončí';
 
   @override
   String get importData => 'Importovat data';
-
-  @override
-  String get importDataConfig => 'Importovat data z jiných zdrojů';
 
   @override
   String get debugDiagnostics => 'Ladění a diagnostika';
@@ -720,9 +702,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get understanding => 'Porozumění';
 
   @override
-  String get understandingSubtitle => 'Slova pochopená z vašich konverzací.';
-
-  @override
   String get providing => 'Poskytování';
 
   @override
@@ -730,9 +709,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get remembering => 'Zapamatování';
-
-  @override
-  String get rememberingSubtitle => 'Fakta a detaily zapamatované pro vás.';
 
   @override
   String get unlimitedPlan => 'Neomezený plán';
@@ -806,9 +782,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get debugLogsAutoDelete => 'Automaticky se smažou po 3 dnech.';
 
   @override
-  String get debugLogsDesc => 'Pomáhá diagnostikovat problémy';
-
-  @override
   String get noLogFilesFound => 'Nebyly nalezeny žádné soubory protokolu.';
 
   @override
@@ -827,7 +800,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get debugLogCleared => 'Protokol ladění vymazán';
 
   @override
-  String get exportStarted => 'Export zahájen. Může to trvat několik sekund...';
+  String get exportStarted => 'Export zahájen. Může to trvat několik sekund…';
 
   @override
   String get exportAllData => 'Exportovat všechna data';
@@ -845,10 +818,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'Smazat graf znalostí?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      'Tím se smažou všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude v průběhu času znovu vytvořen nebo při dalším požadavku.';
-
-  @override
   String get knowledgeGraphDeleted => 'Graf znalostí smazán';
 
   @override
@@ -858,9 +827,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteKnowledgeGraph => 'Smazat graf znalostí';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'Vymazat všechny uzly a spojení';
 
   @override
   String get mcp => 'MCP';
@@ -930,9 +896,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get claudeDesktop => 'Claude Desktop';
-
-  @override
-  String get addToClaudeConfig => 'Přidat do claude_desktop_config.json';
 
   @override
   String get copyConfig => 'Kopírovat konfiguraci';
@@ -1040,7 +1003,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Opravdu chcete odpojit od $appName? Můžete se kdykoli znovu připojit.';
+    return '$appName můžete kdykoli znovu připojit.';
   }
 
   @override
@@ -1108,10 +1071,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get enhanceTranscriptAccuracy => 'Zvýšit přesnost přepisu';
-
-  @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'S vylepšením našeho modelu můžeme pro vaše nahrávky poskytovat lepší výsledky přepisu.';
 
   @override
   String get legalNotice =>
@@ -1279,7 +1238,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tellUsPrimaryLanguage => 'Řekněte nám svůj primární jazyk';
 
   @override
-  String get languageForTranscription => 'Nastavte svůj jazyk pro ostřejší přepisy a personalizovaný zážitek.';
+  String get languageForTranscription => 'Omi tento jazyk používá pro přepis, shrnutí a vzpomínky.';
 
   @override
   String get singleLanguageModeInfo => 'Režim jednoho jazyka je povolen. Překlad je zakázán pro vyšší přesnost.';
@@ -1438,7 +1397,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String integrationComingSoon(String appName) {
-    return 'Integrace s $appName již brzy! Usilovně pracujeme na tom, abychom vám přinesli více možností správy úkolů.';
+    return 'Aplikace $appName zatím není podporována.';
   }
 
   @override
@@ -1460,7 +1419,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get bringYourOwn => 'Přineste si vlastní';
 
   @override
-  String get payYourSttProvider => 'Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.';
+  String get payYourSttProvider => 'V Omi zdarma. Poskytovateli přepisu platíte přímo.';
 
   @override
   String get freeMinutesMonth => '300 bezplatných minut měsíčně. Neomezené s ';
@@ -1547,7 +1506,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get enterApiKey => 'Zadejte svůj API klíč';
 
   @override
-  String get storedLocallyNeverShared => 'Uloženo lokálně, nikdy nesdíleno';
+  String get storedLocallyNeverShared => 'Uloženo v tomto telefonu. Odesíláno pouze vašemu poskytovateli přepisu.';
 
   @override
   String get host => 'Hostitel';
@@ -1580,18 +1539,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get logsCopied => 'Protokoly zkopírovány';
 
   @override
-  String get noLogsYet => 'Zatím žádné protokoly. Začněte nahrávat, abyste viděli aktivitu vlastního STT.';
+  String get noLogsYet => 'Zatím žádné protokoly. Nahrajte něco a uvidíte požadavky vašemu poskytovateli přepisu.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device používá $reason. Bude použito Omi.';
+    return '$device nahrává ve formátu, který tento poskytovatel nedokáže číst ($reason), proto se místo něj použije přepis Omi.';
   }
 
   @override
   String get omiTranscription => 'Přepis Omi';
-
-  @override
-  String get bestInClassTranscription => 'Nejlepší přepis ve své třídě bez nutnosti nastavení';
 
   @override
   String get instantSpeakerLabels => 'Okamžité štítky mluvčích';
@@ -1600,16 +1556,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get languageTranslation => 'Překlad 100+ jazyků';
 
   @override
-  String get optimizedForConversation => 'Optimalizováno pro konverzaci';
-
-  @override
   String get autoLanguageDetection => 'Automatická detekce jazyka';
-
-  @override
-  String get highAccuracy => 'Vysoká přesnost';
-
-  @override
-  String get privacyFirst => 'Soukromí na prvním místě';
 
   @override
   String get saveChanges => 'Uložit změny';
@@ -1621,7 +1568,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get viewTemplate => 'Zobrazit šablonu';
 
   @override
-  String get trySomethingLike => 'Zkuste něco jako...';
+  String get trySomethingLike => 'Zkuste něco jako…';
 
   @override
   String get tryIt => 'Vyzkoušejte to';
@@ -1648,10 +1595,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get features => 'Funkce';
 
   @override
-  String get creatingYourApp => 'Vytváření vaší aplikace...';
+  String get creatingYourApp => 'Vytváření vaší aplikace…';
 
   @override
-  String get generatingIcon => 'Generování ikony...';
+  String get generatingIcon => 'Generování ikony…';
 
   @override
   String get whatShouldWeMake => 'Co bychom měli vytvořit?';
@@ -1702,13 +1649,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get perMonthLabel => '/ měsíc';
 
   @override
-  String get creating => 'Vytváření...';
+  String get creating => 'Vytváření…';
 
   @override
   String get createApp => 'Vytvořit aplikaci';
 
   @override
-  String get searchingForDevices => 'Hledání zařízení...';
+  String get searchingForDevices => 'Hledání zařízení';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1755,26 +1702,27 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundActivity => 'Aktivita na pozadí';
 
   @override
-  String get backgroundActivityDesc => 'Umožněte Omi běžet na pozadí pro lepší stabilitu';
+  String get backgroundActivityDesc =>
+      'Aby Omi pokračoval v záznamu i při vypnuté obrazovce nebo po přepnutí aplikace.';
 
   @override
   String get locationAccess => 'Přístup k poloze';
 
   @override
-  String get locationAccessDesc => 'Povolte polohu na pozadí pro plný zážitek';
+  String get locationAccessDesc => 'Aby Omi mohl zaznamenat, kde vaše konverzace probíhaly.';
 
   @override
   String get notifications => 'Oznámení';
 
   @override
-  String get notificationsDesc => 'Povolte oznámení, abyste byli informováni';
+  String get notificationsDesc =>
+      'Aby vám Omi mohl posílat shrnutí konverzací, připomínky úkolů a odpovědi z vašich aplikací.';
 
   @override
   String get locationServiceDisabled => 'Služba určování polohy zakázána';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Služba určování polohy je zakázána. Přejděte do Nastavení > Soukromí a zabezpečení > Služby určování polohy a povolte ji';
+  String get locationServiceDisabledDesc => 'Polohové služby jsou na tomto zařízení vypnuté. Zapněte je v Nastavení.';
 
   @override
   String get backgroundLocationDenied => 'Přístup k poloze na pozadí odepřen';
@@ -1797,9 +1745,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get allDone => 'Vše hotovo!';
-
-  @override
-  String get keepGoing => 'Pokračujte dál, jde vám to skvěle';
 
   @override
   String get skipThisQuestion => 'Přeskočit tuto otázku';
@@ -1882,8 +1827,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – Váš AI společník';
 
   @override
-  String get captureEveryMoment =>
-      'Zachyťte každý okamžik. Získejte souhrny\npodporované AI. Už nikdy si nedělejte poznámky.';
+  String get captureEveryMoment => 'Omi nahrává vaše konverzace a za vás\nsepíše shrnutí a úkoly.';
 
   @override
   String get appleWatchSetup => 'Nastavení Apple Watch';
@@ -1933,16 +1877,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get selectPrimaryLanguage => 'Vyberte svůj primární jazyk';
 
   @override
-  String get languageBenefits => 'Nastavte svůj jazyk pro ostřejší přepisy a personalizovaný zážitek';
+  String get languageBenefits => 'Omi tento jazyk používá pro přepis, shrnutí a vzpomínky.';
 
   @override
   String get whatsYourPrimaryLanguage => 'Jaký je váš primární jazyk?';
 
   @override
   String get selectYourLanguage => 'Vyberte svůj jazyk';
-
-  @override
-  String get personalGrowthJourney => 'Vaše cesta osobního růstu s AI, které naslouchá každému vašemu slovu.';
 
   @override
   String get actionItemsTitle => 'Úkoly';
@@ -1981,14 +1922,14 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteActionItemTitle => 'Smazat úkol';
 
   @override
-  String get deleteActionItemMessage => 'Opravdu chcete tento úkol smazat?';
+  String get deleteActionItemMessage => 'Smazat tento úkol?';
 
   @override
   String get deleteSelectedItemsTitle => 'Smazat vybrané položky';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Opravdu chcete smazat $count vybraný/vybrané/vybraných úkol$s?';
+    return 'Smazat vybrané úkoly ($count)$s?';
   }
 
   @override
@@ -2015,7 +1956,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get welcomeActionItemsDescription =>
-      'Vaše AI automaticky extrahuje úkoly a to-dos z vašich konverzací. Objeví se zde, když budou vytvořeny.';
+      'Vaše AI automaticky vytáhne úkoly z vašich konverzací. Objeví se zde, když budou vytvořeny.';
 
   @override
   String get autoExtractionFeature => 'Automaticky extrahováno z konverzací';
@@ -2035,10 +1976,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteSelected => 'Smazat vybrané';
 
   @override
-  String get searchMemories => 'Hledat vzpomínky...';
+  String get searchMemories => 'Hledat vzpomínky';
 
   @override
-  String get memoryDeleted => 'Vzpomínka smazána.';
+  String get memoryDeleted => 'Vzpomínka smazána';
 
   @override
   String get memoryHistoryPartial => 'Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.';
@@ -2047,16 +1988,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
-  String get memoryAllowUse => 'Allow use';
+  String get memoryAllowUse => 'Povolit použití';
 
   @override
-  String get memoryDontUse => 'Don\'t use';
+  String get memoryDontUse => 'Nepoužívat';
 
   @override
   String get undo => 'Vrátit zpět';
 
   @override
-  String get noMemoriesYet => '🧠 Zatím žádné vzpomínky';
+  String get noMemoriesYet => 'Zatím žádné vzpomínky';
 
   @override
   String get noAutoMemories => 'Zatím žádné automaticky extrahované vzpomínky';
@@ -2068,7 +2009,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noMemoriesInCategories => 'Žádné vzpomínky v těchto kategoriích';
 
   @override
-  String get noMemoriesFound => '🔍 Nenalezeny žádné vzpomínky';
+  String get noMemoriesFound => 'Nenalezeny žádné vzpomínky';
 
   @override
   String get addFirstMemory => 'Přidat první vzpomínku';
@@ -2077,7 +2018,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearMemoryTitle => 'Vymazat paměť Omi';
 
   @override
-  String get clearMemoryMessage => 'Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět.';
+  String get clearMemoryMessage => 'Všechny vaše vzpomínky budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String get clearMemoryButton => 'Vymazat paměť';
@@ -2142,10 +2083,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get baselineMemory => 'Základní paměť';
 
   @override
-  String get alwaysInContext => 'Vždy v kontextu';
-
-  @override
-  String get memoryContentHint => 'Rád/a jím zmrzlinu...';
+  String get memoryContentHint => 'Dávám přednost ranním schůzkám.';
 
   @override
   String get failedToSaveMemory => 'Uložení se nezdařilo. Zkontrolujte prosím připojení.';
@@ -2223,20 +2161,20 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Smazat úkol';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Opravdu chcete smazat tento úkol?';
+  String get deleteActionItemConfirmMessage => 'Smazat tento úkol?';
 
   @override
   String get appLanguage => 'Jazyk aplikace';
 
   @override
-  String get appInterfaceSectionTitle => 'ROZHRANÍ APLIKACE';
+  String get appInterfaceSectionTitle => 'Rozhraní aplikace';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ŘEČ A PŘEPIS';
+  String get speechTranscriptionSectionTitle => 'Řeč a přepis';
 
   @override
   String get languageSettingsHelperText =>
-      'Jazyk aplikace mění nabídky a tlačítka. Jazyk řeči ovlivňuje, jak jsou vaše nahrávky přepisovány.';
+      'Jazyk aplikace mění nabídky a tlačítka. Hlavní jazyk ovlivňuje, jak jsou vaše nahrávky přepisovány.';
 
   @override
   String get translationNotice => 'Oznámení o překladu';
@@ -2252,7 +2190,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get pleaseSelectReason => 'Vyberte prosím důvod';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Řekněte nám více o tom, co se pokazilo...';
+  String get tellUsMoreWhatWentWrong => 'Řekněte nám více o tom, co se pokazilo…';
 
   @override
   String get selectText => 'Vybrat text';
@@ -2311,7 +2249,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get exportButton => 'Exportovat';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Položky akcí zkopírovány do schránky';
+  String get actionItemsCopiedToClipboard => 'Úkoly zkopírovány do schránky';
 
   @override
   String get summarize => 'Shrnout';
@@ -2440,10 +2378,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get createKeyToGetStarted => 'Vytvořte klíč pro začátek';
 
   @override
-  String get configureSttProvider => 'Konfigurace poskytovatele STT';
-
-  @override
-  String get setWhenConversationsAutoEnd => 'Nastavte, kdy konverzace automaticky končí';
+  String get setWhenConversationsAutoEnd => 'Jak dlouho Omi čeká na tichu, než konverzaci ukončí';
 
   @override
   String get importDataFromOtherSources => 'Import dat z jiných zdrojů';
@@ -2458,7 +2393,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Pomáhá diagnostikovat problémy';
 
   @override
-  String get exportStartedMessage => 'Export zahájen. Může to trvat několik sekund...';
+  String get exportStartedMessage => 'Export zahájen. Může to trvat několik sekund…';
 
   @override
   String get exportConversationsToJson => 'Exportovat konverzace do souboru JSON';
@@ -2472,16 +2407,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Vymazat všechny uzly a spojení';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Přidat do claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Připojte AI asistenty k vašim datům';
-
-  @override
-  String get useYourMcpApiKey => 'Použijte svůj MCP API klíč';
 
   @override
   String get realTimeTranscript => 'Přepis v reálném čase';
@@ -2494,12 +2420,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Podrobné diagnostické zprávy';
-
-  @override
-  String get autoCreateSpeakers => 'Automaticky vytvářet řečníky';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automaticky vytvořit při detekci jména';
 
   @override
   String get followUpQuestions => 'Následné otázky';
@@ -2580,10 +2500,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get youreAllSet => 'Vše je připraveno!';
 
   @override
-  String get welcomeToOmiDescription =>
-      'Vítejte v Omi! Váš AI společník je připraven vám pomoci s rozhovory, úkoly a mnoho dalšího.';
-
-  @override
   String get startUsingOmi => 'Začít používat Omi';
 
   @override
@@ -2596,7 +2512,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get toggleControlBar => 'Přepnout ovládací panel';
 
   @override
-  String get pressKeys => 'Stiskněte klávesy...';
+  String get pressKeys => 'Stiskněte klávesy…';
 
   @override
   String get cmdRequired => '⌘ vyžadováno';
@@ -2611,7 +2527,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get search => 'Hledat';
 
   @override
-  String get searchPlaceholder => 'Hledat...';
+  String get searchPlaceholder => 'Hledat';
 
   @override
   String get untitledConversation => 'Konverzace bez názvu';
@@ -2660,16 +2576,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reviewAndManageConversations => 'Prohlížejte a spravujte své zachycené konverzace';
 
   @override
-  String get startCapturingConversations => 'Začněte zachytávat konverzace pomocí zařízení Omi a zobrazí se zde.';
-
-  @override
   String get useMobileAppToCapture => 'Použijte mobilní aplikaci k zachycení zvuku';
-
-  @override
-  String get conversationsProcessedAutomatically => 'Konverzace se zpracovávají automaticky';
-
-  @override
-  String get getInsightsInstantly => 'Získejte poznatky a souhrny okamžitě';
 
   @override
   String get showAll => 'Zobrazit vše →';
@@ -2679,9 +2586,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dailyScore => 'DENNÍ SKÓRE';
-
-  @override
-  String get dailyScoreDescription => 'Skóre, které vám pomůže\nlépe se soustředit na plnění.';
 
   @override
   String get searchResults => 'Výsledky vyhledávání';
@@ -2702,7 +2606,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tasksLater => 'Později';
 
   @override
-  String get loadingTasks => 'Načítání úkolů...';
+  String get loadingTasks => 'Načítání úkolů…';
 
   @override
   String get tasks => 'Úkoly';
@@ -2775,10 +2679,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteActionItem => 'Smazat úkol';
 
   @override
-  String get deleteActionItemConfirmation => 'Opravdu chcete smazat tento úkol? Tuto akci nelze vrátit zpět.';
+  String get deleteActionItemConfirmation => 'Smazat tento úkol? Tuto akci nelze vrátit zpět.';
 
   @override
-  String get enterActionItemDescription => 'Zadejte popis úkolu...';
+  String get enterActionItemDescription => 'Zadejte popis úkolu';
 
   @override
   String get markAsCompleted => 'Označit jako dokončené';
@@ -2787,10 +2691,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get setDueDateAndTime => 'Nastavit termín a čas';
 
   @override
-  String get reloadingApps => 'Znovu načítání aplikací...';
+  String get reloadingApps => 'Znovu načítání aplikací…';
 
   @override
-  String get loadingApps => 'Načítání aplikací...';
+  String get loadingApps => 'Načítání aplikací…';
 
   @override
   String get browseInstallCreateApps => 'Procházejte, instalujte a vytvářejte aplikace';
@@ -2826,10 +2730,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Vytvořte a odešlete svou vlastní Omi aplikaci';
 
   @override
-  String get submittingYourApp => 'Odesílání vaší aplikace...';
+  String get submittingYourApp => 'Odesílání vaší aplikace…';
 
   @override
-  String get preparingFormForYou => 'Příprava formuláře pro vás...';
+  String get preparingFormForYou => 'Příprava formuláře pro vás…';
 
   @override
   String get appDetails => 'Podrobnosti aplikace';
@@ -2851,13 +2755,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Jste úžasná aplikace, vaším úkolem je reagovat na dotazy uživatelů a dát jim dobrý pocit...';
+      'Jste úžasná aplikace, vaším úkolem je reagovat na dotazy uživatelů a dát jim dobrý pocit…';
 
   @override
   String get conversationPrompt => 'Výzva konverzace';
 
   @override
-  String get conversationPromptPlaceholder => 'Jste úžasná aplikace, dostanete přepis a shrnutí konverzace...';
+  String get conversationPromptPlaceholder => 'Jste úžasná aplikace, dostanete přepis a shrnutí konverzace…';
 
   @override
   String get notificationScopes => 'Rozsahy oznámení';
@@ -3017,7 +2921,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get pricingPaid => 'Placené';
 
   @override
-  String get loadingCapabilities => 'Načítání funkcí...';
+  String get loadingCapabilities => 'Načítání funkcí…';
 
   @override
   String get filterInstalled => 'Nainstalováno';
@@ -3073,9 +2977,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get connectionNeeded => '🌐 Vyžadováno připojení';
 
   @override
-  String get startConversation => 'Začněte konverzaci a nechte kouzlo začít';
-
-  @override
   String get checkInternetConnection => 'Zkontrolujte prosím své připojení k internetu';
 
   @override
@@ -3115,7 +3016,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Zpráva úspěšně nahlášena';
 
   @override
-  String get confirmReportMessage => 'Opravdu chcete nahlásit tuto zprávu?';
+  String get confirmReportMessage => 'Nahlásit tuto zprávu?';
 
   @override
   String get selectChatAssistant => 'Vybrat chatovacího asistenta';
@@ -3130,7 +3031,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearChatTitle => 'Vymazat chat?';
 
   @override
-  String get confirmClearChat => 'Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.';
+  String get confirmClearChat => 'Vymazat tento chat? Tuto akci nelze vrátit zpět.';
 
   @override
   String get copy => 'Kopírovat';
@@ -3157,10 +3058,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get failedToTranscribeAudio => 'Nepodařilo se přepsat zvuk';
 
   @override
-  String get transcribing => 'Přepisování...';
-
-  @override
-  String get transcriptionFailed => 'Přepis se nezdařil';
+  String get transcribing => 'Přepisování…';
 
   @override
   String get discardedConversation => 'Zahozená konverzace';
@@ -3172,7 +3070,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get from => 'od';
 
   @override
-  String get copied => 'Zkopírováno!';
+  String get copied => 'Zkopírováno';
 
   @override
   String get copyLink => 'Kopírovat odkaz';
@@ -3210,7 +3108,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get failedToGenerateShareLink => 'Nepodařilo se vygenerovat odkaz ke sdílení';
 
   @override
-  String get reloadingConversations => 'Načítání konverzací...';
+  String get reloadingConversations => 'Načítání konverzací…';
 
   @override
   String get user => 'Uživatel';
@@ -3266,10 +3164,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get getOmiDevice => 'Získat zařízení Omi';
 
   @override
-  String get wearableAiCompanion => 'Nositelný AI společník';
-
-  @override
-  String get loadingMemories => 'Načítání vzpomínek...';
+  String get loadingMemories => 'Načítání vzpomínek…';
 
   @override
   String get allMemories => 'Všechny vzpomínky';
@@ -3281,7 +3176,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get manual => 'Ruční';
 
   @override
-  String get loadingYourMemories => 'Načítání vašich vzpomínek...';
+  String get loadingYourMemories => 'Načítání vašich vzpomínek…';
 
   @override
   String get createYourFirstMemory => 'Vytvořte svou první vzpomínku a začněte';
@@ -3305,13 +3200,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get createMemory => 'Vytvořit vzpomínku';
 
   @override
-  String get deleteMemoryConfirmation => 'Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.';
+  String get deleteMemoryConfirmation => 'Smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.';
 
   @override
   String get makePrivate => 'Nastavit jako soukromé';
-
-  @override
-  String get organizeAndControlMemories => 'Organizujte a ovládejte své vzpomínky';
 
   @override
   String get total => 'Celkem';
@@ -3320,13 +3212,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get makeAllMemoriesPrivate => 'Nastavit všechny vzpomínky jako soukromé';
 
   @override
-  String get setAllMemoriesToPrivate => 'Nastavit všechny vzpomínky na soukromou viditelnost';
-
-  @override
   String get makeAllMemoriesPublic => 'Nastavit všechny vzpomínky jako veřejné';
-
-  @override
-  String get setAllMemoriesToPublic => 'Nastavit všechny vzpomínky na veřejnou viditelnost';
 
   @override
   String get permanentlyRemoveAllMemories => 'Trvale odstranit všechny vzpomínky z Omi';
@@ -3342,7 +3228,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět a trvale odstraní všech $count vzpomínek.';
+    return 'Všechny vzpomínky ($count) budou smazány. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -3395,10 +3281,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get chooseYourLanguage => 'Vyberte svůj jazyk';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'Vyberte si preferovaný jazyk pro nejlepší Omi zážitek';
-
-  @override
-  String get searchLanguages => 'Hledat jazyky...';
+  String get searchLanguages => 'Hledat jazyky';
 
   @override
   String get selectALanguage => 'Vyberte jazyk';
@@ -3420,9 +3303,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String charactersCount(int count) {
     return '$count znaků';
   }
-
-  @override
-  String get enableFeaturesForBestExperience => 'Povolte funkce pro nejlepší Omi zážitek na vašem zařízení.';
 
   @override
   String get microphoneAccess => 'Přístup k mikrofonu';
@@ -3455,13 +3335,13 @@ class AppLocalizationsCs extends AppLocalizations {
       'Omi potřebuje oprávnění k přístupnosti pro detekci, kdy se připojujete ke schůzkám Zoom, Meet nebo Teams ve vašem prohlížeči.';
 
   @override
-  String get pleaseWait => 'Prosím čekejte...';
+  String get pleaseWait => 'Prosím čekejte…';
 
   @override
   String get joinTheCommunity => 'Připojte se ke komunitě!';
 
   @override
-  String get loadingProfile => 'Načítání profilu...';
+  String get loadingProfile => 'Načítání profilu…';
 
   @override
   String get profileSettings => 'Nastavení profilu';
@@ -3587,7 +3467,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get saveSettings => 'Uložit Nastavení';
 
   @override
-  String get syncingDeveloperSettings => 'Synchronizace vývojářského nastavení...';
+  String get syncingDeveloperSettings => 'Synchronizace vývojářského nastavení…';
 
   @override
   String get summary => 'Souhrn';
@@ -3633,13 +3513,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Nechte Omi automaticky vybrat nejlepší aplikaci';
 
   @override
-  String get deleteConversationConfirmation => 'Opravdu chcete smazat tuto konverzaci? Tuto akci nelze vrátit zpět.';
+  String get deleteConversationConfirmation => 'Smazat tuto konverzaci? Tuto akci nelze vrátit zpět.';
 
   @override
   String get conversationDeleted => 'Konverzace smazána';
 
   @override
-  String get generatingLink => 'Generování odkazu...';
+  String get generatingLink => 'Generování odkazu…';
 
   @override
   String get editConversation => 'Upravit konverzaci';
@@ -3660,7 +3540,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get conversationTitle => 'Název konverzace';
 
   @override
-  String get enterConversationTitle => 'Zadejte název konverzace...';
+  String get enterConversationTitle => 'Zadejte název konverzace…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Název konverzace úspěšně aktualizován';
@@ -3672,7 +3552,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Chyba při aktualizaci názvu konverzace';
 
   @override
-  String get settingUp => 'Nastavování...';
+  String get settingUp => 'Nastavování…';
 
   @override
   String get startYourFirstRecording => 'Zahajte svůj první záznam';
@@ -3681,11 +3561,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Příprava záznamu systémového zvuku';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Klikněte na tlačítko pro záznam zvuku pro živé přepisy, poznatky AI a automatické ukládání.';
-
-  @override
-  String get reconnecting => 'Opětovné připojování...';
+  String get reconnecting => 'Opětovné připojování…';
 
   @override
   String get recordingPaused => 'Záznam pozastaven';
@@ -3698,14 +3574,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Pokračování za ${countdown}s...';
+    return 'Pokračování za ${countdown}s…';
   }
 
   @override
   String get tapPlayToResume => 'Klepněte na přehrát pro pokračování';
 
   @override
-  String get listeningForAudio => 'Poslouchání zvuku...';
+  String get listeningForAudio => 'Poslouchání zvuku…';
 
   @override
   String get preparingAudioCapture => 'Příprava záznamu zvuku';
@@ -3730,13 +3606,10 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Spusťte záznam pro zobrazení živého přepisu';
-
-  @override
   String get paused => 'Pozastaveno';
 
   @override
-  String get initializing => 'Inicializace...';
+  String get initializing => 'Inicializace…';
 
   @override
   String get recording => 'Nahrávání';
@@ -3753,9 +3626,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get settingUpSystemAudioCapture => 'Nastavení záznamu systémového zvuku';
 
   @override
-  String get capturingAudioAndGeneratingTranscript => 'Záznam zvuku a generování přepisu';
-
-  @override
   String get clickToBeginRecordingSystemAudio => 'Klikněte pro zahájení záznamu systémového zvuku';
 
   @override
@@ -3767,7 +3637,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'přeloženo pomocí omi';
+  String get translatedByOmi => 'přeloženo pomocí Omi';
 
   @override
   String get backToConversations => 'Zpět na Konverzace';
@@ -3792,7 +3662,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get selectAudioInput => 'Vyberte vstup zvuku';
 
   @override
-  String get loadingDevices => 'Načítání zařízení...';
+  String get loadingDevices => 'Načítání zařízení…';
 
   @override
   String get settingsHeader => 'NASTAVENÍ';
@@ -3822,7 +3692,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get signOutQuestion => 'Odhlásit se?';
 
   @override
-  String get signOutConfirmation => 'Opravdu se chcete odhlásit?';
+  String get signOutConfirmation =>
+      'Pro zobrazení konverzací se budete muset znovu přihlásit. Spárované zařízení a předvolby aplikace v tomto telefonu zůstanou.';
 
   @override
   String get customVocabularyHeader => 'VLASTNÍ SLOVNÍK';
@@ -3844,9 +3715,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deliveryTime => 'Čas doručení';
-
-  @override
-  String get deliveryTimeDescription => 'Kdy přijímat denní souhrn';
 
   @override
   String get subscription => 'Předplatné';
@@ -3888,29 +3756,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klikněte na zkratku a změňte ji. Stisknutím Escape zrušíte.';
 
   @override
-  String get configureSTTProvider => 'Nakonfigurovat poskytovatele STT';
-
-  @override
-  String get setConversationEndDescription => 'Nastavte, kdy konverzace automaticky končí';
-
-  @override
   String get importDataDescription => 'Importovat data z jiných zdrojů';
 
   @override
   String get exportConversationsDescription => 'Exportovat konverzace do JSON';
 
   @override
-  String get exportingConversations => 'Exportování konverzací...';
-
-  @override
-  String get clearNodesDescription => 'Vymazat všechny uzly a připojení';
+  String get exportingConversations => 'Exportování konverzací…';
 
   @override
   String get deleteKnowledgeGraphQuestion => 'Smazat graf znalostí?';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'Tím se smažou všechna odvozená data grafu znalostí. Vaše původní vzpomínky zůstanou v bezpečí.';
 
   @override
   String get connectOmiWithAI => 'Připojte Omi k AI asistentům';
@@ -3967,8 +3822,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get updateAppQuestion => 'Aktualizovat aplikaci?';
 
   @override
-  String get updateAppConfirmation =>
-      'Opravdu chcete aktualizovat svou aplikaci? Změny se projeví po kontrole naším týmem.';
+  String get updateAppConfirmation => 'Změny se projeví po kontrole naším týmem.';
 
   @override
   String get updateApp => 'Aktualizovat aplikaci';
@@ -3990,9 +3844,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Veřejné aplikace ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'K dispozici je nová verze  🎉';
 
   @override
   String get no => 'Ne';
@@ -4035,14 +3886,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Zrušit předplatné?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Opravdu chcete zrušit předplatné? Budete mít přístup do konce aktuálního fakturačního období.';
+  String get cancelSubscriptionConfirmation => 'Budete mít přístup do konce aktuálního fakturačního období.';
 
   @override
   String get cancelSubscriptionButton => 'Zrušit předplatné';
 
   @override
-  String get cancelling => 'Rušení...';
+  String get cancelling => 'Rušení…';
 
   @override
   String get betaTesterMessage => 'Jste beta tester této aplikace. Zatím není veřejná. Bude veřejná po schválení.';
@@ -4159,7 +4009,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Přidávání do $serviceName...';
+    return 'Přidávání do $serviceName…';
   }
 
   @override
@@ -4196,7 +4046,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API klíče se používají pro ověření, když vaše aplikace komunikuje se serverem OMI. Umožňují vaší aplikaci vytvářet vzpomínky a bezpečně přistupovat k dalším službám OMI.';
+      'API klíče se používají pro ověření, když vaše aplikace komunikuje se serverem Omi. Umožňují vaší aplikaci vytvářet vzpomínky a bezpečně přistupovat k dalším službám Omi.';
 
   @override
   String get aboutOmiApiKeys => 'O Omi API klíčích';
@@ -4221,7 +4071,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Tuto akci nelze vrátit zpět. Všechny aplikace používající tento klíč již nebudou mít přístup k API.';
+      'Aplikace používající tento klíč ztratí přístup k API. Tuto akci nelze vrátit zpět.';
 
   @override
   String get revoke => 'Odvolat';
@@ -4231,9 +4081,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get createAnApp => 'Vytvořit aplikaci';
-
-  @override
-  String get createAndShareYourApp => 'Vytvořte a sdílejte svou aplikaci';
 
   @override
   String get itemApp => 'Aplikace';
@@ -4278,7 +4125,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Opravdu chcete smazat tuto $item? Tuto akci nelze vrátit zpět.';
+    return 'Smazání této $item nelze vrátit zpět.';
   }
 
   @override
@@ -4286,7 +4133,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Opravdu chcete odvolat klíč \"$keyName\"? Tuto akci nelze vrátit zpět.';
+    return 'Vše, co používá \"$keyName\", ztratí přístup. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -4329,10 +4176,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get maximumSecurityE2ee => 'Maximální zabezpečení (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      'End-to-end šifrování je zlatý standard ochrany soukromí. Když je povoleno, vaše data jsou šifrována na vašem zařízení před odesláním na naše servery. To znamená, že nikdo, ani Omi, nemůže přistupovat k vašemu obsahu.';
-
-  @override
   String get importantTradeoffs => 'Důležité kompromisy:';
 
   @override
@@ -4364,15 +4207,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get secureEncryption => 'Bezpečné šifrování';
 
   @override
-  String get secureEncryptionDescription =>
-      'Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.';
-
-  @override
   String get endToEndEncryption => 'End-to-end šifrování';
-
-  @override
-  String get e2eeCardDescription =>
-      'Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.';
 
   @override
   String get dataAlwaysEncrypted => 'Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu.';
@@ -4443,8 +4278,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get getOmiUnlimitedFree => 'Získejte Omi Unlimited zdarma přispěním vašich dat k trénování AI modelů.';
 
   @override
-  String get trainingDataBullets =>
-      '• Vaše data pomáhají vylepšovat AI modely\n• Sdílena jsou pouze necitlivá data\n• Plně transparentní proces';
+  String get trainingDataBullets => '• Vaše data pomáhají zlepšovat modely AI\n• Sdílena jsou pouze nescitlivá data';
 
   @override
   String get learnMoreAtOmiTraining => 'Zjistěte více na omi.me/training';
@@ -4460,7 +4294,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Váš plán zůstane aktivní do $date. Poté ztratíte přístup k neomezeným funkcím. Jste si jisti?';
+    return 'Váš plán zůstane aktivní do $date. Poté ztratíte přístup k neomezeným funkcím.';
   }
 
   @override
@@ -4525,9 +4359,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Jste na plánu Unlimited.';
 
   @override
-  String get yourOmiUnleashed => 'Váš Omi, uvolněný. Přejděte na neomezený pro nekonečné možnosti.';
-
-  @override
   String planEndedOn(String date) {
     return 'Váš plán skončil $date.\nZnovu se přihlaste nyní - budete okamžitě účtováni za nové fakturační období.';
   }
@@ -4552,7 +4383,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get askOmiAnything => 'Zeptejte se Omi na cokoli o svém životě';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Odemkněte nekonečnou paměť Omi';
+  String get unlockOmiInfiniteMemory => 'Neomezené vzpomínky';
 
   @override
   String get youreOnAnnualPlan => 'Jste na ročním plánu';
@@ -4564,7 +4395,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get unableToLoadPlans => 'Nepodařilo se načíst plány';
 
   @override
-  String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
+  String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu.';
 
   @override
   String get useFreePlan => 'Použít bezplatný plán';
@@ -4605,10 +4436,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'Na vašem soukromí nám záleží';
 
   @override
-  String get privacyIntroText =>
-      'V Omi bereme vaše soukromí velmi vážně. Chceme být transparentní ohledně dat, která shromažďujeme a jak je používáme ke zlepšení produktu. Zde je to, co potřebujete vědět:';
-
-  @override
   String get whatWeTrack => 'Co sledujeme';
 
   @override
@@ -4619,14 +4446,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get ourCommitment => 'Náš závazek';
-
-  @override
-  String get commitmentText =>
-      'Zavazujeme se používat shromážděná data pouze k tomu, abychom z Omi udělali lepší produkt. Vaše soukromí a důvěra jsou pro nás prvořadé.';
-
-  @override
-  String get thankYouText =>
-      'Děkujeme, že jste váženým uživatelem Omi. Máte-li jakékoli dotazy nebo obavy, neváhejte nás kontaktovat na team@basedhardware.com.';
 
   @override
   String get password => 'Heslo';
@@ -4671,11 +4490,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Graf znalostí úspěšně smazán';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Export zahájen. Může to trvat několik sekund...';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'Tímto se odstraní všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude postupně obnoven nebo při dalším požadavku.';
+  String get exportStartedMayTakeFewSeconds => 'Export zahájen. Může to trvat několik sekund…';
 
   @override
   String get configureDailySummaryDigest => 'Nastavte si denní přehled úkolů';
@@ -4746,7 +4561,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Toto trvale smaže všechny konverzace importované z Limitless. Tuto akci nelze vrátit zpět.';
+      'Všechny konverzace importované z Limitless budou smazány. Tuto akci nelze vrátit zpět.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4787,7 +4602,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Opravdu chcete smazat vzorek uživatele $name?';
+    return 'Hlasový vzorek osoby $name bude odstraněn. Tuto akci nelze vrátit zpět.';
   }
 
   @override
@@ -4795,15 +4610,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Opravdu chcete smazat $name? Tím se také odstraní všechny přidružené hlasové vzorky.';
+    return 'Tím se odstraní hlasové vzorky osoby $name a nelze to vrátit zpět. Repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.';
   }
 
   @override
   String get howItWorksTitle => 'Jak to funguje?';
-
-  @override
-  String get howPeopleWorks =>
-      'Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!';
 
   @override
   String get tapToDelete => 'Klepněte pro smazání';
@@ -4865,8 +4676,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Vaše nahrávky v reálném čase budou ukládány do soukromého cloudového úložiště, zatímco mluvíte.';
 
   @override
-  String get storeAudioCloudDescription =>
-      'Ukládejte své nahrávky v reálném čase do soukromého cloudového úložiště, zatímco mluvíte. Zvuk je zachycen a bezpečně uložen v reálném čase.';
+  String get storeAudioCloudDescription => 'Nahrávky se nahrávají během mluvení, abyste je mohli později přehrát.';
 
   @override
   String get downloadingFirmware => 'Stahování firmwaru';
@@ -4911,7 +4721,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get checkingForUpdates => 'Kontrola aktualizací';
 
   @override
-  String get checkingFirmwareVersion => 'Kontrola verze firmwaru...';
+  String get checkingFirmwareVersion => 'Kontrola verze firmwaru…';
 
   @override
   String get firmwareUpdate => 'Aktualizace firmwaru';
@@ -5072,7 +4882,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.';
 
   @override
-  String get tasksEmptyStateMessage => 'Úkoly z vašich konverzací se zobrazí zde.\nKlepněte na + pro ruční vytvoření.';
+  String get tasksEmptyStateMessage => 'Začněte konverzaci a vytvořte úkol.';
 
   @override
   String get clearChatAction => 'Vymazat chat';
@@ -5090,19 +4900,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get showLess => 'zobrazit méně ↑';
 
   @override
-  String get loadingYourRecording => 'Načítání nahrávky...';
+  String get loadingYourRecording => 'Načítání nahrávky…';
 
   @override
   String get photoDiscardedMessage => 'Tato fotografie byla zahozena, protože nebyla významná.';
 
   @override
-  String get analyzing => 'Analyzování...';
+  String get analyzing => 'Analyzování…';
 
   @override
   String get searchCountries => 'Hledat země...';
 
   @override
-  String get checkingAppleWatch => 'Kontrola Apple Watch...';
+  String get checkingAppleWatch => 'Kontrola Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'Nainstalujte Omi na\nApple Watch';
@@ -5150,7 +4960,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get finishedConversation => 'Dokončená konverzace?';
 
   @override
-  String get stopRecordingConfirmation => 'Opravdu chcete zastavit nahrávání a shrnout konverzaci nyní?';
+  String get stopRecordingConfirmation => 'Zastavit nahrávání a shrnout konverzaci hned teď?';
 
   @override
   String get conversationEndsManually => 'Konverzace skončí pouze ručně.';
@@ -5164,7 +4974,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dontAskAgain => 'Neptej se mě znovu';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Čekání na přepis nebo fotografie...';
+  String get waitingForTranscriptOrPhotos => 'Čekání na přepis nebo fotografie…';
 
   @override
   String get noSummaryYet => 'Zatím žádné shrnutí';
@@ -5211,7 +5021,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noSummary => 'Žádný souhrn';
 
   @override
-  String get updateOmiFirmware => 'Aktualizovat firmware omi';
+  String get updateOmiFirmware => 'Aktualizovat firmware Omi';
 
   @override
   String get anErrorOccurredTryAgain => 'Došlo k chybě. Zkuste to prosím znovu.';
@@ -5363,10 +5173,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Vygenerovat můj Wrapped';
 
   @override
-  String get wrappedProcessingDefault => 'Zpracování...';
+  String get wrappedProcessingDefault => 'Zpracování…';
 
   @override
-  String get wrappedCreatingYourStory => 'Vytváříme tvůj\npříběh roku 2025...';
+  String get wrappedCreatingYourStory => 'Vytváříme tvůj\npříběh roku 2025…';
 
   @override
   String get wrappedSomethingWentWrong => 'Něco se\npokazilo';
@@ -5396,7 +5206,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Spuštění generování se nezdařilo. Zkuste to prosím znovu.';
 
   @override
-  String get wrappedStarting => 'Spouštím...';
+  String get wrappedStarting => 'Spouštím…';
 
   @override
   String get wrappedShare => 'Sdílet';
@@ -5603,13 +5413,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Něco se pokazilo! Zkuste to prosím znovu později.';
 
   @override
-  String get uploadingVoiceProfile => 'Nahrávání vašeho hlasového profilu....';
+  String get uploadingVoiceProfile => 'Nahrávání vašeho hlasového profilu….';
 
   @override
-  String get memorizingYourVoice => 'Ukládání vašeho hlasu...';
+  String get memorizingYourVoice => 'Ukládání vašeho hlasu…';
 
   @override
-  String get personalizingExperience => 'Přizpůsobování vašeho zážitku...';
+  String get personalizingExperience => 'Přizpůsobování vašeho zážitku…';
 
   @override
   String get keepSpeakingUntil100 => 'Mluvte dál, dokud nedosáhnete 100%.';
@@ -5687,9 +5497,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get removeFromAllFolders => 'Odebrat ze všech složek';
 
   @override
-  String get buildAndShareYourCustomApp => 'Vytvořte a sdílejte svou vlastní aplikaci';
-
-  @override
   String get searchAppsPlaceholder => 'Hledat v 1500+ aplikacích';
 
   @override
@@ -5717,25 +5524,25 @@ class AppLocalizationsCs extends AppLocalizations {
   String get frequencyDescOff => 'Žádná proaktivní upozornění';
 
   @override
-  String get frequencyDescMinimal => 'Pouze kritická připomenutí';
+  String get frequencyDescMinimal => 'Jen naléhavé věci, asi 1–3 denně';
 
   @override
-  String get frequencyDescLow => 'Pouze důležité aktualizace';
+  String get frequencyDescLow => 'Jen důležité věci, asi 3–5 denně';
 
   @override
-  String get frequencyDescBalanced => 'Pravidelné užitečné připomínky';
+  String get frequencyDescBalanced => 'Užitečné návrhy, asi 5–8 denně';
 
   @override
-  String get frequencyDescHigh => 'Časté kontroly';
+  String get frequencyDescHigh => 'Více návrhů, asi 6–9 denně';
 
   @override
-  String get frequencyDescMaximum => 'Zůstaňte neustále zapojeni';
+  String get frequencyDescMaximum => 'Každé užitečné propojení, až 9 denně';
 
   @override
   String get clearChatQuestion => 'Vymazat chat?';
 
   @override
-  String get syncingMessages => 'Synchronizace zpráv se serverem...';
+  String get syncingMessages => 'Synchronizace zpráv se serverem…';
 
   @override
   String get chatAppsTitle => 'Chat aplikace';
@@ -5894,10 +5701,10 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Shrnutí konverzace...\nMůže to trvat několik sekund';
+  String get summarizingConversation => 'Shrnutí konverzace…\nMůže to trvat několik sekund';
 
   @override
-  String get resummarizingConversation => 'Opětovné shrnutí konverzace...\nMůže to trvat několik sekund';
+  String get resummarizingConversation => 'Opětovné shrnutí konverzace…\nMůže to trvat několik sekund';
 
   @override
   String get nothingInterestingRetry => 'Nic zajímavého nenalezeno,\nchcete to zkusit znovu?';
@@ -5992,7 +5799,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
+  String get premiumMinutesInfo => '300 prémiových minut měsíčně. Pro neomezený bezplatný přepis zvolte „Na zařízení“.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
@@ -6027,7 +5834,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get doNotCloseApp => 'Prosím nezavírejte aplikaci.';
 
   @override
-  String get downloading => 'Stahování...';
+  String get downloading => 'Stahování…';
 
   @override
   String get downloadModel => 'Stáhnout model';
@@ -6072,7 +5879,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get batteryDrainSignificantly => 'Vybíjení baterie se výrazně zvýší.';
 
   @override
-  String get premiumMinutesMonth => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+  String get premiumMinutesMonth =>
+      '300 prémiových minut měsíčně. Pro neomezený bezplatný přepis zvolte „Na zařízení“. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6106,7 +5914,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Příprava $model...';
+    return 'Příprava $model…';
   }
 
   @override
@@ -6126,7 +5934,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Vestavěný živý přepis Omi je optimalizován pro konverzace v reálném čase s automatickou detekcí mluvčích a diarizací.';
+      'Živý přepis Omi je navržený pro konverzace v reálném čase a označuje, kdo co řekl.';
 
   @override
   String get reset => 'Resetovat';
@@ -6135,7 +5943,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get useTemplateFrom => 'Použít šablonu od';
 
   @override
-  String get selectProviderTemplate => 'Vyberte šablonu poskytovatele...';
+  String get selectProviderTemplate => 'Vyberte šablonu poskytovatele…';
 
   @override
   String get quicklyPopulateResponse => 'Rychle vyplnit známým formátem odpovědi poskytovatele';
@@ -6337,13 +6145,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get signUpSuccess => 'Registrace úspěšná!';
 
   @override
-  String get loadingKnowledgeGraph => 'Načítání znalostního grafu...';
+  String get loadingKnowledgeGraph => 'Načítání znalostního grafu…';
 
   @override
   String get noKnowledgeGraphYet => 'Zatím žádný znalostní graf';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Vytváření znalostního grafu ze vzpomínek...';
+  String get buildingKnowledgeGraphFromMemories => 'Vytváření znalostního grafu ze vzpomínek…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6360,7 +6168,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Otevírám $appName...';
+    return 'Otevírám $appName…';
   }
 
   @override
@@ -6394,7 +6202,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get moneyEarned => 'Vyděláno';
 
   @override
-  String get writeYourReply => 'Napište svou odpověď...';
+  String get writeYourReply => 'Napište svou odpověď…';
 
   @override
   String get replySentSuccessfully => 'Odpověď byla úspěšně odeslána';
@@ -6541,7 +6349,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get selectContactsToShareSummary => 'Vyberte kontakty pro sdílení shrnutí konverzace';
 
   @override
-  String get searchContactsHint => 'Hledat kontakty...';
+  String get searchContactsHint => 'Hledat kontakty';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6630,7 +6438,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Přenášení...';
+  String get transferring => 'Přenášení…';
 
   @override
   String get transferRequired => 'Vyžadován přenos';
@@ -6649,19 +6457,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transferToPhone => 'Přenést do telefonu';
 
   @override
-  String get privateAndSecureOnDevice => 'Soukromé a bezpečné na vašem zařízení';
+  String get privateAndSecureOnDevice => 'Uloženo v tomto telefonu';
 
   @override
   String get recordingInfo => 'Informace o nahrávce';
 
   @override
-  String get transferInProgress => 'Probíhá přenos...';
+  String get transferInProgress => 'Probíhá přenos…';
 
   @override
   String get shareRecording => 'Sdílet nahrávku';
 
   @override
-  String get deleteRecordingConfirmation => 'Opravdu chcete trvale smazat tuto nahrávku? Tuto akci nelze vrátit zpět.';
+  String get deleteRecordingConfirmation => 'Tuto akci nelze vrátit zpět.';
 
   @override
   String get recordingIdLabel => 'ID nahrávky';
@@ -6776,7 +6584,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Při aktualizaci stavu aplikace došlo k chybě.';
 
   @override
-  String get calculatingETA => 'Vypočítávám...';
+  String get calculatingETA => 'Vypočítávám…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6787,29 +6595,29 @@ class AppLocalizationsCs extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Zbývá přibližně minuta';
 
   @override
-  String get almostDone => 'Téměř hotovo...';
+  String get almostDone => 'Téměř hotovo…';
 
   @override
   String get omiSays => 'Omi říká';
 
   @override
-  String get analyzingYourData => 'Analyzuji vaše data...';
+  String get analyzingYourData => 'Analyzuji vaše data…';
 
   @override
   String migratingToProtection(String level) {
-    return 'Přecházení na ochranu $level...';
+    return 'Přecházení na ochranu $level…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Žádná data k přenosu. Dokončování...';
+  String get noDataToMigrateFinalizing => 'Žádná data k přenosu. Dokončování…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Přenášení $itemType... $percentage %';
+    return 'Přenášení $itemType… $percentage %';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Všechny objekty přeneseny. Dokončování...';
+  String get allObjectsMigratedFinalizing => 'Všechny objekty přeneseny. Dokončování…';
 
   @override
   String get migrationErrorOccurred => 'Během přenosu došlo k chybě. Zkuste to prosím znovu.';
@@ -6844,7 +6652,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get templateName => 'Název šablony';
 
   @override
-  String get templateNameHint => 'např. Extraktor akcí ze schůzky';
+  String get templateNameHint => 'např. Extraktor úkolů ze schůzky';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Název musí mít alespoň 3 znaky';
@@ -6866,13 +6674,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Pouze vy můžete používat tuto šablonu';
 
   @override
-  String get generatingDescription => 'Generování popisu...';
+  String get generatingDescription => 'Generování popisu…';
 
   @override
-  String get creatingAppIcon => 'Vytváření ikony aplikace...';
+  String get creatingAppIcon => 'Vytváření ikony aplikace…';
 
   @override
-  String get installingApp => 'Instalace aplikace...';
+  String get installingApp => 'Instalace aplikace…';
 
   @override
   String get appCreatedAndInstalled => 'Aplikace vytvořena a nainstalována!';
@@ -7001,7 +6809,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Zadejte prosím popis vaší aplikace';
 
   @override
-  String get aiGenCreatingAppIcon => 'Vytvářím ikonu aplikace...';
+  String get aiGenCreatingAppIcon => 'Vytvářím ikonu aplikace…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7034,7 +6842,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Měníte svůj plán Unlimited na $title. Opravdu chcete pokračovat?';
+    return 'Měníte svůj plán Unlimited na $title.';
   }
 
   @override
@@ -7058,7 +6866,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Nepodařilo se otevřít stránku upgradu. Zkuste to prosím znovu.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Vložte sem svou JSON konfiguraci...';
+  String get transcriptionJsonPlaceholder => 'Vložte sem svou JSON konfiguraci…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7119,16 +6927,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingTellUsAboutYourself => 'Řekněte nám o sobě';
 
   @override
-  String get onboardingChooseYourPreference => 'Vyberte si preference';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'Udělit požadovaný přístup';
-
-  @override
   String get onboardingYoureAllSet => 'Vše je připraveno';
 
   @override
-  String get searchTranscriptOrSummary => 'Hledat v přepisu nebo shrnutí...';
+  String get searchTranscriptOrSummary => 'Hledat v přepisu nebo shrnutí';
 
   @override
   String get myGoal => 'Můj cíl';
@@ -7363,10 +7165,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get msgUploadFileFailed => 'Nahrávání souboru se nezdařilo, zkuste to prosím později';
 
   @override
-  String get msgReadingMemories => 'Čtení vašich vzpomínek...';
+  String get msgReadingMemories => 'Čtení vašich vzpomínek…';
 
   @override
-  String get msgLearningMemories => 'Učení se z vašich vzpomínek...';
+  String get msgLearningMemories => 'Učení se z vašich vzpomínek…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Nahrání přiloženého souboru se nezdařilo.';
@@ -7423,7 +7225,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Nové 🚀';
+  String get conversationNewIndicator => 'Nové';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7431,7 +7233,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Slučování...';
+  String get mergingStatus => 'Slučování…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7526,10 +7328,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get color => 'Barva';
 
   @override
-  String get waitingForDevice => 'Čekání na zařízení...';
+  String get waitingForDevice => 'Čekání na zařízení…';
 
   @override
-  String get saySomething => 'Řekněte něco...';
+  String get saySomething => 'Řekněte něco…';
 
   @override
   String get initialisingSystemAudio => 'Inicializace systémového zvuku';
@@ -7578,7 +7380,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get audioDownloadFailed => 'Stažení zvuku se nezdařilo';
 
   @override
-  String get downloadingAudio => 'Stahování zvuku...';
+  String get downloadingAudio => 'Stahování zvuku…';
 
   @override
   String get shareAudio => 'Sdílet zvuk';
@@ -7587,7 +7389,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get preparingAudio => 'Příprava zvuku';
 
   @override
-  String get gettingAudioFiles => 'Získávání zvukových souborů...';
+  String get gettingAudioFiles => 'Získávání zvukových souborů…';
 
   @override
   String get downloadingAudioProgress => 'Stahování zvuku';
@@ -7596,13 +7398,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingAudio => 'Zpracování zvuku';
 
   @override
-  String get combiningAudioFiles => 'Kombinování zvukových souborů...';
+  String get combiningAudioFiles => 'Kombinování zvukových souborů…';
 
   @override
   String get audioReady => 'Zvuk je připraven';
 
   @override
-  String get openingShareSheet => 'Otevírání listu sdílení...';
+  String get openingShareSheet => 'Otevírání listu sdílení…';
 
   @override
   String get audioShareFailed => 'Sdílení se nezdařilo';
@@ -7787,7 +7589,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get mcpConnectionFailed => 'Nepodařilo se připojit k MCP serveru';
 
   @override
-  String get authorizingMcpServer => 'Autorizace...';
+  String get authorizingMcpServer => 'Autorizace…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Jak jste nás našli?';
@@ -7922,7 +7724,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get downloadingFromDevice => 'Stahování ze zařízení';
 
   @override
-  String get reconnectingToInternet => 'Opětovné připojování k internetu...';
+  String get reconnectingToInternet => 'Opětovné připojování k internetu…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7930,11 +7732,11 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Zpracování na serveru...';
+  String get processingOnServer => 'Zpracování na serveru…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Zpracování... $current/$total segmentů';
+    return 'Zpracování… $current/$total segmentů';
   }
 
   @override
@@ -8008,9 +7810,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get apiEnvironment => 'Prostředí API';
-
-  @override
-  String get apiEnvironmentDescription => 'Vyberte, ke kterému serveru se připojit';
 
   @override
   String get production => 'Produkce';
@@ -8115,7 +7914,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get followTheVoiceInstructions => 'Postupujte podle hlasovych pokunu';
 
   @override
-  String get statusCalling => 'Volani...';
+  String get statusCalling => 'Volani…';
 
   @override
   String get statusCallInProgress => 'Hovor probiha';
@@ -8160,10 +7959,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get failedToStartCall => 'Nepodarilo se zahajit hovor';
 
   @override
-  String get callStateConnecting => 'Pripojovani...';
+  String get callStateConnecting => 'Pripojovani…';
 
   @override
-  String get callStateRinging => 'Zvoneni...';
+  String get callStateRinging => 'Zvoneni…';
 
   @override
   String get callStateEnded => 'Hovor ukoncen';
@@ -8172,7 +7971,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get callStateFailed => 'Hovor selhal';
 
   @override
-  String get transcriptPlaceholder => 'Prepis se zobrazi zde...';
+  String get transcriptPlaceholder => 'Prepis se zobrazi zde…';
 
   @override
   String get phoneUnmute => 'Zrusit ztlumeni';
@@ -8274,9 +8073,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get phoneCallsUpsellFeature3 => 'Příjemci vidí vaše skutečné číslo, ne náhodné';
-
-  @override
-  String get phoneCallsUpsellFeature4 => 'Vaše hovory zůstávají soukromé a bezpečné';
 
   @override
   String get phoneCallsUpgradeButton => 'Upgradovat na Neomezený';
@@ -8384,7 +8180,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get fairUseAboutBody =>
-      'Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.';
+      'Omi je navrženo pro osobní konverzace, schůzky a živé interakce. Využití se měří podle času strávenému mluvením, ne podle času připojení. Pokud je vaše využití výrazně nad běžným osobním použitím, nejprve dostanete upozornění. Trvalé intenzivní používání může přepis zpomalit nebo omezit.';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8411,7 +8207,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcriptionPaused => 'Nahrávání, připojování';
 
   @override
-  String get transcriptionPausedReconnecting => 'Stále se nahrává — připojování k přepisu...';
+  String get transcriptionPausedReconnecting => 'Stále se nahrává — připojování k přepisu…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8478,10 +8274,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cancelSyncQuestion => 'Zrušit synchronizaci?';
 
   @override
-  String get omisStorageDesc =>
-      'Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.';
-
-  @override
   String get phoneStorageDesc =>
       'Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.';
 
@@ -8499,7 +8291,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
 
   @override
-  String get storageSection => 'ÚLOŽIŠTĚ';
+  String get storageSection => 'Úložiště';
 
   @override
   String get permissions => 'Oprávnění';
@@ -8512,7 +8304,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get permissionsPageDescription =>
-      'Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.';
+      'Omi tato oprávnění používá k připojení k zařízení, nahrávání zvuku, práci na pozadí, odesílání připomínek a zaznamenávání míst, kde konverzace proběhly.';
 
   @override
   String get permissionsRequiredDescription =>
@@ -8520,9 +8312,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get permissionsSetupTitle => 'Získejte nejlepší zážitek';
-
-  @override
-  String get permissionsSetupDescription => 'Povolte několik oprávnění, aby Omi mohl fungovat naplno.';
 
   @override
   String get permissionsChangeAnytime => 'Toto můžete kdykoli změnit v Nastavení > Oprávnění';
@@ -8564,7 +8353,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tellUsMore => 'Řekněte nám více (volitelné)';
 
   @override
-  String get cancelReasonDetailHint => 'Oceníme jakoukoli zpětnou vazbu...';
+  String get cancelReasonDetailHint => 'Oceníme jakoukoli zpětnou vazbu…';
 
   @override
   String get justAMoment => 'Moment, prosím';
@@ -8659,7 +8448,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get diagnostics => 'Diagnostika';
 
   @override
-  String get waitingForData => 'Čekání na data...';
+  String get waitingForData => 'Čekání na data…';
 
   @override
   String get liveRssiOverTime => 'RSSI v reálném čase';
@@ -8668,7 +8457,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noRssiDataYet => 'Zatím žádná data RSSI';
 
   @override
-  String get collectingData => 'Sbírání dat...';
+  String get collectingData => 'Sbírání dat…';
 
   @override
   String get cleanDisconnect => 'Čisté odpojení';
@@ -8749,7 +8538,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stableFirmware => 'Stabilní firmware';
 
   @override
-  String get fetchingStableFirmware => 'Načítání nejnovějšího stabilního firmwaru...';
+  String get fetchingStableFirmware => 'Načítání nejnovějšího stabilního firmwaru…';
 
   @override
   String get noStableFirmwareFound => 'Nepodařilo se najít stabilní verzi firmwaru pro vaše zařízení.';
@@ -8766,6 +8555,42 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Odesílání zvuku o délce $duration k přepisu…';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Opakuji odeslání… zvuk o délce $duration zůstává ve vašem telefonu';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Odeslání se nezdařilo — zvuk o délce $duration zůstává ve vašem telefonu. Klepnutím to zkusíte znovu.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Odeslání se nezdařilo — zvuk o délce $duration zůstává ve vašem telefonu.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Poslouchám… zde se zobrazí přepis.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp => 'Nahrává se offline — přepis se doplní, až budete znovu online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Přepis není k dispozici — nahrávání pokračuje a váš zvuk se ukládá.';
+
+  @override
+  String get capturing => 'Záznam';
+
+  @override
+  String get capturingPhotos => 'Pořizování fotek';
+
+  @override
   String get willSyncAutomatically => 'synchronizuje se automaticky';
 
   @override
@@ -8778,10 +8603,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get voiceRecordingFound => 'Nalezena nahrávka';
 
   @override
-  String get transcriptionConnecting => 'Připojování přepisu...';
+  String get transcriptionConnecting => 'Připojování přepisu…';
 
   @override
-  String get transcriptionReconnecting => 'Opětovné připojování přepisu...';
+  String get transcriptionReconnecting => 'Opětovné připojování přepisu…';
 
   @override
   String get transcriptionUnavailable => 'Přepis není dostupný';
@@ -8888,10 +8713,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlenky nám pomáhají vytvořit lepší produkt.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+  String get deleteFlowConfirmTitle => 'Smazat váš účet?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Po smazání účtu jej nelze obnovit.';
+  String get deleteFlowConfirmSubtitle => 'Tuto akci nelze vrátit, ani s pomocí podpory.';
 
   @override
   String get deleteConsequenceSubscription => 'Jakékoli aktivní předplatné bude zrušeno.';
@@ -8916,10 +8741,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get planUpdate => 'Aktualizace plánu';
-
-  @override
-  String get planDeprecationMessage =>
-      'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
 
   @override
   String get upgradeYourPlan => 'Upgradujte svůj plán';
@@ -9006,9 +8827,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get architectSubtitle => 'AI pro pokročilé — tisíce chatů + agentní automatizace';
-
-  @override
   String chatUsageCost(String used, String limit) {
     return 'Chat: \$$used / \$$limit využito tento měsíc';
   }
@@ -9081,7 +8899,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get recordWithPhoneMic => 'Nahrát mikrofonem telefonu';
 
   @override
-  String get recordWithPhoneMicSubtitle => 'Zaznamenávejte zvuk kolem vás';
+  String get recordWithPhoneMicSubtitle => 'Nahrávejte a přepisujte pomocí mikrofonu tohoto telefonu';
 
   @override
   String get phoneCall => 'Telefonní hovor';
@@ -9090,7 +8908,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get phoneCallSubtitle => 'Nahrávejte hovor s živým přepisem';
 
   @override
-  String get searchActionItems => 'Hledat akční položky';
+  String get searchActionItems => 'Hledat úkoly';
 
   @override
   String get selectActionItems => 'Vybrat více';
@@ -9261,6 +9079,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Stahování z vašeho zařízení';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current z $total';
   }
@@ -9309,9 +9137,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundModeDescription => 'Udržujte nahrávání Omi, i když je aplikace úplně zavřená.';
 
   @override
-  String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
-
-  @override
   String get backgroundModeUnavailable =>
       'Režim na pozadí není k dispozici, protože není připojeno žádné kompatibilní zařízení. Pro použití této funkce připojte zařízení Omi, OpenGlass nebo Friend Pendant.';
 
@@ -9342,7 +9167,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.';
+      'Nahrávejte teď, přepisujte, kdy budete chtít. Do té doby zůstává zvuk v telefonu.';
 
   @override
   String get transcribeLaterNote =>
@@ -9404,7 +9229,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Skvělá práce!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Začněte mluvit...';
+  String get deviceOnboardingStartSpeaking => 'Začněte mluvit…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Zeptejte se Omi';
@@ -9414,10 +9239,10 @@ class AppLocalizationsCs extends AppLocalizations {
       'Jednou stiskněte tlačítko, položte otázku a po dokončení stiskněte znovu';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Zpracovávám vaši otázku...';
+  String get deviceOnboardingProcessingQuestion => 'Zpracovávám vaši otázku…';
 
   @override
-  String get deviceOnboardingListening => 'Poslouchám...';
+  String get deviceOnboardingListening => 'Poslouchám…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Vypnutí';
@@ -9444,7 +9269,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Odpojeno';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Vypínám...';
+  String get deviceOnboardingStatusTurningOff => 'Vypínám…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Nastavení dvojitého klepnutí';
@@ -9483,7 +9308,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceOnboardingIntroTitle => 'Poznejte svůj Omi';
 
   @override
-  String get deviceOnboardingIntroSubtitle => 'Rychlá praktická prohlídka všeho, co váš Omi umí.';
+  String get deviceOnboardingIntroSubtitle => 'Vyzkoušejte živý přepis, kladení otázek a zkratku dvojitým klepnutím.';
 
   @override
   String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
@@ -9623,7 +9448,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteOnDeviceModel => 'Smazat model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Opravdu chcete tento model smazat?';
+  String get deleteOnDeviceModelConfirm => 'Smazat tento model?';
 
   @override
   String get onDeviceModelDownloaded => 'Staženo';
@@ -9752,7 +9577,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get copyMessage => 'Kopírovat zprávu';
 
   @override
-  String get searchSettings => 'Hledat v nastavení…';
+  String get searchSettings => 'Hledat v nastavení';
 
   @override
   String get errorLoadingAudio => 'Chyba při načítání zvuku';
@@ -9780,7 +9605,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusTooOld => 'Příliš staré na synchronizaci — Omi ho nemůže přijmout';
 
   @override
-  String get planSheetChooseYourPlan => 'Vyberte si plán a odemkněte neomezené Omi.';
+  String get planSheetChooseYourPlan => 'Vyberte si plán, který vám vyhovuje.';
 
   @override
   String get availableOnMacMobileWeb => 'Dostupné na Macu, mobilu a webu';
@@ -9916,11 +9741,6 @@ class AppLocalizationsCs extends AppLocalizations {
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nezaznamenáno ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Hlasový profil: $name';
   }
@@ -9947,7 +9767,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Klepnutím na + začnete nahrávat';
+  String get tapPlusToStartRecording => 'Klepnutím na tlačítko nahrávání začnete nahrávat';
 
   @override
   String get chatBlockTask => 'Úkol';
@@ -9994,4 +9814,3189 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'Aby Omi věděl, který hlas je váš — mluvte asi 5 sekund o čemkoli.';
+
+  @override
+  String get home => 'Domů';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Tuto vzpomínku se nepodařilo aktualizovat. Zkuste to znovu.';
+
+  @override
+  String get unstarConversation => 'Odebrat hvězdu z konverzace';
+
+  @override
+  String get moreOptions => 'Další možnosti';
+
+  @override
+  String get filterByDate => 'Filtrovat podle data';
+
+  @override
+  String get memoryGraph => 'Graf vzpomínek';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
+        'skipPrompt': 'Skip Question',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add Another Sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hlas je připraven k rozpoznání',
+        'saved_sample_awaiting_embedding': 'Vzorek uložen, čeká na zpracování hlasu',
+        'not_learned': 'Hlas nebyl naučen',
+        'other': 'Stav hlasu není znám',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označit i pozdější řeč tohoto mluvčího';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aktualizovat souhrn s novými jmény';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk nelze přečíst — synchronizace není možná';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Co pro mě můžeš udělat?',
+        'goal': 'Pomoz mi stanovit cíl',
+        'activity': 'Shrň mé nedávné aktivity',
+        'improve': 'Jak se mohu zlepšit?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Příští týden';
+
+  @override
+  String get clearSearch => 'Vymazat hledání';
+
+  @override
+  String get filterBySpeaker => 'Filtrovat podle mluvčího';
+
+  @override
+  String get notNow => 'Teď ne';
+
+  @override
+  String get discard => 'Zahodit';
+
+  @override
+  String get keepEditing => 'Pokračovat v úpravách';
+
+  @override
+  String get discardChangesTitle => 'Zahodit změny?';
+
+  @override
+  String get discardChangesMessage => 'Neuložené změny budou ztraceny.';
+
+  @override
+  String get pause => 'Pozastavit';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat konverzace ($count)?',
+      one: 'Smazat 1 konverzaci?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Smažou se také jejich vzpomínky, úkoly a zvukové soubory.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazáno konverzací: $count',
+      one: '1 konverzace smazána',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Přesunuto konverzací: $count',
+      one: 'Přesunuta 1 konverzace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Konverzace se nepodařilo přesunout';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Zahozeno · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na tlačítko nahrávání na domovské obrazovce.';
+
+  @override
+  String get conversationMap => 'Mapa konverzací';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Konverzace: $count',
+      one: '1 konverzace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Úkoly: $count',
+      one: '1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Zpět o 10 sekund';
+
+  @override
+  String get skipForward10Seconds => 'Vpřed o 10 sekund';
+
+  @override
+  String get failedToShareRecap => 'Souhrn se nepodařilo sdílet';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, ukládání do vyrovnávací paměti';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, ukládání do vyrovnávací paměti · $minutes min';
+  }
+
+  @override
+  String get memoryDetailsTitle => 'Vzpomínka';
+
+  @override
+  String get editMemoryTitle => 'Upravit vzpomínku';
+
+  @override
+  String get newMemoryTitle => 'Nová vzpomínka';
+
+  @override
+  String get memoryReadOnlyHint => 'Tato vzpomínka je uchována jako historie a nelze ji upravit.';
+
+  @override
+  String get openConversation => 'Otevřít konverzaci';
+
+  @override
+  String get memoryGraphTitle => 'Graf vzpomínek';
+
+  @override
+  String get memoryReviewTitle => 'Co jsem se dnes dozvěděl';
+
+  @override
+  String get memoryReviewRight => 'Správně';
+
+  @override
+  String get memoryReviewWrong => 'Špatně';
+
+  @override
+  String get memoryReviewFix => 'Opravit';
+
+  @override
+  String get memoryReviewConfirmed => 'Potvrzeno.';
+
+  @override
+  String get memoryReviewDropped => 'Odebráno z vašich vzpomínek.';
+
+  @override
+  String get memoryReviewUpdated => 'Aktualizováno.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Uložení se nezdařilo, zkuste to znovu';
+
+  @override
+  String get indentTask => 'Odsadit';
+
+  @override
+  String get outdentTask => 'Zrušit odsazení';
+
+  @override
+  String get goalDeleted => 'Cíl smazán';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Úkoly se nepodařilo přijmout. Možná jste toto sdílení už přijali.';
+
+  @override
+  String get pausePlayback => 'Pozastavit';
+
+  @override
+  String get deleteSample => 'Smazat vzorek';
+
+  @override
+  String get deletePersonTitle => 'Smazat osobu?';
+
+  @override
+  String get deletePersonLabel => 'Smazat osobu';
+
+  @override
+  String get noPeopleYet => 'Zatím žádné osoby';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat úkoly ($count)?',
+      one: 'Smazat 1 úkol?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Úkolů: $count',
+      one: '1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Do seznamu přibyly úkoly: $count',
+      one: 'Do seznamu přibyl 1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Přidat úkoly ($count)',
+      one: 'Přidat 1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'úkoly ($count)',
+      one: '1 úkol',
+    );
+    return '$name sdílí $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exportováno do $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Termín: $date';
+  }
+
+  @override
+  String get linkEvent => 'Propojit událost';
+
+  @override
+  String get noCalendarEventsNearby => 'Kolem této doby nebyly nalezeny žádné události v kalendáři.';
+
+  @override
+  String get suggestedEvent => 'Navrženo';
+
+  @override
+  String get openInGoogleCalendar => 'Otevřít v Kalendáři Google';
+
+  @override
+  String get shareWithAttendees => 'Sdílet s účastníky';
+
+  @override
+  String get unlinkCalendarEvent => 'Zrušit propojení události';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Poznámky: $title';
+  }
+
+  @override
+  String get previousResult => 'Předchozí výsledek';
+
+  @override
+  String get nextResult => 'Další výsledek';
+
+  @override
+  String get playFromHere => 'Přehrát odsud';
+
+  @override
+  String get shareConversationQuestion => 'Sdílet konverzaci?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Úkoly z této konverzace se zobrazí zde.';
+
+  @override
+  String get noPendingTasks => 'Žádné čekající úkoly';
+
+  @override
+  String nCompleted(int count) {
+    return 'Dokončeno: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Určit mluvčího';
+
+  @override
+  String get couldNotLoadCheckout => 'Stránku pokladny se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Měsíční limit bezplatných hovorů je vyčerpán. Obnoví se příští měsíc.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Historii importů se nepodařilo načíst';
+
+  @override
+  String get phoneCallButton => 'Volat';
+
+  @override
+  String get searchContacts => 'Hledat kontakty';
+
+  @override
+  String get phoneContactsAccessTitle => 'Povolit přístup ke kontaktům';
+
+  @override
+  String get phoneSelectCountryTitle => 'Vyberte zemi';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Žádná ověřená čísla';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Ověřte své číslo, abyste mohli volat přes Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Toto číslo se nepodařilo smazat';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Zapomenout zařízení?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi se přestane k tomuto zařízení připojovat.';
+
+  @override
+  String get deviceForgottenMessage => 'Zařízení zapomenuto';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Zrušit spárování zařízení?';
+
+  @override
+  String get rollBack => 'Vrátit zpět';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostika zařízení Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Selhalo';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'znovu připojeno za $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'před $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Řídí se vaším hlavním jazykem';
+
+  @override
+  String get creatorPayouts => 'Výplaty tvůrcům';
+
+  @override
+  String get sttLanguageOverride => 'Přepsat';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Použít hlavní jazyk';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Tento poskytovatel nepodporuje $language, proto používá $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Zjištěná RAM: $ram GB. Doporučené minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Zjištěný model: $model (starší než iPhone XS). Rozpoznávání v zařízení může být pomalejší.';
+  }
+
+  @override
+  String get copyLogs => 'Kopírovat protokoly';
+
+  @override
+  String get openProviderDocs => 'Otevřít dokumentaci';
+
+  @override
+  String get getApiKey => 'Získat klíč API';
+
+  @override
+  String get showApiKey => 'Zobrazit klíč API';
+
+  @override
+  String get hideApiKey => 'Skrýt klíč API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Odebrat $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count slov',
+      one: '1 slovo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Zbývá $remaining z $limit bezplatných hovorů tento měsíc';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Zbývá $remaining z $limit bezplatných hovorů tento měsíc · každý až $minutes min';
+  }
+
+  @override
+  String get appCreators => 'Tvůrci aplikací';
+
+  @override
+  String get homeScreen => 'Domovská obrazovka';
+
+  @override
+  String get phoneCalls => 'Telefonní hovory';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Přeskakuje tiché audio před přepisem, aby snížil náklady.';
+
+  @override
+  String get flashCustomFirmware => 'Nahrát vlastní firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Nahrávejte vlastní sestavení firmwaru';
+
+  @override
+  String get selectFirmwareZip => 'Vyberte soubor ZIP s firmwarem';
+
+  @override
+  String get customFirmwareWarning =>
+      'Vlastní firmware může zařízení nevratně poškodit. Ujistěte se, že jde o platné sestavení firmwaru Omi, a během aktualizace zařízení neodpojujte.';
+
+  @override
+  String get firmwareFlashed => 'Firmware nahrán';
+
+  @override
+  String get deviceWillRestart => 'Zařízení se restartuje.';
+
+  @override
+  String get exportFailedTryAgain => 'Export se nezdařil. Zkuste to znovu.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Zařízení: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Ponechat předplatné';
+
+  @override
+  String get couldNotLoadPage => 'Stránku se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Krok $current z $total';
+  }
+
+  @override
+  String get sharedTasksLinkExpired => 'Tyto sdílené úkoly nebyly nalezeny nebo platnost odkazu vypršela.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Někdo';
+
+  @override
+  String get allow => 'Povolit';
+
+  @override
+  String get permissionAllowed => 'Povoleno';
+
+  @override
+  String get permissionBlockedHint => 'Vypnuto v Nastavení. Povolte to tam, abyste to mohli používat.';
+
+  @override
+  String get useDifferentAccount => 'Použít jiný účet';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Krok $current z $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Nechte Omi běžet pár dní. Vaše konverzace, vzpomínky a úkoly se začnou plnit.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nemůžete najít zařízení? Ujistěte se, že je zapnuté a blízko telefonu, a vyhledejte znovu.';
+
+  @override
+  String get scanAgain => 'Vyhledat znovu';
+
+  @override
+  String get howToPair => 'Jak spárovat';
+
+  @override
+  String get contactSupportAction => 'Kontaktovat podporu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName je offline. Stiskněte jeho tlačítko, aby se probudilo, a zkuste to znovu.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterie $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Aktualizovat firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Připojování…';
+
+  @override
+  String get recordOptionsTip => 'Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Aktualizace nebyla dokončena. Zařízení má stále současný firmware a je bezpečné ho používat. Nabijte ho, mějte ho u telefonu a zkuste to znovu.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Spustit aktualizaci';
+
+  @override
+  String get otaNotSupported => 'Tento firmware nelze aktualizovat přes Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'K zařízení $deviceName se nepodařilo připojit. Nechte ho zapnuté a poblíž a zkuste to znovu.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Tato aktualizace teď není k dispozici. Zkuste to později.';
+
+  @override
+  String get otaStarting => 'Spouštění aktualizace…';
+
+  @override
+  String get otaStartFailed => 'Aktualizaci se nepodařilo spustit. Zkontrolujte název a heslo Wi-Fi a zkuste to znovu.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName se restartuje s novým firmwarem.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Aktualizace byla zrušena';
+
+  @override
+  String get cancelUpdate => 'Zrušit aktualizaci';
+
+  @override
+  String get otaKeepNearby => 'Během aktualizace nechte zařízení zapnuté a poblíž a nezavírejte aplikaci.';
+
+  @override
+  String get otaWifiConnecting => 'Připojování k Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Připojeno k Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'K Wi-Fi se nepodařilo připojit. Zkontrolujte název sítě a heslo.';
+
+  @override
+  String get otaDownloadFailed => 'Stažení firmwaru se nezdařilo. Zkontrolujte připojení Wi-Fi a zkuste to znovu.';
+
+  @override
+  String get otaInstallFailed => 'Instalace se nezdařila. Zařízení má stále současný firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName je aktualizováno a samo se restartuje.';
+  }
+
+  @override
+  String get showPassword => 'Zobrazit heslo';
+
+  @override
+  String get hidePassword => 'Skrýt heslo';
+
+  @override
+  String get appNotFoundOrRemoved => 'Tato aplikace již není k dispozici';
+
+  @override
+  String get startupFailedTitle => 'Omi se nepodařilo spustit';
+
+  @override
+  String get startupFailedMessage => 'Při spouštění Omi se něco pokazilo. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Tato verze Omi má problém s konfigurací. Nejedná se o problém s vaším zařízením. Kontaktujte podporu a uveďte podrobnosti níže.';
+
+  @override
+  String get discardRecordingTitle => 'Zahodit nahrávání?';
+
+  @override
+  String get discardRecordingMessage => 'Váš hlasový vzorek ještě není uložen. Pokud nyní odejdete, bude zahozen.';
+
+  @override
+  String get keepRecording => 'Pokračovat v nahrávání';
+
+  @override
+  String get view => 'Zobrazit';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Povolit přístup aplikaci $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName bude dostávat vaše konverzace, vzpomínky a nahrávky na server svého vývojáře. Omi neodpovídá za to, jak se tam s těmito daty nakládá.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName je vypnuta';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hodnocení',
+      one: '1 hodnocení',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Snímek obrazovky $index z $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatovat s $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Nastavení $appName';
+  }
+
+  @override
+  String get appOptions => 'Možnosti aplikace';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Přístup vám zůstane do konce aktuálního zúčtovacího období.';
+
+  @override
+  String get chatSendMessage => 'Odeslat zprávu';
+
+  @override
+  String get chatAddAttachment => 'Přidat přílohu';
+
+  @override
+  String get removeAttachment => 'Odebrat přílohu';
+
+  @override
+  String get chatRemoveSelectedText => 'Odebrat citovaný text';
+
+  @override
+  String get chatOfflineHint => 'Jste offline. Pro odesílání zpráv se znovu připojte.';
+
+  @override
+  String get chatReplyFailed => 'Omi nemohl odpovědět. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Vypnout $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Co se nepovedlo?';
+
+  @override
+  String get selectAReason => 'Vyberte důvod';
+
+  @override
+  String get submit => 'Odeslat';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Příliš rozvláčné';
+
+  @override
+  String get feedbackReasonIncorrect => 'Nesprávné nebo smyšlené';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Neužitečné nebo mimo téma';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nedodržel pokyny';
+
+  @override
+  String get additionalFeedbackOptional => 'Další zpětná vazba (volitelné)';
+
+  @override
+  String get helpful => 'Užitečné';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Shrnutí dne · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Co jsem dělal včera?';
+
+  @override
+  String get chatStarterDoDifferently => 'Co bych dnes mohl udělat jinak?';
+
+  @override
+  String get chatStarterTeachMe => 'Můžeš mě naučit něco nového?';
+
+  @override
+  String get thinking => 'Přemýšlím';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Novinky se nepodařilo načíst';
+
+  @override
+  String get githubRepositoryUrl => 'URL repozitáře na GitHubu';
+
+  @override
+  String get githubRepositoryUrlHint => 'Odkaz na repozitář se zdrojovým kódem aplikace';
+
+  @override
+  String get triggerEvents => 'Spouštěcí události';
+
+  @override
+  String get noAppsInCategoryYet => 'V této kategorii zatím nejsou žádné aplikace';
+
+  @override
+  String get scopes => 'Rozsahy';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Vytvořte aplikaci pomocí AI jedním klepnutím';
+
+  @override
+  String get refreshManifest => 'Obnovit manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Verze $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ uživatelů';
+  }
+
+  @override
+  String get discovery => 'Objev';
+
+  @override
+  String get chatBlockShowMore => 'Zobrazit více';
+
+  @override
+  String get chatBlockShowLess => 'Zobrazit méně';
+
+  @override
+  String get triggerEvent => 'Spouštěcí událost';
+
+  @override
+  String get webhookUrl => 'URL webhooku';
+
+  @override
+  String get appHomeUrl => 'URL domovské stránky aplikace';
+
+  @override
+  String get authUrl => 'URL ověření';
+
+  @override
+  String get setupCompletedUrl => 'URL dokončení nastavení';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifestu nástrojů chatu';
+
+  @override
+  String get invalidWebhookUrlError => 'Zadejte platnou URL webhooku';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repozitáře GitHub je povinná';
+
+  @override
+  String get removeScreenshot => 'Odebrat snímek obrazovky';
+
+  @override
+  String get addScreenshot => 'Přidat snímek obrazovky';
+
+  @override
+  String get aiGenRegenerateIcon => 'Znovu vygenerovat ikonu';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aplikace: $count',
+      one: '1 aplikace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Vygenerovat popis';
+
+  @override
+  String get selectImageFileTitle => 'Vyberte soubor obrázku';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vyberte miniaturu obrázku';
+
+  @override
+  String get appIdNotFoundError => 'ID aplikace nebylo nalezeno';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest byl úspěšně obnoven';
+
+  @override
+  String get manifestRefreshFailed => 'Nepodařilo se obnovit manifest';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Nahrávky této konverzace';
+
+  @override
+  String get captureRecordingSeparate => 'Oddělit…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Oddělit tuto nahrávku?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording se zobrazí jako samostatná konverzace a s touto událostí už nebude seskupena.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Oddělit';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Oddělení se nezdařilo. Zkuste to znovu.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tuto nahrávku nelze otevřít.';
+
+  @override
+  String get captureRecordingViewing => 'Prohlížíte tuto nahrávku';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Nahráno: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Počítač';
+
+  @override
+  String get renameConversation => 'Přejmenovat';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávek: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Přívěsek';
+
+  @override
+  String get conversationDeveloperTools => 'Vývojářské nástroje v konverzacích';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dalších',
+      many: '$count dalších',
+      few: '$count další',
+      one: '1 další',
+    );
+    return '$name + $_temp0';
+  }
+
+  @override
+  String get recordingAndTranscription => 'Nahrávání a přepis';
+
+  @override
+  String get notificationsAndDisplay => 'Oznámení a zobrazení';
+
+  @override
+  String get helpAndAbout => 'Nápověda a o aplikaci';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomozte Omi rozpoznávat hlasy';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Byli jste to vy?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Je to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kdo je to?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To jsem já';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nejsem to já';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Někdo nový';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Někdo, koho neznám';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nejsem si jistý';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Přehrát ukázku';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Pamatovat si hlasy lidí, které pojmenujete';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi si uchová krátkou ukázku hlasu, aby je příště poznal. Můžete to kdykoli změnit v Nastavení.';
+
+  @override
+  String get speakerTagPromptThanks => 'Díky! Omi bude hlasy rozpoznávat čím dál lépe.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Jméno';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Tuto ukázku nelze přehrát';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nepodařilo se uložit. Zkuste to prosím znovu.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Žádat mě o označení hlasů';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi se občas zeptá, kdo mluvil ve vašich nedávných konverzacích';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Když někoho pojmenujete, Omi si uchová krátkou ukázku hlasu, aby ho příště poznal';
+
+  @override
+  String get leaveBlank => 'Nechte prázdné';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Přidat do ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Čekající přepisy $pending/$total';
+  }
+
+  @override
+  String get captureSourceCall => 'Hovor';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Pokračovat';
+
+  @override
+  String get finish => 'Dokončit';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Přívěsek pozastaven · po dokončení pokračuje';
+
+  @override
+  String get pendantIsListeningTitle => 'Váš přívěsek poslouchá';
+
+  @override
+  String get oneSourceAtATime => 'Omi nahrává vždy jen z jednoho zdroje.';
+
+  @override
+  String get recordWithPhoneInstead => 'Nahrávat raději telefonem';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Přívěsek se pozastaví, dokud neskončíte';
+
+  @override
+  String get pendantPausesDuringCall => 'Přívěsek se během hovoru pozastaví';
+
+  @override
+  String get keepUsingPendant => 'Dál používat přívěsek';
+
+  @override
+  String get recordWith => 'Nahrát pomocí';
+
+  @override
+  String get moreWaysToRecord => 'Další způsoby nahrávání';
+
+  @override
+  String get openCall => 'Otevřít hovor';
+
+  @override
+  String get captureRecoveryBanner => 'Omi neodesílá zvuk — klepnutím se znovu připojte';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later.';
+
+  @override
+  String get captureNotTranscribing => 'Nepřepisuje se';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
+
+  @override
+  String get captureStillRecording => 'Stále se nahrává';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon používá jiná aplikace';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Hovor nebo jiná aplikace převzala mikrofon, takže Omi teď neslyší. Omi bude pokračovat sám, jakmile se mikrofon uvolní. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaše vlastní služba převodu řeči na text není dostupná. Omi uchovává zvuk v tomto telefonu a odešle ho, až bude služba opět k dispozici. Nic se neztratí.';
+
+  @override
+  String get captureStarting => 'Spouštění…';
+
+  @override
+  String get capturePhoneStorageFull => 'Úložiště telefonu je plné';
+
+  @override
+  String get captureStorageAlmostFull => 'Úložiště je téměř plné';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name a další';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Poslechněte si odpovědi Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Mám to. Vaše další schůzka začíná za dvacet minut.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Vše je připraveno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Klepnutím na řádek ho zkontrolujete nebo změníte.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Když se zeptáte pomocí tlačítka, Omi může svou odpověď přečíst nahlas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Poslechněte si svou poslední odpověď';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Přehrávání vaší poslední odpovědi...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prostřednictvím $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Prostřednictvím reproduktoru telefonu';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prostřednictvím aktuálního audio výstupu';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odpovědi zůstávají na obrazovce. Nic se nemluví.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Soukromé. Mluví pouze prostřednictvím AirPods, Bluetooth nebo kabelových sluchátek.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Používá reproduktor telefonu, když nejsou připojena sluchátka.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Číslo Omi zůstane tiché. Odpovědi se stále zobrazují v aplikaci.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device připojeno. Zde bude mluvit Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nejsou připojena žádná sluchátka. Číslo Omi zůstane tiché, dokud nějaké nepřipojíte.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Hraje přes $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Přehrává nahlas přes reproduktor telefonu.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Toto můžete kdykoli změnit na $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Přehrajte si tuto prohlídku kdykoli na čísle $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Sluchátka';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minut';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Úkoly';
+
+  @override
+  String get usageMonth => 'Tento měsíc';
+
+  @override
+  String get usageYear => 'Letos';
+
+  @override
+  String get usageAll => 'Vždy';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Vzhled';
+
+  @override
+  String get appearanceSystem => 'Systém';
+
+  @override
+  String get appearanceLight => 'Světlý';
+
+  @override
+  String get appearanceDark => 'Tmavý';
+
+  @override
+  String get chatDiscardRecording => 'Zahodit';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nerozuměl jsem — zkuste to znovu';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Hledat osoby';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Přidat „$query“ jako novou osobu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Zobrazit všechny osoby ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, zeptej se na cokoli';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Místa';
+
+  @override
+  String get recaps => 'Shrnutí';
+
+  @override
+  String get recent => 'Nedávné';
+
+  @override
+  String get searchPartialFailure => 'Některé výsledky se nepodařilo načíst';
+
+  @override
+  String get peopleSearchPlaceholder => 'Hledat lidi';
+
+  @override
+  String get peopleNotHeardYet => 'Zatím neslyšeni';
+
+  @override
+  String get peopleRecent => 'Nedávní';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tím se odstraní jejich hlasové vzorky a nelze to vrátit zpět. Jejich repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.';
+
+  @override
+  String get personTalkTime => 'Doba mluvení';
+
+  @override
+  String get personLastHeard => 'Naposledy slyšen';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat lidi: $count?',
+      one: 'Smazat 1 člověka?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chybí hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osob: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žádné odpovídající osoby';
+
+  @override
+  String get deselectAll => 'Zrušit výběr';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávání hlasu';
+
+  @override
+  String get greetingMorning => 'Dobré ráno';
+
+  @override
+  String get greetingAfternoon => 'Dobré odpoledne';
+
+  @override
+  String get greetingEvening => 'Dobrý večer';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Co chcete vědět?';
+
+  @override
+  String get askSuggestDecide => 'Co jsem dnes rozhodl?';
+
+  @override
+  String get askSuggestOwe => 'Co ještě dlužím lidem?';
+
+  @override
+  String get askSuggestNotice => 'Čeho si Omi všiml?';
+
+  @override
+  String get pastChats => 'Předchozí chaty';
+
+  @override
+  String get newChat => 'Nový chat';
+
+  @override
+  String get startFresh => 'Začít znovu';
+
+  @override
+  String get noPastChats => 'Tady se zobrazí vaše chaty s Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Smazat tento chat?';
+
+  @override
+  String get deleteChatMessage => 'Z předchozích chatů zmizí natrvalo.';
+
+  @override
+  String get deleteChat => 'Smazat chat';
+
+  @override
+  String get appsAskWith => 'Ptejte se Omi s';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozhovorů dnes.',
+      one: '1 rozhovor dnes.',
+      zero: 'Dnes žádné rozhovory.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Co bylo na obrazovce';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímek obrazovky z této schůzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Smazat snímek obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.';
+
+  @override
+  String get conversationSummaryFailed => 'Shrnutí se nepodařilo';
+
+  @override
+  String get reconnectionsRecent => 'Opětovná připojení (posledních 7 dní)';
+
+  @override
+  String get failedConnections => 'Neúspěšná připojení';
+
+  @override
+  String get failedConnectionsRecent => 'Neúspěšná připojení (posledních 7 dní)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od spárování';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Nízká jistota';
+
+  @override
+  String get peopleFilterPinned => 'Připnuté';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Připnuto: $count',
+      one: '1 připnutá',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Potvrzená';
+
+  @override
+  String get confidenceLikely => 'Pravděpodobná';
+
+  @override
+  String get confidenceUnverified => 'Neověřená';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Jistota: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označili jste $count×',
+      one: 'Označili jste jednou',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vybráno v $count návrzích',
+      one: 'Vybráno v 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potvrdili jste $count automatických označení',
+      one: 'Potvrdili jste 1 automatické označení',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Označeno automaticky, zatím nepotvrzeno';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nikdy nepotvrzeno';
+
+  @override
+  String get confidenceReasonCorrected => 'Přiřazení jste opravili';
+
+  @override
+  String get confidenceReasonVoiceReady => 'hlas uložen';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'zatím chybí hlasový vzorek';
+
+  @override
+  String get confidenceReasonNotHeard => 'zatím neslyšeno';
+
+  @override
+  String get confidenceSheetTitle => 'Jistota';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi rozpoznává hlas osoby $name a vy jste to potvrdili.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi hlas osoby $name obvykle pozná, ale potvrdili jste ho jen několikrát.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Osobu $name zatím nemáte označenou ani potvrzenou, takže si Omi není jisté, zda zná jejich hlas.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Podklady';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označeno vámi v $count konverzacích',
+      one: 'Označeno vámi v 1 konverzaci',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ano u $count návrhů',
+      one: 'Ano u 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vybráno v $count návrzích',
+      one: 'Vybráno v 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potvrdili jste $count automatických označení',
+      one: 'Potvrdili jste 1 automatické označení',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Změnili jste $count automatických označení na jinou osobu',
+      one: 'Změnili jste 1 automatické označení na jinou osobu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatických označení zatím nepotvrzeno',
+      one: '1 automatické označení zatím nepotvrzeno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Hlasový vzorek je připraven';
+
+  @override
+  String get evidenceNoVoice => 'Zatím žádný hlasový vzorek';
+
+  @override
+  String get evidenceNotHeard => 'Zatím neslyšeno v konverzaci';
+
+  @override
+  String get evidenceNothing => 'Zatím jste je neoznačili ani nepotvrdili';
+
+  @override
+  String get effectCountsALot => 'Hodně pomáhá';
+
+  @override
+  String get effectCounts => 'Pomáhá';
+
+  @override
+  String get effectCountsALittle => 'Trochu pomáhá';
+
+  @override
+  String get effectBarelyCounts => 'Skoro nepomáhá';
+
+  @override
+  String get effectCountsAgainst => 'Škodí';
+
+  @override
+  String get effectNeeded => 'Potřeba pro „Potvrzená“';
+
+  @override
+  String get confidenceToReachConfirmed => 'Jak dosáhnout stavu Potvrzená';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi potřebuje také hlasový vzorek osoby $name. Označte ji se zapnutou funkcí „Pamatovat si hlasy“.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name je ve stavu Potvrzená. Nemusíte dělat nic dalšího.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Vaše označení a potvrzení mají největší váhu. Automatická označení mají malou váhu, dokud je nepotvrdíte.';
+
+  @override
+  String get personWhyConfidence => 'Proč?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Připnout osobu $name';
+  }
+
+  @override
+  String get pinAction => 'Připnout';
+
+  @override
+  String get unpinAction => 'Odepnout';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Osoba $name připnuta';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Osoba $name odepnuta';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Proč $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Smazat osobu $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Osoba $name je připnutá. Její hlasové vzorky se odstraní, Omi ji přestane rozpoznávat a v dřívějších přepisech se zobrazí jako nepojmenovaný mluvčí. Tuto akci nelze vrátit zpět.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Smazat osobu $name';
+  }
+
+  @override
+  String get selectPeople => 'Vybrat osoby';
+
+  @override
+  String get cleanUpEllipsis => 'Vyčistit…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Osoby, u kterých si Omi není jisté: $count',
+      one: '1 osoba, u které si Omi není jisté',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Většinou špatně slyšená jména. Projděte je a odstraňte ta, která nejsou skutečná.';
+
+  @override
+  String get reviewAction => 'Zkontrolovat';
+
+  @override
+  String get cleanUpTitle => 'Vyčištění';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi si není jisté u těchto osob ($count). Většinou jde o jména špatně slyšená z přepisů. Zrušte zaškrtnutí u těch, které chcete ponechat.',
+      one: 'Omi si není jisté u této osoby. Zrušte zaškrtnutí, pokud ji chcete ponechat.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Připnuté osoby se do vyčištění nikdy nezahrnují.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat osoby ($count)',
+      one: 'Smazat 1 osobu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazané osoby: $count',
+      one: '1 osoba smazána',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Není co čistit';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi si teď není u nikoho nejisté.';
+
+  @override
+  String get selectAllSkipsPinned => 'Vybrat vše přeskočí připnuté osoby. Smažte je jednotlivě na jejich stránce.';
+
+  @override
+  String get pinnedNotSelectable => 'Připnuto, nelze vybrat';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignorované hlasy';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasty a další hlasy, které jste označili jako „Není osoba“';
+
+  @override
+  String get ignoredVoicesEmpty => 'Žádné ignorované hlasy';
+
+  @override
+  String get restoreAction => 'Obnovit';
+
+  @override
+  String get voiceRestoredToast => 'Omi se na tento hlas může znovu zeptat';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Někdo jiný…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Není osoba';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nevím';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'To jsem já';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Nejbližší hlasy';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Lidé, se kterými jste nedávno mluvili';
+
+  @override
+  String get voiceMatchClose => 'Blízká shoda';
+
+  @override
+  String get voiceMatchPossible => 'Možná shoda';
+
+  @override
+  String get voiceMatchWeak => 'Slabá shoda';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Shoda hlasu: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Vaše odpověď pomůže Omi příště poznat tento hlas.';
+
+  @override
+  String get speakerTagPromptHintOwner => 'Vaše odpověď označí pouze přehrané úryvky.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Uloženo jako $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Uloženo jako váš hlas';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi se na tento hlas už nebude ptát';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Označeno jako $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Označeno jako vy';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Označeno jako není osoba';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Označení odstraněno';
+
+  @override
+  String get whoIsItTitle => 'Kdo to je?';
+
+  @override
+  String get newPersonEllipsis => 'Nová osoba…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Přidat „$name“';
+  }
+
+  @override
+  String get everyoneHeader => 'Všichni';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Platí pro každý řádek tohoto mluvčího';
+
+  @override
+  String get collapseAction => 'Sbalit';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Nejsem to já';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označte je ještě v $count konverzacích.',
+      one: 'Označte je ještě v 1 konverzaci.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Zapněte Omi v Zkratkách → Siri. Řekněte „$askPhrase“ nebo „$questionPhrase“ a pak položte svou otázku.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Můžete také říct „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Je k dispozici aktualizace';
+
+  @override
+  String get updateAvailableMessage => 'Nová verze Omi je připravená, s opravami a vylepšeními.';
+
+  @override
+  String get updateRequiredTitle => 'Vyžaduje se aktualizace';
+
+  @override
+  String get updateRequiredMessage =>
+      'Tato verze Omi už není podporovaná. Aktualizujte ji, abyste mohli dál nahrávat a synchronizovat.';
+
+  @override
+  String get exportingAllData =>
+      'Exportují se vaše data… Nechejte Omi otevřené; u velkých účtů to může trvat několik minut.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mluvčí: $count',
+      one: '1 mluvčí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Automaticky odstranit synchronizované kopie';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synchronizované kopie se odstraní po $days dnech';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Odstraní místní kopie $days dní po synchronizaci. Cloudové kopie zůstávají zachovány.';
+  }
+
+  @override
+  String get localCopiesSection => 'Místní kopie';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označeno řádků: $count',
+      one: 'Označen 1 řádek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Hlas naučen',
+        'pending': 'Učení hlasu…',
+        'disabled': 'Ukládání hlasu je vypnuté',
+        'other': 'Hlas zatím není naučen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi příště pozná osobu $name.',
+        'pending': 'Potrvá to několik sekund.',
+        'disabled': 'Zapněte v Nastavení ukládání hlasů, aby Omi mohl poznat osobu $name.',
+        'other': 'Omi potřebuje více zřetelné řeči od osoby $name a bude to zkoušet dál.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nalezen v dřívějších rozhovorech: $count',
+      one: 'Nalezen v 1 dřívějším rozhovoru',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Pravděpodobně',
+        'soundsLike': 'Zní jako $name',
+        'notPerson': 'Není $name',
+        'alsoTitle': 'Je to také $name?',
+        'alsoBody': 'Omi našel stejný hlas v dřívějších rozhovorech.',
+        'confirmed': 'Tento štítek jste potvrdili',
+        'other': 'Zkontrolovat',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tohoto hlasu';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Omi nenalezeno';
+
+  @override
+  String get findDeviceNoneMessage => 'Zapněte ho a podržte ho u telefonu.';
+
+  @override
+  String get startupFailedDetails => 'Podrobnosti';
+
+  @override
+  String get couldNotLoadApiKeys => 'Klíče API se nepodařilo načíst.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Ne…';
+
+  @override
+  String get diagnosticsRightNow => 'Právě teď';
+
+  @override
+  String get diagnosticsLast7Days => 'Posledních 7 dní';
+
+  @override
+  String get diagnosticsConnectedFor => 'Připojeno';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Znovu se připojuje samo';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Krátké výpadky, pokaždé zpět asi za $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Tento týden žádné výpadky';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Potíže s připojením';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Neúspěšná připojení za posledních 24 hodin: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Výpadky';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'asi $count za hodinu';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Nejdelší výpadek';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Od spárování: výpadků $drops, neúspěšných připojení $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Posledních $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'Nelze se připojit. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get chatReplyServerError => 'Něco se pokazilo na naší straně. Zkuste to prosím znovu.';
+
+  @override
+  String get chatReplyTimeout => 'Odpověď trvala příliš dlouho. Zkuste to prosím znovu.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nejste přihlášeni. Přihlaste se a zkuste to znovu.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chatovací aplikace se nepodařilo načíst. Zkuste to prosím znovu.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výběr hlasu je sdílen mezi mobilní a desktopovou aplikací.';
+
+  @override
+  String get readChatRepliesAloud => 'Číst odpovědi chatu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Mluví pouze tehdy, když to povolí \"Hlasová odpověď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, jsem Omi. Tohle je můj hlas.';
+
+  @override
+  String get peopleStatsIncomplete => 'Počty mohou být neúplné.';
+
+  @override
+  String get previousDay => 'Předchozí den';
+
+  @override
+  String get nextDay => 'Následující den';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Žádné úkoly na $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Konverzace se znovu zpracovává…';
+
+  @override
+  String get conversationReprocessed => 'Konverzace aktualizována';
+
+  @override
+  String get loadingTranscript => 'Načítání přepisu…';
+
+  @override
+  String get transcriptLoadFailed => 'Přepis se nepodařilo načíst.';
+
+  @override
+  String get processingConversationProgress => 'Konverzace se zpracovává…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tuto konverzaci se nepodařilo zpracovat.';
+
+  @override
+  String get waitForReprocessing => 'Počkejte na dokončení opětovného zpracování.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Mluvčí';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Označení mluvčích se napříč nahrávkami v této konverzaci nemusí shodovat.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O popiscích mluvčích';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nedokázalo napříč nahrávkami rozeznat ostatní hlasy. Klepnutím na popisek mluvčího pojmenujete, kdo mluví.';
+
+  @override
+  String get nameSpeakerTitle => 'Pojmenovat mluvčího';
+
+  @override
+  String get playbackPreparingAudio => 'Připravuje se zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Zpět na aktuální';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk není k dispozici';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk se nepodařilo načíst';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Zkontrolujte připojení';
+
+  @override
+  String get forYou => 'Pro vás';
+
+  @override
+  String get stopThese => 'Zastavit tyto';
+
+  @override
+  String get dismiss => 'Skrýt';
+
+  @override
+  String get showOnLockScreen => 'Zobrazit na zamčené obrazovce';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.';
+
+  @override
+  String get onboardingSetupTitle => 'Nastavujeme váš Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dejte Omi chvilku na přizpůsobení';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Připravujeme váš pracovní prostor';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ladíme přepis na váš jazyk';
+
+  @override
+  String get onboardingSetupStepMemory => 'Nastavujeme vaši paměť';
+
+  @override
+  String get onboardingSetupStepDevices => 'Připojujeme vaše zařízení';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Přizpůsobujeme váš zážitek';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Líbí se vám Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ano';
+
+  @override
+  String get onboardingRatingPromptNo => 'Ne';
+
+  @override
+  String get partialRecording => 'Částečná nahrávka';
+
+  @override
+  String get importTranscriptFiles => 'Soubory přepisů';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Právě probíhá příliš mnoho importů. Zkuste to později.';
+
+  @override
+  String get importFileTooLarge => 'Tento soubor je příliš velký na import.';
+
+  @override
+  String get importUnsupportedFileType => 'Tento typ souboru nelze importovat.';
+
+  @override
+  String get reviewTitle => 'Kontrola';
+
+  @override
+  String get reviewEntryTitle => 'Otázky pro vás';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Zbývá $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kdo to řekl?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Je to stejná osoba jako „$name“?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Jak se to píše?';
+
+  @override
+  String get reviewPlayClip => 'Přehrát úryvek';
+
+  @override
+  String get reviewStopClip => 'Zastavit úryvek';
+
+  @override
+  String get reviewOpenDetailsHint => 'Otevře podrobnosti';
+
+  @override
+  String get reviewAnswerMe => 'Já';
+
+  @override
+  String get reviewAnswerOther => 'Jiné';
+
+  @override
+  String get reviewAddTask => 'Přidat úkol';
+
+  @override
+  String get reviewAnswerFailed => 'Odpověď se nepodařilo uložit. Zkuste to znovu.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Tato odpověď označí konverzace: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Neznámý mluvčí';
+
+  @override
+  String get reviewNewPersonName => 'Jejich jméno';
+
+  @override
+  String get reviewSomeoneElse => 'Někdo jiný…';
+
+  @override
+  String get reviewConfirm => 'Potvrdit';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Potvrdit: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Nevím jistě';
+
+  @override
+  String get reviewOpenConversation => 'Konverzace';
+
+  @override
+  String get reviewTaskField => 'Úkol';
+
+  @override
+  String get reviewDue => 'Termín';
+
+  @override
+  String get reviewNoDate => 'Žádný';
+
+  @override
+  String get reviewProject => 'Projekt';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Už hotovo';
+
+  @override
+  String get reviewReasonNotMine => 'Není můj';
+
+  @override
+  String get reviewReasonNotUseful => 'Není užitečné';
+
+  @override
+  String get reviewYesMerge => 'Ano, sloučit';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Konverzace: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Zadat ručně';
+
+  @override
+  String get reviewLoadFailed => 'Vaše otázky se nepodařilo načíst.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Není na co odpovídat';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi se zde zeptá, jen když vás bude potřebovat.';
+
+  @override
+  String get reviewRecentChanges => 'Nedávné změny';
+
+  @override
+  String get reviewChangesIntro => 'Co Omi změnilo samo za posledních 30 dní. Vraťte zpět vše, co vypadá špatně.';
+
+  @override
+  String get reviewChangeUndone => 'Vráceno zpět. Omi to samo znovu neudělá.';
+
+  @override
+  String get reviewChangeFailed => 'Tuto změnu se nepodařilo aktualizovat. Zkuste to znovu.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Nedávné změny se nepodařilo načíst.';
+
+  @override
+  String get reviewNoChangesTitle => 'Zatím žádné změny';
+
+  @override
+  String get reviewNoChangesBody => 'Až Omi uklidí vaše poznámky, změny se objeví zde.';
+
+  @override
+  String get reviewShowMore => 'Zobrazit více';
+
+  @override
+  String get entityKeptCurrent => 'Udržuje aktuální Omi';
+
+  @override
+  String get entityNotRight => 'Není to správně?';
+
+  @override
+  String get entityCorrectionTitle => 'Co není správně?';
+
+  @override
+  String get entityCorrectionHint => 'Řekněte Omi, co opravit';
+
+  @override
+  String get entityCorrectionSaved => 'Díky. Omi to opraví.';
+
+  @override
+  String get entityCorrectionFailed => 'Opravu se nepodařilo odeslat. Zkuste to znovu.';
+
+  @override
+  String get entityLoadFailed => 'Tuto stránku se nepodařilo načíst.';
+
+  @override
+  String get entityProject => 'Projekt';
+
+  @override
+  String get entityProjects => 'Projekty';
+
+  @override
+  String get entityDecisions => 'Rozhodnutí';
+
+  @override
+  String get entityOpenTasks => 'Otevřené úkoly';
+
+  @override
+  String get entityOpenThreads => 'Otevřená témata';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Čeká se na: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Termín: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Co Omi ví';
+
+  @override
+  String get entityRecentConversations => 'Nedávné konverzace';
+
+  @override
+  String get tasksNoProject => 'Bez projektu';
+
+  @override
+  String get tasksGroupByProject => 'Seskupit podle projektu';
+
+  @override
+  String get tasksGroupByDate => 'Seskupit podle data';
+
+  @override
+  String get dreamReportTitle => 'Zpráva Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Režim náhledu: Dream ukazuje, co by změnil, ale ve vašem účtu se zatím nic nemění.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream tyto změny provádí sám. Libovolnou z nich můžete vrátit v Nedávných změnách.';
+
+  @override
+  String get dreamReportRunNow => 'Spustit hned';
+
+  @override
+  String get dreamReportRunLimit => 'Dnes už nezbývají žádná ruční spuštění';
+
+  @override
+  String get dreamReportRunInProgress => 'Průchod už běží. Zkuste to znovu za minutu.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream se nepodařilo spustit. Zkuste to znovu.';
+
+  @override
+  String get dreamReportIdle => 'Zatím není co nového zkontrolovat.';
+
+  @override
+  String get dreamReportLoadFailed => 'Zprávu Dream se nepodařilo načíst.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Zatím žádné průchody';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream zhruba jednou za hodinu zkontroluje, co se ve vašem účtu změnilo.';
+
+  @override
+  String get dreamReportScheduled => 'Naplánováno';
+
+  @override
+  String get dreamReportManual => 'Ručně';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Selhalo ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Zastaveno na časovém limitu';
+
+  @override
+  String get dreamReportNothingFound => 'Není co opravovat';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Přečteno položek: $records · tokenů: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Opravil by';
+
+  @override
+  String get dreamReportFixed => 'Opraveno';
+
+  @override
+  String get dreamReportWouldAsk => 'Zeptal by se vás';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Navrhl by úkoly';
+
+  @override
+  String get dreamReportLearnedWords => 'Naučená slova';
+
+  @override
+  String get dreamReportFeedback => 'Nahlášeno týmu Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Smazaná položka';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Dnes $count z $limit průchodů';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count změn čeká',
+      one: '1 změna čeká',
+      zero: 'Žádné čekající změny',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dnes zbývá $count ručních spuštění',
+      one: 'Dnes zbývá 1 ruční spuštění',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes oprav',
+      one: '1 oprava',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks návrhů',
+      one: '1 návrh',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starších změn přeskočeno',
+      one: '1 starší změna přeskočena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hlášení zadrženo z důvodu soukromí',
+      one: '1 hlášení zadrženo z důvodu soukromí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Odpověď uložena pro tento úryvek.';
+
+  @override
+  String get pinPersonDescription => 'Připnuté osoby zůstávají nahoře v seznamu Lidé a Vyčištění je neodstraní.';
+
+  @override
+  String get chatAppsProblemFailed => 'Něco se pokazilo. Zkus to znovu.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app je připojeno';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Obnovení se nezdařilo. Zobrazujeme poslední známá data.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Jen pro čtení. Omi odpovídej v $app.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Díky. Až bude WhatsApp připraven, objeví se tady.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Zatím použít Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Aplikaci $app se nepodařilo otevřít. Zkontroluj, že je nainstalovaná, a zkus to znovu.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Co jsem včera slíbil Samovi?';
+
+  @override
+  String get chatAppsDoesSave => 'Ukládá vzpomínky a spravuje tvoje úkoly';
+
+  @override
+  String get chatAppsOnTheList => 'Na seznamu';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Zatím žádné chaty';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'V $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi otevře Telegram se soukromým odkazem, který je jen pro tebe.';
+
+  @override
+  String get chatAppsOpenMessages => 'Otevřít Zprávy';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Odpojit $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Zdraví, peníze a vše, co jsi označil jako soukromé, zůstává mimo chatovací aplikace.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Pošli Omi jednu zprávu z čísla, které chceš používat. Kód v ní propojí toto číslo s tvým účtem.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Pracujeme na tom, aby Omi fungoval i ve WhatsAppu. Až bude hotovo, objeví se tady.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Chaty, které s Omi vedeš v $app, se zobrazí tady.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Zobrazit chaty';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi přestane odpovídat v $app a smaže historii chatu, kterou pro něj uchovává. Zprávy, které už v $app jsou, tam zůstanou.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Tyto chaty jsou tady jen pro čtení. Odpovídej v $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Přidat Omi do Kontaktů';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi si pamatuje kontext napříč všemi aplikacemi';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram a iMessage fungují už dnes, se stejnými vzpomínkami a úkoly.';
+
+  @override
+  String get chatAppsComingLater => 'Později';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Příliš mnoho pokusů. Počkej minutu a zkus to znovu.';
+
+  @override
+  String get chatAppsMessage => 'Zpráva';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Otevřít $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Nastavení na dvě klepnutí';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Chatovací aplikace se nepodařilo načíst';
+
+  @override
+  String get chatAppsInsights => 'Postřehy od Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Vypnuto: vidíš je jen v $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Piš Omi z Telegramu a iMessage';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Pošli hlasovou zprávu a Omi na ni odpoví.';
+
+  @override
+  String get chatAppsPartOfPro => 'Chatovací aplikace jsou součástí Pro';
+
+  @override
+  String get chatAppsMessagesApp => 'Zprávy';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram na jiném zařízení?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Ptej se na svůj den, ukládej vzpomínky a spravuj úkoly z Telegramu nebo iMessage. Tvoje chaty zůstávají v aplikaci, kterou používáš, a Omi si pamatuje, o čem jste mluvili, všude.';
+
+  @override
+  String get chatAppsTryRemind => 'Připomeň mi, že mám v neděli zavolat mamce';
+
+  @override
+  String get chatAppsChannelsTitle => 'Chatovací aplikace';
+
+  @override
+  String get chatAppsDoesAnswer => 'Odpovídá na otázky o tvých konverzacích a vzpomínkách';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Chaty v $app';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'V CENĚ OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Odkaz';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Nikdy za tebe nepíše jiným lidem';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Nepřipojeno';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Tvoje chaty s Omi ukládá také Telegram. Omi odpovídá jen tobě, nikdy jiným lidem, a můžeš ho kdykoli odpojit.';
+
+  @override
+  String get chatAppsProblemOffline => 'Jsi offline. Zkontroluj připojení a zkus to znovu.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Piš Omi ze svého telefonního čísla';
+
+  @override
+  String get chatAppsPrivateMemories => 'Nechat soukromé vzpomínky v aplikaci';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Připojit Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Nech Omi, ať ti tady pošle shrnutí nebo postřeh.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Čekáme, až v Telegramu klepneš na Spustit…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Mluv s Omi v aplikacích, které používáš každý den.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Připojeno jako $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Ukládej vzpomínky a spravuj úkoly přímo z chatu';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Napiš Omi pro připojení';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Pošli zprávu v aplikaci Zprávy. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.';
+
+  @override
+  String get chatAppsShowInApp => 'Zobrazovat tyto chaty v aplikaci Omi';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Získej nový kód a pošli ho ze Zpráv.';
+
+  @override
+  String get chatAppsNoMessages => 'Žádné zprávy';
+
+  @override
+  String get chatAppsHeroTitle => 'Chatuj s Omi tam, kde už chatuješ';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage a další';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kód vyprší za $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Tato chatovací aplikace byla odpojena.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi odpovídá jen tobě. Nikdy nepíše první.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Odpojením se smaže historie, kterou Omi uchovává pro $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Piš Omi v aplikaci $app kdykoli.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Zkus se zeptat';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Vrať se sem. Potvrdíme, že to vyšlo.';
+
+  @override
+  String get chatAppsDoesFiles => 'Posílá a přijímá soubory, fotky a hlasové zprávy';
+
+  @override
+  String get chatAppsTryWeek => 'Shrň můj týden do tří řádků';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Tvoje chaty z $app zůstávají v $app. Omi přesto ví, o čem jste mluvili v aplikaci i v tvých dalších chatovacích aplikacích.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp už brzy';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Platnost kódu vypršela';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Chatovací aplikace zatím nejsou pro tvůj účet dostupné.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Co Omi dělá v chatovacích aplikacích';
+
+  @override
+  String get chatAppsVoiceNotes => 'Hlasové zprávy';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Zatím není k dispozici';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Znovu otevřít Zprávy';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Připojeno $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Čekáme na tvoji zprávu';
+
+  @override
+  String get chatAppsEntryTitle => 'Chatuj s Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Klepni níže na Otevřít Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Zapnuto: zobrazí se v aplikaci Omi jako chaty jen pro čtení.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Odpojit $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'V chatu s Omi klepni na Spustit';
+
+  @override
+  String get chatAppsLocked => 'Vyžaduje Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Ahoj Omi, kód propojení $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Chat v $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontakty';
+
+  @override
+  String get chatAppsCodeNote => 'Kód funguje jednou a platnost mu vyprší za 10 minut.';
+
+  @override
+  String get chatAppsMoreComing => 'Další aplikace přijdou.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Zatím';
+
+  @override
+  String get chatAppsGetNewCode => 'Získat nový kód';
+
+  @override
+  String get chatAppsNotifyMe => 'Dej mi vědět';
+
+  @override
+  String get chatAppsPrefilled => 'Předvyplněno';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Neotevřelo se to? Pošli tohle na $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Platnost odkazu vypršela. Klepni na Otevřít Telegram pro nový.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Komu: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označit „$task“ jako hotové?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Odstranit úkol „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je „$name“ stejná osoba jako „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Sloučit dvě duplicitní vzpomínky?';
+
+  @override
+  String get reviewProposalMemory => 'Aktualizovat tuto vzpomínku?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Aktualizovat shrnutí pro „$name“?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Použít tuto navrženou opravu?';
+
+  @override
+  String get reviewProposalApply => 'Použít';
+
+  @override
+  String get reviewProposalSuggested => 'Navrženo';
+
+  @override
+  String get reviewProposalConflict => 'Od návrhu Dream se to změnilo, takže se nic nepoužilo.';
 }

@@ -17,6 +17,8 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -219,20 +221,50 @@ class ForceDirectedSimulation3D {
   }
 }
 
+/// Label of the user's own node: their given name, else the localized "You".
+/// The backend's English 'me' / 'the user' labels still identify that node.
+@visibleForTesting
+String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
+  final name = givenName.trim();
+  return name.isNotEmpty ? name : l10n.you;
+}
+
+/// Lowercased graph labels that identify the user's own node: the backend's English labels
+/// plus the given name. The localized display fallback is not one of them, so a concept
+/// node that happens to read "tú" or "you" stays a concept.
+@visibleForTesting
+Set<String> memoryGraphKnownUserLabels(String givenName) {
+  final name = givenName.trim().toLowerCase();
+  return {'me', 'the user', if (name.isNotEmpty) name};
+}
+
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
+
+  /// The Memories page header card. It draws its own card: a compact skeleton while loading, a
+  /// non-interactive graph that calls [onOpen] on tap once loaded, and a single row with
+  /// Try Again on failure. The page's list never waits on it.
+  final bool preview;
+
+  /// Opens the full graph from the [preview] card.
+  final VoidCallback? onOpen;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   const MemoryGraphPage({
     super.key,
     this.embedded = false,
+    this.preview = false,
+    this.onOpen,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
@@ -317,7 +349,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      final data = await widget.loadGraph();
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
@@ -378,9 +410,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final nodes = data['nodes'] as List<dynamic>? ?? [];
     final edges = data['edges'] as List<dynamic>? ?? [];
 
-    final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
-    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
+    final givenName = SharedPreferencesUtil().givenName;
+    final userLabel = memoryGraphUserLabel(givenName, context.l10n);
+    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
       final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
@@ -422,7 +454,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: nodeId,
         label: label,
         nodeType: nodeType,
-        baseColor: isUser ? Colors.white : _colorForType(nodeType),
+        baseColor: isUser ? OmiColors.accent : _colorForType(nodeType),
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
@@ -437,7 +469,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: primaryUserId,
         label: userLabel,
         nodeType: 'person',
-        baseColor: Colors.white,
+        baseColor: OmiColors.accent,
         initialPosition: v.Vector3.zero(),
         isFixed: true,
       );
@@ -488,7 +520,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       case 'organization':
         return Colors.orangeAccent;
       case 'thing':
-        return Colors.purpleAccent;
+        return Colors.yellowAccent;
       default:
         return Colors.blueAccent;
     }
@@ -546,27 +578,104 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
   }
 
+  /// Height of the preview card while it loads and once it shows the graph, so the list below does
+  /// not jump when the graph arrives.
+  static const double _previewHeight = 140;
+
+  Widget _buildPreviewCard() {
+    final l10n = context.l10n;
+    if (_error != null && !_isLoading) {
+      // Failure collapses to one row so the memory list moves up; Try Again reloads in place.
+      return Container(
+        key: const ValueKey('memories_mind_map_error'),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs),
+        constraints: const BoxConstraints(minHeight: 52),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: Icon(Icons.hub_outlined, size: 20, color: OmiColors.textTertiary)),
+            const SizedBox(width: OmiSpacing.sm),
+            Expanded(
+              child: Text(
+                _error!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
+            OmiButton(
+              key: const ValueKey('memories_mind_map_retry'),
+              variant: OmiButtonVariant.tertiary,
+              size: OmiButtonSize.compact,
+              label: l10n.tryAgain,
+              onPressed: _loadGraph,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: l10n.memoryGraph,
+      child: GestureDetector(
+        key: const ValueKey('memories_mind_map_preview'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onOpen,
+        child: ClipRRect(
+          borderRadius: OmiRadius.xlAll,
+          child: SizedBox(
+            height: _previewHeight,
+            child: ColoredBox(
+              color: OmiColors.surface1,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ExcludeSemantics(
+                        child: _isLoading
+                            ? const MemoryGraphSkeleton(key: ValueKey('memories_mind_map_loading'))
+                            : _buildBody(),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: ExcludeSemantics(
+                      child: Icon(Icons.open_in_full_rounded, size: 18, color: OmiColors.textTertiary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.preview) return _buildPreviewCard();
     if (widget.embedded) {
-      return ColoredBox(color: Colors.black, child: _buildBody());
+      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: OmiColors.surface0,
       extendBodyBehindAppBar: widget.showAppBar,
       appBar: widget.showAppBar
           ? AppBar(
-              title: const Text('omi.me', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              centerTitle: true,
+              title: Text(context.l10n.memoryGraphTitle),
               backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
+              leading: const OmiBackButton(),
               actions: widget.showShareButton
                   ? [
-                      IconButton(
+                      OmiIconButton(
                         key: _shareButtonKey,
                         icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        label: context.l10n.share,
                         onPressed: _shareGraph,
                       ),
                     ]
@@ -579,42 +688,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: Colors.purpleAccent),
-            const SizedBox(height: 16),
-            Text(context.l10n.loadingKnowledgeGraph, style: const TextStyle(color: Colors.white70)),
-          ],
-        ),
-      );
+      return OmiLoadingState(label: context.l10n.loadingKnowledgeGraph);
     }
 
     if (_error != null) {
-      return Center(
+      return SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              // Explicit colors: the bare button resolved to theme primary/onPrimary
-              // (black-on-black on this theme), an invisible label.
-              ElevatedButton(
-                onPressed: _loadGraph,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
-                child: Text(context.l10n.retry),
-              ),
-            ],
-          ),
+          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
         ),
       );
     }
@@ -624,26 +704,20 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
+      final emptyState = OmiEmptyState(
+        icon: Icons.hub_outlined,
+        title: context.l10n.noKnowledgeGraphYet,
+        message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      );
+      if (!widget.embedded) {
+        return SafeArea(child: emptyState);
+      }
+      // Scaled down to fit when embedded in the small Home card.
+      return LayoutBuilder(
+        builder: (context, constraints) => Center(
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
-                const SizedBox(height: 16),
-                Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.knowledgeGraphWillBuildAutomatically,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white38, fontSize: 14),
-                ),
-              ],
-            ),
+            child: SizedBox(width: constraints.maxWidth, child: emptyState),
           ),
         ),
       );
@@ -910,7 +984,8 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withValues(alpha: alpha);
+      final light = OmiColors.active == OmiPalette.light;
+      _edgePaint.color = (light ? OmiColors.border : Colors.white).withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -925,7 +1000,7 @@ class GraphPainter3D extends CustomPainter {
       if (isDimmed) {
         _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
+        _edgePaint.color = (light ? OmiColors.accent : Colors.white).withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -936,12 +1011,19 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: edge.label,
           style: TextStyle(
-            color: Colors.white54.withValues(alpha: alpha * 2),
+            color: (light ? OmiColors.textPrimary : Colors.white54).withValues(alpha: alpha * 2),
             fontSize: (9 * avgScale).clamp(7, 11),
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (light) {
+          final labelRect = Rect.fromCenter(center: Offset(midX, midY - 8), width: tp.width + 8, height: tp.height + 4);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2 - 8));
       }
     }
@@ -967,8 +1049,13 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withValues(alpha: p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
+          Color.lerp(
+            OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
+            node.baseColor,
+            0.5,
+          )!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -982,13 +1069,27 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
+              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
+            ),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (OmiColors.active == OmiPalette.light) {
+          final labelRect = Rect.fromLTWH(
+            centerOffset.dx - tp.width / 2 - 4,
+            centerOffset.dy + radius,
+            tp.width + 8,
+            tp.height + 6,
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
       }
     }
@@ -1014,4 +1115,93 @@ class _ProjectedNode {
     required this.scale,
     required this.alpha,
   });
+}
+
+/// The preview card's loading state: a faint, static node-and-edge sketch at the card's size. It
+/// pulses gently a few times (not at all under Reduce Motion) and then rests, so a slow load does
+/// not animate forever.
+class MemoryGraphSkeleton extends StatefulWidget {
+  const MemoryGraphSkeleton({super.key});
+
+  @override
+  State<MemoryGraphSkeleton> createState() => _MemoryGraphSkeletonState();
+}
+
+class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+    value: 1,
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = OmiMotion.of(context).standard == Duration.zero;
+    if (reduce) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else if (!_started) {
+      _started = true;
+      _pulse.repeat(min: 0.55, max: 1, reverse: true, count: 6);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _pulse,
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _GraphSkeletonPainter(node: OmiColors.surface3, edge: OmiColors.border),
+      ),
+    );
+  }
+}
+
+class _GraphSkeletonPainter extends CustomPainter {
+  _GraphSkeletonPainter({required this.node, required this.edge});
+
+  final Color node;
+  final Color edge;
+
+  // Positions as fractions of the card, and radii in logical pixels: a hub with a few clusters.
+  static const _nodes = <(double, double, double)>[
+    (0.50, 0.50, 9),
+    (0.30, 0.32, 6),
+    (0.68, 0.28, 6),
+    (0.72, 0.68, 7),
+    (0.32, 0.72, 5),
+    (0.16, 0.50, 4),
+    (0.86, 0.46, 4),
+    (0.52, 0.16, 4),
+    (0.55, 0.84, 4),
+  ];
+  static const _edges = <(int, int)>[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 7), (3, 6), (3, 8), (4, 5), (1, 7)];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    Offset at(int i) => Offset(_nodes[i].$1 * size.width, _nodes[i].$2 * size.height);
+    final edgePaint = Paint()
+      ..color = edge
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    for (final (a, b) in _edges) {
+      canvas.drawLine(at(a), at(b), edgePaint);
+    }
+    final nodePaint = Paint()..color = node;
+    for (var i = 0; i < _nodes.length; i++) {
+      canvas.drawCircle(at(i), _nodes[i].$3, nodePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GraphSkeletonPainter old) => old.node != node || old.edge != edge;
 }

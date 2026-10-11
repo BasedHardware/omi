@@ -34,6 +34,25 @@ void main() {
     hostApiChannelNames.clear();
   });
 
+  for (final error in ['gatt_status_22', 'pairing_lost']) {
+    test('disconnect before readiness propagates $error without changing its cause', () async {
+      var pairingLostNotifications = 0;
+      BleBridge.instance.pairingLostCallback = () => pairingLostNotifications++;
+      addTearDown(() => BleBridge.instance.pairingLostCallback = null);
+      setHostApiHandler('getBluetoothState', (message) async => ['on']);
+      setHostApiHandler('manageDevice', (message) async {
+        BleBridge.instance.onPeripheralDisconnected(_deviceId, error);
+        return <Object?>[];
+      });
+
+      final transport = NativeBleTransport(_deviceId);
+      addTearDown(transport.dispose);
+
+      await expectLater(transport.connect(), throwsA(error));
+      expect(pairingLostNotifications, error == 'pairing_lost' ? 1 : 0);
+    });
+  }
+
   test('keeps button listener alive and resubscribes after reconnect', () async {
     final subscribeCalls = <List<Object?>>[];
     final services = [
@@ -89,5 +108,34 @@ void main() {
       [2, 0, 0, 0],
       [2, 0, 0, 0],
     ]);
+  });
+  test('reading a characteristic the firmware does not expose skips the native read', () async {
+    const disServiceUuid = '0000180a-0000-1000-8000-00805f9b34fb';
+    const firmwareRevisionUuid = '00002a26-0000-1000-8000-00805f9b34fb';
+    const serialNumberUuid = '00002a25-0000-1000-8000-00805f9b34fb';
+    final readCalls = <List<Object?>>[];
+    final services = [
+      BleService(uuid: disServiceUuid, characteristicUuids: [firmwareRevisionUuid]),
+    ];
+
+    setHostApiHandler('manageDevice', (message) async {
+      BleBridge.instance.onDeviceReady(_deviceId, services);
+      return <Object?>[];
+    });
+    setHostApiHandler('getBluetoothState', (message) async => ['on']);
+    setHostApiHandler('readCharacteristic', (message) async {
+      readCalls.add((message! as List<Object?>).toList());
+      return [Uint8List.fromList('3.0.21'.codeUnits)];
+    });
+
+    final transport = NativeBleTransport(_deviceId);
+    addTearDown(transport.dispose);
+    await transport.connect();
+
+    expect(await transport.readCharacteristic(disServiceUuid, serialNumberUuid), isEmpty);
+    expect(readCalls, isEmpty);
+
+    expect(await transport.readCharacteristic(disServiceUuid, firmwareRevisionUuid), '3.0.21'.codeUnits);
+    expect(readCalls, hasLength(1));
   });
 }

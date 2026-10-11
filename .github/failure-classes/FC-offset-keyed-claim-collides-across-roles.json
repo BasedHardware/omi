@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-offset-keyed-claim-collides-across-roles",
+  "violated_contract": "A claim that isolates a shared resource must exclusive-lock the resource identifier that consumers actually bind, not a proxy key that can alias two different derived values. Harness sessions claim TCP ports; claiming the offset number lets two offsets whose role defaults intersect (llm_gateway at +1000 and redis at +3700 both yield 10080) both succeed.",
+  "canonical_prevention": "O_EXCL-claim each derived port number, including cross-role intersections, roll back a partial offset if any port is taken, and assert disjoint occupancy across the whole offset space rather than pinning two known colliding offsets.",
+  "canonical_prevention_artifact": [
+    "scripts/dev-harness/tests/test_mobile_session.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "scripts/dev-harness/**"
+  ],
+  "status": "open"
+}

@@ -105,6 +105,19 @@ injects `--fast-only` when no lane was chosen.
 same worktree finds its slot with `env` and never needs to re-acquire. Every
 `env`, `verify`, `check`, and `run` refreshes the lease's heartbeat.
 
+The first acquire also pins one atomic routing record per slot: the bundle
+prefix plus the automation, desktop-backend, and Python port bases. Later
+commands load that record even when their shell has none of the pool variables.
+An explicitly configured value that disagrees with the record fails with the
+pinned and requested values instead of inspecting or launching a different
+bundle/port tuple under the same slot number.
+
+Slots that predate the routing record fail closed rather than guessing from a
+new shell. Migrate one by re-running `acquire` once with
+`OMI_E2E_POOL_PREFIX`, `OMI_E2E_POOL_AUTOMATION_BASE`,
+`OMI_E2E_POOL_BACKEND_BASE`, and `OMI_E2E_POOL_PYTHON_BASE` all set to that
+slot's existing tuple. Unacquired slots continue to use the documented defaults.
+
 ### Launch policy: fail closed, not fail cold
 
 The launch path enforces the headless rules that used to live only in this
@@ -131,7 +144,8 @@ document:
   ready: the ready gate is `omi-e2e-pool check` for grants/sign-in, then
   `omi-ctl wait-ready` for the live signed-in owner-ready snapshot.
 
-Each slot has fixed ports, so nothing needs to be threaded through by hand:
+Each slot has fixed ports, so nothing needs to be threaded through by hand. The
+default pinned tuple is:
 
 | Slot N | Bundle | Bridge port | Desktop backend | Python backend |
 | --- | --- | --- | --- | --- |

@@ -37,6 +37,26 @@ class TestBillableTranscriptionSeconds:
     def test_clock_skew_never_negative(self):
         assert billable_transcription_seconds(1060.0, 1000.0, 1050.0) == 0
 
+    def test_resume_after_silent_flush_does_not_bill_the_gap(self):
+        # #15263: flush at t=1000 fired during silence and advanced the window
+        # start; audio resumed at t=1040; this flush at t=1060 must bill only
+        # [1040, 1055] (last audio byte), not [1000, 1055].
+        assert billable_transcription_seconds(1000.0, 1055.0, 1060.0, last_audio_resume_time=1040.0) == 15
+
+    def test_resume_floor_ignored_when_older_than_window_start(self):
+        # A stale resume marker from an earlier pause must not shrink a window
+        # that legitimately covers newer audio.
+        assert billable_transcription_seconds(1000.0, 1060.0, 1060.0, last_audio_resume_time=900.0) == 60
+
+    def test_no_resume_marker_preserves_prior_behavior(self):
+        # Continuous audio, no resume: identical to the pre-fix contract.
+        assert billable_transcription_seconds(1000.0, 1060.0, 1060.0, last_audio_resume_time=None) == 60
+
+    def test_resume_then_no_more_audio_bills_zero(self):
+        # One resume byte then silence again: window floors to the resume point
+        # and the end clamps to it — nothing new to bill.
+        assert billable_transcription_seconds(1000.0, 1040.0, 1060.0, last_audio_resume_time=1040.0) == 0
+
 
 class TestListenRuntimeUsesClampedBilling:
     """The shared listen usage flush must not bill raw wall-clock time."""

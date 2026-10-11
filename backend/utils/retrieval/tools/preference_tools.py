@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
+from utils.messaging.undo import record_write
+from utils.messaging.projection import surface_runtime
 from database._client import get_data_plane_firestore_client
 from models.knowledge_ledger_policy import canonicalize_ledger_slot
 from models.memory_contracts import deterministic_contract_id
@@ -18,13 +20,23 @@ from models.memory_apply import WriterMode
 from models.memories import MemoryDB
 from models.product_memory import LedgerWriteReason
 from utils.log_sanitizer import sanitize_pii
-from utils.memory.canonical_memory_adapter import search_canonical_memories
-from utils.memory.knowledge_ledger import LedgerProvenance, save_fact
+from utils.memory.canonical_memory_adapter import (
+    read_canonical_memory_item,
+    search_canonical_memories,
+)
+from utils.memory.knowledge_ledger import LedgerProvenance, amend_fact, save_fact
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, ensure_canonical_apply_control_state
 from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
+
+
+def _capture_app_memory_write(**kwargs):
+    runtime = surface_runtime.get()
+    if runtime is None or runtime.surface == 'app':
+        capture_memory_write(**kwargs)
+
 
 PREFERENCE_DUPLICATE_THRESHOLD = 0.90
 
@@ -38,11 +50,13 @@ def preference_duplicate_message(preference: str, hits: Optional[list]) -> Optio
     """
     preferred = " ".join((preference or "").split()).casefold()
     for hit in hits or []:
+        memory_id = str(hit.get('memory_id') or hit.get('id') or '').strip()
+        existing = f" (memory_id={memory_id})" if memory_id else ""
         raw_score = hit.get("score", hit.get("relevance_score", hit.get("vector_score")))
         content = str(hit.get("content") or "")
         normalized = " ".join(content.split()).casefold()
         if preferred and normalized == preferred:
-            return f"Similar preference already exists: {content}"
+            return f"Similar preference already exists{existing}: {content}"
         if raw_score is None:
             continue
         try:
@@ -50,7 +64,7 @@ def preference_duplicate_message(preference: str, hits: Optional[list]) -> Optio
         except (TypeError, ValueError):
             continue
         if score >= PREFERENCE_DUPLICATE_THRESHOLD:
-            return f"Similar preference already exists: {content}"
+            return f"Similar preference already exists{existing}: {content}"
     return None
 
 
@@ -116,7 +130,7 @@ def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> Ledg
     )
 
 
-def _save_compatibility_preference(uid: str, preference: str, *, firestore_client: Any) -> str:
+def _save_compatibility_preference(uid: str, preference: str, *, user_stated: bool, firestore_client: Any) -> str:
     """Write through the released compatibility seam while its mode is active.
 
     The ledger is an explicit writer-mode migration target, not a drop-in
@@ -132,7 +146,7 @@ def _save_compatibility_preference(uid: str, preference: str, *, firestore_clien
         "uid": uid,
         "content": preference,
         "category": "system",
-        "manually_added": False,
+        "manually_added": user_stated,
         "created_at": now,
         "updated_at": now,
         "reviewed": False,
@@ -149,7 +163,7 @@ def _save_compatibility_preference(uid: str, preference: str, *, firestore_clien
         upsert_vector=False,
         require_canonical_promotion=True,
     )
-    capture_memory_write(
+    _capture_app_memory_write(
         principal_id=uid,
         source="agent_preference_memory_create",
         session_id=memory_id,
@@ -162,6 +176,8 @@ def _save_compatibility_preference(uid: str, preference: str, *, firestore_clien
 def save_user_preference_tool(
     preference: str,
     slot: str = "",
+    replace_memory_id: str = "",
+    user_stated: bool = False,
     config: RunnableConfig = None,
 ) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """Save a learned user preference or personal detail for future conversations.
@@ -174,7 +190,11 @@ def save_user_preference_tool(
     - "Prefers metric units over imperial"
 
     Do NOT save ephemeral information (today's mood, current task).
-    Do NOT save something already known from existing memories.
+    Do NOT save something already known from existing memories. When the user
+    corrects an existing memory, find its ID with get_memories_tool or
+    search_memories_tool and pass replace_memory_id. Set user_stated only for a
+    preference directly asserted by the user in this conversation, never for
+    an inference from context or third-party speech.
     Do NOT ask for confirmation — just save it silently when you learn it.
 
     Args:
@@ -182,6 +202,8 @@ def save_user_preference_tool(
         slot: Optional canonical registry slot (for example ``home_city`` or
             ``occupation``). Unknown names are stored unslotted and remain
             searchable; do not invent new slot names.
+        replace_memory_id: Existing memory ID to correct instead of appending.
+        user_stated: Whether the user directly asserted this preference.
     """
     uid = _get_uid(config)
     if not uid:
@@ -192,6 +214,52 @@ def save_user_preference_tool(
     except Exception as e:
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
+
+    replacement = replace_memory_id.strip()
+    if replacement:
+        try:
+            prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
+            if prior is None or prior.status.value != 'active' or prior.superseded_by:
+                return "Error updating preference: memory is unavailable or historical"
+            if preference_duplicate_message(preference, [{'content': prior.content}]):
+                return f"Preference already saved (memory_id={replacement})"
+            service = MemoryService(db_client=firestore_client)
+            if prior.ledger_schema_version == 'knowledge_ledger.v1':
+                provenance = _write_provenance(uid, preference, config).model_copy(
+                    update={'source_type': 'agent_chat_correction', 'source_id': replacement}
+                )
+                memory_id = amend_fact(
+                    uid,
+                    replacement,
+                    preference,
+                    provenance=provenance,
+                    write_reason=LedgerWriteReason.agent_reusable_conclusion,
+                    slot=prior.slot,
+                    subject_scope=prior.subject_scope,
+                    subject_entity_id=prior.subject_entity_id,
+                    curation_weight=prior.curation_weight,
+                    visibility=prior.visibility,
+                    user_asserted=user_stated,
+                    db_client=firestore_client,
+                )
+            else:
+                # Pre-ledger Short-term rows are corrected through the canonical
+                # user mutation. The existing ID remains stable for pending L2.
+                service.update_external_memory_content(
+                    uid,
+                    replacement,
+                    preference,
+                    memory_system=MemorySystem.CANONICAL,
+                    consumer='agent_preference',
+                    operation='correct_user_preference',
+                )
+                memory_id = replacement
+            return f"Preference updated (memory_id={memory_id}): {preference}" + record_write(
+                uid, 'memory', memory_id, prior.content, preference
+            )
+        except Exception as e:
+            logger.error("Failed to update preference error_type=%s", type(e).__name__)
+            return "Error updating preference"
 
     # The canonical adapter preserves whether a search provider supplied a real
     # relevance score; the universal service currently synthesizes positional
@@ -210,7 +278,9 @@ def save_user_preference_tool(
         control = ensure_canonical_apply_control_state(uid, db_client=firestore_client)
         writer_mode = WriterMode(control.writer_mode)
         if writer_mode == WriterMode.compatibility:
-            _save_compatibility_preference(uid, preference, firestore_client=firestore_client)
+            memory_id = _save_compatibility_preference(
+                uid, preference, user_stated=user_stated, firestore_client=firestore_client
+            )
         elif writer_mode == WriterMode.ledger:
             provenance = _write_provenance(uid, preference, config)
             resolved_slot = canonicalize_ledger_slot(slot, strict=False) if isinstance(slot, str) else None
@@ -220,9 +290,10 @@ def save_user_preference_tool(
                 provenance=provenance,
                 write_reason=LedgerWriteReason.agent_reusable_conclusion,
                 slot=resolved_slot,
+                user_asserted=user_stated,
                 db_client=firestore_client,
             )
-            capture_memory_write(
+            _capture_app_memory_write(
                 principal_id=uid,
                 source="agent_preference_ledger_write",
                 session_id=provenance.source_id,
@@ -238,7 +309,9 @@ def save_user_preference_tool(
         else:
             raise RuntimeError(f"preference writer is not admitted in {writer_mode.value} mode")
         logger.info("Saved user preference: %s", sanitize_pii(preference))
-        return f"Preference saved: {preference}"
+        return f"Preference saved (memory_id={memory_id}): {preference}" + record_write(
+            uid, 'memory', memory_id, None, preference
+        )
     except Exception as e:
         logger.error("Failed to save preference error_type=%s", type(e).__name__)
         return "Error saving preference"

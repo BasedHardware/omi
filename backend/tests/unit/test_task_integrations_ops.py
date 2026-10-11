@@ -28,7 +28,8 @@ def _mock_response(status_code: int, json_data=None, text: str = ""):
 
 
 @pytest.mark.asyncio
-async def test_create_task_todoist_success():
+async def test_create_task_todoist_success(monkeypatch):
+    monkeypatch.setattr(ops.notifications_db, "resolve_user_timezone", lambda uid: "UTC")
     client = AsyncMock(spec=httpx.AsyncClient)
     client.post.return_value = _mock_response(201, {"id": "todoist-task-42"})
 

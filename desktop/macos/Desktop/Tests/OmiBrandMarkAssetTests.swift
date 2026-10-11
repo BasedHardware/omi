@@ -34,4 +34,20 @@ final class OmiBrandMarkAssetTests: XCTestCase {
     XCTAssertNotNil(image, "menu-bar identity must resolve from the packaged resource bundle")
     XCTAssertTrue(image?.isTemplate == true)
   }
+
+  func testStructuredResourceBundleRootIsSearched() throws {
+    let app = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".app")
+    defer { try? FileManager.default.removeItem(at: app) }
+    let resourceRoot = app.appendingPathComponent(
+      "Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources")
+    try FileManager.default.createDirectory(at: resourceRoot, withIntermediateDirectories: true)
+    let source = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Sources/Resources/herologo.png")
+    try FileManager.default.copyItem(at: source, to: resourceRoot.appendingPathComponent("herologo.png"))
+
+    let image = OmiBrandMarkAsset.templateImage(
+      in: [], resourceBundleRoots: OmiBrandMarkAsset.knownResourceBundleRoots(in: app))
+    XCTAssertNotNil(image)
+  }
 }

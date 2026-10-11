@@ -278,10 +278,13 @@ def test_circuit_recovers_through_the_half_open_probe() -> None:
     circuit.record_success()
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success(serving=True)
     assert circuit.state == 'closed'
     assert circuit.allow_request() is True
 

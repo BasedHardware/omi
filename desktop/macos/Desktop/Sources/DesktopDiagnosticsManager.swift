@@ -1399,6 +1399,7 @@ final class DesktopDiagnosticsManager {
   ]
 
   private static let allowedFallbackAreas: Set<String> = [
+    "screen_task_gate", "screen_task_extraction",
     "sync_dispatch",
     "pusher",
     "stt_selection",
@@ -1438,10 +1439,12 @@ final class DesktopDiagnosticsManager {
     "ptt_input_routing",
     "account_cutover",
     "voice_typing",
+    "rewind_database", "meeting_screen_evidence",
     "other",
   ]
 
   private static let allowedFallbackReasons: Set<String> = [
+    "ocr_unusable", "offline", "gate_unavailable", "gate_invalid_response",
     "timeout",
     "provider_5xx",
     "provider_429",
@@ -1463,6 +1466,12 @@ final class DesktopDiagnosticsManager {
     "stale_alive_latch",
     "out_of_memory",
     "process_exited",
+    // The local engine answered, and the answer was empty: schema-valid, no
+    // overview, no sections, no action items, no events. Distinct from every
+    // failure reason here because nothing failed — which is why it needs its
+    // own label rather than bucketing to `other`. The rate is the signal for
+    // whether constrained decoding is really constraining.
+    "contentless_projection",
     "http_401",
     "db_lock_contention",
     "mode_switch_timeout",

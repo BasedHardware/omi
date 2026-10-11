@@ -80,6 +80,14 @@ For every frame, regardless of outcome, also produce:
   so score for recall, not decoration. A frame showing the people in the meeting usually
   carries more of that than a wall of code or text; otherwise favor a single clear focal
   subject, readable at a glance, over dense text-only content.
+- visible_participant_names: up to 8 person names shown as participant labels in a video-call
+  UI (the name on a video tile, or an entry in the call's participant list), spelled exactly as
+  shown. Leave out the tile labelled "You" or "(You)", names that appear only in documents,
+  chats, tabs, or bookmarks, and never guess a name that is not rendered. [] when no call UI
+  shows names.
+- screen_summary: at most 280 characters, factual: which app or site is on screen, the title of
+  any shared document, slide, or page, and the key visible text a note-taker would want. Never
+  include credentials, account numbers, or message contents.
 
 If you reject the frame, still fill in reject_reason with the single best-matching reason
 above, and still fill in caption/labels/source_badge/banner_suitability as best you can from

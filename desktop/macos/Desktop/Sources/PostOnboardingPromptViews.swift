@@ -10,8 +10,9 @@ import SwiftUI
 /// file, a compose box, a product page — and "Try it now" opens it with the question already in the
 /// bar, so the first ask is grounded in a screen with something on it.
 ///
-/// Escapable three ways (the close button, tapping outside, or trying a case) and never shown again
-/// once dismissed.
+/// Escapable three ways (the close button, Esc, or trying a case) and never shown again once
+/// dismissed. Deliberately **not** by clicking the dim: this is the first thing a new user sees, and
+/// one stray click must not throw it away for good.
 struct TryAskingPopupView: View {
   let onTry: (FirstUseCase) -> Void
   let onDismiss: () -> Void
@@ -36,7 +37,7 @@ struct TryAskingPopupView: View {
         // The dim belongs to the shell's surface, not to the window: this popup is an overlay on the
         // whole main window, which is transparent and much larger than the panels inside it, so a
         // full-bleed dim here was a dark rectangle stamped on the desktop. See `ShellModalScrim`.
-        ShellModalScrim(onTap: onDismiss)
+        ShellModalScrim(onTap: {})
 
         HStack(alignment: .top, spacing: OmiSpacing.xxl) {
           chooser
@@ -44,7 +45,7 @@ struct TryAskingPopupView: View {
             .frame(maxHeight: .infinity, alignment: .top)
 
           FirstUseCasePreview(useCase: selected)
-            .animation(.easeOut(duration: 0.22), value: selected)
+            .omiAnimation(.standard, value: selected)
         }
         .frame(width: popupWidth, height: popupHeight)
         .padding(OmiSpacing.xxl)
@@ -52,20 +53,10 @@ struct TryAskingPopupView: View {
         // faint edge and the one ambient shadow.
         .inkGlassPanel()
         .overlay(alignment: .topTrailing) {
-          Button(action: onDismiss) {
-            Image(systemName: "xmark")
-              .font(.system(size: 12, weight: .bold))
-              .foregroundColor(Ink.secondary)
-              .frame(width: 28, height: 28)
-              .background(
-                Circle()
-                  .fill(Ink.rowFill)
-              )
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Close")
-          .padding(OmiSpacing.lg)
+          DismissButton(action: onDismiss)
+            .padding(OmiSpacing.lg)
         }
+        .overlay { OverlayModalEscapeCatcher(action: onDismiss) }
       }
     }
     // The automation bridge drives the same two controls a click does (`first_use_popup_select`,
@@ -227,7 +218,7 @@ struct PromptSuggestionBanner: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Button(action: onOpen) {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          Text("Next step -> Ask omi")
+          Text("Next step → Ask Omi")
             .inkStyle(.firstTitle, color: bannerPrimaryText)
 
           Text(
@@ -273,18 +264,8 @@ struct PromptSuggestionBanner: View {
     .inkGlassPanel()
     .overlay(alignment: .topTrailing) {
       ZStack(alignment: .topTrailing) {
-        Button(action: onDismiss) {
-          Image(systemName: "xmark")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundColor(bannerSecondaryText)
-            .frame(width: 24, height: 24)
-            .background(
-              Circle()
-                .fill(Ink.rowFill)
-            )
-        }
-        .buttonStyle(.plain)
-        .padding(OmiSpacing.md)
+        DismissButton(action: onDismiss, size: .compact)
+          .padding(OmiSpacing.md)
       }
     }
   }

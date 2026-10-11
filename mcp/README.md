@@ -1,8 +1,28 @@
 # mcp-server-omi: A OMI MCP server
 
+> **Deprecated — use the hosted server at `https://api.omi.me/v1/mcp`.**
+> The hosted endpoint (Streamable HTTP) exposes the full tool surface with OAuth
+> or MCP-key auth and requires no local process. This package remains published
+> for clients that genuinely need a local stdio bridge, and is no longer the
+> recommended setup.
+>
+> **Migrating from this package:**
+> 1. Create an MCP key in the Omi app: **Settings → Developer Settings → MCP
+>    Server → API Keys** (or **Use omi memory anywhere → Manual installation**
+>    in the macOS app). The `omi_mcp_...` value is shown once.
+> 2. Point your client at `https://api.omi.me/v1/mcp` with the header
+>    `Authorization: Bearer omi_mcp_...` — most clients accept this natively
+>    (see `claude mcp add --transport http`, Cursor `mcp.json`, Codex
+>    `[mcp_servers.omi]` in `~/.codex/config.toml`).
+> 3. For cloud clients that support OAuth connectors (claude.ai, ChatGPT),
+>    add the URL and approve Omi's OAuth consent — no key needed.
+
 ## Overview
 
 A Model Context Protocol server for Omi interaction and automation. This server provides tools to read, search, and manipulate Memories and Conversations.
+
+**0.2.0:** deprecated in favor of the hosted endpoint above; no functional
+changes beyond this notice and a startup warning.
 
 ### Tools
 1. `get_memories`
@@ -145,11 +165,16 @@ Get-Content "$env:APPDATA\Claude\logs\mcp-server-omi.log" -Tail 20 -Wait
 
 ### Custom Backend URL
 
-If you are self-hosting the Omi backend, you can specify the API endpoint by setting the `OMI_API_BASE_URL` environment variable.
+If you are self-hosting the Omi backend, point `OMI_API_BASE_URL` at your
+deployment's REST MCP base. The package appends REST segments (`memories`,
+`conversations/...`) directly, so the value **must end with `/v1/mcp/`**:
 
 ```bash
-export OMI_API_BASE_URL="https://your-backend-url.com"
+export OMI_API_BASE_URL="https://your-backend-url.com/v1/mcp/"
 ```
+
+This is the *REST base*, distinct from the hosted MCP endpoint remote clients
+connect to (`https://api.omi.me/v1/mcp`, no trailing slash).
 
 ## License
 

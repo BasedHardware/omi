@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from models.chat import Message
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
@@ -96,6 +97,7 @@ class MessageServiceStatusEvent(MessageEvent):
     provider: Optional[str] = None
     retryable: Optional[bool] = None
     reason: Optional[str] = None
+    retry_after: Optional[int] = None
 
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not
@@ -151,6 +153,8 @@ class TranslationEvent(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         del j["event_type"]
+        # Callers pass stored segment dicts; storage-only placement evidence stays server-side.
+        j["segments"] = [transcript_segment_for_client(segment) for segment in j.get("segments") or []]
         return j
 
 
@@ -185,11 +189,18 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
     person_id: str
     person_name: str
     segment_id: str
+    # Set only with an empty person_id: a pinned person this voice nearly matched (a question, never a label).
+    suggested_person_id: Optional[str] = None
+    retracted: bool = False
 
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         del j["event_type"]
+        if j.get("suggested_person_id") is None:
+            j.pop("suggested_person_id", None)
+        if not self.retracted:
+            j.pop("retracted", None)
         return j
 
 
@@ -227,4 +238,18 @@ class ProactiveMessageEvent(MessageEvent):
         j = self.model_dump(mode="json", exclude_none=True)
         j["type"] = self.event_type
         del j["event_type"]
+        return j
+
+
+class ProactivityV2Event(MessageEvent):
+    """Identity-only wakeup; clients fetch authenticated feed content."""
+
+    event_type: str = "proactivity_v2"
+    item_id: str
+    target_kind: str
+    target_id: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = j.pop("event_type")
         return j

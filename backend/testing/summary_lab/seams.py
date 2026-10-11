@@ -27,7 +27,7 @@ def production_notes_v2_seam(fixture: Fixture, variant: Variant) -> Note:
     """Opt-in live path. Imports production only when this function is called."""
     del variant
     from utils.llm.conversation_processing import get_conversation_notes
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
     from datetime import datetime
 
     started = datetime.fromisoformat(fixture.started_at)

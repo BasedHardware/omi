@@ -47,11 +47,21 @@ enum ChatSelectableProse {
     style: OmiMarkdown.Style,
     fontSize: CGFloat,
     fontScale: CGFloat,
-    citationOrdinals: Set<Int> = []
+    citationOrdinals: Set<Int> = [],
+    documentProse: Bool = false
   ) -> NSAttributedString? {
     #if DEBUG
       ChatStreamingRenderProbe.hit(.appKitProseBuild)
     #endif
+    if documentProse {
+      guard
+        let result = SummaryDocumentProse.attributedString(
+          markdown: OmiMarkdownTilde.escapingNonPairDelimiters(source), fontSize: fontSize, fontScale: fontScale)
+      else { return nil }
+      let linked = NSMutableAttributedString(attributedString: result)
+      applyCitationLinks(to: linked, ordinals: citationOrdinals)
+      return linked
+    }
     let processed = OmiMarkdownContent.preprocessText(source)
     let escaped = OmiMarkdownTilde.escapingNonPairDelimiters(processed)
     guard
@@ -464,6 +474,7 @@ struct ChatSelectableProseBlock: View {
   let fontScale: CGFloat
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  var documentProse: Bool = false
 
   @State private var hover: ChatSelectableProseText.CitationHover?
   @State private var isPreviewHovering = false
@@ -489,7 +500,8 @@ struct ChatSelectableProseBlock: View {
       style: style,
       fontSize: Int(fontSize),
       fontScaleMilli: Int((fontScale * 1_000).rounded()),
-      citationOrdinals: citations.map(\.ordinal).sorted())
+      citationOrdinals: citations.map(\.ordinal).sorted(),
+      documentProse: documentProse)
     if let entry = ChatProseRenderCache.entry(
       for: cacheKey,
       produce: {
@@ -498,7 +510,8 @@ struct ChatSelectableProseBlock: View {
           style: style,
           fontSize: fontSize,
           fontScale: fontScale,
-          citationOrdinals: Set(citations.map(\.ordinal)))
+          citationOrdinals: Set(citations.map(\.ordinal)),
+          documentProse: documentProse)
       })
     {
       ChatSelectableProseText(

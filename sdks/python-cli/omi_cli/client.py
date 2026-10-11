@@ -18,7 +18,9 @@ loop here would buy nothing.
 from __future__ import annotations
 
 import json
+import math
 import re
+import urllib.parse
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Iterator, Mapping, Optional
@@ -34,10 +36,11 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, UsageError, from_status
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+CHAT_STREAM_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 MAX_RETRY_ATTEMPTS = 4
 # Maximum server-supplied Retry-After the CLI will wait before retrying. When
 # the hint exceeds this, automatic retries stop and the caller gets the mapped
@@ -116,6 +119,36 @@ class OmiClient:
     def delete(self, path: str) -> Any:
         return self._request("DELETE", path)
 
+    def stream_post_lines(
+        self,
+        path: str,
+        *,
+        json_body: Mapping[str, Any],
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> Iterator[str]:
+        """Stream one POST response without replaying a possibly accepted chat turn.
+
+        Unlike ordinary reads, retrying after a stream disconnect could send the
+        user's message twice. The caller owns parsing the application protocol.
+        """
+        try:
+            with self._http.stream(
+                "POST", path, json=json_body, headers=headers, timeout=CHAT_STREAM_TIMEOUT
+            ) as response:
+                if self._verbose:
+                    import sys
+
+                    sys.stderr.write(f"[debug] POST {path} → {response.status_code} (stream)\n")
+                if not 200 <= response.status_code < 300:
+                    response.read()
+                    raise self._error_from_response(response)
+                yield from response.iter_lines()
+        except (httpx.TransportError, httpx.DecodingError) as exc:
+            raise TransportError(
+                message="Chat connection interrupted",
+                detail="The message may have reached Omi. Check `omi chat --history` before sending it again.",
+            ) from exc
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -150,7 +183,7 @@ class OmiClient:
                     if response.status_code >= 500:
                         retry_after = _parse_retry_after(response.headers.get("Retry-After"))
                         if _retry_after_exceeds_automatic_wait(retry_after):
-                            if method in {"POST", "PATCH"}:
+                            if method in _AMBIGUOUS_WRITE_METHODS:
                                 raise _unknown_write_outcome(method, response=response)
                             raise self._error_from_response(response)
                         raise _RetryableHttp(response, retry_after=retry_after)
@@ -163,16 +196,16 @@ class OmiClient:
                         raise _RetryableHttp(response, retry_after=retry_after)
                     return self._handle_response(response)
         except _RetryableHttp as exc:
-            if method in {"POST", "PATCH"} and exc.response.status_code >= 500:
+            if method in _AMBIGUOUS_WRITE_METHODS and exc.response.status_code >= 500:
                 raise _unknown_write_outcome(method, response=exc.response) from exc
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
         except httpx.TransportError as exc:
-            if method in {"POST", "PATCH"} and not isinstance(
+            if method in _AMBIGUOUS_WRITE_METHODS and not isinstance(
                 exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
             ):
                 raise _unknown_write_outcome(method) from exc
-            if method in {"POST", "PATCH"}:
+            if method in _AMBIGUOUS_WRITE_METHODS:
                 raise TransportError(
                     message="Connection failed",
                     detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
@@ -262,12 +295,18 @@ class _RetryableHttp(Exception):
         self.retry_after = retry_after
 
 
+# Methods whose replay is unsafe once the request may have reached the server.
+# DELETE is included: a lost response or 5xx leaves the resource's removal
+# ambiguous, exactly like a POST/PATCH body write.
+_AMBIGUOUS_WRITE_METHODS = frozenset({"POST", "PATCH", "DELETE"})
+
+
 def _may_retry(method: str, exc: BaseException) -> bool:
     """Only replay writes when the failure establishes they were not applied."""
     if isinstance(exc, _RetryableHttp):
-        return method not in {"POST", "PATCH"} or exc.response.status_code == 429
+        return method not in _AMBIGUOUS_WRITE_METHODS or exc.response.status_code == 429
     if isinstance(exc, httpx.TransportError):
-        return method not in {"POST", "PATCH"} or isinstance(
+        return method not in _AMBIGUOUS_WRITE_METHODS or isinstance(
             exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
         )
     return False
@@ -366,15 +405,25 @@ def _format_validation_error(entry: Any) -> str:
     return str(msg or entry)
 
 
+# RFC 9110 delay-seconds is ``1*DIGIT`` (ASCII digits only).
+_DELAY_SECONDS_RE = re.compile(r"[0-9]+")
+
+
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     """Parse the Retry-After header per RFC 9110 (delay-seconds or HTTP-date)."""
     if not value:
         return None
     cleaned = value.strip()
-    try:
-        return max(0.0, float(cleaned))
-    except ValueError:
-        pass
+    # float() also accepts signs, fractions, exponents, underscores, inf/nan
+    # and non-ASCII digits. None of those are delay-seconds, so only a plain
+    # digit run takes the numeric path; anything else falls through to the
+    # HTTP-date parse below.
+    if _DELAY_SECONDS_RE.fullmatch(cleaned):
+        parsed = float(cleaned)
+        # A digit run too long for a float overflows to inf, which must not
+        # become an infinite cooldown.
+        if math.isfinite(parsed):
+            return parsed
 
     try:
         dt = parsedate_to_datetime(cleaned)
@@ -403,6 +452,19 @@ def _format_rate_limit_detail(retry_after: Optional[float], detail: Optional[str
     if detail:
         parts.append(detail)
     return " ".join(parts) if parts else "Slow down and retry shortly."
+
+
+def path_segment(value: str) -> str:
+    """Percent-encode a user-supplied ID for use as a single URL path segment.
+
+    IDs come straight from argv (often from an agent), and are interpolated into
+    request paths. Unencoded, ``/`` and ``..`` let an ID escape its resource
+    collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
+    would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
+    """
+    if value in {"", ".", ".."}:
+        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
+    return urllib.parse.quote(value, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:

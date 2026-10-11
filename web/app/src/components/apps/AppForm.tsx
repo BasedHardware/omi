@@ -178,7 +178,9 @@ export function AppForm({ mode, app }: AppFormProps) {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // Thumbnails
-  const [thumbnails, setThumbnails] = useState<{ url: string; id: string }[]>([]);
+  // id is null for a screenshot whose upload id the server did not send back;
+  // those cannot be submitted without dropping the rest of the list.
+  const [thumbnails, setThumbnails] = useState<{ url: string; id: string | null }[]>([]);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   // Prompts
@@ -257,7 +259,9 @@ export function AppForm({ mode, app }: AppFormProps) {
       }
 
       if (app.thumbnail_urls) {
-        setThumbnails(app.thumbnail_urls.map((url, i) => ({ url, id: `existing-${i}` })));
+        setThumbnails(
+          app.thumbnail_urls.map((url, i) => ({ url, id: app.thumbnails?.[i] ?? null })),
+        );
       }
     }
   }, [mode, app]);
@@ -328,8 +332,8 @@ export function AppForm({ mode, app }: AppFormProps) {
     }
   };
 
-  const removeThumbnail = (id: string) => {
-    setThumbnails((prev) => prev.filter((t) => t.id !== id));
+  const removeThumbnail = (index: number) => {
+    setThumbnails((prev) => prev.filter((_, i) => i !== index));
   };
 
   // AI description generation
@@ -455,6 +459,10 @@ export function AppForm({ mode, app }: AppFormProps) {
         data.is_paid = true;
         data.price = parseFloat(price);
         data.payment_plan = paymentPlan;
+      }
+      const thumbnailIds = thumbnails.map((thumb) => thumb.id);
+      if (!thumbnailIds.includes(null)) {
+        data.thumbnails = thumbnailIds as string[];
       }
 
       if (mode === 'create') {
@@ -719,8 +727,11 @@ export function AppForm({ mode, app }: AppFormProps) {
           <section className={cn(sectionCardClass, 'space-y-4')}>
             <h2 className="text-lg font-medium text-text-primary">Screenshots</h2>
             <div className="flex gap-3 overflow-x-auto pb-2">
-              {thumbnails.map((thumb) => (
-                <div key={thumb.id} className="relative flex-shrink-0">
+              {thumbnails.map((thumb, index) => (
+                <div
+                  key={`${thumb.id ?? thumb.url}-${index}`}
+                  className="relative flex-shrink-0"
+                >
                   <Image
                     src={thumb.url}
                     alt="Screenshot"
@@ -730,7 +741,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                   />
                   <button
                     type="button"
-                    onClick={() => removeThumbnail(thumb.id)}
+                    onClick={() => removeThumbnail(index)}
                     className="absolute -top-2 -right-2 p-1 bg-error rounded-full"
                   >
                     <XIcon className="w-3 h-3 text-white" />

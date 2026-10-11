@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { AppsExplorer } from '@/components/apps/AppsExplorer';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function AppsPage() {
   useEffect(() => {
-    MixpanelManager.pageView('Connectors');
+    PostHogManager.pageView('Connectors');
   }, []);
 
   return (

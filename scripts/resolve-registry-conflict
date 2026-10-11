@@ -1,0 +1,540 @@
+#!/usr/bin/env python3
+"""Three-way union for additive keyed registries during a conflicted merge.
+
+Operate on git's merge stages (base/ours/theirs), not a two-way diff. Union
+by key. When both sides have a key with different content, take theirs if ours
+matches base, ours if theirs matches base, and stop if both edited it.
+
+Do not reformat, reorder, or re-serialise the surrounding file. Insert new
+keys into the correct container (manifest checks into `checks:`, never at
+EOF after `exempt:`). Verify the parsed result before writing; refuse to write
+if a key from either side is missing, duplicated, or unparseable.
+
+Known paths:
+  .github/checks-manifest.yaml
+  .github/scripts/dead_code/flutter.allowlist.json
+  contracts/spine/files.json
+
+`app/AGENTS.md` is refused: prose under a 11411-byte budget, not mechanical.
+Any other path is refused by name.
+
+Usage during `git merge origin/main` (ours = feature, theirs = main):
+
+  python3 scripts/resolve-registry-conflict .github/checks-manifest.yaml
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+KNOWN_MANIFEST = ".github/checks-manifest.yaml"
+KNOWN_ALLOWLIST = ".github/scripts/dead_code/flutter.allowlist.json"
+KNOWN_SPINE = "contracts/spine/files.json"
+KNOWN_PATHS = (KNOWN_MANIFEST, KNOWN_ALLOWLIST, KNOWN_SPINE)
+AGENTS_MD = "app/AGENTS.md"
+AGENTS_MD_BUDGET = 11411
+
+TOP_LEVEL_KEY = re.compile(r"^(?P<key>[A-Za-z_][\w-]*):\s*$", re.MULTILINE)
+
+
+class ResolverError(Exception):
+    """A named, fail-closed refusal. Never write when this is raised."""
+
+
+@dataclass(frozen=True)
+class Item:
+    key: str
+    parsed: Any
+    start: int
+    end: int
+    text: str
+
+
+@dataclass(frozen=True)
+class Container:
+    name: str
+    key_field: str
+    header_end: int
+    body_end: int
+    items: tuple[Item, ...]
+
+
+@dataclass(frozen=True)
+class Document:
+    kind: str
+    items: tuple[Item, ...]
+    containers: tuple[Container, ...]
+
+
+def posix_path(value: str) -> str:
+    value = value.replace("\\", "/")
+    while value.startswith("./"):
+        value = value[2:]
+    return value
+
+
+def canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def parse_yaml_value(raw: str) -> Any:
+    value = raw.strip()
+    if not value:
+        return ""
+    if value.startswith(("[", '"')) or value in {"true", "false", "null"}:
+        return json.loads(value)
+    return value
+
+
+def parse_yaml_subset(text: str) -> dict[str, list[dict[str, Any]]]:
+    """Same JSON-valued YAML subset the checks manifest uses."""
+
+    sections: dict[str, list[dict[str, Any]]] = {}
+    section: str | None = None
+    current: dict[str, Any] | None = None
+    for lineno, raw_line in enumerate(text.splitlines(), start=1):
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw_line.startswith((" ", "\t")) and stripped.endswith(":"):
+            section = stripped[:-1]
+            sections.setdefault(section, [])
+            current = None
+            continue
+        if section is None:
+            raise ResolverError(f"YAML entry before a section at line {lineno}")
+        if stripped.startswith("- "):
+            current = {}
+            sections[section].append(current)
+            stripped = stripped[2:]
+        if current is None or ":" not in stripped:
+            raise ResolverError(f"expected key: value at line {lineno}")
+        key, raw_value = stripped.split(":", 1)
+        current[key.strip()] = parse_yaml_value(raw_value)
+    return sections
+
+
+def _item_start_re(key_field: str) -> re.Pattern[str]:
+    return re.compile(rf"^  - {re.escape(key_field)}:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def parse_manifest(text: str) -> Document:
+    matches = list(TOP_LEVEL_KEY.finditer(text))
+    if not matches:
+        raise ResolverError("manifest has no top-level keys")
+    containers: list[Container] = []
+    all_items: list[Item] = []
+    for index, match in enumerate(matches):
+        name = match.group("key")
+        if name == "checks":
+            key_field = "id"
+        elif name == "exempt":
+            key_field = "path"
+        else:
+            raise ResolverError(f"unknown manifest section {name!r}")
+        header_end = match.end()
+        body_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[header_end:body_end]
+        starts = list(_item_start_re(key_field).finditer(body))
+        items: list[Item] = []
+        seen: set[str] = set()
+        for item_index, start_match in enumerate(starts):
+            key = start_match.group(1).strip().strip('"')
+            if key in seen:
+                raise ResolverError(f"duplicate {name} key {key!r}")
+            seen.add(key)
+            rel_start = start_match.start()
+            rel_end = starts[item_index + 1].start() if item_index + 1 < len(starts) else len(body)
+            block = body[rel_start:rel_end].rstrip("\n") + "\n"
+            abs_start = header_end + rel_start
+            abs_end = abs_start + len(block)
+            parsed_rows = parse_yaml_subset(f"{name}:\n{block}").get(name, [])
+            if len(parsed_rows) != 1:
+                raise ResolverError(f"could not parse {name} item {key!r}")
+            items.append(Item(key=key, parsed=parsed_rows[0], start=abs_start, end=abs_end, text=block))
+        container = Container(name=name, key_field=key_field, header_end=header_end, body_end=body_end, items=tuple(items))
+        containers.append(container)
+        all_items.extend(items)
+    return Document(kind="manifest", items=tuple(all_items), containers=tuple(containers))
+
+
+def _skip_ws_and_commas(text: str, index: int) -> int:
+    while index < len(text) and text[index] in " \t\r\n,":
+        index += 1
+    return index
+
+
+def extract_json_object_items(text: str, *, start: int, end: int) -> tuple[Item, ...]:
+    decoder = json.JSONDecoder()
+    index = _skip_ws_and_commas(text, start)
+    if index >= end or text[index] != "{":
+        raise ResolverError("expected a JSON object")
+    index += 1
+    items: list[Item] = []
+    seen: set[str] = set()
+    while True:
+        index = _skip_ws_and_commas(text, index)
+        if index >= end:
+            raise ResolverError("unterminated JSON object")
+        if text[index] == "}":
+            break
+        pair_start = index
+        key, key_end = decoder.raw_decode(text, index)
+        if not isinstance(key, str):
+            raise ResolverError("JSON object keys must be strings")
+        colon = text.find(":", key_end, end)
+        if colon < 0:
+            raise ResolverError(f"missing colon after {key!r}")
+        value, value_end = decoder.raw_decode(text, _skip_ws_and_commas(text, colon + 1))
+        if key in seen:
+            raise ResolverError(f"duplicate JSON key {key!r}")
+        seen.add(key)
+        items.append(Item(key=key, parsed=value, start=pair_start, end=value_end, text=text[pair_start:value_end]))
+        index = value_end
+    return tuple(items)
+
+
+def extract_json_array_objects(text: str, *, start: int, end: int, key_field: str) -> tuple[Item, ...]:
+    decoder = json.JSONDecoder()
+    index = _skip_ws_and_commas(text, start)
+    if index >= end or text[index] != "[":
+        raise ResolverError("expected a JSON array")
+    index += 1
+    items: list[Item] = []
+    seen: set[str] = set()
+    while True:
+        index = _skip_ws_and_commas(text, index)
+        if index >= end:
+            raise ResolverError("unterminated JSON array")
+        if text[index] == "]":
+            break
+        obj_start = index
+        parsed, obj_end = decoder.raw_decode(text, index)
+        if not isinstance(parsed, dict) or key_field not in parsed:
+            raise ResolverError(f"array entry missing {key_field!r}")
+        key = parsed[key_field]
+        if not isinstance(key, str) or not key:
+            raise ResolverError(f"array {key_field} must be a non-empty string")
+        if key in seen:
+            raise ResolverError(f"duplicate JSON array key {key!r}")
+        seen.add(key)
+        items.append(Item(key=key, parsed=parsed, start=obj_start, end=obj_end, text=text[obj_start:obj_end]))
+        index = obj_end
+    return tuple(items)
+
+
+def parse_spine(text: str) -> Document:
+    items = extract_json_object_items(text, start=0, end=len(text))
+    closing = text.rfind("}")
+    if closing < 0:
+        raise ResolverError("spine files.json is missing a closing brace")
+    header_end = text.find("{") + 1
+    container = Container(name="files", key_field="path", header_end=header_end, body_end=closing, items=items)
+    return Document(kind="json_object", items=items, containers=(container,))
+
+
+def parse_allowlist(text: str) -> Document:
+    decoder = json.JSONDecoder()
+    payload, _ = decoder.raw_decode(text)
+    if not isinstance(payload, dict) or "entries" not in payload:
+        raise ResolverError("allowlist must be an object with an entries array")
+    marker = '"entries"'
+    marker_at = text.find(marker)
+    if marker_at < 0:
+        raise ResolverError("allowlist is missing an entries key")
+    colon = text.find(":", marker_at + len(marker))
+    array_start = _skip_ws_and_commas(text, colon + 1)
+    items = extract_json_array_objects(text, start=array_start, end=len(text), key_field="path")
+    closing = text.rfind("]")
+    if closing < 0:
+        raise ResolverError("allowlist entries array is missing a closing bracket")
+    header_end = array_start + 1
+    container = Container(name="entries", key_field="path", header_end=header_end, body_end=closing, items=items)
+    return Document(kind="json_array", items=items, containers=(container,))
+
+
+def parse_document(path: str, text: str) -> Document:
+    if path == KNOWN_MANIFEST:
+        return parse_manifest(text)
+    if path == KNOWN_SPINE:
+        return parse_spine(text)
+    if path == KNOWN_ALLOWLIST:
+        return parse_allowlist(text)
+    raise ResolverError(f"no keyed-registry resolver for path {path!r}")
+
+
+def pick_side(*, path: str, key: str, base: Item | None, ours: Item | None, theirs: Item | None) -> str:
+    if ours is not None and theirs is None:
+        return "ours"
+    if theirs is not None and ours is None:
+        return "theirs"
+    if ours is None or theirs is None:
+        raise ResolverError(f"{path}: key {key!r} missing from both sides")
+    if canonical(ours.parsed) == canonical(theirs.parsed):
+        return "ours"
+    base_parsed = None if base is None else canonical(base.parsed)
+    if base_parsed is not None and canonical(ours.parsed) == base_parsed:
+        return "theirs"
+    if base_parsed is not None and canonical(theirs.parsed) == base_parsed:
+        return "ours"
+    raise ResolverError(
+        f"both sides edited {path} key {key!r}; a human has to read it"
+    )
+
+
+def reconstruct_container(*, kind: str, source: str, container: Container, ordered_texts: list[str]) -> str:
+    """Replace *container*'s body in *source* with *ordered_texts*, preserving header/suffix."""
+
+    if kind == "manifest":
+        if not ordered_texts:
+            body = "\n"
+        else:
+            body = "\n" + "\n".join(text.rstrip("\n") for text in ordered_texts) + "\n"
+        return source[: container.header_end] + body + source[container.body_end :]
+
+    if kind in {"json_object", "json_array"}:
+        if container.items:
+            prefix = source[container.header_end : container.items[0].start]
+        elif kind == "json_object":
+            prefix = "\n  "
+        else:
+            prefix = "\n    "
+        indent = prefix.rsplit("\n", 1)[-1]
+        inner = (",\n" + indent).join(ordered_texts) if ordered_texts else ""
+        body = prefix + inner
+        if ordered_texts and not body.endswith("\n"):
+            body += "\n"
+        elif not ordered_texts:
+            body = "\n"
+        return source[: container.header_end] + body + source[container.body_end :]
+
+    raise ResolverError(f"unknown document kind {kind!r}")
+
+
+def resolve_container(
+    *,
+    path: str,
+    kind: str,
+    source: str,
+    container_name: str,
+    base: Document,
+    ours: Document,
+    theirs: Document,
+) -> str:
+    ours_containers = {container.name: container for container in ours.containers}
+    theirs_containers = {container.name: container for container in theirs.containers}
+    base_containers = {container.name: container for container in base.containers}
+    ours_c = ours_containers.get(container_name)
+    theirs_c = theirs_containers.get(container_name)
+    if ours_c is None and theirs_c is None:
+        return source
+    scaffold = ours_c or theirs_c
+    assert scaffold is not None
+    base_map = {item.key: item for item in (base_containers[container_name].items if container_name in base_containers else ())}
+    ours_map = {item.key: item for item in (ours_c.items if ours_c else ())}
+    theirs_map = {item.key: item for item in (theirs_c.items if theirs_c else ())}
+    union_keys: list[str] = []
+    seen: set[str] = set()
+    for item in (ours_c.items if ours_c else ()) + (theirs_c.items if theirs_c else ()):
+        if item.key not in seen:
+            union_keys.append(item.key)
+            seen.add(item.key)
+    ordered_texts: list[str] = []
+    for key in union_keys:
+        side = pick_side(path=path, key=key, base=base_map.get(key), ours=ours_map.get(key), theirs=theirs_map.get(key))
+        winner = ours_map[key] if side == "ours" else theirs_map[key]
+        ordered_texts.append(winner.text)
+    return reconstruct_container(kind=kind, source=source, container=scaffold, ordered_texts=ordered_texts)
+
+
+def resolve_text(path: str, base_text: str, ours_text: str, theirs_text: str) -> str:
+    path = posix_path(path)
+    refuse_path(path)
+    base = parse_document(path, base_text)
+    ours = parse_document(path, ours_text)
+    theirs = parse_document(path, theirs_text)
+    source = ours_text
+    # Apply containers last-to-first so earlier offsets stay valid.
+    for container in reversed(ours.containers or theirs.containers):
+        source = resolve_container(
+            path=path,
+            kind=ours.kind,
+            source=source,
+            container_name=container.name,
+            base=base,
+            ours=ours,
+            theirs=theirs,
+        )
+        # Re-parse the updated ours-shaped document so later containers still
+        # match the current source offsets. The scaffold for remaining
+        # containers is the updated source parsed as ours.
+        updated = parse_document(path, source)
+        ours = updated
+    verify_result(path, base, parse_document(path, ours_text), theirs, source)
+    return source
+
+
+def document_keys(document: Document) -> set[str]:
+    if document.kind == "manifest":
+        # Union-survival is per container; the global set is still unique-by-id
+        # plus unique-by-exempt-path. Prefix to keep them distinct.
+        keys: set[str] = set()
+        for container in document.containers:
+            for item in container.items:
+                keys.add(f"{container.name}:{item.key}")
+        return keys
+    return {item.key for item in document.items}
+
+
+def verify_result(path: str, base: Document, ours: Document, theirs: Document, result_text: str) -> None:
+    try:
+        result = parse_document(path, result_text)
+    except (ResolverError, json.JSONDecodeError, ValueError) as exc:
+        raise ResolverError(f"{path}: resolver output did not parse: {exc}") from exc
+
+    if path == KNOWN_MANIFEST:
+        sections = parse_yaml_subset(result_text)
+        check_ids = [row.get("id") for row in sections.get("checks", [])]
+        if len(check_ids) != len(set(check_ids)):
+            raise ResolverError(f"{path}: duplicate check ids in resolver output")
+        exempt_paths = [row.get("path") for row in sections.get("exempt", [])]
+        if any(row.get("id") for row in sections.get("exempt", []) if "id" in row):
+            raise ResolverError(f"{path}: a checks: block landed inside exempt:")
+        ours_checks = {item.key for item in next(c.items for c in ours.containers if c.name == "checks")}
+        theirs_checks = {item.key for item in next(c.items for c in theirs.containers if c.name == "checks")}
+        result_checks = {item.key for item in next(c.items for c in result.containers if c.name == "checks")}
+        expected_checks = ours_checks | theirs_checks
+        if result_checks != expected_checks:
+            missing = sorted(expected_checks - result_checks)
+            extra = sorted(result_checks - expected_checks)
+            raise ResolverError(
+                f"{path}: check id set mismatch missing={missing} extra={extra}"
+            )
+        ours_exempt = {item.key for container in ours.containers if container.name == "exempt" for item in container.items}
+        theirs_exempt = {item.key for container in theirs.containers if container.name == "exempt" for item in container.items}
+        result_exempt = {item.key for container in result.containers if container.name == "exempt" for item in container.items}
+        expected_exempt = ours_exempt | theirs_exempt
+        if result_exempt != expected_exempt:
+            raise ResolverError(
+                f"{path}: exempt path set mismatch missing={sorted(expected_exempt - result_exempt)}"
+            )
+        if len(result.items) != len(document_keys(result)):
+            raise ResolverError(f"{path}: item count does not match unique keys")
+        _verify_winners(path, base, ours, theirs, result)
+        return
+
+    ours_keys = {item.key for item in ours.items}
+    theirs_keys = {item.key for item in theirs.items}
+    result_keys = {item.key for item in result.items}
+    expected = ours_keys | theirs_keys
+    if result_keys != expected:
+        raise ResolverError(
+            f"{path}: key set mismatch missing={sorted(expected - result_keys)} extra={sorted(result_keys - expected)}"
+        )
+    if len(result.items) != len(result_keys):
+        raise ResolverError(f"{path}: duplicate keys in resolver output")
+    _verify_winners(path, base, ours, theirs, result)
+
+
+def _verify_winners(path: str, base: Document, ours: Document, theirs: Document, result: Document) -> None:
+    for container in result.containers:
+        base_map = {item.key: item for c in base.containers if c.name == container.name for item in c.items}
+        ours_map = {item.key: item for c in ours.containers if c.name == container.name for item in c.items}
+        theirs_map = {item.key: item for c in theirs.containers if c.name == container.name for item in c.items}
+        result_map = {item.key: item for item in container.items}
+        for key, item in result_map.items():
+            side = pick_side(
+                path=path,
+                key=key,
+                base=base_map.get(key),
+                ours=ours_map.get(key),
+                theirs=theirs_map.get(key),
+            )
+            expected = ours_map[key] if side == "ours" else theirs_map[key]
+            if canonical(item.parsed) != canonical(expected.parsed):
+                raise ResolverError(f"{path}: key {key!r} did not keep the {side} value")
+
+
+def refuse_path(path: str) -> None:
+    path = posix_path(path)
+    if path == AGENTS_MD:
+        raise ResolverError(
+            f"{AGENTS_MD} is prose under a {AGENTS_MD_BUDGET}-byte budget and is not "
+            "mechanical; refuse to merge it"
+        )
+    if path not in KNOWN_PATHS:
+        raise ResolverError(f"no keyed-registry resolver for path {path!r}")
+
+
+def git_show(root: Path, revision: str) -> str:
+    result = subprocess.run(
+        ["git", "show", revision],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
+        raise ResolverError(f"git show {revision} failed: {detail}")
+    return result.stdout
+
+
+def read_stages(root: Path, path: str) -> tuple[str, str, str]:
+    try:
+        base = git_show(root, f":1:{path}")
+        ours = git_show(root, f":2:{path}")
+        theirs = git_show(root, f":3:{path}")
+    except ResolverError as exc:
+        raise ResolverError(
+            f"no three-way stages for {path}; pass --base/--ours/--theirs or run during a conflicted merge ({exc})"
+        ) from exc
+    return base, ours, theirs
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("path", help="repository-relative registry path")
+    parser.add_argument("--base", type=Path, help="stage-1 file (default: git :1:PATH)")
+    parser.add_argument("--ours", type=Path, help="stage-2 file (default: git :2:PATH)")
+    parser.add_argument("--theirs", type=Path, help="stage-3 file (default: git :3:PATH)")
+    parser.add_argument("--output", type=Path, help="write here instead of PATH")
+    parser.add_argument("--root", type=Path, default=Path.cwd(), help="git work tree")
+    parser.add_argument("--dry-run", action="store_true", help="print the result and do not write")
+    args = parser.parse_args(argv)
+
+    path = posix_path(args.path)
+    try:
+        refuse_path(path)
+        if args.base or args.ours or args.theirs:
+            if not (args.base and args.ours and args.theirs):
+                raise ResolverError("--base, --ours, and --theirs must be passed together")
+            base_text = args.base.read_text(encoding="utf-8")
+            ours_text = args.ours.read_text(encoding="utf-8")
+            theirs_text = args.theirs.read_text(encoding="utf-8")
+        else:
+            base_text, ours_text, theirs_text = read_stages(args.root, path)
+        result = resolve_text(path, base_text, ours_text, theirs_text)
+    except ResolverError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        sys.stdout.write(result)
+        return 0
+    output = args.output if args.output is not None else args.root / path
+    output.write_text(result, encoding="utf-8")
+    print(f"resolved {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

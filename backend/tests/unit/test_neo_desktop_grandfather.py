@@ -139,12 +139,19 @@ class TestEffectiveDesktopAccessTier:
         assert get_remaining_transcription_seconds('neo-uid', source='desktop') is None
         assert cleared_cache_keys == [
             'trial_paywall:expired:neo-uid:openrouter',
+            'trial_paywall:expired:neo-uid:openrouter:managed',
             'trial_paywall:expired:neo-uid:openai',
+            'trial_paywall:expired:neo-uid:openai:managed',
             'trial_paywall:expired:neo-uid:anthropic',
+            'trial_paywall:expired:neo-uid:anthropic:managed',
             'trial_paywall:expired:neo-uid:gemini',
+            'trial_paywall:expired:neo-uid:gemini:managed',
             'trial_paywall:expired:neo-uid:deepgram',
+            'trial_paywall:expired:neo-uid:deepgram:managed',
             'trial_paywall:expired:neo-uid:deepgram:strict',
+            'trial_paywall:expired:neo-uid:deepgram:strict:managed',
             'trial_paywall:expired:neo-uid',
+            'trial_paywall:expired:neo-uid:managed',
         ]
 
 

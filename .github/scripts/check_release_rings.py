@@ -11,10 +11,11 @@ if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 
 from workflow_composite_contract import backend_deploy_contract_text
-BACKEND_RELEASE_SOURCES = (
-    Path(".github/workflows/gcp_backend.yml"),
-)
+
+BACKEND_RELEASE_SOURCES = (Path(".github/workflows/gcp_backend.yml"),)
 DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
+FIRESTORE_READINESS_ACTION = Path(".github/actions/firestore-readiness/action.yml")
+FIRESTORE_READINESS_USES = "uses: ./.github/firestore-workflow/.github/actions/firestore-readiness"
 
 OBSOLETE_RELEASE_RING_SOURCES = (
     Path("backend/deploy/release_rings.yaml"),
@@ -58,6 +59,10 @@ def check() -> list[str]:
     workflow_path = paths[Path(".github/workflows/gcp_backend.yml")]
     workflow = workflow_path.read_text(encoding="utf-8")
     contract = backend_deploy_contract_text(workflow, ROOT, DEPLOY_BACKEND_STACK_ACTION)
+    if FIRESTORE_READINESS_USES in workflow:
+        readiness_action = ROOT / FIRESTORE_READINESS_ACTION
+        if readiness_action.is_file():
+            contract += "\n" + readiness_action.read_text(encoding="utf-8")
     errors.extend(
         require(
             contract,
@@ -107,7 +112,10 @@ def check() -> list[str]:
             contract,
             workflow_path,
             "canonical release-vector verifier",
-            ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py"),
+            (
+                "backend/scripts/verify_backend_release_vector.py",
+                "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py",
+            ),
         )
     )
     promotion = contract.find("Shift Cloud Run traffic to validated revisions")

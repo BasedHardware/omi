@@ -798,7 +798,7 @@ struct AddMcpServerSheet: View {
             .frame(width: 20, height: 20)
         },
         title: "Server saved to ~/.omi/mcp.json",
-        detail: "Its tools reach chat automatically — right away, or with your next message if a reply is in flight."
+        detail: "Its tools reach chat automatically — right away, or from your next message if Omi is still replying."
       )
 
       HStack {
@@ -1229,7 +1229,7 @@ struct LocalMcpDetailSheet: View {
       }
 
       Text(
-        "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
+        "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or from your next message if Omi is still replying."
       )
       .scaledFont(size: OmiType.caption)
       .foregroundColor(Ink.secondary)

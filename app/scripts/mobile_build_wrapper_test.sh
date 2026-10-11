@@ -8,7 +8,8 @@ trap 'rm -rf "$fixture_dir"' EXIT
 mkdir -p "$fixture_dir/scripts" "$fixture_dir/ios"
 cp "$ROOT_DIR/setup.sh" "$fixture_dir/setup.sh"
 cp "$ROOT_DIR/scripts/validate_mobile_build_config.sh" "$fixture_dir/scripts/validate_mobile_build_config.sh"
-chmod +x "$fixture_dir/scripts/validate_mobile_build_config.sh"
+cp "$ROOT_DIR/scripts/build_provenance_dart_defines.sh" "$fixture_dir/scripts/build_provenance_dart_defines.sh"
+chmod +x "$fixture_dir/scripts/validate_mobile_build_config.sh" "$fixture_dir/scripts/build_provenance_dart_defines.sh"
 
 log_file="$fixture_dir/flutter.log"
 (
@@ -41,7 +42,10 @@ log_file="$fixture_dir/flutter.log"
 
   run_build_ios prod
   grep -F 'flutter run --flavor prod -d TEST-DEVICE --dart-define=OMI_APP_PROFILE=mobile_beta' "$log_file" >/dev/null
-  [[ "$(grep -F 'OMI_APP_PROFILE=mobile_beta' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=')" == 1 ]]
+  [[ "$(grep -F 'OMI_APP_PROFILE=mobile_beta' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=OMI_APP_PROFILE=')" == 1 ]]
+  grep -E -- '--dart-define=OMI_GIT_SHA=' "$log_file" >/dev/null
+  grep -E -- '--dart-define=OMI_BUILD_NUMBER=' "$log_file" >/dev/null
+  grep -E -- '--dart-define=OMI_GIT_DIRTY=' "$log_file" >/dev/null
 
   if run_build_ios prod --dart-define=OMI_APP_PROFILE=production; then
     echo 'FAIL: wrapper accepted a conflicting profile define' >&2
@@ -66,7 +70,7 @@ log_file="$fixture_dir/flutter.log"
 
   : >"$log_file"
   OMI_MOBILE_BUILD_MODE=release run_build_android dev
-  grep -E '^flutter run --flavor dev .*--release$' "$log_file" >/dev/null
+  grep -E '^flutter run --flavor dev .*--release' "$log_file" >/dev/null
 
   : >"$log_file"
   if OMI_MOBILE_BUILD_MODE=bogus run_build_ios dev 2>/dev/null; then

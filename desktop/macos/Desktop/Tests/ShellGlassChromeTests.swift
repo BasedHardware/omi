@@ -235,7 +235,6 @@ final class ShellGlassChromeTests: XCTestCase {
     "MainWindow/Pages/ChatErrorCard.swift",
     "MainWindow/Components/ChatBubble.swift",
     "MainWindow/Components/ChatMessagesView.swift",
-    "MainWindow/Components/ChatSessionsSidebar.swift",
     "MainWindow/Components/ConversationRowView.swift",
     "MainWindow/Components/CitationCardView.swift",
     "MainWindow/Components/OmiSearchField.swift",

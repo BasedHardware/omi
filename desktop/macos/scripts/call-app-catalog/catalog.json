@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "thresholds": {
+    "window_days": 14,
+    "min_users": 10,
+    "min_call_like_sessions": 30,
+    "min_classified_releases": 30,
+    "max_mute_like_ratio_to_add": 0.02,
+    "min_mute_like_ratio_to_remove": 0.1,
+    "candidate_min_users": 5,
+    "candidate_min_call_like_sessions": 20
+  },
+  "release_ends_call": [
+    {
+      "bundle_id": "us.zoom.xos",
+      "added": "2026-09-26",
+      "source": "probe",
+      "evidence": "call-audio-probe on macOS 27: mic held through mute and an AirPods switch; leaving stopped mic and speaker in the same millisecond; the next meeting re-acquired both 8.0 s later (#19063)"
+    }
+  ]
+}

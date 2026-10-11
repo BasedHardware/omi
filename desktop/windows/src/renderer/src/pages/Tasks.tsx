@@ -100,7 +100,7 @@ function moveSelection(
 }
 
 export function Tasks(): React.JSX.Element {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   // This panel stays mounted while the user is on another tab, so "mounted" is not
   // "on screen". Same signal the Conversations panel gates its fetches on.
   const tasksPanelIsActive = pathname === TASKS_PATH
@@ -124,7 +124,25 @@ export function Tasks(): React.JSX.Element {
   // Keyboard-navigation selection (mac parity). The highlighted row a keyboard
   // user is driving; independent of the mouse hover/edit state above.
   const [keyboardSelectedTaskId, setKeyboardSelectedTaskId] = useState<number | null>(null)
+  const [appliedProactivityTarget, setAppliedProactivityTarget] = useState('')
   const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  const proactivityTargetId = new URLSearchParams(search).get('proactivity_task')
+  const proactivityTarget = items.find((item) => item.backendId === proactivityTargetId)
+  const proactivityTargetKey =
+    tasksPanelIsActive && proactivityTargetId && proactivityTarget
+      ? `${proactivityTargetId}:${proactivityTarget.id}`
+      : ''
+
+  // Apply route-driven selection during render so the matching task is visible
+  // in the very first committed render after navigation.
+  if (proactivityTargetKey !== appliedProactivityTarget) {
+    setAppliedProactivityTarget(proactivityTargetKey)
+    if (proactivityTargetKey && proactivityTarget) {
+      setFilter('all')
+      setKeyboardSelectedTaskId(proactivityTarget.id)
+    }
+  }
 
   // Re-read the local task store. Called on mount, on every `onTasksChanged`
   // (optimistic write OR a background sync landing), and on manual refresh.
@@ -366,6 +384,15 @@ export function Tasks(): React.JSX.Element {
     const el = scrollRef.current?.querySelector(`[data-task-id="${keyboardSelectedTaskId}"]`)
     el?.scrollIntoView({ block: 'nearest' })
   }, [keyboardSelectedTaskId])
+
+  useEffect(() => {
+    const id = proactivityTargetId
+    const item = proactivityTarget
+    if (!tasksPanelIsActive || !id || !item || keyboardSelectedTaskId !== item.id) return
+    if (scrollRef.current?.querySelector(`[data-task-id="${item.id}"]`)) {
+      window.omi?.proactivityTargetRendered?.({ kind: 'action_item', id })
+    }
+  }, [proactivityTargetId, proactivityTarget, tasksPanelIsActive, keyboardSelectedTaskId, filter])
 
   // Switching the filter can leave the selected row unrendered while it's still in
   // `items` (the filter just hides it), so `items.find` would keep resolving it and

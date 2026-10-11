@@ -87,10 +87,7 @@ class SttModeResolver {
     return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
-  Future<SttModeDecision> decide({
-    required CustomSttConfig persistedCustomStt,
-    required BleAudioCodec codec,
-  }) async {
+  Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
@@ -154,11 +151,7 @@ class SttModeResolver {
       );
     }
 
-    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(
-      codec,
-      null,
-      allowanceOnDevice: true,
-    )) {
+    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, null, allowanceOnDevice: true)) {
       return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'unsupported_codec_on_device',
@@ -182,4 +175,19 @@ class SttModeResolver {
       allowanceOnDevice: true,
     );
   }
+}
+
+PurePollingSocket? customSttPollingSocket(Object? socket) {
+  final primary = socket is CompositeTranscriptionSocket ? socket.primarySocket : socket;
+  return primary is PurePollingSocket ? primary : null;
+}
+
+/// When custom STT is configured, its polling socket keeps buffering audio
+/// locally and retrying instead of tearing the transcription socket down on
+/// every failure (see PurePollingSocket). Surface that local state so the
+/// recording UI can show "offline, buffering" instead of silently showing
+/// "Listening" while nothing is actually being transcribed.
+Duration? customSttBufferingFor(Object? socket, [DateTime? now]) {
+  final since = customSttPollingSocket(socket)?.bufferingSince;
+  return since == null ? null : (now ?? DateTime.now()).difference(since);
 }

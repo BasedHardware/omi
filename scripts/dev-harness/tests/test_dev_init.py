@@ -111,6 +111,28 @@ def _hooks_dir(cwd: Path) -> Path:
     return (cwd / result.stdout.strip()).resolve()
 
 
+def _linked_worktree_dest(tmp_path: Path) -> Path:
+    """Place the linked worktree where the host Git wrapper allows it.
+
+    The managed git wrapper refuses destinations under /tmp and ~/workspace so
+    disposable trees land on scratch. Pytest's tmp_path is typically
+    /private/tmp, which that guard correctly denies. Task worktrees belong
+    under $OMI_WORKTREES (normally /Volumes/scratch/worktrees/omi). Do not
+    bypass the guard or skip this test when that root exists.
+    """
+    candidates: list[Path] = []
+    env_root = os.environ.get("OMI_WORKTREES", "").strip()
+    if env_root:
+        candidates.append(Path(env_root))
+    default_root = Path("/Volumes/scratch/worktrees/omi")
+    if default_root not in candidates:
+        candidates.append(default_root)
+    for root in candidates:
+        if root.is_dir():
+            return root / f".pytest-dev-init-linked-{os.getpid()}-{tmp_path.name}"
+    return tmp_path / "linked"
+
+
 def test_dev_init_installs_hooks_from_a_linked_worktree(tmp_path: Path) -> None:
     """A linked worktree's `.git` is a file, so `.git/hooks/pre-commit` does not exist.
 
@@ -119,15 +141,25 @@ def test_dev_init_installs_hooks_from_a_linked_worktree(tmp_path: Path) -> None:
     failure cost a full dependency install first.
     """
     repo = _fixture_repo(tmp_path)
-    worktree = tmp_path / "linked"
-    _git("-C", str(repo), "worktree", "add", "-q", "-b", "work", str(worktree))
-    assert (worktree / ".git").is_file()
+    worktree = _linked_worktree_dest(tmp_path)
+    try:
+        _git("-C", str(repo), "worktree", "add", "-q", "-b", "work", str(worktree))
+        assert (worktree / ".git").is_file()
 
-    result = _run_dev_init(worktree)
+        result = _run_dev_init(worktree)
 
-    assert result.returncode == 0, result.stdout
-    hook = _hooks_dir(worktree) / "pre-commit"
-    assert hook.is_file() and os.access(hook, os.X_OK), result.stdout
+        assert result.returncode == 0, result.stdout
+        hook = _hooks_dir(worktree) / "pre-commit"
+        assert hook.is_file() and os.access(hook, os.X_OK), result.stdout
+    finally:
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)],
+            env=_clean_env(),
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        shutil.rmtree(worktree, ignore_errors=True)
 
 
 def test_dev_init_installs_hooks_in_a_main_checkout(tmp_path: Path) -> None:
