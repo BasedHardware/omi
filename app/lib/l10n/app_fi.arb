@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Vastaanottaja: Omi · {address}",
     "chatAppsInsightsSubtitle": "Anna Omin lähettää sinulle yhteenveto tai oivallus tänne.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…"
+    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…",
+    "reviewProposalCloseTask": "Merkitäänkö ”{task}” tehdyksi?",
+    "reviewProposalRetireTask": "Poistetaanko tehtävä ”{task}”?",
+    "reviewProposalMergePeople": "Onko ”{name}” sama henkilö kuin ”{other}”?",
+    "reviewProposalMergeMemories": "Yhdistetäänkö kaksi päällekkäistä muistoa?",
+    "reviewProposalMemory": "Päivitetäänkö tämä muisto?",
+    "reviewProposalEntitySummary": "Päivitetäänkö kohteen ”{name}” yhteenveto?",
+    "reviewProposalGeneric": "Otetaanko tämä ehdotettu korjaus käyttöön?",
+    "reviewProposalApply": "Ota käyttöön",
+    "reviewProposalSuggested": "Ehdotettu",
+    "reviewProposalConflict": "Tämä on muuttunut Dreamin ehdotuksen jälkeen, joten mitään ei otettu käyttöön."
 }

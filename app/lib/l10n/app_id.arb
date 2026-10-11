@@ -4025,5 +4025,15 @@
     "chatAppsIMessageTo": "Kepada: Omi · {address}",
     "chatAppsInsightsSubtitle": "Biarkan Omi mengirimkan rangkuman atau wawasan ke sini.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Menunggu Anda mengetuk Mulai di Telegram…"
+    "chatAppsTelegramWaiting": "Menunggu Anda mengetuk Mulai di Telegram…",
+    "reviewProposalCloseTask": "Tandai “{task}” sebagai selesai?",
+    "reviewProposalRetireTask": "Hapus tugas “{task}”?",
+    "reviewProposalMergePeople": "Apakah “{name}” orang yang sama dengan “{other}”?",
+    "reviewProposalMergeMemories": "Gabungkan dua memori duplikat?",
+    "reviewProposalMemory": "Perbarui memori ini?",
+    "reviewProposalEntitySummary": "Perbarui ringkasan untuk “{name}”?",
+    "reviewProposalGeneric": "Terapkan perbaikan yang disarankan ini?",
+    "reviewProposalApply": "Terapkan",
+    "reviewProposalSuggested": "Disarankan",
+    "reviewProposalConflict": "Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan."
 }

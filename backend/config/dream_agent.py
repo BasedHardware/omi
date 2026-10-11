@@ -4,6 +4,33 @@ import math
 import os
 from dataclasses import dataclass
 
+AUTO = frozenset({'title', 'overview', 'spelling', 'vocabulary'})
+SUGGEST = frozenset({'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'})
+KNOWN_KINDS = AUTO | SUGGEST
+SUGGESTIONS_PER_DAY = 3
+
+
+def auto_apply_kinds() -> frozenset[str]:
+    """An override may narrow safe automation; risky operations always require Review."""
+    value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
+    if value is None:
+        return AUTO
+    requested = {kind.strip() for kind in value.split(',') if kind.strip()}
+    ignored = requested - AUTO
+    if ignored:
+        import logging
+        from utils.dream_metrics import POLICY_WARNINGS
+
+        POLICY_WARNINGS.inc(len(ignored))
+        logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
+    return frozenset(requested & AUTO)
+
+
+def apply_policy(kind: str, automatic: frozenset[str]) -> str:
+    if kind not in KNOWN_KINDS:
+        raise ValueError('Unknown dream edit kind')
+    return 'auto' if kind in automatic else 'suggest'
+
 
 def mode() -> str:
     value = os.getenv('DREAM_AGENT_MODE', 'off').strip().lower()

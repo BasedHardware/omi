@@ -141,7 +141,7 @@ class LinqProvider:
         return await self.api(
             'POST',
             '/chats/' + quote(chat, safe='') + '/messages',
-            body={'parts': parts, 'preferred_service': 'iMessage', 'idempotency_key': operation},
+            body={'message': {'parts': parts, 'idempotency_key': operation}, 'preferred_service': 'iMessage'},
             idempotent=True,
         )
 

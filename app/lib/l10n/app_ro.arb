@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Către: Omi · {address}",
     "chatAppsInsightsSubtitle": "Lasă-l pe Omi să-ți trimită aici un rezumat sau o perspectivă.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Așteptăm să atingi Start în Telegram…"
+    "chatAppsTelegramWaiting": "Așteptăm să atingi Start în Telegram…",
+    "reviewProposalCloseTask": "Marchezi „{task}” ca finalizată?",
+    "reviewProposalRetireTask": "Elimini sarcina „{task}”?",
+    "reviewProposalMergePeople": "„{name}” este aceeași persoană cu „{other}”?",
+    "reviewProposalMergeMemories": "Unești două amintiri duplicate?",
+    "reviewProposalMemory": "Actualizezi această amintire?",
+    "reviewProposalEntitySummary": "Actualizezi rezumatul pentru „{name}”?",
+    "reviewProposalGeneric": "Aplici această corectare sugerată?",
+    "reviewProposalApply": "Aplică",
+    "reviewProposalSuggested": "Sugerat",
+    "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic."
 }

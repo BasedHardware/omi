@@ -13000,4 +13000,42 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označiti „$task” kao dovršeno?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Ukloniti zadatak „$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je li „$name” ista osoba kao „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Spojiti dva duplicirana sjećanja?';
+
+  @override
+  String get reviewProposalMemory => 'Ažurirati ovo sjećanje?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Ažurirati sažetak za „$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Primijeniti ovaj predloženi ispravak?';
+
+  @override
+  String get reviewProposalApply => 'Primijeni';
+
+  @override
+  String get reviewProposalSuggested => 'Predloženo';
+
+  @override
+  String get reviewProposalConflict => 'Ovo se promijenilo otkako je Dream to predložio, pa ništa nije primijenjeno.';
 }

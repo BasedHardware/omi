@@ -190,6 +190,17 @@ export interface AdviceResponse {
   advice: string;
 }
 
+export interface AgentProposalAnswer {
+  decision: "accept" | "dismiss";
+}
+
+export interface AgentProposalItem {
+  edit?: Edit | null;
+  other_label?: string | null;
+  target_label?: string;
+  vocabulary?: Term | null;
+}
+
 export interface AgentToolSchema {
   description: string;
   name: string;
@@ -2135,6 +2146,7 @@ export interface DreamReportEdit {
   evidence_count: number;
   kind: string;
   outcome: "shadow" | "applied" | "suppressed" | "suggest_only" | "edit_cap" | "invalid_evidence";
+  policy?: "auto" | "suggest";
   reason: string;
   target_label: string;
 }
@@ -2158,6 +2170,7 @@ export interface DreamReportTask {
 export interface DreamReportTerm {
   aliases: Array<string>;
   kind: string;
+  policy?: "auto" | "suggest";
   spelling: string;
 }
 
@@ -2190,6 +2203,16 @@ export interface DreamRunsResponse {
   passes_today: number;
   queued_changes: number;
   runs: Array<DreamRun>;
+}
+
+export interface Edit {
+  after?: string;
+  before?: string;
+  evidence: Array<string>;
+  kind: "spelling" | "title" | "overview" | "memory" | "merge_people" | "entity_summary" | "close_task" | "retire_task" | "merge_memories";
+  other?: string;
+  reason: string;
+  target: string;
 }
 
 export interface EntitiesResponse {
@@ -4134,6 +4157,15 @@ export interface ReviewAnswerReceipt {
   remaining_today: number;
 }
 
+export interface ReviewAnswerV2 {
+  agent_proposal?: AgentProposalAnswer | null;
+  not_sure?: boolean;
+  same_person?: SamePersonAnswer | null;
+  speaker?: SpeakerAnswer | null;
+  spelling?: SpellingAnswer | null;
+  task?: TaskAnswer | null;
+}
+
 export interface ReviewAppRequest {
   response?: string | null;
   review?: string | null;
@@ -4177,8 +4209,26 @@ export interface ReviewItem {
   title: string;
 }
 
+export interface ReviewItemV2 {
+  agent_proposal?: AgentProposalItem | null;
+  created_at: string;
+  item_id: string;
+  kind: "speaker" | "task" | "same_person" | "spelling" | "agent_proposal";
+  quote?: string | null;
+  same_person?: SamePersonItem | null;
+  speaker?: SpeakerItem | null;
+  spelling?: SpellingItem | null;
+  task?: TaskItem | null;
+  title: string;
+}
+
 export interface ReviewItemsResponse {
   items: Array<ReviewItem>;
+  remaining_today: number;
+}
+
+export interface ReviewItemsResponseV2 {
+  items: Array<ReviewItemV2>;
   remaining_today: number;
 }
 
@@ -5187,6 +5237,13 @@ export interface TaskWorkflowControl {
 
 export type TaskWorkflowMode = "off" | "shadow" | "write" | "read";
 
+export interface Term {
+  aliases?: Array<string>;
+  evidence: Array<string>;
+  kind: "person" | "organization" | "project" | "jargon";
+  spelling: string;
+}
+
 export interface TestDailySummaryRequest {
   date?: string | null;
 }
@@ -5802,6 +5859,8 @@ export interface OmiApiSchemas {
   "AddTesterRequest": AddTesterRequest;
   "AdviceAssistantSettings": AdviceAssistantSettings;
   "AdviceResponse": AdviceResponse;
+  "AgentProposalAnswer": AgentProposalAnswer;
+  "AgentProposalItem": AgentProposalItem;
   "AgentToolSchema": AgentToolSchema;
   "AgentToolsResponse": AgentToolsResponse;
   "Announcement": Announcement;
@@ -6065,6 +6124,7 @@ export interface OmiApiSchemas {
   "DreamRun": DreamRun;
   "DreamRunRequest": DreamRunRequest;
   "DreamRunsResponse": DreamRunsResponse;
+  "Edit": Edit;
   "EntitiesResponse": EntitiesResponse;
   "EntityCorrection": EntityCorrection;
   "EntityPage": EntityPage;
@@ -6326,12 +6386,15 @@ export interface OmiApiSchemas {
   "RestoreLegacyConversationItemsResponse": RestoreLegacyConversationItemsResponse;
   "ReviewAnswer": ReviewAnswer;
   "ReviewAnswerReceipt": ReviewAnswerReceipt;
+  "ReviewAnswerV2": ReviewAnswerV2;
   "ReviewAppRequest": ReviewAppRequest;
   "ReviewChange": ReviewChange;
   "ReviewChangesResponse": ReviewChangesResponse;
   "ReviewEvidence": ReviewEvidence;
   "ReviewItem": ReviewItem;
+  "ReviewItemV2": ReviewItemV2;
   "ReviewItemsResponse": ReviewItemsResponse;
+  "ReviewItemsResponseV2": ReviewItemsResponseV2;
   "ReviewResolutionRequest": ReviewResolutionRequest;
   "ReviewResolutionResponse": ReviewResolutionResponse;
   "SamePersonAnswer": SamePersonAnswer;
@@ -6480,6 +6543,7 @@ export interface OmiApiSchemas {
   "TaskUpdateCandidate": TaskUpdateCandidate;
   "TaskWorkflowControl": TaskWorkflowControl;
   "TaskWorkflowMode": TaskWorkflowMode;
+  "Term": Term;
   "TestDailySummaryRequest": TestDailySummaryRequest;
   "TestPromptRequest": TestPromptRequest;
   "TesterAccessRequest": TesterAccessRequest;
@@ -11307,6 +11371,26 @@ export interface OmiApiPaths {
       operationId: "report_message_v2_messages__message_id__report_post";
       responses: {
         "200": MessageReportResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/review/items": {
+    get: {
+      operationId: "get_review_items_v2_v2_review_items_get";
+      responses: {
+        "200": ReviewItemsResponseV2;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/review/items/{item_id}/answer": {
+    post: {
+      operationId: "answer_review_item_v2_v2_review_items__item_id__answer_post";
+      responses: {
+        "200": ReviewAnswerReceipt;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -20953,6 +21037,46 @@ export async function report_message_v2_messages__message_id__report_post(path: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_review_items_v2_v2_review_items_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ReviewItemsResponseV2> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/review/items`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function answer_review_item_v2_v2_review_items__item_id__answer_post(path: { item_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ReviewAnswerV2, init?: OmiApiClientInit): Promise<ReviewAnswerReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/review/items/${path.item_id}/answer`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_sync_capture_manifest_v2_sync_capture_manifest_post(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, authorization?: string }, body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<SyncCaptureManifestResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-capture-manifest`;
@@ -21544,4 +21668,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 496 client methods generated.
+// Total: 498 client methods generated.

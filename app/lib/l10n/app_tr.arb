@@ -4025,5 +4025,15 @@
     "chatAppsIMessageTo": "Kime: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi'nin sana buradan bir özet veya içgörü göndermesine izin ver.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…"
+    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…",
+    "reviewProposalCloseTask": "“{task}” tamamlandı olarak işaretlensin mi?",
+    "reviewProposalRetireTask": "“{task}” görevi kaldırılsın mı?",
+    "reviewProposalMergePeople": "“{name}” ile “{other}” aynı kişi mi?",
+    "reviewProposalMergeMemories": "İki yinelenen anı birleştirilsin mi?",
+    "reviewProposalMemory": "Bu anı güncellensin mi?",
+    "reviewProposalEntitySummary": "“{name}” özeti güncellensin mi?",
+    "reviewProposalGeneric": "Önerilen bu düzeltme uygulansın mı?",
+    "reviewProposalApply": "Uygula",
+    "reviewProposalSuggested": "Önerilen",
+    "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı."
 }

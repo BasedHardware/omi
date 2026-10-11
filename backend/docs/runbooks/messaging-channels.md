@@ -132,6 +132,53 @@ iMessage: the send/receive ledger blocks a turn that would exceed
 `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO`. A long answer can stop mid-thread until
 David sends another message. That is the ratio guard, not a retry bug.
 
+## Linq sandbox activation and accepted-but-silent webhooks
+
+Linq's sandbox activation reply is provider-owned; it is not Omi's
+`Account linked. You can chat with Omi here.` acknowledgement. Check the active
+`users/{uid}/channel_links` mirror (the source for `GET /v1/messaging/links`)
+to establish Omi linking. Do not infer a link from the activation message.
+If activation did not reach Omi, mint a fresh code in the app and send the code
+again after activation. An unlinked sender receives instructions to link in Omi.
+Never bypass proof verification or the send/receive ratio to activate a sender.
+
+On 2026-10-11 the sandbox did deliver the code: the Linq link became active at
+09:24:39.483Z. Accepted webhooks at 09:24:39Z and 09:24:52Z were followed by
+content-free worker `ProviderError` logs at 09:24:39.945Z and 09:25:06.421Z.
+The next inbound at 09:25:28Z remained pending behind the failed turn's lease.
+The old logs did not retain provider status codes, so they cannot establish
+sandbox quota rejection. The adapter sent the wrong v3 body shape: Linq's
+[SendMessage contract](https://docs.linqapp.com/channel/imessage/api/resources/chats/subresources/messages/methods/send/)
+requires `message.parts` and `message.idempotency_key`, with `preferred_service`
+at the top level. Synthetic transport replay now rejects the old shape.
+
+Current worker logs report provider, bounded reason, exception type and HTTP
+status only, including terminal 429 responses. A handled turn failure attempts one short guarded failure reply,
+closes the stream in its owning task, stops typing, and releases the surface
+lease. The failed inbox row remains running and is never automatically replayed.
+A finished turn that raises `CancelledError` follows that same path. A worker
+task that is still cancelling retains its lease, because thread-pool work may
+still be running. A settled deferred reentry stores a failure fence, sends at
+most one notice, and releases the lease so the chat is not stuck; a retry sees
+the fence and does not run the turn again. Process loss still retains the lease.
+Only delivered assistant replies enter model event history. A failure to complete
+the inbox tombstone after successful delivery does not send a contradictory apology.
+Error frames are drained for a terminal fallback before being treated as silent failure.
+Failure-notice delivery records degraded/exhausted outcomes through the shared fallback helper.
+If the provider rejects the failure reply too (including exhausted ratio credit),
+`Messaging failure reply failed` records that outcome without provider bodies.
+
+Operator action for already-stuck jobs: confirm the old worker is stopped,
+reconcile each running job's delivery receipts/effects, then deliberately clear
+only its retained lease. Pending jobs may then drain; do not reset running jobs
+or reserved receipts blindly. No production data was changed by this diagnosis.
+After the fix is deployed, verify a new inbound reply on the sandbox and inspect
+status-only failures. A 400 suggests schema validation; 401/403 requires checking
+provider authorization or sandbox activation/recipient restrictions; 429 requires
+checking the sandbox limit in Linq. Those are diagnostic leads, not proof of the
+provider's rejection reason. Use the dashboard or read-only provider receipts;
+never paste credentials, handles or message bodies into incident notes.
+
 ## Kill switch
 
 1. Set `OMI_MESSAGING_CHANNELS=off` and roll the backend. Admission and new

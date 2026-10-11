@@ -13071,4 +13071,42 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Markahan ang “$task” bilang tapos na?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Alisin ang gawaing “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Iisang tao ba sina “$name” at “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Pagsamahin ang dalawang dobleng alaala?';
+
+  @override
+  String get reviewProposalMemory => 'I-update ang alaalang ito?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'I-update ang buod para kay “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Ilapat ang iminungkahing ayos na ito?';
+
+  @override
+  String get reviewProposalApply => 'Ilapat';
+
+  @override
+  String get reviewProposalSuggested => 'Iminungkahi';
+
+  @override
+  String get reviewProposalConflict => 'Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.';
 }

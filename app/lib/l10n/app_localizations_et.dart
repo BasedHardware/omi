@@ -12960,4 +12960,42 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Kas märkida „$task“ tehtuks?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Kas eemaldada ülesanne „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Kas „$name“ on sama inimene kui „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Kas liita kaks topeltmälestust?';
+
+  @override
+  String get reviewProposalMemory => 'Kas uuendada seda mälestust?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Kas uuendada „$name“ kokkuvõtet?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Kas rakendada see soovitatud parandus?';
+
+  @override
+  String get reviewProposalApply => 'Rakenda';
+
+  @override
+  String get reviewProposalSuggested => 'Soovitatud';
+
+  @override
+  String get reviewProposalConflict => 'See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.';
 }

@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Aan: Omi · {address}",
     "chatAppsInsightsSubtitle": "Laat Omi je hier een samenvatting of inzicht sturen.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…"
+    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…",
+    "reviewProposalCloseTask": "“{task}” als klaar markeren?",
+    "reviewProposalRetireTask": "De taak “{task}” verwijderen?",
+    "reviewProposalMergePeople": "Is “{name}” dezelfde persoon als “{other}”?",
+    "reviewProposalMergeMemories": "Twee dubbele herinneringen samenvoegen?",
+    "reviewProposalMemory": "Deze herinnering bijwerken?",
+    "reviewProposalEntitySummary": "De samenvatting van “{name}” bijwerken?",
+    "reviewProposalGeneric": "Deze voorgestelde correctie toepassen?",
+    "reviewProposalApply": "Toepassen",
+    "reviewProposalSuggested": "Voorgesteld",
+    "reviewProposalConflict": "Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast."
 }

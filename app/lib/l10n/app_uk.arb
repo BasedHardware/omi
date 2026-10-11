@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Кому: Omi · {address}",
     "chatAppsInsightsSubtitle": "Дозвольте Omi надсилати вам тут підсумок або інсайт.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…"
+    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…",
+    "reviewProposalCloseTask": "Позначити «{task}» як виконане?",
+    "reviewProposalRetireTask": "Видалити завдання «{task}»?",
+    "reviewProposalMergePeople": "«{name}» і «{other}» — це та сама людина?",
+    "reviewProposalMergeMemories": "Об’єднати два дубльовані спогади?",
+    "reviewProposalMemory": "Оновити цей спогад?",
+    "reviewProposalEntitySummary": "Оновити підсумок для «{name}»?",
+    "reviewProposalGeneric": "Застосувати це запропоноване виправлення?",
+    "reviewProposalApply": "Застосувати",
+    "reviewProposalSuggested": "Запропоновано",
+    "reviewProposalConflict": "Це змінилося після пропозиції Dream, тому нічого не застосовано."
 }

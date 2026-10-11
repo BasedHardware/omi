@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Leiskite Omi čia atsiųsti apibendrinimą ar įžvalgą.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…"
+    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…",
+    "reviewProposalCloseTask": "Pažymėti „{task}“ kaip atliktą?",
+    "reviewProposalRetireTask": "Pašalinti užduotį „{task}“?",
+    "reviewProposalMergePeople": "Ar „{name}“ yra tas pats asmuo kaip „{other}“?",
+    "reviewProposalMergeMemories": "Sujungti du pasikartojančius prisiminimus?",
+    "reviewProposalMemory": "Atnaujinti šį prisiminimą?",
+    "reviewProposalEntitySummary": "Atnaujinti „{name}“ santrauką?",
+    "reviewProposalGeneric": "Pritaikyti šį siūlomą pataisymą?",
+    "reviewProposalApply": "Pritaikyti",
+    "reviewProposalSuggested": "Siūloma",
+    "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta."
 }

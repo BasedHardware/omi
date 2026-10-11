@@ -13001,4 +13001,42 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Пазначыць «$task» як выкананае?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Выдаліць задачу «$task»?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '«$name» і «$other» — адзін і той жа чалавек?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Аб’яднаць два дубліраваныя ўспаміны?';
+
+  @override
+  String get reviewProposalMemory => 'Абнавіць гэты ўспамін?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Абнавіць зводку для «$name»?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Ужыць гэта прапанаванае выпраўленне?';
+
+  @override
+  String get reviewProposalApply => 'Ужыць';
+
+  @override
+  String get reviewProposalSuggested => 'Прапанавана';
+
+  @override
+  String get reviewProposalConflict => 'Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта.';
 }

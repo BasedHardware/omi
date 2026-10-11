@@ -12990,4 +12990,42 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Pažymėti „$task“ kaip atliktą?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Pašalinti užduotį „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Ar „$name“ yra tas pats asmuo kaip „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Sujungti du pasikartojančius prisiminimus?';
+
+  @override
+  String get reviewProposalMemory => 'Atnaujinti šį prisiminimą?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Atnaujinti „$name“ santrauką?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Pritaikyti šį siūlomą pataisymą?';
+
+  @override
+  String get reviewProposalApply => 'Pritaikyti';
+
+  @override
+  String get reviewProposalSuggested => 'Siūloma';
+
+  @override
+  String get reviewProposalConflict => 'Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.';
 }
