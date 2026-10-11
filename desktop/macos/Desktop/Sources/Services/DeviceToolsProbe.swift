@@ -4,8 +4,9 @@ import Foundation
 /// bridge action `device_tools_probe`.
 ///
 /// Every branch is deterministic on any machine and on CI: a deliberately
-/// absent Messages store, a send rejected on validation before Messages.app is
-/// contacted, and an AppleScript that only echoes its own argv. None of it
+/// absent Messages store, a send and three compose proposals rejected on
+/// validation before any app or window is involved, and an AppleScript that
+/// only echoes its own argv. None of it
 /// requires Full Disk Access, Automation, or Contacts to be granted, and none
 /// of it touches the user's real message history or delivers a message.
 enum DeviceToolsProbe {
@@ -61,6 +62,20 @@ enum DeviceToolsProbe {
       detail["sendValidation"] = "unexpected_error"
     }
 
+    // The propose path refuses a bare name and an empty draft before any
+    // compose window could open, so these checks never show the person a window.
+    detail["proposeNameValidation"] = proposeRejection(
+      .email, ["to": ["Maya"], "text": "Running late"])
+    detail["proposeBodyValidation"] = proposeRejection(
+      .message, ["to": ["+10000000000"], "text": "   "])
+    // An address the person never gave (here, one "read from a page") is sent
+    // back for confirmation instead of opening a draft.
+    detail["proposeGrounding"] = await MainActor.run {
+      ComposeRecipientGrounding(accountEmail: { nil }).ungroundedRecipients(
+        ["ops@probe.invalid"], personTexts: ["summarize this page"], runID: nil, ownerID: nil
+      ).isEmpty ? "grounded" : "needs_confirmation"
+    }
+
     do {
       let result = try AppleScriptRunner.run(
         script: "on run argv\nreturn item 1 of argv\nend run",
@@ -81,5 +96,12 @@ enum DeviceToolsProbe {
 
     detail["ok"] = "true"
     return detail
+  }
+
+  private static func proposeRejection(_ channel: ComposeProposalChannel, _ arguments: [String: Any]) -> String {
+    switch ComposeProposalRequest.parse(channel, arguments: arguments) {
+    case .success: return "not_rejected"
+    case .failure(let rejection): return rejection.reasonCode
+    }
   }
 }
