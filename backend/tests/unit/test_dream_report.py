@@ -67,6 +67,14 @@ def client(store):
     return TestClient(app)
 
 
+def test_manual_capacity_wait_is_retryable_instead_of_idle(store, client, monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=None))
+    response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'reserved_capacity'}
+    assert response.headers['retry-after'] == '120'
+
+
 @pytest.mark.parametrize('method', ['get', 'post'])
 @pytest.mark.parametrize('gate', ['off', 'stranger', 'dream_off'])
 def test_disabled_and_outside_cohort_are_exact_404(client, monkeypatch, gate, method):
