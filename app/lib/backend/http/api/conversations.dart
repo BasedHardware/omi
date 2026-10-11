@@ -786,7 +786,10 @@ bool isSyncUploadRateLimitResponse(http.Response response) {
 bool isSyncContentInProgressResponse(http.Response response) {
   if (response.statusCode != 409) return false;
   try {
-    return (jsonDecode(response.body) as Map<String, dynamic>)['code'] == 'sync_content_in_progress';
+    final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'sync_content_in_progress';
   } catch (_) {
     return false;
   }
@@ -796,11 +799,12 @@ bool isSyncContentInProgressResponse(http.Response response) {
 @visibleForTesting
 UploadFilesResult? syncContentInProgressResult(http.Response response) {
   if (!isSyncContentInProgressResponse(response)) return null;
-  final body = jsonDecode(response.body) as Map<String, dynamic>;
-  final id = body['job_id'];
-  if (id is! String || id.trim().isEmpty) return null;
-  final hint = body['poll_after_ms'];
-  final pollAfterMs = hint is num ? hint.toInt() : 20000;
+  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+    jsonDecode(response.body) as Map<String, dynamic>,
+  );
+  final id = body.jobId;
+  if (id == null || id.trim().isEmpty) return null;
+  final pollAfterMs = body.pollAfterMs ?? 20000;
   return UploadFilesResult.queued(id,
       pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)));
 }

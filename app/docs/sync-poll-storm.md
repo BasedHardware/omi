@@ -247,6 +247,38 @@ This keeps the feature diff independent of unrelated upstream work. The reordere
 rerun after committing the tool/fixture follow-up; the final lane report records
 that final SHA and outcome.
 
+## Generated response contract follow-up
+
+The full backend suite exposed two raw 409 response decoders added by this
+branch. `SyncContentInProgressResponse` now declares `code`, optional `job_id`
+and optional `poll_after_ms` in the v2 upload's OpenAPI 409 response. The job
+status response also declares its optional poll hint. The repository generators
+produce the Dart and TypeScript wire types; both 409 helpers decode through
+`GeneratedSyncContentInProgressResponse`, and the job status adapter projects
+all cadence/throttle metadata through `GeneratedSyncJobStatusResponse`.
+Legacy responses without owner/hints retain their paced-conflict behavior.
+No schema inventory exemption or allowlist was added.
+
+Verification from repository root:
+
+```sh
+printf '%s\n' tests/unit/test_app_client_schema_inventory.py > /tmp/omi-sync-schema-tests.txt
+BACKEND_UNIT_TEST_FILE_LIST=/tmp/omi-sync-schema-tests.txt bash backend/test.sh
+backend/.venv/bin/python backend/scripts/generate_dart_models.py --group conversation --check
+backend/.venv/bin/python backend/scripts/check_app_client_openapi_compatibility.py --base-ref origin/main
+bash backend/test.sh
+OMI_PR_BODY_FILE=/tmp/omi-sync-pr-body.md make preflight
+```
+
+The inventory reproduction failed with **1 failed, 12 passed** before the fix,
+then passed **13 tests** after regeneration. Generated Dart freshness and
+released app-client OpenAPI compatibility checks passed. The focused Dart
+command above passed the **138-test protected spine and 112 sync tests**, including
+409 owner/hint decoding, omitted-field compatibility and metadata projection;
+the analyzer ratchet passed. The final lane report records the full backend
+suite and committed-head preflight results, including comparison of any backend
+failures against a detached origin/main worktree with its own locked venv.
+
 ## Residual risk and production acceptance
 
 Budgets and transient cooldowns are process-local, as before; relaunch gets a

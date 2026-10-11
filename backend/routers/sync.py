@@ -206,6 +206,7 @@ class SyncJobStatusResponse(BaseModel):
     reason_code: str | None = None
     retry_after: int | None = None
     recording_age_seconds: int | None = None
+    poll_after_ms: int | None = None
 
 
 class SyncCaptureManifestFile(BaseModel):

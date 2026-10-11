@@ -30065,6 +30065,47 @@
         "title": "SyncCaptureManifestResponse",
         "type": "object"
       },
+      "SyncContentInProgressResponse": {
+        "description": "A duplicate upload follows its live owner; older servers omit hints.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "default": "The same audio is already processing",
+            "title": "Detail",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "SyncContentInProgressResponse",
+        "type": "object"
+      },
       "SyncJobStartResponse": {
         "properties": {
           "job_id": {
@@ -30129,6 +30170,17 @@
             "default": "fresh",
             "title": "Lane",
             "type": "string"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
           },
           "processed_segments": {
             "default": 0,
@@ -78077,6 +78129,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncContentInProgressResponse"
+                }
+              }
+            },
+            "description": "The same audio is already processing; follow its owner when present"
           },
           "422": {
             "content": {

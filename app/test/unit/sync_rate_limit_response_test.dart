@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
 void main() {
   group('sync capture manifest admission', () {
@@ -35,6 +37,52 @@ void main() {
       expect(syncRateLimitKindForResponse(unknown), SyncRateLimitKind.edgeThrottle);
       expect(syncRateLimitKindForResponse(text), SyncRateLimitKind.edgeThrottle);
       expect(syncRateLimitKindForResponse(html), SyncRateLimitKind.edgeThrottle);
+    });
+  });
+
+  group('generated sync response contracts', () {
+    test('409 owner and poll hint decode through the generated response', () {
+      final response = http.Response(
+          '{"code":"sync_content_in_progress","detail":"The same audio is already processing",'
+          '"job_id":"live-owner","poll_after_ms":90000}',
+          409,
+          headers: {'retry-after': '20'});
+      expect(isSyncContentInProgressResponse(response), isTrue);
+      final result = syncContentInProgressResult(response)!;
+      expect(result.jobId, 'live-owner');
+      expect(result.pollAfterMs, 90000);
+      expect(result.completed, isNull);
+    });
+
+    test('shipped 409s without optional owner/hints remain a paced conflict', () {
+      final legacy = http.Response('{"code":"sync_content_in_progress"}', 409);
+      expect(isSyncContentInProgressResponse(legacy), isTrue);
+      expect(syncContentInProgressResult(legacy), isNull);
+      final ownerOnly = http.Response('{"code":"sync_content_in_progress","job_id":"live-owner"}', 409);
+      expect(syncContentInProgressResult(ownerOnly)!.pollAfterMs, 20000);
+      expect(isSyncContentInProgressResponse(http.Response('{}', 409)), isFalse);
+      expect(isSyncContentInProgressResponse(http.Response('{"code":"different_conflict"}', 409)), isFalse);
+      expect(isSyncContentInProgressResponse(http.Response('<html/>', 409)), isFalse);
+    });
+
+    test('status projection preserves generated poll hint and throttle metadata', () {
+      final json = <String, dynamic>{
+        'job_id': 'owner',
+        'status': 'processing',
+        'poll_after_ms': 90000,
+        'lane': 'backfill',
+        'reason_code': 'backfill_paced',
+        'retry_after': 60
+      };
+      final fromJson = SyncJobStatusResponse.fromJson(json);
+      final fromWire = SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+      for (final status in [fromJson, fromWire]) {
+        expect(status.pollAfterMs, 90000);
+        expect(status.lane, 'backfill');
+        expect(status.reasonCode, 'backfill_paced');
+        expect(status.retryAfter, 60);
+      }
+      expect(SyncJobStatusResponse.fromJson({'job_id': 'old', 'status': 'processing'}).pollAfterMs, isNull);
     });
   });
 
