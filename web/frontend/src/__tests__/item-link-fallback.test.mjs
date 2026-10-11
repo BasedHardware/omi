@@ -56,7 +56,7 @@ describe('private item links', () => {
   });
 
   it('give link previews generic Omi metadata only', () => {
-    assert.equal(ITEM_LINK_METADATA.title, 'Omi');
+    assert.deepEqual(ITEM_LINK_METADATA.title, { absolute: 'Omi' });
     assert.equal(ITEM_LINK_METADATA.openGraph.title, 'Omi');
     assert.deepEqual(ITEM_LINK_METADATA.robots, { index: false, follow: false });
     for (const [kind, source] of Object.entries(pageSources)) {

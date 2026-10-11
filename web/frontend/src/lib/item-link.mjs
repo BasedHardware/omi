@@ -68,7 +68,7 @@ export function itemLinkWebHandoff(kind, id, options = {}) {
 
 /** Generic preview metadata: identical for every item, so nothing about it leaks. */
 export const ITEM_LINK_METADATA = Object.freeze({
-  title: 'Omi',
+  title: { absolute: 'Omi' },
   description: 'Open this in the Omi app.',
   robots: { index: false, follow: false },
   openGraph: {
