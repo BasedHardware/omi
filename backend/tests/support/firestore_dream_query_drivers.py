@@ -86,8 +86,14 @@ def entries():
                 },
                 'report': {'status': 'complete'},
             },
-            domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
+            domains={
+                'success': [True, False],
+                'refund': [True, False],
+                'count_failure': [True, False],
+                'deferred': [[], ['conversations/one']],
+            },
             neutrals={
+                'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
                 'consumed': ([], 'post-query acknowledgement versions'),
                 'release': (True, 'post-query lease policy'),
             },
