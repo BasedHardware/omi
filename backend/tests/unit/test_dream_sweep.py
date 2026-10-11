@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from config.dream_agent import Caps
-from database import dream_feedback, dream_store, dream_dirty
+from database import dream_history, dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
@@ -192,6 +192,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     assert set(store.rows) == {
         ('users', UID),
         ('dream_users', UID),
+        ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
         ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
