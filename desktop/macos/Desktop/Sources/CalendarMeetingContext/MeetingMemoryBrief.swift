@@ -112,6 +112,11 @@ enum MeetingMemoryBriefComposer {
           sourceConversationTitle: source.displayTitle,
           facts: facts)
       }
+      if !previous.isEmpty {
+        // Counts only: the pilot's "why is my brief empty?" is otherwise silent.
+        log(
+          "MeetingMemoryBrief: \(previous.count) matched meeting(s) had no cited decision, follow-up, or open question")
+      }
     }
     return nil
   }
@@ -139,20 +144,25 @@ enum MeetingMemoryBriefComposer {
     var facts: [MeetingMemoryBriefFact] = []
     let sections = conversation.structured.sections
 
-    func appendSection(_ kind: MeetingMemoryBriefFact.Kind, matching words: [String]) {
-      guard
-        let section = sections.first(where: { section in
-          let heading = section.heading.lowercased()
-          return !section.sourceSegmentIDs.isEmpty && words.contains(where: heading.contains)
-        }), let text = firstLine(section.bodyMarkdown)
-      else { return }
+    // A "Decisions" heading is the strongest signal. Summaries usually title sections by
+    // topic instead, so otherwise take the first cited line that states the outcome itself.
+    func appendSection(
+      _ kind: MeetingMemoryBriefFact.Kind, heading words: [String], line states: (String) -> Bool
+    ) {
+      let cited = sections.filter { !$0.sourceSegmentIDs.isEmpty }
+      let byHeading = cited.first { section in words.contains(where: section.heading.lowercased().contains) }
+        .flatMap { section in cleanedLines(section.bodyMarkdown).first.map { (section, $0) } }
+      let byLine = cited.compactMap { section in
+        cleanedLines(section.bodyMarkdown).first(where: states).map { (section, $0) }
+      }.first
+      guard let (section, text) = byHeading ?? byLine else { return }
       facts.append(
         MeetingMemoryBriefFact(
           kind: kind, text: text, sourceConversationID: conversation.id,
           sourceSegmentIDs: section.sourceSegmentIDs))
     }
 
-    appendSection(.decision, matching: ["decision", "agreed"])
+    appendSection(.decision, heading: ["decision", "agreed"], line: statesDecision)
     if let action = conversation.structured.actionItems.first(where: {
       !$0.completed && !$0.deleted && $0.captureOwner == "user" && !$0.sourceSegmentIDs.isEmpty
     }), let text = firstLine(action.description) {
@@ -161,22 +171,37 @@ enum MeetingMemoryBriefComposer {
           kind: .followUp, text: text, sourceConversationID: conversation.id,
           sourceSegmentIDs: action.sourceSegmentIDs))
     }
-    appendSection(.openQuestion, matching: ["open question", "unresolved"])
+    appendSection(.openQuestion, heading: ["open question", "unresolved"], line: statesOpenQuestion)
 
     return Array(facts.prefix(3))
   }
 
-  private static func firstLine(_ text: String) -> String? {
-    guard
-      let raw = text.split(whereSeparator: \.isNewline).first(where: {
-        !$0.trimmingCharacters(in: .whitespaces).isEmpty
-      })
-    else {
-      return nil
+  private static let openQuestionPhrases = [
+    "open question", "unresolved", "undecided", "not decided", "haven't decided", "hasn't decided",
+    "no decision", "left open", "still open", "not agreed", "not yet agreed",
+  ]
+
+  /// "They have not decided how to measure it" is an open question, never a decision.
+  static func statesOpenQuestion(_ line: String) -> Bool {
+    let lower = line.lowercased()
+    return openQuestionPhrases.contains(where: lower.contains)
+  }
+
+  static func statesDecision(_ line: String) -> Bool {
+    let lower = line.lowercased()
+    return ["decided", "agreed", "decision"].contains(where: lower.contains)
+      && !lower.contains("disagree") && !statesOpenQuestion(lower)
+  }
+
+  private static func cleanedLines(_ text: String) -> [String] {
+    text.split(whereSeparator: \.isNewline).compactMap { raw in
+      let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \t-*#•"))
+      return cleaned.isEmpty ? nil : String(cleaned.prefix(240))
     }
-    let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \t-*#"))
-    guard !cleaned.isEmpty else { return nil }
-    return String(cleaned.prefix(240))
+  }
+
+  private static func firstLine(_ text: String) -> String? {
+    cleanedLines(text).first
   }
 }
 

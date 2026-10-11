@@ -72,6 +72,59 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
     XCTAssertEqual(brief?.facts.map(\.sourceConversationID), ["prior-1", "prior-1", "prior-1"])
   }
 
+  /// Shaped like a real production summary: sections titled by topic, with the outcome
+  /// stated in a cited line rather than under a "Decisions" heading.
+  func testOutcomesStatedInTopicSectionsBecomeFacts() {
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Calendar permission",
+          bodyMarkdown: """
+            - The beta group had about 40 testers.
+            - The speakers decided to show the calendar prompt only in settings.
+            """,
+          sourceSegmentIDs: ["s1", "s2"]),
+        SummarySection(
+          heading: "Measuring wrong matches",
+          bodyMarkdown: "- The speakers have not decided how to measure wrong matches.",
+          sourceSegmentIDs: ["s3"]),
+      ]))
+
+    XCTAssertEqual(
+      facts.map(\.kind), [.decision, .openQuestion])
+    XCTAssertEqual(facts.first?.text, "The speakers decided to show the calendar prompt only in settings.")
+    XCTAssertEqual(facts.first?.sourceSegmentIDs, ["s1", "s2"])
+    XCTAssertEqual(facts.last?.text, "The speakers have not decided how to measure wrong matches.")
+  }
+
+  func testNegatedOrDisputedLinesAreNeverDecisions() {
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("They have not decided on pricing."))
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("Sara disagreed with the rollout date."))
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("No decision was made on hosting."))
+    XCTAssertTrue(MeetingMemoryBriefComposer.statesOpenQuestion("No decision was made on hosting."))
+    XCTAssertTrue(MeetingMemoryBriefComposer.statesDecision("The team agreed to ship on Thursday."))
+
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Pricing", bodyMarkdown: "- Sara disagreed with the rollout date.", sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertTrue(facts.isEmpty)
+  }
+
+  func testAHeadingStillWinsAndUncitedBodiesNeverCount() {
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Rollout", bodyMarkdown: "- We decided to ship Friday.", sourceSegmentIDs: []),
+        SummarySection(
+          heading: "Notes", bodyMarkdown: "- The team agreed to cut scope.", sourceSegmentIDs: ["s2"]),
+        citedDecision,
+      ]))
+
+    XCTAssertEqual(facts.map(\.text), ["Ship the smaller pilot first."])
+  }
+
   func testTitleOnlyAndEmailOnlyAreNotEnough() {
     let sameTitleWrongPerson = conversation(
       identity: ConversationMeetingIdentity(
