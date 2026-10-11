@@ -77,7 +77,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # Bump once in the final chunk: a concurrent pass must not clear the
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
-            batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
+            batch.set(state, {'score': firestore.Increment(weight), 'unavailable_paused': False}, merge=True)
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True
@@ -158,7 +158,9 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
         if trigger == 'manual':
             if data.get('lease'):
                 raise AdmissionDenied('dream_run_in_progress')
-            if data.get('score', 0) <= 0 or dirty_count(uid, transaction=tx, firestore_client=database) == 0:
+            if (data.get('score', 0) <= 0 and not data.get('unavailable_paused')) or dirty_count(
+                uid, transaction=tx, firestore_client=database
+            ) == 0:
                 return None
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
@@ -167,7 +169,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
-            or data.get('score', 0) <= 0
+            or (data.get('score', 0) <= 0 and not (trigger == 'manual' and data.get('unavailable_paused')))
             or (trigger != 'manual' and passes >= caps.passes)
             or caps.tokens < 1024
             or caps.edits < 1
@@ -232,7 +234,7 @@ def finish(
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
         queued = (
             dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
-            if success or failure_eligible
+            if success or failure_eligible or (refund and report.get('dirty_counts', {}).get('unavailable', 0))
             else []
         )
         versions = {item['version'] for item in consumed}
@@ -246,7 +248,27 @@ def finish(
         acknowledged_paths = {s.reference.path for s in acknowledged}
         remaining = [s for s in queued if s.reference.path not in acknowledged_paths]
         queued_after = queued_count - len(acknowledged)
-        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned)}
+        counts = report.get('dirty_counts', {})
+        # A fully inspected unavailable-only remainder must not monopolize the
+        # highest-score scheduler slots. Retain every ref; a product write wakes
+        # it atomically, and an authorized manual run can retry without a write.
+        # Never pause unread, refreshed, budget-deferred or failed reads.
+        pause_unavailable = (
+            release
+            and (success or refund)
+            and queued_after > 0
+            and counts.get('unavailable') == queued_after
+            and counts.get('fetched') == queued_count == len(queued)
+            and not any(counts.get(key, 0) for key in ('newer', 'failed', 'budget_deferred'))
+            and data.get('score') == lease['score']
+            and all(s.to_dict()['last_changed_at'] <= lease['started_at'] for s in remaining)
+        )
+        settled = {
+            **report,
+            'records_queued_after': queued_after,
+            'poisoned': len(poisoned),
+            'unavailable_paused': int(pause_unavailable),
+        }
         encoded = _review_store().encode_doc(uid, {'source': settled})
         watermark = lease['watermark']
         if acknowledged:
@@ -290,6 +312,10 @@ def finish(
                 max(0, data['score'] - lease['score']) if (success or poisoned) and queued_after == 0 else data['score']
             ),
         }
+        if data.get('unavailable_paused') and (queued_after == 0 or counts.get('admitted', 0) > 0):
+            patch.update(score=max(1, data['score']) if queued_after else 0, unavailable_paused=False)
+        if pause_unavailable:
+            patch.update(score=0, unavailable_paused=True)
         if refund:
             # A midnight completion must not decrement the new day's allowance.
             if data.get('day') == lease['day']:

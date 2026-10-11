@@ -213,3 +213,47 @@ def test_unconfigured_conversation_vector_index_is_counted_as_failed(monkeypatch
     with pytest.raises(RuntimeError, match='index unavailable'):
         dream_context.semantic_conversation_refs('synthetic', 'synthetic')
     assert vector_db.query_vectors('synthetic', 'synthetic') == []
+
+
+def test_reclaimed_targets_stop_at_reasoning_limit_before_reading_overflow(monkeypatch):
+    dirty, now = snapshots(35)
+    calls = []
+    monkeypatch.setattr(dream_reads.dream_store, 'dirty_refs', lambda *a, **k: dirty)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref, **k: calls.append(ref) or {'content': 'Toy boat'})
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
+    report = {}
+    rows, consumed = dream_reads.read_changes('synthetic', {'started_at': now}, Caps(tokens=100000), diagnostics=report)
+    assert len(rows.targets) == len(consumed) == len(calls) == dream_context.REASONING_TARGET_LIMIT
+    assert report['dirty_counts']['budget_deferred'] == 27
+
+
+def test_structured_query_terms_survive_long_transcript():
+    row = {
+        'structured': {'title': 'Zuvrah boat', 'overview': 'Nuvra factory'},
+        'transcript_segments': [{'text': 'sailing mountain river furniture landscape desert ' * 1000}],
+    }
+    terms = dream_context.query_terms(row)
+    assert 'zuvrah' in terms and 'nuvra' in terms
+    assert 'title' not in terms and 'overview' not in terms
+
+
+def test_later_path_retries_transient_hydration_failure():
+    calls = []
+
+    def read():
+        calls.append('read')
+        if len(calls) == 1:
+            raise RuntimeError('private-provider-body')
+        return {'content': 'Toy boat'}
+
+    report = {}
+    rows = dream_context.add_context(
+        {'people/a': {'name': 'Toy'}},
+        [('people/recovered', read, 'lexical'), ('people/recovered', read, 'semantic')],
+        Caps(),
+        diagnostics=report,
+    )
+    assert 'people/recovered' in rows and len(calls) == 2
+    assert report['retrieval_counts']['lexical']['failed'] == 1
+    assert report['retrieval_counts']['semantic']['added'] == 1
+    assert report['retrieval_counts']['semantic']['duplicate'] == 0

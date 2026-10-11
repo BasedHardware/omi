@@ -7,7 +7,7 @@ from database import review_store
 from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
-from utils.dream_context import fits_pass
+from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT
 from utils.dream_diagnostics import initialize
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -111,7 +111,7 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None):
     counts = diagnostics['dirty_counts']
     read = cached_reader()
 
-    dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
+    dirty = dream_store.dirty_refs(uid, limit=dream_store.DIRTY_LIMIT)
     records = EvidenceRecords()
     consumed = []
     assessed = {}
@@ -163,9 +163,10 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None):
     records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics)
     # Return unspent neighbourhood capacity to dirty targets. Only admitted
     # versions are acknowledged; budget-deferred/unavailable refs stay queued.
-    while position < len(dirty):
+    while position < len(dirty) and len(records.targets) < REASONING_TARGET_LIMIT:
         if admit(dirty[position]) == 'budget':
             counts['budget_deferred'] = len(dirty) - position
             break
         position += 1
+    counts['budget_deferred'] = len(dirty) - position
     return records, consumed

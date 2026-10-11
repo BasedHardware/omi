@@ -196,7 +196,9 @@ def test_idle_pass_refunds_and_can_admit_again(queue, monkeypatch):
     assert report['dirty_counts']['unavailable'] == 1
     assert dream_store.dirty_count(UID) == 1
     state = queue.rows[('dream_users', UID)]
-    assert state['passes'] == 0 and state['score'] > 0 and state['lease'] is None
+    assert state['passes'] == 0 and state['score'] == 0 and state['lease'] is None
+    assert state['unavailable_paused'] and report['unavailable_paused'] == 1
+    assert dream_store.acquire(UID, Caps()) is None
     assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
     turn.assert_not_called()
     dream_store.mark_dirty(UID, [('conversations', 'new')])
@@ -572,3 +574,55 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
         'edits.reason:string_too_short': 1,
     }
     assert dream_store.dirty_count(UID) == 0 and report['poisoned'] == 0
+
+
+def test_unavailable_pause_allows_manual_retry_without_dropping_versions(queue, monkeypatch):
+    seed(queue, 1)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['unavailable_paused'] == 1 and dream_store.dirty_count(UID) == 1
+    assert dream_store.acquire(UID, Caps(), trigger='manual') is not None
+
+
+def test_unavailable_remainder_pause_fences_concurrent_refresh(queue, monkeypatch):
+    seed(queue, 35)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
+    lease = dream_store.acquire(UID, Caps(), now=NOW)
+    report = {}
+    _, consumed = dream_reads.read_changes(UID, lease, Caps(), diagnostics=report)
+    dream_store.mark_dirty(UID, [('conversations', '0')])
+    dream_store.finish(UID, lease, report, success=False, refund=True, consumed=consumed)
+    assert not report['unavailable_paused']
+    assert queue.rows[('dream_users', UID)]['score'] > 0
+    assert dream_store.dirty_count(UID) == 35
+
+
+def test_unavailable_accounts_release_top_score_slots_without_deleting_refs(queue, monkeypatch):
+    seed(queue, 500)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['unavailable_paused'] == 1 and dream_store.dirty_count(UID) == 500
+    # Model 100 previously paused high-score accounts; a lower-score account
+    # now wins the same bounded single-field scheduler query.
+    for i in range(100):
+        queue.rows[('dream_users', f'paused-{i}')] = {'score': 0, 'unavailable_paused': True}
+    queue.rows[('dream_users', 'lower-score')] = {'score': 1}
+    assert dream_store.candidates(limit=1) == ['lower-score']
+    dream_store.mark_dirty(UID, [('conversations', '0')])
+    assert not queue.rows[('dream_users', UID)]['unavailable_paused']
+    assert dream_store.acquire(UID, Caps()) is not None
+
+
+def test_manual_visibility_recovery_resumes_budget_deferred_queue(queue, monkeypatch):
+    seed(queue, 35)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
+    asyncio.run(dream_agent.run_pass(UID))
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: {'content': 'Toy boat'})
+    from models.dream_agent import Plan
+
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(), 1)))
+    report = asyncio.run(dream_agent.run_pass(UID, trigger='manual'))
+    assert report['status'] == 'complete' and report['records_queued_after'] == 27
+    state = queue.rows[('dream_users', UID)]
+    assert state['score'] > 0 and not state['unavailable_paused']
+    assert dream_store.acquire(UID, Caps()) is not None

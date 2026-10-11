@@ -4,12 +4,13 @@
 
 Dirty reads initially admit up to four editable targets for neighbourhood retrieval,
 then return unused context capacity to additional dirty targets under the existing
-triage budget. This is an initial allocation, not a four-target pass cap.
+triage budget and eight-target reasoning limit. This is an initial allocation, not a four-target pass cap.
 Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
 existing Pinecone conversation and canonical memory semantic hits, then nearby
 conversations and screen records. Reads remain owner scoped and visibility checked.
-Queries and result counts are bounded. Failed queries or hydration reads increment
+Queries and result counts are bounded. Structured title/overview terms precede
+long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
 the affected path's failure count and emit shared degraded fallback telemetry;
 remaining paths can still contribute. Missing/locked/hidden hydration results
 count as unavailable rather than provider failures.
@@ -37,7 +38,14 @@ only; previously it also counted unavailable versions that were acknowledged.
 Only versions present as editable targets are eligible for pass acknowledgement
 or failed-reasoning retry settlement. Unavailable/budget-deferred versions remain
 queued. Permanently absent or hidden records may therefore recur in diagnostics;
-the existing queue overflow/retention policy is unchanged.
+the existing queue overflow/retention policy is unchanged. When every remaining
+queued version was inspected and unavailable, settlement pauses that account by
+clearing its scheduler score without deleting refs. This prevents repeated idle
+refunds from monopolizing the highest-score slots. A new product write atomically
+wakes the account; an authorized manual run can also retry while paused. There
+is no automatic timed retry. Concurrent refreshes, unread refs, newer versions,
+provider failures and budget-deferred refs prevent this pause. The pass report
+counts `unavailable_paused` as zero or one.
 
 Prometheus exports `omi_dream_retrieval_total{path,count}` and
 `omi_dream_dirty_read_total{count}` with only these closed labels. These diagnostics
@@ -157,7 +165,7 @@ reads and deletes. Coalescing reduces pass reads and retained documents for
 repeated writes; it does not claim fewer billed writes for multi-reference batches.
 
 Drain considers the highest weighted score first, at most 100 users per
-invocation. A pass reads distinct queued references newest first, at most 400
+invocation. A pass reads distinct queued references newest first, at most 500 (the dirty queue cap)
 before enrichment, stopping when their conservatively encoded triage excerpts
 would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
@@ -183,7 +191,7 @@ gate. Triage gets `min(12000, Caps.tokens // 2)`; reasoning gets the pass budget
 observed triage tokens. Per-record character allowances use the space left after
 schema, framing, refs and completion reserve, then halve until the encoded request
 fits. Triage retains an allowance of at least 600 characters per record; reasoning
-retains at least 1,500. Additional records that cannot fit at the triage floor stay
+retains at least 1,500. Additional records beyond the eight-target reasoning limit or that cannot fit at the triage floor stay
 queued for a later pass. A single triage record may shrink below its floor with
 head/tail retention if needed to fit the transport gate, preventing oversized
 records from blocking the queue. Short source text is never padded. Conversation summary fields retain space before transcript text

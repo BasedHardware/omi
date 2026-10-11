@@ -12,7 +12,7 @@ from database import dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
 from utils import dream_reads, dream_tools, dream_transport, dream_guards
-from utils.dream_context import EvidenceRecords, target_refs, cluster_hints
+from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
@@ -66,7 +66,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
         raise ValueError('dream_unknown_cluster')
     if not refs:
         return Plan(), triage.tokens
-    targets = [ref for ref in refs if ref in target_refs(records)][:8]
+    targets = [ref for ref in refs if ref in target_refs(records)][:REASONING_TARGET_LIMIT]
     if not targets:
         return Plan(), triage.tokens
     # Both stages see the same admitted context; triage-selected targets stay bounded.

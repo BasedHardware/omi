@@ -40,6 +40,9 @@ def target_refs(records):
     return getattr(records, 'targets', set(records))
 
 
+REASONING_TARGET_LIMIT = 8
+
+
 PROBLEMS = ('spelling', 'duplicates', 'entity', 'tasks', 'quality')
 
 
@@ -91,9 +94,9 @@ def fits_pass(records, caps, vocabulary=None):
 def query_terms(row, vocabulary=()):
     # Query content, never the projector's synthetic "title/overview" headers.
     content = ' '.join(
-        [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
-        + [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
+        [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
         + [str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label')]
+        + [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
     )[:3000]
     words = list(dict.fromkeys(word for word in tokens(content) if len(word) > 3 and word not in common_words()))
     near = [
@@ -228,10 +231,12 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None)
             if isinstance(exc, review_store.ReviewNotFound) or exc.status_code in {402, 404}:
                 path_count(diagnostics, path, 'unavailable')
                 continue
+            seen.discard(ref)  # A later bounded path may recover a transient read failure.
             path_count(diagnostics, path, 'failed')
             record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
             continue
         except Exception:
+            seen.discard(ref)  # A later bounded path may recover a transient read failure.
             path_count(diagnostics, path, 'failed')
             record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
             continue
