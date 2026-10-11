@@ -30,6 +30,9 @@ def admission_state(client, args, trial):
 def entries():
     return (
         DriverEntry(
+            'database.dream_context_reads.subject_memory_refs', base={'uid': UID, 'subject': 'person:synthetic'}
+        ),
+        DriverEntry(
             'database.dream_context_reads.temporal_neighbours',
             base={
                 'uid': UID,

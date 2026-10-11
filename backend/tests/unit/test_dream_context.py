@@ -125,6 +125,7 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
     from types import SimpleNamespace
 
     calls = []
+    monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
     monkeypatch.setattr(dream_context.action_items, 'get_action_items', lambda uid, **kwargs: [{'id': 'task'}])
     monkeypatch.setattr(
         dream_context,
@@ -160,6 +161,10 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
         'conversations/adjacent',
         'screen/frame',
     ]
+    assert calls == []
+    for ref, load in rows:
+        if callable(load):
+            load()
     assert all(uid == 'synthetic-owner' for uid, _ in calls)
 
 
@@ -173,6 +178,7 @@ def test_semantic_embedding_calls_use_llm_pool(monkeypatch):
     from types import SimpleNamespace
 
     submitted = []
+    monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
 
     def submit(pool, fn, *args, **kwargs):
         submitted.append(pool)
@@ -232,7 +238,11 @@ def test_temporal_queries_find_nearest_on_both_sides_without_photo_reads(collect
         when = now + timedelta(minutes=minutes)
         return db.snapshot(
             'users/synthetic/' + collection + '/' + key,
-            {field: when.isoformat() if collection == 'screen_activity' else when},
+            {
+                field: when.isoformat() if collection == 'screen_activity' else when,
+                'captureEligible': True,
+                'accountGeneration': 0,
+            },
         )
 
     db.queue_results([snapshot('left-near', -1), snapshot('left-far', -40)])
@@ -245,20 +255,44 @@ def test_temporal_queries_find_nearest_on_both_sides_without_photo_reads(collect
     assert not any('photos' in str(shape) for shape in db.shapes)
 
 
-def test_canonical_neighbourhood_unavailability_fails_pass(monkeypatch):
+def test_context_deduplicates_before_hydration_and_stops_before_unfitting_read(monkeypatch):
+    calls = []
+    targets = {'people/a': {'name': 'Nuvra'}}
+
+    def load():
+        calls.append('read')
+        return {'name': 'Synthetic context'}
+
+    rows = dream_context.add_context(targets, [('people/a', load), ('people/b', load), ('people/b', load)], Caps())
+    assert len(rows) == 2 and calls == ['read']
+    monkeypatch.setattr(dream_context, 'fits_pass', lambda *a: False)
+    dream_context.add_context(targets, [('people/c', load)], Caps())
+    assert calls == ['read']
+
+
+def test_typesense_outage_keeps_other_context_tiers(monkeypatch):
     from types import SimpleNamespace
 
-    def unavailable(uid, **kwargs):
-        assert kwargs['authoritative'] is True
-        raise RuntimeError('synthetic canonical outage')
+    monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
 
-    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(read=unavailable))
-    with pytest.raises(RuntimeError, match='synthetic canonical outage'):
-        list(
-            dream_context.context_candidates(
-                'synthetic', {'people/a': {'name': 'Nuvra'}}, [], read_record=None, read_entity_record=None
-            )
-        )
+    def unavailable(**kwargs):
+        raise RuntimeError('synthetic outage')
+
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', unavailable)
+    monkeypatch.setattr(dream_context.vector_db, 'query_vectors', lambda *a, **k: ['independent'])
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(search=lambda *a, **k: []))
+    records = dream_context.add_context(
+        {'people/a': {'name': 'Zuvrah'}},
+        dream_context.context_candidates(
+            'synthetic',
+            {'people/a': {'name': 'Zuvrah'}},
+            [],
+            read_record=lambda *a: {'name': 'Zuvra'},
+            read_entity_record=None,
+        ),
+        Caps(),
+    )
+    assert 'conversations/independent' in records
 
 
 def test_dense_repeated_triage_metadata_is_compacted_and_budgeted():
@@ -309,3 +343,45 @@ def test_merge_question_cannot_mutate_context_entity():
     ).questions
     assert sink['rejected'] == {'context_target': 1}
     assert dream_guards.filter_plan(Plan(questions=[question]), records, targets=records).questions == [question]
+
+
+def test_temporal_screen_capture_and_generation_are_authoritative():
+    from datetime import datetime, timedelta, timezone
+    from database.dream_context_reads import temporal_neighbours
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    now = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
+    db = RecordingFirestore()
+    db.documents['users/synthetic/task_intelligence_control/state'] = {'account_generation': 2}
+
+    def screen(key, eligible, generation):
+        return db.snapshot(
+            'users/synthetic/screen_activity/' + key,
+            {'timestamp': now.isoformat(), 'captureEligible': eligible, 'accountGeneration': generation},
+        )
+
+    db.queue_results([screen('ok', True, 2), screen('opted-out', False, 2), screen('old', True, 1)])
+    db.queue_results([])
+    assert [
+        r['id']
+        for r in temporal_neighbours(
+            'synthetic', 'screen_activity', now - timedelta(hours=2), now, now + timedelta(hours=2), firestore_client=db
+        )
+    ] == ['ok']
+
+
+def test_task_control_and_record_reads_are_cached_per_pass(monkeypatch):
+    from types import SimpleNamespace
+    from utils import dream_reads
+
+    calls = []
+    monkeypatch.setattr(
+        dream_reads.action_items, 'get_action_item', lambda uid, key: {'id': key, 'account_generation': 2}
+    )
+    monkeypatch.setattr(
+        dream_reads, 'get_task_workflow_control', lambda uid: calls.append(uid) or SimpleNamespace(account_generation=2)
+    )
+    cache = {}
+    assert dream_reads.read_record('synthetic', 'action_items/a', control_cache=cache)
+    assert dream_reads.read_record('synthetic', 'action_items/b', control_cache=cache)
+    assert calls == ['synthetic']
