@@ -3,7 +3,8 @@
 from datetime import timedelta
 from difflib import SequenceMatcher
 
-from database import action_items, conversations, screen_activity, vector_db
+from database import action_items, vector_db
+from database.dream_context_reads import temporal_neighbours
 from utils.conversations.search import keyword_search_conversation_ids
 from utils.dream_guards import common_words, timestamp, tokens
 from utils.dream_prompt import (
@@ -95,7 +96,7 @@ def query_terms(row, vocabulary=()):
         if entry.get('spelling')
         and any(SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in words)
     ]
-    return list(dict.fromkeys([*words, *near]))[:6]
+    return list(dict.fromkeys([*near[:2], *words]))[:6]
 
 
 def identities(row):
@@ -149,10 +150,10 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         if time is None:
             continue
         start, end = time - timedelta(hours=2), time + timedelta(hours=2)
-        for neighbour in conversations.get_conversations(uid, start_date=start, end_date=end, limit=4):
+        for neighbour in temporal_neighbours(uid, 'conversations', start, time, end):
             ref = 'conversations/' + neighbour['id']
             yield ref, read_record(uid, ref)
-        for screen in screen_activity.get_screen_activity(uid, start_date=start, end_date=end, limit=4):
+        for screen in temporal_neighbours(uid, 'screen_activity', start, time, end):
             yield 'screen/' + screen['id'], screen
 
 

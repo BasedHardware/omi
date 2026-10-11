@@ -133,8 +133,11 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
     )
     monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **kwargs: ['lexical'])
     monkeypatch.setattr(dream_context.vector_db, 'query_vectors', lambda query, uid, **kwargs: ['semantic'])
-    monkeypatch.setattr(dream_context.conversations, 'get_conversations', lambda uid, **kwargs: [{'id': 'adjacent'}])
-    monkeypatch.setattr(dream_context.screen_activity, 'get_screen_activity', lambda uid, **kwargs: [{'id': 'frame'}])
+    monkeypatch.setattr(
+        dream_context,
+        'temporal_neighbours',
+        lambda uid, collection, *a: [{'id': 'adjacent' if collection == 'conversations' else 'frame'}],
+    )
 
     def read(uid, ref):
         calls.append((uid, ref))
@@ -208,6 +211,38 @@ def test_decomposed_accents_do_not_multiply_summary_words():
 def test_empty_target_retrieval_never_touches_memory_store(monkeypatch):
     monkeypatch.setattr(dream_context, 'MemoryService', lambda: pytest.fail('idle retrieval read memory'))
     assert list(dream_context.context_candidates('synthetic', {}, [], read_record=None, read_entity_record=None)) == []
+
+
+def test_vocabulary_near_matches_survive_dense_query_terms():
+    words = 'zirconium kayaking nebular photons extragalactic spectroscopy Nuvrah'
+    terms = dream_context.query_terms({'content': words}, [{'spelling': 'Nuvra'}])
+    assert terms[0] == 'Nuvra' and len(terms) <= 6
+
+
+@pytest.mark.parametrize('collection,field', [('conversations', 'created_at'), ('screen_activity', 'timestamp')])
+def test_temporal_queries_find_nearest_on_both_sides_without_photo_reads(collection, field):
+    from datetime import datetime, timedelta, timezone
+    from database.dream_context_reads import temporal_neighbours
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    now = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
+    db = RecordingFirestore()
+
+    def snapshot(key, minutes):
+        when = now + timedelta(minutes=minutes)
+        return db.snapshot(
+            'users/synthetic/' + collection + '/' + key,
+            {field: when.isoformat() if collection == 'screen_activity' else when},
+        )
+
+    db.queue_results([snapshot('left-near', -1), snapshot('left-far', -40)])
+    db.queue_results([snapshot('right-near', 2), snapshot('right-mid', 3), snapshot('right-far', 30)])
+    rows = temporal_neighbours(
+        'synthetic', collection, now - timedelta(hours=2), now, now + timedelta(hours=2), firestore_client=db
+    )
+    assert [row['id'] for row in rows] == ['left-near', 'right-near', 'right-mid', 'right-far']
+    assert len(db.shapes) == 2
+    assert not any('photos' in str(shape) for shape in db.shapes)
 
 
 def test_canonical_neighbourhood_unavailability_fails_pass(monkeypatch):

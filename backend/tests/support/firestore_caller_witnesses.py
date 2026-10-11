@@ -34,7 +34,6 @@ import routers.integration as integration_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
-import utils.dream_context as dream_context
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
@@ -513,41 +512,9 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
     trial(capture, wrapped_2025.generate_wrapped_2025, 'u1')
 
 
-def _run_dream_context(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    _stub(
-        monkeypatch,
-        dream_context,
-        'MemoryService',
-        lambda: SimpleNamespace(read=lambda *a, **k: [], search=lambda *a, **k: []),
-    )
-    _stub(monkeypatch, dream_context, 'keyword_search_conversation_ids', lambda *a, **k: [])
-    _stub(monkeypatch, dream_context.vector_db, 'query_vectors', lambda *a, **k: [])
-    # A memory target reaches temporal lookup without buying linked task reads.
-    trial(
-        capture,
-        lambda: list(
-            dream_context.context_candidates(
-                'u1',
-                {'memory_items/synthetic': {'created_at': FROZEN_NOW, 'content': 'Nuvra'}},
-                [],
-                read_record=lambda *a: None,
-                read_entity_record=lambda *a: None,
-            )
-        ),
-    )
-
-
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
-        CallerWitness(
-            'utils/dream_context.py:context_candidates:database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            ('dream-context',),
-            1,
-            _run_dream_context,
-        ),
         CallerWitness(
             'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
             'database.conversations.get_conversations',
