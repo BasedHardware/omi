@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let query = '';
 let authUser: { uid: string } | null = null;
+const routerHarness = vi.hoisted(() => ({ push: vi.fn() }));
 const referralHarness = vi.hoisted(() => ({
   claim: vi.fn(),
   navigate: vi.fn(),
 }));
 
 vi.mock('@tschk/moonshine-next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerHarness.push }),
   useSearchParams: () => new URLSearchParams(query),
 }));
 
@@ -110,5 +111,32 @@ describe('LoginClient geometry', () => {
       ).toBeTruthy(),
     );
     expect(referralHarness.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('LoginClient return path', () => {
+  beforeEach(() => {
+    routerHarness.push.mockReset();
+    authUser = { uid: 'user-1' };
+  });
+
+  afterEach(() => {
+    cleanup();
+    authUser = null;
+    query = '';
+  });
+
+  it('returns a signed-in reader to the page an item link asked for', async () => {
+    query = 'next=%2Fconversations%3Fid%3Dabc';
+    render(createElement(LoginClient));
+    await waitFor(() =>
+      expect(routerHarness.push).toHaveBeenCalledWith('/conversations?id=abc'),
+    );
+  });
+
+  it('ignores a next that would leave the app', async () => {
+    query = 'next=%2F%2Fevil.example';
+    render(createElement(LoginClient));
+    await waitFor(() => expect(routerHarness.push).toHaveBeenCalledWith('/home'));
   });
 });
