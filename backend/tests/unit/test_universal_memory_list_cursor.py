@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import count
+
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from unittest.mock import MagicMock
@@ -24,6 +26,13 @@ def service_mod(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "unit-test-universal-list-cursor-secret")
     module = _load_memory_service(monkeypatch)
+    from utils.memory import read_resilience
+
+    # Pagination tests issue independent page requests without wall-clock gaps.
+    # Model one second of refill per admission, keeping the actual default
+    # burst/in-flight policy and the request budgets intact. Isolate cases too.
+    ticks = count()
+    monkeypatch.setattr(read_resilience, "_retry_allowance", read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     missing = object()
     original_seams = {
         name: getattr(module, name, missing)
