@@ -3862,8 +3862,14 @@ inventory, contains scalar metadata, and holds only a weak reference to the ring
 Unproven buffers fail closed. Grant consumption discards excess pre-grant credit;
 a second grant needs another ten new seconds and another cooldown.
 
-Recovery queries prefer longer intervals (capped at ten seconds), breaking ties
-with newer end times and using the newest end of long turns. The physical PCM
+Recovery snapshots its selection boundary before observing new proof, pools
+post-checkpoint ranges first up to ten seconds (including gapped phrases), and
+uses older pending audio only when new physical PCM is below the evidence minimum.
+The boundary remains available throughout the active tranche; advancing the proof
+cursor cannot demote unreserved phrases. Grant checkpoints advance over all current
+PCM only when post-checkpoint audio is selected for reservation and the increased
+allowance covers the next attempt. Longer/newer intervals win within each pool,
+using the newest end of long turns. The physical PCM
 sample count is also capped at ten seconds even if malformed timestamp spans
 overlap. Existing centroid eviction, thresholds/margins, manual authority,
 owner contention and stale-generation fences still decide acceptance.

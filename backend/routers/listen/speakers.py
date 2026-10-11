@@ -767,7 +767,9 @@ class SpeakerMatcher:
         self._embedding_attempts.setdefault(speaker_id, 0)
         return self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
 
-    def _reserve_embedding(self, speaker_id: int, *, segment: Optional[dict[str, Any]] = None) -> bool:
+    def _reserve_embedding(
+        self, speaker_id: int, *, segment: Optional[dict[str, Any]] = None, recovery_audio: bool = False
+    ) -> bool:
         """Reserve synchronously before any await; failed requests spend tokens too."""
         now = time.monotonic()
         elapsed = max(0.0, now - self._socket_embedding_refilled_at)
@@ -785,10 +787,13 @@ class SpeakerMatcher:
             and not socket_blocked
             and self._embedding_attempts[speaker_id] < MAX_RECOVERED_VOICE_ATTEMPTS
             and recovery
-            and recovery.grant(now)
+            and recovery_audio
+            and recovery.grant(now, attempts=self._embedding_attempts[speaker_id])
         ):
             RECOVERY_GRANTS.labels(tranche='first' if recovery.tranches == 1 else 'second').inc()
-            voice_blocked = False
+            voice_blocked = self._embedding_attempts[speaker_id] + 1 > recovery.attempt_limit(
+                MAX_VOICE_EMBEDDING_ATTEMPTS
+            )
         if voice_blocked or socket_blocked:
             self._record_budget_exit(
                 'both' if voice_blocked and socket_blocked else 'voice' if voice_blocked else 'socket',
@@ -1036,25 +1041,22 @@ class SpeakerMatcher:
                     speaker_id,
                 )
                 return
-            # Streaming providers resend/extend merged segments. Subtract every
-            # successfully embedded interval before choosing a fresh clip, so an
-            # update cannot turn three seconds of speech into six seconds of evidence.
             covered = [(a, b) for a, b in self._covered_audio.get(speaker_id, []) if b > buffer_start]
             self._covered_audio[speaker_id] = covered
-            # Retain interval metadata only; PCM stays in the bounded ring.
-            # Coalesce provider repeats before subtracting successful evidence.
             fresh = fresh_audio_ranges(self._pending_audio.get(speaker_id, []), incoming_ranges, covered, time_range)
             if not fresh:
-                # Zero fresh seconds left after subtracting embedded audio.
                 self._record_exit('no_fresh_audio', speaker_id)
                 return
-            # A metadata cap also bounds pathological alternating tiny turns.
             self._pending_audio[speaker_id] = fresh
             recovery = self._voice_recovery.get(speaker_id)
+            watermark = (
+                recovery.selection_watermark(self._embedding_attempts[speaker_id], MAX_VOICE_EMBEDDING_ATTEMPTS)
+                if recovery
+                else None
+            )
             if recovery:
                 recovery.observe(ring_buffer, fresh)
-            # Appending evicts the oldest clip. Gate against only the evidence
-            # that will survive, or rejection can leave this voice pending forever.
+            # Gate against evidence surviving oldest-clip eviction.
             retained = list(self.speaker_evidence.get(speaker_id, ()))
             if speaker_id in self._competition_only and speaker_id not in self._competition_fresh:
                 retained = []
@@ -1068,7 +1070,12 @@ class SpeakerMatcher:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
             pcm, selected = select_query_audio(
-                ring_buffer, fresh, prefer_recent=recovery is not None, sample_rate=self.host.request.sample_rate
+                ring_buffer,
+                fresh,
+                prefer_recent=recovery is not None,
+                sample_rate=self.host.request.sample_rate,
+                capture_watermark=watermark,
+                minimum_seconds=needed,
             )
             if not pcm:
                 self._record_exit('no_pcm', speaker_id)
@@ -1077,7 +1084,11 @@ class SpeakerMatcher:
             if clip_seconds < needed:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
-            if not self._reserve_embedding(speaker_id, segment=segment):
+            if not self._reserve_embedding(
+                speaker_id,
+                segment=segment,
+                recovery_audio=watermark is not None and all(a >= watermark for a, _ in selected),
+            ):
                 return
             query = await self._extract_query(pcm)
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
@@ -1085,10 +1096,7 @@ class SpeakerMatcher:
                 return
             if recovery and self._embedding_attempts[speaker_id] > MAX_VOICE_EMBEDDING_ATTEMPTS:
                 recovery.has_evidence = True
-            # Cover only successful embeddings; failed requests still spend budget.
             covered.extend(selected)
-            # Continue already-queued unselected speech after successful queries;
-            # failures and denials never create retries or exempt reservations.
             unselected = subtract_audio_ranges(fresh, selected)[-128:]
             if unselected:
                 self._pending_audio[speaker_id] = unselected

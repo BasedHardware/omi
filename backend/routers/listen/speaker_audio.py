@@ -47,8 +47,20 @@ def encode_query(pcm: bytes, sample_rate: int) -> bytes:
 
 
 def select_query_audio(
-    ring: AudioRingBuffer, fresh: list[tuple[float, float]], *, prefer_recent: bool, sample_rate: int
+    ring: AudioRingBuffer,
+    fresh: list[tuple[float, float]],
+    *,
+    prefer_recent: bool,
+    sample_rate: int,
+    capture_watermark: float | None = None,
+    minimum_seconds: float = 0.5,
 ) -> tuple[bytes, list[tuple[float, float]]]:
+    if capture_watermark is not None:
+        newer = [(max(start, capture_watermark), end) for start, end in fresh if end > capture_watermark]
+        pcm, selected = select_query_audio(ring, newer, prefer_recent=True, sample_rate=sample_rate)
+        if len(pcm) / (sample_rate * 2) >= minimum_seconds:
+            return pcm, selected
+        # Only insufficient new physical evidence permits older pending speech.
     selected, chunks = [], []
     remaining_seconds = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
     ordered = sorted(fresh, key=lambda r: (-min(10.0, r[1] - r[0]), -r[1])) if prefer_recent else fresh

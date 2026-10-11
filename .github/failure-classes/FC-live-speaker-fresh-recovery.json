@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "FC-live-speaker-fresh-recovery",
   "violated_contract": "A voice that exhausted its initial allowance on noisy speech must have a bounded opportunity to recover from later proven fresh PCM without replayed windows, overlapping capture positions, forged timestamps, failed requests, or lifecycle churn creating unbounded model admission or weakening identity authority.",
-  "canonical_prevention": "Use one per-admitted-voice scalar recovery ledger with physical append and capture-axis high-watermarks, ten new PCM seconds and a monotonic cooldown per grant, at most two three-attempt tranches and a hard eighteen-attempt ceiling. Reserve every recovery request synchronously through the unchanged shared socket bucket; failures spend quota. Preserve carried allowance state, checkpoint every grant, and publish recovery acceptances only through existing automatic arbitration and final authority.",
+  "canonical_prevention": "Use one per-admitted-voice scalar recovery ledger with physical append and capture-axis high-watermarks, ten new PCM seconds and a monotonic cooldown per grant, at most two three-attempt tranches and a hard eighteen-attempt ceiling. Reserve every recovery request synchronously through the unchanged shared socket bucket; failures spend quota. Preserve carried allowance state, select and pool post-checkpoint PCM before older pending ranges, checkpoint only an admitted fresh query, recheck each increased attempt limit, and publish recovery acceptances only through existing automatic arbitration and final authority.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_speaker_voice_recovery.py",
     "backend/tests/unit/test_owner_recognition_embedding_budget.py",

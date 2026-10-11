@@ -19,6 +19,8 @@ class VoiceRecovery:
     watermark: int
     audio_watermark: float
     next_grant_at: float
+    checkpoint_audio_watermark: float
+    query_audio_watermark: float
     fresh_bytes: int = 0
     tranches: int = 0
     has_evidence: bool = False
@@ -34,6 +36,8 @@ class VoiceRecovery:
             proven.total_bytes_written if proven else 0,
             bounds[1] if bounds else 0,
             now + RECOVERY_COOLDOWN_SECONDS,
+            bounds[1] if bounds else 0,
+            bounds[1] if bounds else 0,
         )
 
     def observe(self, ring: object, ranges: list[tuple[float, float]]) -> None:
@@ -44,6 +48,8 @@ class VoiceRecovery:
             self.watermark = proven.total_bytes_written if proven else 0
             bounds = proven.get_time_range() if proven else None
             self.audio_watermark = max(self.audio_watermark, bounds[1] if bounds else self.audio_watermark)
+            self.checkpoint_audio_watermark = max(self.checkpoint_audio_watermark, self.audio_watermark)
+            self.query_audio_watermark = max(self.query_audio_watermark, self.audio_watermark)
             self.fresh_bytes = 0
             return
         if current is None or self.tranches >= RECOVERY_MAX_TRANCHES:
@@ -64,20 +70,28 @@ class VoiceRecovery:
                 self.audio_watermark = max(self.audio_watermark, min(hi, bounds[1]))
         self.fresh_bytes = min(self.fresh_bytes, RECOVERY_FRESH_SECONDS * ring.bytes_per_second)
 
-    def grant(self, now: float) -> bool:
+    def selection_watermark(self, attempts: int, base: int) -> float:
+        # Observation advances its proof cursor; selection must retain accumulated
+        # phrases until reserved, and failed queries may reuse the active tranche.
+        return self.checkpoint_audio_watermark if attempts >= self.attempt_limit(base) else self.query_audio_watermark
+
+    def grant(self, now: float, *, attempts: int = 0, base: int = 12) -> bool:
         ring = self.ring_ref() if self.ring_ref else None
         if (
-            ring is None
+            attempts + 1 > min(MAX_RECOVERED_VOICE_ATTEMPTS, base + (self.tranches + 1) * RECOVERY_ATTEMPTS_PER_TRANCHE)
+            or ring is None
             or self.tranches >= RECOVERY_MAX_TRANCHES
             or now < self.next_grant_at
             or self.fresh_bytes < RECOVERY_FRESH_SECONDS * ring.bytes_per_second
         ):
             return False
+        self.query_audio_watermark = self.checkpoint_audio_watermark
         self.tranches += 1
         self.fresh_bytes = 0
         self.watermark = ring.total_bytes_written
         bounds = ring.get_time_range()
-        self.audio_watermark = bounds[1] if bounds else self.audio_watermark
+        self.audio_watermark = max(self.audio_watermark, bounds[1] if bounds else self.audio_watermark)
+        self.checkpoint_audio_watermark = self.audio_watermark
         self.next_grant_at = now + RECOVERY_COOLDOWN_SECONDS
         return True
 

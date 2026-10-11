@@ -81,6 +81,100 @@ async def test_twelve_noisy_attempts_then_new_clean_owner_speech_recovers(monkey
 
 
 @pytest.mark.anyio
+async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    ring = host.state.audio_ring_buffer
+    ring.write_positioned(_pcm(60, 1), 0)
+    for _ in range(12):
+        await matcher.match(1, _segment('old-failed', 0, 60))
+    recovery = matcher._voice_recovery[1]
+    clock.now = recovery.next_grant_at
+    observed = []
+
+    async def extract(pcm):
+        observed.append(np.frombuffer(pcm, dtype=np.int16))
+        return np.array([[-1.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(matcher, '_extract_query', extract)
+    # Accrue proof across updates, preserving gaps and the selection checkpoint.
+    for i in range(5):
+        start = 70 + i * 3
+        ring.write_positioned(_pcm(2, 20 + i), start)
+        await matcher.match(1, _segment(f'phrase-{i}', start, 2))
+    assert matcher._embedding_attempts[1] == 13
+    assert recovery.tranches == 1
+    assert len(observed) == 1
+    assert len(observed[0]) == 10 * 16000
+    assert set(observed[0]) == {20, 21, 22, 23, 24}
+    assert all(np.count_nonzero(observed[0] == value) == 2 * 16000 for value in range(20, 25))
+    assert recovery.checkpoint_audio_watermark == 84
+    assert recovery.query_audio_watermark == 60
+    assert matcher._pending_audio[1] == [(0, 60)]
+    clock.now += 30
+    await matcher.match(1, _segment('old-fallback', 0, 60))
+    await matcher.match(1, _segment('old-fallback', 0, 60))
+    await matcher.match(1, _segment('cannot-recredit-phrases', 70, 14))
+    assert matcher._embedding_attempts[1] == 15
+    assert recovery.tranches == 1
+    assert recovery.fresh_bytes == 0
+    assert len(calls) == 12
+
+
+@pytest.mark.anyio
+async def test_uncarried_release_at_fifteen_cannot_admit_sixteen_with_first_grant(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    await _exhaust(matcher, host, clock)
+    matcher._embedding_attempts[1] = 27
+    matcher._release_rollover_attempts({1: 12}, set())
+    recovery = matcher._voice_recovery[1]
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    clock.now = recovery.next_grant_at
+    before = _metric(RECOVERY_GRANTS, tranche='first')
+    await matcher.match(1, _segment('first-grant-cannot-cover-sixteen', 24, 10))
+    assert matcher._embedding_attempts[1] == 15
+    assert recovery.tranches == 0
+    assert recovery.fresh_bytes == 10 * 16000 * 2
+    assert _metric(RECOVERY_GRANTS, tranche='first') == before
+    assert len(calls) == 12
+
+
+@pytest.mark.anyio
+async def test_evicted_fresh_proof_cannot_checkpoint_an_old_fallback_query(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    ring = host.state.audio_ring_buffer = AudioRingBuffer(10, 16000)
+    ring.write_positioned(_pcm(10, 1), 0)
+    matcher._admit_voice(1)
+    matcher._embedding_attempts[1] = 12
+    recovery = matcher._voice_recovery[1] = VoiceRecovery.checkpoint(ring, 0)
+    ring.write_positioned(_pcm(10, 2), 10)
+    recovery.observe(ring, [(10, 20)])
+    ring.write_positioned(_pcm(10, 1), 0)  # regressed capture evicts the credited PCM
+    clock.now = 30
+    await matcher.match(1, _segment('old-fallback-cannot-grant', 0, 10))
+    assert not calls
+    assert recovery.tranches == 0
+    assert recovery.checkpoint_audio_watermark == 10
+    assert recovery.fresh_bytes == 10 * ring.bytes_per_second
+    assert matcher._embedding_attempts[1] == 12
+
+
+def test_new_audio_below_minimum_falls_back_without_claiming_a_fresh_query():
+    ring = AudioRingBuffer(120, 16000)
+    ring.write_positioned(_pcm(10, 1), 0)
+    ring.write_positioned(_pcm(0.25, 2), 20)
+    pcm, selected = select_query_audio(
+        ring,
+        [(0, 10), (20, 20.25)],
+        prefer_recent=True,
+        sample_rate=16000,
+        capture_watermark=10,
+        minimum_seconds=0.5,
+    )
+    assert selected == [(0, 10)]
+    assert set(np.frombuffer(pcm, dtype=np.int16)) == {1}
+
+
+@pytest.mark.anyio
 async def test_failures_spend_both_tranches_and_never_exceed_eighteen(monkeypatch):
     matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
     before = {x: _metric(RECOVERY_GRANTS, tranche=x) for x in ('first', 'second')}
@@ -326,14 +420,25 @@ async def test_recovery_cannot_bypass_identity_authority_or_stale_generation(mon
 
 
 @pytest.mark.anyio
-async def test_scope_refresh_and_carried_rollover_do_not_renew_tranches(monkeypatch):
+async def test_actual_scope_change_and_carried_rollover_do_not_renew_tranches(monkeypatch):
     matcher, host, clock, _, _ = _setup(monkeypatch, failed=True)
     await _exhaust(matcher, host, clock)
     clock.now += 30
     host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: np.array([[-1.0, 0.0]], dtype=np.float32))
     await matcher.match(1, dict(_segment('scope-next', 24, 10), speaker_id_scope='next'))
     recovery = matcher._voice_recovery[1]
     assert recovery.tranches == 1
+    checkpoint = (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
+    assert matcher._voice_scopes[1] == 'next'
+    host.state.audio_ring_buffer.write_positioned(_pcm(2), 34)
+    await matcher.match(1, dict(_segment('scope-change', 34, 2), speaker_id_scope='another-provider'))
+    assert matcher._voice_scopes[1] == 'another-provider'
+    assert matcher._voice_recovery[1] is recovery
+    assert recovery.tranches == 1
+    assert (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at) == checkpoint
+    assert recovery.fresh_bytes == 2 * 16000 * 2
+    assert matcher._embedding_attempts[1] == 14
     matcher._profile_conversation_id = 'first'
     host.state.speaker_id_enabled = False
     await matcher.refresh_for_conversation('first')
@@ -342,7 +447,7 @@ async def test_scope_refresh_and_carried_rollover_do_not_renew_tranches(monkeypa
     matcher.speaker_to_person[1] = ('user', 'User')
     matcher.note_rollover_carry({1})
     await matcher.refresh_for_conversation('second')
-    assert matcher._embedding_attempts[1] == 13
+    assert matcher._embedding_attempts[1] == 14
     assert matcher._voice_recovery[1] is recovery
     matcher.note_rollover_carry(set())
     await matcher.refresh_for_conversation('third')
