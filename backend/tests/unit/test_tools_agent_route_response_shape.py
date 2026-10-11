@@ -107,6 +107,19 @@ def _install_route_stubs(monkeypatch):
     action_services_mod.update_action_item_text = MagicMock(return_value='Updated action item.')
     monkeypatch.setitem(sys.modules, 'utils.retrieval.tool_services.action_items', action_services_mod)
 
+    commitment_services_mod = types.ModuleType('utils.retrieval.tool_services.commitments')
+    commitment_services_mod.get_commitments_result = MagicMock(
+        return_value={
+            'result_text': 'No open commitments to other people found since 2026-09-11.',
+            'groups': [],
+            'unattributed': [],
+            'sources': [],
+            'totals': {'people': 0, 'commitments': 0, 'unattributed': 0, 'excluded_unknown_owner': 0},
+            'truncated': False,
+        }
+    )
+    monkeypatch.setitem(sys.modules, 'utils.retrieval.tool_services.commitments', commitment_services_mod)
+
     client_mod = types.ModuleType('database._client')
     client_mod.get_firestore_client = MagicMock()
     client_mod.document_id_from_seed = MagicMock(return_value='test-document-id')

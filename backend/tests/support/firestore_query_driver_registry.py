@@ -67,6 +67,7 @@ _OFFSET = (0, 'row window; fixed, not filter-affecting')
 _PAGE = (25, 'scan/page bound; fixed small positive, not filter-affecting')
 _BUDGET = (None, 'request budget; RPC timeout/charge only, no filter effect')
 _EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter or order effect')
+_SCAN_REPORT = (None, 'output-only dict the read fills with hit_limit/docs_scanned; no query effect')
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
 _NOOP = (noop, 'callback side-effect neutralized; does not affect filters')
@@ -278,7 +279,13 @@ _add(
             'due_start_date': [None, T0],
             'due_end_date': [None, T1],
         },
-        neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET, 'extra_fields': _EXTRA_FIELDS},
+        neutrals={
+            'limit': _LIMIT_OPT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'extra_fields': _EXTRA_FIELDS,
+            'scan_report': _SCAN_REPORT,
+        },
     )
 )
 _add(

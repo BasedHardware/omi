@@ -182,3 +182,36 @@ def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
     out = action_items.prepare_action_item_for_read(dict(raw))
     assert out['completed'] is expected_completed
     assert out['status'] == expected_status
+
+
+def _open_docs(count, deleted):
+    docs = []
+    for index in range(count):
+        doc = _Doc(f'd{index}', BASE - timedelta(minutes=index), None, completed=False)
+        if index < deleted:
+            doc._data['deleted'] = True
+        docs.append(doc)
+    return docs
+
+
+def test_scan_report_flags_a_stream_cut_by_soft_deleted_rows(fake_db):
+    # 40 open rows, the newest 35 soft-deleted: a page of 2 streams 2 + 32 slack
+    # documents, finds no live row, and older live rows stay unread.
+    fake_db.collection.return_value.document.return_value.collection.return_value = _Query(_open_docs(40, 35))
+    report = {}
+
+    items = action_items.get_action_items('uid1', completed=False, limit=2, scan_report=report)
+
+    assert items == []
+    assert report == {'hit_limit': True, 'docs_scanned': 34}
+
+
+def test_scan_report_is_clear_when_the_stream_ends_early_and_rows_are_unchanged(fake_db):
+    fake_db.collection.return_value.document.return_value.collection.return_value = _Query(_open_docs(5, 2))
+    report = {}
+
+    with_report = action_items.get_action_items('uid1', completed=False, limit=10, scan_report=report)
+    without_report = action_items.get_action_items('uid1', completed=False, limit=10)
+
+    assert report == {'hit_limit': False, 'docs_scanned': 5}
+    assert [item['id'] for item in with_report] == [item['id'] for item in without_report] == ['d2', 'd3', 'd4']

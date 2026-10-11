@@ -18,6 +18,7 @@ from config.jev_decisions import JEV_MODEL
 from config.mentor_v2 import mentor_config
 from config.proactivity_v2 import ProactivityDenied, producer_for
 from database import action_items as tasks
+from utils.task_predicates import is_open_conversation_task
 from database import proactivity_redis
 from models.proactivity import ProactivityTarget
 from utils import proactivity as spine
@@ -448,13 +449,7 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
 async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> None:
     """Due event is revalidated against canonical state; never writes to a task."""
     task = await run_blocking(db_executor, tasks.get_action_item, uid, action_item_id)
-    if not task or task.get('deleted') or task.get('completed') or task.get('status', 'active') != 'active':
-        return
-    if (
-        not task.get('conversation_id')
-        or task.get('is_locked')
-        or task.get('source', 'legacy') not in {'legacy', 'conversation'}
-    ):
+    if not task or not is_open_conversation_task(task):
         return
     due = task.get('due_at')
     if isinstance(due, str):

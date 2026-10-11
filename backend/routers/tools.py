@@ -13,6 +13,7 @@ Endpoints:
 - GET   /v1/tools/action-items           — list action items
 - POST  /v1/tools/action-items           — create action item
 - PATCH /v1/tools/action-items/{id}      — update action item
+- GET   /v1/tools/commitments            — open commitments to other people (read-only)
 - POST  /v1/tools/calendar-events        — create calendar event
 """
 
@@ -36,6 +37,7 @@ from utils.retrieval.tool_services.action_items import (
     create_action_item_text,
     update_action_item_text,
 )
+from utils.retrieval.tool_services.commitments import get_commitments_result
 from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,56 @@ class ToolResponse(BaseModel):
     result_text: str
     is_error: bool = False
     sources: list[ToolSource] = Field(default_factory=list)
+
+
+class CommitmentAttribution(BaseModel):
+    names: list[str] = Field(default_factory=list)
+    person_ids: list[str] = Field(default_factory=list)
+    basis: Literal['speaker', 'speakers', 'conversation', 'none'] = 'none'
+    likely: bool = False
+
+
+class CommitmentItem(BaseModel):
+    task_id: str
+    description: str
+    due_at: Optional[str] = None
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = None
+    created_at: Optional[str] = None
+    conversation_id: str
+    conversation_title: Optional[str] = None
+    conversation_started_at: Optional[str] = None
+    excerpt: Optional[str] = None
+    context: Optional[str] = None
+    attribution: CommitmentAttribution
+    partial_match: bool = False
+
+
+class CommitmentGroup(BaseModel):
+    names: list[str]
+    person_ids: list[str] = Field(default_factory=list)
+    basis: Literal['speaker', 'speakers', 'conversation']
+    likely: bool = False
+    partial_match: bool = False
+    open_count: int
+    commitments: list[CommitmentItem]
+
+
+class CommitmentTotals(BaseModel):
+    people: int = 0
+    commitments: int = 0
+    unattributed: int = 0
+    excluded_unknown_owner: int = 0
+    not_checked: int = 0
+
+
+class CommitmentsToolResponse(ToolResponse):
+    """ToolResponse plus the typed read the Mac maps directly; result_text is a plain fallback."""
+
+    since: Optional[str] = None
+    groups: list[CommitmentGroup] = Field(default_factory=list)
+    unattributed: list[CommitmentItem] = Field(default_factory=list)
+    totals: CommitmentTotals = Field(default_factory=CommitmentTotals)
+    truncated: bool = False
 
 
 def _ok(tool_name: str, text: str, sources: Optional[list[dict]] = None) -> dict:
@@ -352,6 +404,28 @@ def update_action_item(
         due_at=body.due_at,
     )
     return _ok("update_action_item", result)
+
+
+@router.get("/v1/tools/commitments", response_model=CommitmentsToolResponse)
+def get_commitments(
+    since: Optional[str] = Query(default=None, max_length=80, description="ISO date with timezone; max 90 days back"),
+    person: Optional[str] = Query(default=None, max_length=120, description="Only commitments to this person (name)"),
+    limit_people: int = Query(default=10, ge=1, le=20),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
+):
+    """Read-only: never creates, edits or completes a task. Names only, never addresses."""
+    result = get_commitments_result(uid=uid, since=since, person=person, limit_people=limit_people)
+    envelope = _ok("get_commitments", result['result_text'], result['sources'])
+    if envelope['is_error']:
+        return envelope
+    return {
+        **envelope,
+        'since': result['since'],
+        'groups': result['groups'],
+        'unattributed': result['unattributed'],
+        'totals': result['totals'],
+        'truncated': result['truncated'],
+    }
 
 
 # --------------- calendar endpoints ---------------

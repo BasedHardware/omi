@@ -118,6 +118,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
     "utils.retrieval.tool_services.action_items",
+    "utils.retrieval.tool_services.commitments",
+    "utils.task_predicates",
     "utils.retrieval.tool_result_boundaries",
     "utils.other",
     "utils.other.endpoints",
@@ -167,6 +169,7 @@ sys.modules["database._client"].db = MagicMock()
 conversations_db = _stub_module("database.conversations")
 conversations_db.get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+conversations_db.get_conversations_by_id_without_photos = MagicMock(return_value=[])
 
 # Stub database.users
 users_db = _stub_module("database.users")
@@ -463,6 +466,14 @@ memories_svc = _load_module_from_file(
 action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
+)
+task_predicates = _load_module_from_file(
+    "utils.task_predicates",
+    BACKEND_DIR / "utils" / "task_predicates.py",
+)
+commitments_svc = _load_module_from_file(
+    "utils.retrieval.tool_services.commitments",
+    BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "commitments.py",
 )
 router_mod = _load_module_from_file(
     "routers.tools",
@@ -1634,3 +1645,130 @@ class TestBoundaryConditions:
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Task'}
         result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", due_at="not-a-date")
         assert "Error" in result
+
+
+# ===========================================================================
+# Tests: GET /v1/tools/commitments (read-only "what do I owe people?")
+# ===========================================================================
+class TestCommitmentsEndpoint:
+    @pytest.fixture(autouse=True)
+    def setup_app(self):
+        app = FastAPI()
+        app.include_router(router_mod.router)
+        app.dependency_overrides[endpoints_mod.get_current_user_uid] = lambda: "test-uid"
+        app.dependency_overrides[endpoints_mod.with_rate_limit.return_value] = lambda: "test-uid"
+        self.client = TestClient(app)
+        now = datetime.now(timezone.utc)
+        action_items_db.get_action_items.reset_mock()
+        action_items_db.get_action_items.side_effect = None
+        action_items_db.get_action_items.return_value = [
+            {
+                'id': 'task-1',
+                'description': 'Send Priya the pricing sheet',
+                'owner': 'user',
+                'status': 'active',
+                'completed': False,
+                'source': 'conversation',
+                'conversation_id': 'conv-1',
+                'created_at': now - timedelta(days=1),
+                'provenance': [
+                    {'kind': 'conversation', 'id': 'conv-1', 'scope': 'canonical', 'transcript_segment_ids': ['s2']}
+                ],
+            }
+        ]
+        conversations_db.get_conversations_by_id_without_photos.reset_mock()
+        conversations_db.get_conversations_by_id_without_photos.return_value = [
+            {
+                'id': 'conv-1',
+                'started_at': now - timedelta(days=1),
+                'structured': {'title': 'Pricing call'},
+                'transcript_segments': [
+                    {
+                        'id': 's1',
+                        'text': 'Can you send the pricing sheet?',
+                        'is_user': False,
+                        'person_id': 'p-priya',
+                        'start': 0.0,
+                        'end': 2.0,
+                    },
+                    {'id': 's2', 'text': "Sure, I'll send it Friday.", 'is_user': True, 'start': 3.0, 'end': 5.0},
+                ],
+            }
+        ]
+        users_db.get_people_by_ids.reset_mock()
+        users_db.get_people_by_ids.return_value = [{'id': 'p-priya', 'name': 'Priya'}]
+        yield
+        action_items_db.get_action_items.side_effect = None
+        action_items_db.get_action_items.return_value = []
+        conversations_db.get_conversations_by_id_without_photos.return_value = []
+        users_db.get_people_by_ids.return_value = []
+
+    def test_returns_typed_groups_and_clickable_conversation_sources(self):
+        resp = self.client.get("/v1/tools/commitments")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "get_commitments"
+        assert body["is_error"] is False
+        assert body["groups"][0]["names"] == ["Priya"]
+        assert body["groups"][0]["basis"] == "speaker"
+        assert body["groups"][0]["commitments"][0]["task_id"] == "task-1"
+        assert body["totals"] == {
+            "people": 1,
+            "commitments": 1,
+            "unattributed": 0,
+            "excluded_unknown_owner": 0,
+            "not_checked": 0,
+        }
+        assert body["groups"][0]["likely"] is False
+        assert body["since"].startswith(str((datetime.now(timezone.utc) - timedelta(days=30)).date()))
+        assert body["sources"] == [
+            {
+                "kind": "conversation",
+                "source_id": "conv-1",
+                "title": "Pricing call",
+                "preview": "Sure, I'll send it Friday.",
+                "created_at": body["sources"][0]["created_at"],
+                "moment_timestamp_ms": None,
+                "app_name": None,
+                "url": None,
+            }
+        ]
+
+    def test_owner_comes_from_auth_not_from_the_query(self):
+        resp = self.client.get("/v1/tools/commitments?uid=someone-else")
+        assert resp.status_code == 200
+        assert action_items_db.get_action_items.call_args.kwargs["uid"] == "test-uid"
+        conversation_call = conversations_db.get_conversations_by_id_without_photos.call_args
+        assert conversation_call.args[0] == "test-uid"
+        assert users_db.get_people_by_ids.call_args.args[0] == "test-uid"
+
+    def test_route_is_rate_limited_as_a_search_read(self):
+        route = next(r for r in router_mod.router.routes if getattr(r, "path", "") == "/v1/tools/commitments")
+        dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
+        assert endpoints_mod.with_rate_limit.return_value in dependency_calls
+        calls = endpoints_mod.with_rate_limit.call_args_list
+        assert any(c.args == (endpoints_mod.get_current_user_uid, "tools:search") for c in calls)
+        assert route.response_model is router_mod.CommitmentsToolResponse
+
+    @pytest.mark.parametrize("limit_people", [0, 21])
+    def test_limit_people_is_bounded(self, limit_people):
+        resp = self.client.get(f"/v1/tools/commitments?limit_people={limit_people}")
+        assert resp.status_code == 422
+
+    def test_malformed_since_is_an_error_result_not_a_500(self):
+        resp = self.client.get("/v1/tools/commitments?since=last-tuesday")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["is_error"] is True
+        assert body["result_text"].startswith("Error: Invalid since format")
+        assert body["groups"] == [] and body["sources"] == []
+        action_items_db.get_action_items.assert_not_called()
+
+    def test_backend_failure_returns_generic_error_without_content(self):
+        action_items_db.get_action_items.side_effect = RuntimeError("firestore said Send Priya the pricing sheet")
+        resp = self.client.get("/v1/tools/commitments")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["is_error"] is True
+        assert body["result_text"] == "Error: Could not load commitments right now."
+        assert "Priya" not in resp.text
