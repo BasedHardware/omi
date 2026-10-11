@@ -210,3 +210,46 @@ runtime payload access. The dev secret project and four secret names are known f
 setup guide; their existence/enabled versions remain unconfirmed because `ro-dev` metadata
 reads returned permission denied. Linq's written AI-use,
 retention, fallback and production-number assurances also remain provider rollout risks.
+
+## Ordered backlog and reminder clock
+
+An identity's inbox is admitted in `created_at` order inside the claim transaction.
+The oldest `pending` or `running` job is the only eligible head. Recovery scans in
+that order; after release, the worker wakes the next pending head. An ambiguous
+running head still needs operator reconciliation, never TTL stealing. Private
+channel identities have one thread, so this also serializes their normal replies.
+Undo cleanup edits its original receipt; stale/duplicate callbacks do not emit new
+unscoped replies. Linq text undo pins the selected receipt before background work.
+Confirmed receipts and undo requests enter the ordered channel history.
+
+The channel runtime carries the original provider message time. Its shaped evidence
+includes a server-verified request clock in the user's timezone. Relative reminders
+use `create_action_item_tool(due_in_minutes=N)`, which computes `due_at` from that
+original time. A reminder is an action item, not a separate scheduled-message object.
+Future confirmations state phone delivery through Omi's silent FCM/local-notification
+path. If backlog makes the original time past, save that due time, report the missed
+time, and do not reschedule it or claim a phone notification was scheduled.
+`omi_initiated` remains denied: no later Telegram reminder message is sent.
+
+The FIFO query adds the declared `inbox(status, created_at)` collection index; its
+manifest readiness must be established before shipping this source. No index or
+production-state changes are performed by this PR.
+
+For the October 11 burst, logs establish the callback's canonical cleanup at
+09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation
+resumed at 09:31:21 and 09:31:27 on another already-existing instance of the same
+revision. The deployed lease has no TTL and no Firestore TTL policy for its collection,
+recovery polls every thirty seconds, no
+Cloud Tasks dispatcher exists for this inbox, and request-only CPU throttling was
+disabled. Those mechanisms do not supply a ten-minute automatic release. Historical
+lease release/reset was not logged and Firestore audit evidence is unavailable;
+its exact owner and trigger remain unresolved. New content-free lease acquisition,
+release, and queue-age events make future recovery timing distinguishable.
+
+The last task's stored due time was 09:35 UTC, not its message-time target 09:29.
+A reminder-cancellation send for the QA principal followed at 09:31:31. Together
+with the old single overwritten inverse document and the reported second successful
+undo, this strongly suggests the newer task was reversed by a stale callback.
+The cancellation log contains no task identifier, so this is an inference, not an
+audited object-level reversal record. Canonical-memory cleanup proves a memory
+inverse ran earlier; the available logs do not independently identify its fact.

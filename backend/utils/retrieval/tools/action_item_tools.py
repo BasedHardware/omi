@@ -10,6 +10,8 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from langchain_core.runnables import RunnableConfig
 
 from utils.messaging.undo import record_write
+from utils.messaging.projection import surface_runtime
+from utils.messaging.turn_context import phone_reminder_confirmation
 import database.action_items as action_items_db
 import database.notifications as notification_db
 from utils.notifications import (
@@ -364,6 +366,8 @@ def create_action_item_tool(
     due_at: Optional[str] = None,
     conversation_id: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+    *,
+    due_in_minutes: Optional[int] = None,
 ) -> str:
     """
     Create a new action item (task/to-do) for the user.
@@ -388,6 +392,7 @@ def create_action_item_tool(
     Args:
         description: Short task description (5-10 words, just the action)
         due_at: Optional due date (ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
+        due_in_minutes: Relative reminder interval; anchored to original message time on channels. Do not also pass due_at.
         conversation_id: Optional conversation ID this task came from
 
     Returns:
@@ -435,6 +440,17 @@ def create_action_item_tool(
         'conversation_id': conversation_id,
     }
 
+    runtime = surface_runtime.get()
+    channel = runtime is not None and runtime.surface != 'app'
+    display_tz = configurable.get('user_timezone') or 'UTC'
+    if due_in_minutes is not None:
+        if due_at is not None or isinstance(due_in_minutes, bool) or due_in_minutes <= 0:
+            return 'Error: Use a positive due_in_minutes or an absolute due_at, not both.'
+        anchor = runtime.request_at if channel and runtime is not None else datetime.now(timezone.utc)
+        if anchor is None:
+            return 'Error: Original message time unavailable. Ask for an explicit reminder time.'
+        due_at = (anchor + timedelta(minutes=due_in_minutes)).isoformat()
+
     # Parse or set due date
     if due_at is not None:
         # Parse provided due date (must be ISO format with timezone)
@@ -479,7 +495,7 @@ def create_action_item_tool(
         # Build concise confirmation message
         task_desc = created_item.get('description', 'Task')
         result = f"✅ Added: {task_desc}"
-        result += record_write(uid, 'task', action_item_id, None, created_item)
+        reminder_state = None
 
         if created_item.get('due_at'):
             due = created_item['due_at']
@@ -487,17 +503,29 @@ def create_action_item_tool(
 
             # Send FCM notification for scheduled reminder
             try:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=action_item_id,
-                    description=task_desc,
-                    due_at=due.isoformat(),
-                    completed=bool(created_item.get('completed')),
-                    status=created_item.get('status'),
-                    deleted=bool(created_item.get('deleted')),
-                )
+                if channel and due <= datetime.now(timezone.utc):
+                    reminder_state = 'late'
+                else:
+                    send_action_item_data_message(
+                        user_id=uid,
+                        action_item_id=action_item_id,
+                        description=task_desc,
+                        due_at=due.isoformat(),
+                        completed=bool(created_item.get('completed')),
+                        status=created_item.get('status'),
+                        deleted=bool(created_item.get('deleted')),
+                    )
+                    reminder_state = 'requested'
             except Exception as notif_error:
+                reminder_state = 'failed'
                 logger.error(f"⚠️ Failed to send notification: {notif_error}")
+
+        receipt_data = dict(created_item)
+        if channel and reminder_state:
+            confirmation = phone_reminder_confirmation(created_item['due_at'], display_tz, reminder_state)
+            result += '. ' + confirmation
+            receipt_data['_channel_reminder_confirmation'] = confirmation
+        result += record_write(uid, 'task', action_item_id, None, receipt_data)
 
         # Send immediate notification that task was created
         try:

@@ -147,6 +147,8 @@ class TelegramAdapter(BaseAdapter):
         await self.pace(message.external_chat_id)
         await self.pace('__global__', 1 / 30)
         body = {'chat_id': message.external_chat_id}
+        if message.callback_id and message.reply_to:
+            body['reply_parameters'] = {'message_id': int(message.reply_to)}
         if draft:
             if self.capabilities.streaming == 'none':
                 return

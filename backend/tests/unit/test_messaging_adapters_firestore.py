@@ -207,3 +207,24 @@ def test_expired_receipts_cleanup_is_bounded_and_preserves_recent_tombstones(sto
     assert manager.prune_expired('test', 'session', now=now) == 5
     assert manager.ref('test', 'session', 'recent').get().exists
     assert manager.ref('test', 'session').get().exists
+
+
+def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
+    from dataclasses import replace
+
+    incoming = message()
+    items = [replace(incoming, provider_message_id=str(i)) for i in range(3)]
+    paths = [store.enqueue(item) for item in items]
+    assert store.claim(paths[2]) is None
+    assert store.claim(paths[1]) is None
+    assert store.claim(paths[0]) is not None
+    assert store.claim(paths[1]) is None
+    store.retry(paths[0])
+    assert store.pending(incoming) == paths
+    assert store.claim(paths[2]) is None
+    assert store.claim(paths[0]) is not None
+    store.complete(paths[0])
+    assert store.claim(paths[2]) is None
+    assert store.claim(paths[1]) is not None
+    store.complete(paths[1])
+    assert store.claim(paths[2]) is not None

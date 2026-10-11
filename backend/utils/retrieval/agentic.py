@@ -9,7 +9,7 @@ Anthropic's native streaming contract.
 
 from __future__ import annotations
 from dataclasses import replace
-from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface
+from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface, channel_evidence
 from utils.messaging.projection import project_runtime_tools, surface_runtime
 from utils.messaging.undo import prepare_channel_write
 
@@ -1439,7 +1439,7 @@ async def _run_shaped_chat_stream(
         *messages,
     ]
     if runtime is not None:
-        evidence = list(runtime.evidence)
+        evidence = channel_evidence(runtime, configurable.get('user_timezone'))
     usage_token = set_usage_context(configurable['user_id'], 'chat_agent')
     try:
         model = get_llm('chat_agent', streaming=True)
@@ -1844,8 +1844,6 @@ message as sent when the tool result says status=sent. If it says cancelled, the
 user chose not to send; acknowledge that rather than retrying.
 </device_tools>"""
 
-    # Live chat-agent tools are OpenAI chat-completions functions. Perplexity
-    # covers web search; Anthropic server tools are not on this lane.
     tool_schemas, tool_registry = _convert_tools(core_tools + device_tools, app_tools)
     tool_registry = dict(tool_registry)
     tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
@@ -1860,15 +1858,13 @@ user chose not to send; acknowledge that rather than retrying.
         tool_registry = dict(projection.registry)
         tool_schemas = [_langchain_tool_to_openai(t) for t in tool_registry.values()]
 
-    # Build the provider-neutral role/content message shape. The current datetime is injected
-    # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
+    # Keep the request clock out of the cached system prefix.
     anthropic_messages = _messages_to_anthropic(messages)
     anthropic_messages = _with_continuation_contract(anthropic_messages)
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
 
-    # Conversations collected by tools for citation
     conversations_collected = []
     evidence_references = []
 
@@ -1878,9 +1874,9 @@ user chose not to send; acknowledge that rather than retrying.
 
     chat_scope = build_chat_scope(context)
 
-    # Config for tools to access via RunnableConfig
     configurable = {
         "user_id": uid,
+        "user_timezone": tz,
         "thread_id": str(uuid.uuid4()),
         **frame_request_runtime_config(messages, chat_session),
         "conversations_collected": conversations_collected,

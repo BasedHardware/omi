@@ -183,6 +183,16 @@ class MessagingStore:
             row = ref.get(transaction=tx).to_dict()
             if not row or row['status'] != 'pending':
                 return None
+            # The query participates in the transaction: only the oldest admitted
+            # unfinished update may run. Running/ambiguous heads are never skipped.
+            head = list(
+                ref.parent.where('status', 'in', ['pending', 'running'])
+                .order_by('created_at')
+                .limit(1)
+                .stream(transaction=tx)
+            )
+            if not head or head[0].reference.path != path:
+                return None
             tx.update(ref, {'status': 'running'})
             return json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
 
@@ -274,6 +284,7 @@ class MessagingStore:
             d.reference.path
             for d in self.identity(message.channel, message.provider, message.external_user_id)
             .collection('inbox')
+            .order_by('created_at')
             .stream()
             if d.to_dict().get('status') == 'pending'
         ]
@@ -318,7 +329,7 @@ class MessagingStore:
             row = identity.to_dict()
             if (row.get('channel'), row.get('provider')) != (channel, provider):
                 continue
-            for event in identity.reference.collection('inbox').stream():
+            for event in identity.reference.collection('inbox').order_by('created_at').stream():
                 if event.to_dict().get('status') == 'pending':
                     paths.append(event.reference.path)
                     if len(paths) >= limit:

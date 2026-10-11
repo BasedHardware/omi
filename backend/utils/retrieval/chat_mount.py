@@ -3,6 +3,7 @@
 from utils.llm.shaped_agent import Mount, Budget
 from utils.chat_followup import FOLLOWUP_PROMPT_SECTION
 from utils.executors import db_executor, run_blocking
+from utils.messaging.turn_context import channel_evidence as channel_evidence
 from utils.messaging.projection import surface_runtime
 
 # These are chat-only mounted instructions, never shared invocation policy.

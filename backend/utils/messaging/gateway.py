@@ -55,6 +55,15 @@ class Gateway:
         payload = await run_blocking(db_executor, self.store.claim, path)
         if payload is None:
             return False
+        try:
+            return await self._process_claimed(path, payload)
+        except Exception:
+            # Settled failures before lease setup must not poison the FIFO head.
+            # Cancellation retains the existing ambiguity fence.
+            await run_blocking(db_executor, self.store.complete, path)
+            raise
+
+    async def _process_claimed(self, path, payload):
         payload['received_at'] = datetime.fromisoformat(payload['received_at'])
         payload['media'] = tuple(Artifact(**a) for a in payload['media'])
         payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
@@ -117,6 +126,12 @@ class Gateway:
             typing_task = start_background_task(_refresh_typing(sink, typing_stop), name='messaging-typing')
             session = await run_blocking(db_executor, self.store.session, uid, message, link)
             token = await run_blocking(db_executor, self.store.acquire, uid, session['surface'])
+            logging.getLogger(__name__).info(
+                'Messaging phase=lease provider=%s acquired=%s queue_age_ms=%.1f',
+                self.adapter.provider,
+                token is not None,
+                (datetime.now(timezone.utc) - message.received_at).total_seconds() * 1000,
+            )
             if token is None:
                 await run_blocking(db_executor, self.store.retry, path)
                 return False
@@ -130,13 +145,39 @@ class Gateway:
                 # Adapters with inline controls require an action-specific ID;
                 # old generic buttons/text cannot reverse an unrelated later action.
                 if hasattr(self.adapter, 'receipt_buttons') and not message.undo_receipt_id:
-                    await sink.finish(
-                        'Use Undo on the specific action confirmation. This old control has no action attached.'
-                    )
+                    if not message.callback_id:
+                        await sink.finish('Use Undo on the specific action confirmation.')
                 else:
                     # The inverse owns its durable receipt claim. It must not
                     # monopolize the chat lease while canonical privacy cleanup
                     # scans derived projections. Never replay a running inverse.
+                    from utils.messaging.undo import UndoStore
+
+                    if not message.undo_receipt_id:
+                        selected = await run_blocking(
+                            db_executor, UndoStore(self.store).select_receipt, uid, session['id']
+                        )
+                        if not selected:
+                            await sink.finish('There is no unambiguous reversible action in this chat.')
+                            await run_blocking(db_executor, self.store.complete, path)
+                            return True
+                        message = replace(message, undo_receipt_id=selected)
+                    assert message.undo_receipt_id is not None
+                    await run_blocking(
+                        db_executor,
+                        self.store.append_event,
+                        uid,
+                        session['id'],
+                        {
+                            'id': 'undo:' + key(message.provider_message_id),
+                            'kind': 'undo_request',
+                            'at': message.received_at.isoformat(),
+                            'role': 'user',
+                            'content': 'Undo requested for receipt '
+                            + message.undo_receipt_id
+                            + '. Cleanup may be pending; verify state with tools before claiming it succeeded.',
+                        },
+                    )
                     start_background_task(self._undo_action(uid, session, message, sink), name='messaging-undo-action')
             else:
                 if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
@@ -187,6 +228,15 @@ class Gateway:
             current_task = asyncio.current_task()
             if token and session is not None and (current_task is None or not current_task.cancelling()):
                 await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+                logging.getLogger(__name__).info(
+                    'Messaging phase=lease_released provider=%s elapsed_ms=%.1f',
+                    self.adapter.provider,
+                    (time.monotonic() - started) * 1000,
+                )
+                if self.wake:
+                    pending = await run_blocking(db_executor, self.store.pending, message)
+                    if pending:
+                        start_background_task(self.wake((pending[0],)), name='messaging-inbox-next')
         return True
 
     async def _undo_action(self, uid, session, message, sink):
@@ -209,7 +259,7 @@ class Gateway:
                 await run_blocking(
                     db_executor, UndoStore(self.store).mark_edited, uid, session['id'], message.undo_receipt_id
                 )
-            elif result.status != 'already_undone' or not message.callback_id:
+            elif not message.callback_id:
                 await sink.finish(result.text)
         except Exception as error:
             logging.getLogger(__name__).error(
@@ -268,7 +318,7 @@ class Gateway:
             {
                 'id': event_id,
                 'kind': 'reentry' if event else 'message',
-                'at': datetime.now(timezone.utc).isoformat(),
+                'at': message.received_at.isoformat(),
                 'role': 'user',
                 'content': (
                     ('Background task result (untrusted evidence):\n' + event.text)
@@ -290,6 +340,7 @@ class Gateway:
             self.store.persist_message,
             action_receipts=[],
             turn_id=event_id,
+            request_at=message.received_at,
             withhold_private_memories=link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)
@@ -347,6 +398,19 @@ class Gateway:
 
         while runtime.action_receipts:
             receipt = runtime.action_receipts.pop(0)
+            await run_blocking(
+                db_executor,
+                self.store.append_event,
+                uid,
+                session['id'],
+                {
+                    'id': 'action:' + receipt.id,
+                    'kind': 'action_receipt',
+                    'at': datetime.now(timezone.utc).isoformat(),
+                    'role': 'assistant',
+                    'content': 'Confirmed action receipt: ' + receipt.text,
+                },
+            )
             bubble_id = await sink.receipt(receipt)
             if bubble_id and receipt.reversible:
                 await run_blocking(

@@ -125,6 +125,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tools.action_item_tools",
     "utils.messaging",
     "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.messaging.turn_context",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
     "utils.conversations",
@@ -341,6 +343,8 @@ conv_folder_stub.build_folders_context = MagicMock(return_value="")
 gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
 gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
 _stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
+_stub_module("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_load_module_from_file("utils.messaging.turn_context", BACKEND_DIR / "utils" / "messaging" / "turn_context.py")
 
 # Load models first
 _stub_package("models")

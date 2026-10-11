@@ -579,3 +579,159 @@ def test_bootstrap_cap_counts_only_other_surface_rows(monkeypatch):
     result = history.recent_activity('test', exclude_session='current')
     assert len(result) == 20
     assert all(row['chat_session_id'] == 'app' for row in result)
+
+
+def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
+    from dataclasses import replace
+    from utils.messaging.projection import surface_runtime
+
+    adapter, store, message = setup_turn()
+    times = [datetime(2026, 10, 11, 9, minute, tzinfo=timezone.utc) for minute in (19, 22, 23)]
+    seen, contexts = [], []
+
+    async def digest(*args):
+        pass
+
+    def turn(uid, surface, session, request, sink, **kwargs):
+        runtime = surface_runtime.get()
+        seen.append((request.text, runtime.request_at))
+        contexts.append(runtime.evidence)
+
+        async def stream():
+            yield terminal('Confirmed ' + request.text)
+
+        return stream()
+
+    monkeypatch.setattr(gateway_module, 'append_digest', digest)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    paths = [
+        store.enqueue(replace(message, provider_message_id=str(i), text=str(i), received_at=at))
+        for i, at in enumerate(times)
+    ]
+    session = store.session('test', message, store.lookup(message))
+    held = store.acquire('test', session['surface'])
+
+    async def run():
+        # A busy lease and reverse worker wake order must not admit a later turn.
+        for path in reversed(paths):
+            assert not await gateway.process(path)
+        assert not seen
+        # No TTL advances ownership. An explicit release is needed even much later.
+        assert store.leases
+        store.release('test', session['surface'], held)
+        assert not await gateway.process(paths[2])
+        for path in paths:
+            assert await gateway.process(path)
+
+    asyncio.run(run())
+    assert seen == list(zip(['0', '1', '2'], times))
+    assert 'Confirmed 0' in str(contexts[1])
+    assert 'Confirmed 1' in str(contexts[2])
+    replies = [call[2]['json']['text'] for call in adapter.transport.calls if call[1].endswith('/sendMessage')]
+    assert replies == ['Confirmed 0', 'Confirmed 1', 'Confirmed 2']
+
+
+def test_relative_reminder_anchors_to_received_time_and_reports_phone_or_late(monkeypatch):
+    from dataclasses import replace
+    from utils.retrieval.tools import action_item_tools
+    from utils.messaging.projection import SurfaceRuntime, surface_runtime
+    from utils.messaging.contracts import Principal
+    from utils.messaging.turn_context import channel_evidence
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 11, 9, 31, tzinfo=timezone.utc)
+
+    tasks, pushes, receipts = {}, [], []
+    monkeypatch.setattr(action_item_tools, 'datetime', Clock)
+    monkeypatch.setattr(
+        action_item_tools.action_items_db,
+        'create_action_item',
+        lambda uid, data: tasks.setdefault('task', dict(data, id='task')) and 'task',
+    )
+    monkeypatch.setattr(action_item_tools.action_items_db, 'get_action_item', lambda uid, task: tasks[task])
+    monkeypatch.setattr(action_item_tools, 'send_action_item_data_message', lambda **kwargs: pushes.append(kwargs))
+    monkeypatch.setattr(action_item_tools, 'send_action_item_created_notification', lambda *args: None)
+    monkeypatch.setattr(
+        action_item_tools, 'record_write', lambda uid, kind, object_id, before, after: receipts.append(after) or ''
+    )
+    runtime = SurfaceRuntime(
+        'channel:test', '', Principal('test'), request_at=datetime(2026, 10, 11, 9, 19, tzinfo=timezone.utc)
+    )
+    config = {'configurable': {'user_id': 'test', 'user_timezone': 'Asia/Ho_Chi_Minh'}}
+    for received, expected, state in [(19, 29, 'late'), (31, 41, 'requested')]:
+        tasks.clear()
+        token = surface_runtime.set(
+            replace(runtime, request_at=datetime(2026, 10, 11, 9, received, tzinfo=timezone.utc))
+        )
+        try:
+            result = action_item_tools.create_action_item_tool.func(
+                description='Synthetic reminder', due_in_minutes=10, config=config
+            )
+            evidence = channel_evidence(surface_runtime.get(), 'Asia/Ho_Chi_Minh')
+            assert '+07:00' in evidence[0]['content'] and 'due_in_minutes=N' in evidence[0]['content']
+        finally:
+            surface_runtime.reset(token)
+        assert tasks['task']['due_at'] == datetime(2026, 10, 11, 9, expected, tzinfo=timezone.utc)
+        if state == 'late':
+            assert not pushes and 'passed while this request waited' in result
+        else:
+            assert pushes[0]['due_at'] == tasks['task']['due_at'].isoformat()
+            assert "I'll remind you at 4:41 PM" in result and 'on your phone' in result
+        assert receipts[-1]['_channel_reminder_confirmation'] in result
+
+
+def test_stale_unscoped_callback_cannot_reverse_latest_write(monkeypatch):
+    from dataclasses import replace
+    from utils.messaging.undo import UndoStore
+
+    adapter, store, message = setup_turn()
+
+    def forbidden(*args):
+        raise AssertionError('Stale generic callback must never resolve the last write')
+
+    monkeypatch.setattr(UndoStore, 'undo', forbidden)
+    monkeypatch.setattr(UndoStore, 'select_receipt', forbidden)
+    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    incoming = replace(message, command='undo', callback_id='stale', reply_to='17')
+    asyncio.run(gateway.process(store.enqueue(incoming)))
+    assert sum(call[1].endswith('/answerCallbackQuery') for call in adapter.transport.calls) == 1
+    assert not any(call[1].endswith('/sendMessage') for call in adapter.transport.calls)
+    assert not store.leases
+
+
+def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
+    from dataclasses import replace
+    import pytest
+
+    adapter, store, message = setup_turn()
+    denied = [True]
+
+    def admission(uid):
+        if denied[0]:
+            raise PermissionError('Synthetic entitlement revoked')
+
+    async def digest(*args):
+        pass
+
+    def turn(*args, **kwargs):
+        async def stream():
+            yield terminal()
+
+        return stream()
+
+    monkeypatch.setattr(gateway_module, 'append_digest', digest)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=admission)
+    first = store.enqueue(message)
+    second = store.enqueue(replace(message, provider_message_id='second'))
+
+    async def run():
+        with pytest.raises(PermissionError):
+            await gateway.process(first)
+        assert store.jobs[first]['status'] == 'done'
+        denied[0] = False
+        assert await gateway.process(second)
+
+    asyncio.run(run())
+    assert not store.leases

@@ -46,7 +46,20 @@ class UndoStore:
                 'expires_at': datetime.now(timezone.utc) + timedelta(minutes=UNDO_MINUTES),
                 'presentation': encryption.encrypt(json.dumps(dict(text=receipt.text)), uid),
                 'payload': encryption.encrypt(
-                    json.dumps(dict(kind=kind, object_id=object_id, before=before, after=after), default=str), uid
+                    json.dumps(
+                        dict(
+                            kind=kind,
+                            object_id=object_id,
+                            before=before,
+                            after=(
+                                {k: v for k, v in after.items() if not k.startswith('_channel_')}
+                                if kind == 'task'
+                                else after
+                            ),
+                        ),
+                        default=str,
+                    ),
+                    uid,
                 ),
             },
             receipt_id=receipt_id,
@@ -121,10 +134,13 @@ class UndoStore:
         if receipt_id:
             self.ref(uid, session, receipt_id).update({'edited_at': datetime.now(timezone.utc)})
 
+    def select_receipt(self, uid, session):
+        pointer = self.ref(uid, session).get().to_dict() or {}
+        return pointer.get('receipt_id') if pointer.get('state') == 'ready' else None
+
     def undo(self, uid, session, receipt_id=None):
         if receipt_id is None:
-            pointer = self.ref(uid, session).get().to_dict() or {}
-            receipt_id = pointer.get('receipt_id') if pointer.get('state') == 'ready' else None
+            receipt_id = self.select_receipt(uid, session)
         if not receipt_id:
             return UndoResult('unavailable', 'There is no unambiguous reversible action in this chat.')
         ref = self.ref(uid, session, receipt_id)
@@ -179,6 +195,8 @@ def action_receipt(receipt_id, kind, object_id, before, after):
         if after.get('due_at'):
             due = _date(after['due_at'])
             text += ' — due ' + due.strftime('%b %d, %H:%M %z')
+        if after.get('_channel_reminder_confirmation'):
+            text += '. ' + after['_channel_reminder_confirmation']
     else:
         summary = str(after or before or 'Memory')
         block = MemoryLinkSpec(type='memoryLink', memory_id=object_id, summary=summary[:200]).model_dump()

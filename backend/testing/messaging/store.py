@@ -52,13 +52,16 @@ class MemoryStore:
                 return None
             payload = asdict(message)
             payload['received_at'] = message.received_at.isoformat()
-            self.jobs[path] = dict(payload=payload, status='pending')
+            self.jobs[path] = dict(payload=payload, status='pending', created_at=datetime.now(timezone.utc))
         return path
 
     def claim(self, path):
         with self.lock:
             row = self.jobs[path]
             if row['status'] != 'pending':
+                return None
+            unfinished = [r for r in self.jobs.values() if r['status'] in ('pending', 'running')]
+            if min(unfinished, key=lambda r: r['created_at']) is not row:
                 return None
             row['status'] = 'running'
             return copy.deepcopy(row['payload'])
@@ -102,3 +105,12 @@ class MemoryStore:
         if not row:
             raise PermissionError('Invalid proof')
         return row['uid']
+
+    def pending(self, message):
+        return [
+            path
+            for path, row in sorted(
+                self.jobs.items(), key=lambda item: item[1].get('created_at', datetime.min.replace(tzinfo=timezone.utc))
+            )
+            if row['status'] == 'pending'
+        ]

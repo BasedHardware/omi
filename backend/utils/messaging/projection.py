@@ -2,6 +2,7 @@
 
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -48,6 +49,7 @@ class SurfaceRuntime:
     persist: Any = None
     action_receipts: list[ActionReceipt] | None = None
     turn_id: str | None = None
+    request_at: datetime | None = None
     withhold_private_memories: bool = False
 
 
