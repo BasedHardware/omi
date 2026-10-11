@@ -553,6 +553,8 @@ overlay:
           OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}', category: rollout}
           DREAM_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Spelling fixes go to Review until auto-apply requires supporting context (Run Now passes run here).
+          DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
           DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
           # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
@@ -765,6 +767,8 @@ overlay:
           # Dream passes run here; mode=on admission and Review proposals require the Review surface.
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Spelling fixes go to Review until auto-apply requires supporting context (scheduled passes run here).
+          DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
           # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
           DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
