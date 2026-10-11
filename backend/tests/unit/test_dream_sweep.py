@@ -273,8 +273,9 @@ def test_prod_scheduler_and_writer_env_contract():
     allowlist = '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
     prod = manifest['environments']['prod']
     writers = [prod['gke']['backend-listen'], prod['gke']['pusher'], *prod['cloud_run']['services'].values()]
+    # 2026-10-11: owner dogfood promoted from shadow to on; the allowlist still limits it to the owner.
     for service in writers:
-        assert service['env']['DREAM_AGENT_MODE']['value'] == 'shadow'
+        assert service['env']['DREAM_AGENT_MODE']['value'] == 'on'
         assert service['env']['DREAM_AGENT_UID_ALLOWLIST']['value'] == allowlist
         assert 'DREAM_AGENT_TESTFLIGHT_ENABLED' not in service['env']
         assert not any(
@@ -319,8 +320,11 @@ def test_prod_scheduler_and_writer_env_contract():
     assert canary.startswith('dream-canary-') and canary not in allowlist.split(',')
     chart = load_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     env = {entry['name']: entry.get('value') for entry in chart['env']}
-    assert env['DREAM_AGENT_MODE'] == 'shadow'
+    assert env['DREAM_AGENT_MODE'] == 'on'
     assert env['DREAM_AGENT_UID_ALLOWLIST'] == allowlist
+    # mode=on admission and Review proposals require the Review surface wherever passes run.
+    for name in ('backend', 'backend-sync'):
+        assert services[name]['env']['REVIEW_SURFACE_MODE']['value'] == 'on'
     dev = manifest['environments']['dev']
     for service in [dev['gke']['backend-listen'], *dev['cloud_run']['services'].values()]:
         assert service['env'].get('DREAM_AGENT_MODE', {}).get('value', 'off') == 'off'
