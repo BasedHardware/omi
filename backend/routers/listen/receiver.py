@@ -130,6 +130,7 @@ from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
+    custom_stt_clock_origin,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -2013,6 +2014,10 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:
             segments = payload.get('segments', [])
             provider = payload.get('stt_provider')
+            state = getattr(self.host, 'state', None)
+            if state is not None and getattr(state, 'first_audio_byte_timestamp', None) is None:
+                # Custom STT may run without forwarding raw audio: set the clock origin, not the first-audio funnel.
+                state.first_audio_byte_timestamp = custom_stt_clock_origin(segments, time.time())
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)

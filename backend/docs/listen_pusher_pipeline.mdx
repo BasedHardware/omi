@@ -1033,6 +1033,22 @@ no-ops, so the first prompt cannot be emitted before the client is able to
 consume it. Subsequent answers or `{"type":"skip_question"}` advance the same
 server-owned question index.
 
+### Custom STT without raw audio
+
+With `custom_stt=enabled` the app's composite socket forwards the custom
+provider's segments as `{"type":"suggested_transcript","segments":[...]}`, and
+it forwards binary audio only when "send raw audio to Omi" is on. With it off
+no frame reaches `_mark_first_audio`, so the receiver anchors the session clock
+from the first suggested transcript instead: `first_audio_byte_timestamp =
+now - max(segment end)` (`custom_stt_clock_origin` in
+`backend/utils/transcribe_decisions.py`; custom segment times count from the
+provider stream's start, and non-finite or negative ends count as 0, so the
+origin is never in the future). Only the origin is set: the first-audio funnel, live-transcription
+journey and usage window stay untouched because no audio was accepted. Without
+an origin the legacy persistence loop dropped every batch and the empty
+conversation was deleted at close. An origin already set by audio is never
+moved.
+
 ### Live STT observability
 
 For backend-provider `/v4/listen` sessions, `omi_live_stt_accepted_total`

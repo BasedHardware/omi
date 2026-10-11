@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
@@ -345,6 +346,29 @@ def decide_stt_buffer_flush(
     if send_to_stt and fair_use_track_dg_usage:
         dg_usage_ms = buffer_len * 1000 // (sample_rate * 2)
     return SttBufferFlushDecision(True, socket_dead, send_to_stt, dg_usage_ms)
+
+
+def custom_stt_clock_origin(segments: Any, now: float) -> Optional[float]:
+    """Session clock origin for custom STT whose raw audio never reaches Omi, or None.
+
+    With "send raw audio to Omi" off the app forwards only suggested transcripts, so no
+    frame ever sets first_audio_byte_timestamp and the legacy persist loop drops every
+    segment. Custom segment times count from the start of the custom provider's stream,
+    which began about the latest `end` before `now`. Non-finite or negative ends count
+    as 0, so the origin is never in the future.
+    """
+    if not isinstance(segments, list) or not segments:
+        return None
+    ends = [
+        float(segment['end'])
+        for segment in segments
+        if isinstance(segment, dict)
+        and isinstance(segment.get('end'), (int, float))
+        and not isinstance(segment.get('end'), bool)
+        and math.isfinite(segment['end'])
+        and segment['end'] > 0
+    ]
+    return now - max(ends, default=0.0)
 
 
 def decide_multi_channel_stt_send(
