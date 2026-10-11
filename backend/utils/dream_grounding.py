@@ -17,6 +17,8 @@ def source_conversations(ref, row):
             sources.add(item['id'])
         if isinstance(item, dict) and item.get('conversation_id'):
             sources.add(item['conversation_id'])
+        if isinstance(item, dict) and item.get('source_type') == 'conversation' and item.get('source_id'):
+            sources.add(item['source_id'].removeprefix('conversations/'))
     return sources
 
 
@@ -40,7 +42,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
         not edit.before.strip()
         or not edit.after.strip()
         or max(len(edit.before), len(edit.after)) > 50
-        or edit.before == edit.after
+        or edit.before.strip() == edit.after.strip()
     ):
         return 'invalid_spelling'
     target = records.get(edit.target)
