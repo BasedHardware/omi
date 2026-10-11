@@ -505,14 +505,18 @@ def effective_user_title(user_title: Any) -> Optional[str]:
     return user_title if isinstance(user_title, str) and user_title.strip() else None
 
 
+def _reveal_user_corrections_for_read(data: Dict[str, Any], uid: str) -> None:
+    if data.get('user_corrections_compressed'):
+        data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
+
+
 def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
 
     data = copy.deepcopy(conversation_data)
     data.pop('live_transcript_replay_receipt', None)
-    if data.get('user_corrections_compressed'):
-        data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
+    _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True
     # User titles are durable overrides. Conversation processing owns the
@@ -2901,6 +2905,7 @@ def assign_conversation_speaker(
             )
             selected_speaker_id = selected_segment_index = None
         current = copy.deepcopy(raw)
+        _reveal_user_corrections_for_read(current, uid)
         current['id'] = current_id
         current['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
