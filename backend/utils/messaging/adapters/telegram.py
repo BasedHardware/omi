@@ -14,6 +14,7 @@ from utils.messaging.adapters.rendering import telegram
 from utils.messaging.adapters.transport import request_json
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 from utils.messaging.identity import key
+from utils.messaging.turn_context import bound_provider_clock
 
 
 class TelegramAdapter(BaseAdapter):
@@ -75,7 +76,13 @@ class TelegramAdapter(BaseAdapter):
         stamp = None if callback else item.get('date')
         if stamp is not None and (not isinstance(stamp, int) or isinstance(stamp, bool)):
             raise ValueError('Invalid Telegram message time')
-        received_at = datetime.fromtimestamp(stamp, timezone.utc) if stamp is not None else datetime.now(timezone.utc)
+        if stamp is None:
+            received_at = datetime.now(timezone.utc)
+        else:
+            try:
+                received_at = bound_provider_clock(datetime.fromtimestamp(stamp, timezone.utc))
+            except (OverflowError, OSError, ValueError):
+                raise ValueError('Invalid Telegram message time') from None
         attachments = []
         for field, default_mime, default_name in (
             ('voice', 'audio/ogg', 'voice.ogg'),

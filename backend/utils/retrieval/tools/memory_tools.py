@@ -34,6 +34,19 @@ logger = logging.getLogger(__name__)
 # are handed to the model at once; the most recent are kept.
 MAX_MEMORIES_FOR_LLM = 300
 
+
+def _channel_empty_memories(date_info=''):
+    runtime = surface_runtime.get()
+    if runtime is None or runtime.surface == 'app':
+        return None
+    return (
+        f"No memories are available to this chat for this query{date_info}. "
+        "Privacy, review, and temporal filters can withhold saved memories. "
+        "This does not prove the user has no saved personal facts. "
+        "Use any supplied activity context accurately and distinguish it from retrieved memories."
+    )
+
+
 # Import agent_config_context for fallback config access
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -314,15 +327,9 @@ def get_memories_tool(
         elif end_dt:
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
-        msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
-        runtime = surface_runtime.get()
-        if runtime is not None and runtime.surface != 'app':
-            msg = (
-                f"No memories are available to this chat for this query{date_info}. "
-                "Privacy, review, and temporal filters can withhold saved memories. "
-                "This does not prove the user has no saved personal facts. "
-                "Use any supplied activity context accurately and distinguish it from retrieved memories."
-            )
+        msg = _channel_empty_memories(date_info)
+        if msg is None:
+            msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
         if scan_truncated:
             msg += " The bounded scan reached its safety limit; more memories may exist."
         logger.info(f"⚠️ get_memories_tool - {msg}")
@@ -393,7 +400,7 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    logger.info(f"🔧 search_memories_tool called with query: {query}, view: {view}")
+    logger.info('search_memories_tool called view=%s', view)
 
     # Get config from parameter or context variable
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -416,7 +423,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     try:
         requested_view = normalize_temporal_read_view(view)
@@ -497,10 +504,14 @@ def search_memories_tool(
                 )
             ][:limit]
         if not matches:
+            channel_msg = _channel_empty_memories()
+            if channel_msg is not None:
+                logger.info('search_memories_tool empty channel result')
+                return channel_msg
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
             )
-            logger.info(f"⚠️ search_memories_tool - {msg}")
+            logger.info('search_memories_tool empty result')
             return msg
 
         records = []

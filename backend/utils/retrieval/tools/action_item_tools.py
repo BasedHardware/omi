@@ -398,10 +398,7 @@ def create_action_item_tool(
     Returns:
         Brief confirmation message.
     """
-    logger.info(
-        f"🔧 create_action_item_tool called - description: {description}, "
-        f"due_at: {due_at}, conversation_id: {conversation_id}"
-    )
+    logger.info('create_action_item_tool called')
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -443,12 +440,20 @@ def create_action_item_tool(
     runtime = surface_runtime.get()
     channel = runtime is not None and runtime.surface != 'app'
     display_tz = configurable.get('user_timezone') or 'UTC'
+    anchored_relative = False
     if due_in_minutes is not None:
-        if due_at is not None or isinstance(due_in_minutes, bool) or due_in_minutes <= 0:
+        if (
+            due_at is not None
+            or isinstance(due_in_minutes, bool)
+            or not isinstance(due_in_minutes, int)
+            or due_in_minutes <= 0
+            or due_in_minutes > 366 * 24 * 60
+        ):
             return 'Error: Use a positive due_in_minutes or an absolute due_at, not both.'
         anchor = runtime.request_at if channel and runtime is not None else datetime.now(timezone.utc)
         if anchor is None:
             return 'Error: Original message time unavailable. Ask for an explicit reminder time.'
+        anchored_relative = channel
         due_at = (anchor + timedelta(minutes=due_in_minutes)).isoformat()
 
     # Parse or set due date
@@ -458,12 +463,12 @@ def create_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
-            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences).
+            # A channel relative reminder keeps the original due instant. Asking for a
+            # future date is what shifted a delayed reminder onto processing time.
             now_utc = datetime.now(timezone.utc)
-            if due_dt < now_utc - timedelta(days=1):
-                logger.warning(
-                    f"⚠️ create_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
-                )
+            if due_dt < now_utc - timedelta(days=1) and not anchored_relative:
+                logger.warning('create_action_item_tool rejected past due_at')
                 return (
                     f"Error: due_at '{due_at}' is in the past. "
                     f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "

@@ -1,6 +1,41 @@
 """Authoritative channel request clocks and observed reminder confirmations."""
 
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+# Provider clocks are not our processing clock. Five minutes matches the Linq
+# webhook replay window; a day covers a delayed Telegram retry without letting
+# an ancient or far-future stamp schedule a reminder at the wrong time.
+FUTURE_SKEW = timedelta(minutes=5)
+OLDEST_REQUEST = timedelta(days=1)
+
+
+def parse_provider_instant(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError('Invalid provider time')
+    text = value.strip().replace('Z', '+00:00')
+    if '.' in text:
+        head, tail = text.split('.', 1)
+        split = next((i for i, char in enumerate(tail) if char in '+-'), len(tail))
+        fraction, zone = tail[:split], tail[split:]
+        digits = ''.join(char for char in fraction if char.isdigit())[:6] or '0'
+        text = head + '.' + digits + zone
+    stamp = datetime.fromisoformat(text)
+    if stamp.tzinfo is None:
+        raise ValueError('Provider time must be timezone aware')
+    return stamp.astimezone(timezone.utc)
+
+
+def bound_provider_clock(stamp, *, now=None):
+    now = now or datetime.now(timezone.utc)
+    if stamp.tzinfo is None:
+        raise ValueError('Provider time must be timezone aware')
+    stamp = stamp.astimezone(timezone.utc)
+    if stamp > now + FUTURE_SKEW:
+        return now
+    if stamp < now - OLDEST_REQUEST:
+        return now - OLDEST_REQUEST
+    return stamp
 
 
 def channel_evidence(runtime, tz):

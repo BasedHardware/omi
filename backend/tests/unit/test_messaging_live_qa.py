@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from testing.messaging.adapter_fakes import FixtureLedger, FixtureTransport, no_sleep
 from testing.messaging.store import MemoryStore
@@ -681,6 +681,140 @@ def test_relative_reminder_anchors_to_received_time_and_reports_phone_or_late(mo
             assert pushes[0]['due_at'] == tasks['task']['due_at'].isoformat()
             assert "I'll remind you at 4:41 PM" in result and 'on your phone' in result
         assert receipts[-1]['_channel_reminder_confirmation'] in result
+    pushes.clear()
+    tasks.clear()
+    token = surface_runtime.set(replace(runtime, request_at=datetime(2026, 10, 8, 9, 19, tzinfo=timezone.utc)))
+    try:
+        result = action_item_tools.create_action_item_tool.func(
+            description='Synthetic reminder', due_in_minutes=10, config=config
+        )
+    finally:
+        surface_runtime.reset(token)
+    assert tasks['task']['due_at'] == datetime(2026, 10, 8, 9, 29, tzinfo=timezone.utc)
+    assert not pushes and 'passed while this request waited' in result and 'future date' not in result
+
+
+def test_provider_clocks_are_bounded_and_linq_uses_sent_at():
+    from utils.messaging.adapters.linq import LinqProvider
+
+    adapter, _, _ = setup_turn()
+    now = datetime.now(timezone.utc)
+    future = int((now + timedelta(hours=2)).timestamp())
+    ancient = int((now - timedelta(days=3)).timestamp())
+    item = {
+        'message_id': 1,
+        'chat': {'id': 42, 'type': 'private'},
+        'from': {'id': 42, 'is_bot': False},
+        'text': 'Synthetic reminder',
+    }
+    ahead = adapter.parse(json.dumps({'update_id': 1, 'message': dict(item, date=future)}).encode())[0]
+    assert ahead.received_at <= datetime.now(timezone.utc) + timedelta(seconds=2)
+    old = adapter.parse(json.dumps({'update_id': 2, 'message': dict(item, date=ancient)}).encode())[0]
+    age = datetime.now(timezone.utc) - old.received_at
+    assert timedelta(hours=23) < age <= timedelta(days=1, seconds=2)
+    try:
+        adapter.parse(json.dumps({'update_id': 3, 'message': dict(item, date=10**18)}).encode())
+    except ValueError as error:
+        assert 'time' in str(error)
+    else:
+        raise AssertionError('Extreme Telegram date must be rejected')
+
+    sent = (now - timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%S.%f') + '123Z'
+    provider = LinqProvider(
+        'fixture-api-key',
+        'whsec_' + base64.b64encode(b'synthetic-test-signing-secret-32').decode(),
+        transport=adapter.transport,
+        sleep=lambda *_: None,
+    )
+    body = {
+        'webhook_version': '2026-02-03',
+        'event_type': 'message.received',
+        'data': {
+            'id': 'fixture-message',
+            'sent_at': sent,
+            'chat': {'id': 'fixture-chat', 'is_group': False},
+            'direction': 'inbound',
+            'sender_handle': {'handle': '+12025550101', 'is_me': False},
+            'parts': [{'type': 'text', 'value': 'Synthetic reminder'}],
+        },
+    }
+    parsed = provider.parse(json.dumps(body).encode())[0]
+    assert abs((parsed.received_at - (now - timedelta(minutes=10))).total_seconds()) < 1
+    body['data']['sent_at'] = (now + timedelta(hours=3)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    clamped = provider.parse(json.dumps(body).encode())[0]
+    assert clamped.received_at <= datetime.now(timezone.utc) + timedelta(seconds=2)
+
+
+def test_busy_lease_does_not_wake_its_own_head(monkeypatch):
+    from dataclasses import replace
+
+    adapter, store, message = setup_turn()
+    wakes = []
+
+    async def wake(paths):
+        wakes.extend(paths)
+
+    async def digest(*args):
+        pass
+
+    def turn(*args, **kwargs):
+        async def stream():
+            yield terminal()
+
+        return stream()
+
+    monkeypatch.setattr(gateway_module, 'append_digest', digest)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None, wake=wake)
+    session = store.session('test', message, store.lookup(message))
+    held = store.acquire('test', session['surface'])
+    path = store.enqueue(message)
+    following = store.enqueue(replace(message, provider_message_id='next'))
+
+    async def run():
+        assert not await gateway.process(path)
+        assert wakes == []
+        assert store.jobs[path]['status'] == 'pending'
+        store.release('test', session['surface'], held)
+        assert await gateway.process(path)
+
+    asyncio.run(run())
+    assert wakes == [following]
+
+
+def test_channel_memory_search_empty_does_not_claim_no_facts(monkeypatch):
+    from types import SimpleNamespace
+    from utils.retrieval.tools import memory_tools
+    from utils.messaging.contracts import Principal
+    from utils.messaging.projection import SurfaceRuntime, surface_runtime
+
+    private = SimpleNamespace(
+        is_locked=False, visibility='private', sensitivity_labels=[], content='synthetic private fact'
+    )
+
+    class Match:
+        memory = private
+        score = 0.9
+
+    class Service:
+        def __init__(self, **kwargs):
+            pass
+
+        def search(self, *args, **kwargs):
+            return [Match()]
+
+    monkeypatch.setattr(memory_tools, 'MemoryService', Service)
+    monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: False)
+    monkeypatch.setattr(memory_tools.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    token = surface_runtime.set(
+        SurfaceRuntime('channel:fixture', '', Principal('test'), withhold_private_memories=True)
+    )
+    try:
+        result = memory_tools.search_memories_tool.func(
+            query='synthetic query', config={'configurable': {'user_id': 'test'}}
+        )
+    finally:
+        surface_runtime.reset(token)
+    assert 'does not prove' in result and 'synthetic private fact' not in result and 'synthetic query' not in result
 
 
 def test_stale_unscoped_callback_cannot_reverse_latest_write(monkeypatch):

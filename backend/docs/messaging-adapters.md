@@ -131,6 +131,11 @@ with their session on unlink or account deletion. Repeated Linq text undo replie
 An inverse atomically claims its own receipt once. A tracked async coordinator runs
 that domain operation on `postprocess_executor`, outside the chat lease and DB worker
 pool, because canonical privacy cleanup may take minutes. Other chat turns can proceed.
+The memory content check is not in the same transaction as `MemoryService` delete or
+update, so a concurrent correction during that cleanup can still be overwritten.
+That race is limited to one user's fact, the five-minute receipt window, and one
+claim; it is not cross-user. It remains a rollout risk, not a reason to hold the
+chat lease.
 Inverse exceptions send a guarded short error and leave that inverse `running` for
 reconciliation; ambiguous effects are never replayed. Ordinary settled turn failures
 retain the running inbox row for reconciliation, try an error reply only before accepted
@@ -230,7 +235,14 @@ Confirmed receipts and undo requests enter the ordered channel history.
 
 The channel runtime carries the original message time. Telegram normal messages
 use the verified update's `message.date`; callbacks lack a tap timestamp and use
-first webhook admission time. Its shaped evidence
+first webhook admission time. Linq uses the message `sent_at` (`data.sent_at` on
+`2026-02-03`, `data.message.sent_at` on `2025-01-01`), not webhook `created_at`
+or worker time. Admission clamps a provider clock more than five minutes ahead
+to server time, and raises a clock older than one day up to that one-day floor,
+so a skewed or replayed stamp cannot schedule a far-future reminder or be
+rewritten onto processing time. A relative reminder whose due time is already
+past is saved at that instant and reported as missed; the tool does not ask the
+model to pick a new future time. Shaped evidence
 includes a server-verified request clock in the user's timezone. Relative reminders
 use `create_action_item_tool(due_in_minutes=N)`, which computes `due_at` from that
 original time. A reminder is an action item, not a separate scheduled-message object.
@@ -239,9 +251,16 @@ path. If backlog makes the original time past, save that due time, report the mi
 time, and do not reschedule it or claim a phone notification was scheduled.
 `omi_initiated` remains denied: no later Telegram reminder message is sent.
 
-The FIFO query adds the declared `inbox(status, created_at)` collection index; its
-manifest readiness must be established before shipping this source. No index or
+The FIFO query adds composite index `messaging_inbox_fifo` on collection `inbox`
+(`status ASC`, `created_at ASC`, `__name__ ASC`), declared in
+`database/messaging_queries.py` and generated into `firestore.indexes.json`.
+Deploy index reconcile creates it; the backend shipment gate requires that
+composite READY on the target project before rollout. No index or
 production-state changes are performed by this PR.
+
+A busy surface lease requeues the inbox head and does not wake that same head.
+The lease holder wakes the oldest pending row on release. The thirty-second
+pending drain covers a leaked lease. That avoids a claim/wake spin.
 
 For the October 11 burst, logs establish the callback's canonical cleanup at
 09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation

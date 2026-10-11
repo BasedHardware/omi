@@ -114,10 +114,22 @@ class Gateway:
                 await run_blocking(db_executor, self.store.settle, path)
             raise
         finally:
-            if self.wake and not _worker_shutting_down():
-                pending = await run_blocking(db_executor, self.store.pending, ChannelMessage(**payload))
-                if pending:
-                    start_background_task(self.wake((pending[0],)), name='messaging-inbox-next')
+            # A lease miss puts this head back to pending. Waking it here spins
+            # the worker until the lease disappears. The holder, or the periodic
+            # drain, admits it once the surface is free. A wake fault must not
+            # replace the turn's own result.
+            try:
+                clock = payload.get('received_at')
+                body = payload
+                if isinstance(clock, str):
+                    body = dict(payload, received_at=datetime.fromisoformat(clock))
+                await self._wake_pending(ChannelMessage(**body), skip_path=path)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging next-head wake failed provider=%s error_type=%s',
+                    self.adapter.provider,
+                    type(error).__name__,
+                )
 
     async def _process_claimed(self, path, payload):
         payload['received_at'] = datetime.fromisoformat(payload['received_at'])
@@ -319,6 +331,7 @@ class Gateway:
             # A started or failed reentry already ran tools or stored its fence.
             # Do not execute them again; the surface stays available.
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+            await self._wake_pending(message)
             return
 
         async def send_guard():
@@ -352,9 +365,11 @@ class Gateway:
                     )
                 ),
             )
+            await self._wake_pending(message)
             raise
         else:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+            await self._wake_pending(message)
 
     async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None):
         def guard():
@@ -515,6 +530,13 @@ class Gateway:
                         type(error).__name__,
                     )
             await run_blocking(db_executor, self.store.release, uid, surface, token)
+
+    async def _wake_pending(self, message, *, skip_path=None):
+        if not self.wake or _worker_shutting_down():
+            return
+        pending = await run_blocking(db_executor, self.store.pending, message)
+        if pending and pending[0] != skip_path:
+            start_background_task(self.wake((pending[0],)), name='messaging-inbox-next')
 
     async def _receipts(self, uid, session, sink, runtime):
         while runtime.action_receipts:
