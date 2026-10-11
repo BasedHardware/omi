@@ -3001,6 +3001,8 @@ class FloatingControlBarManager {
     let text: String
     let presentation: QueryPresentation
     let voiceTurnID: VoiceTurnID?
+    /// The account a hands-free command came from; a queued command never runs as another.
+    let origin: RuntimeOwnerAuthorizationSnapshot?
   }
 
   private enum QueryPresentation {
@@ -4109,7 +4111,8 @@ class FloatingControlBarManager {
   func openAIInputWithQuery(
     _ query: String,
     fromVoice: Bool = false,
-    voiceTurnID: VoiceTurnID? = nil
+    voiceTurnID: VoiceTurnID? = nil,
+    origin: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
     // Only the visible path consumes `suppressNextVisibleSurface`, in
     // `prepareVisibleQueryState`. Every exit before that abandons the query, so a latch set
@@ -4210,7 +4213,7 @@ class FloatingControlBarManager {
     // we need to apply the same router rule here ourselves.
     Task { @MainActor in
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
-        await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+        await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice, origin: origin)
       }
     }
   }
@@ -4236,14 +4239,16 @@ class FloatingControlBarManager {
     barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     fromVoice: Bool,
-    voiceTurnID: VoiceTurnID? = nil
+    voiceTurnID: VoiceTurnID? = nil,
+    origin: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async {
     await routeQuery(
       message,
       barWindow: barWindow,
       provider: provider,
       presentation: .visible(fromVoice: fromVoice),
-      voiceTurnID: voiceTurnID
+      voiceTurnID: voiceTurnID,
+      origin: origin
     )
   }
 
@@ -4252,11 +4257,12 @@ class FloatingControlBarManager {
     barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     presentation: QueryPresentation,
-    voiceTurnID: VoiceTurnID? = nil
+    voiceTurnID: VoiceTurnID? = nil,
+    origin: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async {
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-        ?? true
+        ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
     else { return }
     let turnOwner = chatTurnOwner(for: presentation)
     if provider.isSending {
@@ -4267,7 +4273,8 @@ class FloatingControlBarManager {
       pendingFollowUpQuery = PendingFollowUpQuery(
         text: message,
         presentation: presentation,
-        voiceTurnID: voiceTurnID
+        voiceTurnID: voiceTurnID,
+        origin: origin
       )
       if case .visible(let fromVoice) = presentation {
         prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
@@ -4288,7 +4295,8 @@ class FloatingControlBarManager {
       barWindow: barWindow,
       provider: provider,
       presentation: presentation,
-      voiceTurnID: voiceTurnID
+      voiceTurnID: voiceTurnID,
+      origin: origin
     )
   }
 
@@ -4297,11 +4305,12 @@ class FloatingControlBarManager {
     barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     presentation: QueryPresentation,
-    voiceTurnID: VoiceTurnID?
+    voiceTurnID: VoiceTurnID?,
+    origin: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async {
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-        ?? true
+        ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
     else { return }
     switch presentation {
     case .visible:
@@ -4453,7 +4462,8 @@ class FloatingControlBarManager {
       barWindow: barWindow,
       provider: provider,
       presentation: pending.presentation,
-      voiceTurnID: pending.voiceTurnID
+      voiceTurnID: pending.voiceTurnID,
+      origin: pending.origin
     )
     return true
   }
@@ -4465,9 +4475,9 @@ class FloatingControlBarManager {
   /// Separate from push-to-talk, which presents `.voiceOnly` and owns a `VoiceTurnID` for
   /// the whole recording lifecycle. A wake word owns no turn — the words were already
   /// transcribed by the time it fires — so it uses the visible surface.
-  func submitSpokenCommand(_ command: String) {
+  func submitSpokenCommand(_ command: String, origin: RuntimeOwnerAuthorizationSnapshot? = nil) {
     window?.state.answersQuietly = false
-    sendFollowUpQuery(command, fromVoice: true)
+    sendFollowUpQuery(command, fromVoice: true, origin: origin)
   }
 
   /// Set for exactly one query and consumed by `prepareVisibleQueryState`. A one-shot flag
@@ -4482,18 +4492,19 @@ class FloatingControlBarManager {
   /// glow already signals that Omi is working, and the answer is spoken. The exchange is
   /// still recorded; it is simply not put in front of you.
   @discardableResult
-  func submitHandsFreeCommand(_ command: String) -> Bool {
+  func submitHandsFreeCommand(_ command: String, origin: RuntimeOwnerAuthorizationSnapshot? = nil) -> Bool {
     let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
     Self.suppressNextVisibleSurface = true
-    sendFollowUpQuery(trimmed, fromVoice: true)
+    sendFollowUpQuery(trimmed, fromVoice: true, origin: origin)
     return true
   }
 
   func sendFollowUpQuery(
     _ query: String,
     fromVoice: Bool = false,
-    voiceTurnID: VoiceTurnID? = nil
+    voiceTurnID: VoiceTurnID? = nil,
+    origin: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
     // A turn that is supplied must be current; no turn is nothing to validate. Same rule
     // `routeQuery` and `dispatchChatQuery` already apply. Requiring one whenever
@@ -4506,7 +4517,7 @@ class FloatingControlBarManager {
     }
     guard let window = window, window.state.showingAIResponse else {
       // No active conversation — fall back to new conversation
-      openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID)
+      openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID, origin: origin)
       return
     }
     guard let provider = activeFloatingProvider() else {
@@ -4527,7 +4538,8 @@ class FloatingControlBarManager {
       pendingFollowUpQuery = PendingFollowUpQuery(
         text: query,
         presentation: .visible(fromVoice: fromVoice),
-        voiceTurnID: voiceTurnID
+        voiceTurnID: voiceTurnID,
+        origin: origin
       )
       prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
       provider.stopAgent(owner: turnOwner, reason: .superseded)
@@ -4538,7 +4550,7 @@ class FloatingControlBarManager {
     Task { @MainActor in
       guard
         voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-          ?? true
+          ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
       else {
         Self.suppressNextVisibleSurface = false
         return

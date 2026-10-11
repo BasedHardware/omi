@@ -205,7 +205,7 @@ final class WakeWordAccountIsolationTests: XCTestCase {
         stillAuthorized = isOriginCurrent()
         return false
       },
-      fallback: { fellBack.append($0) })
+      fallback: { command, _ in fellBack.append(command) })
 
     XCTAssertEqual(stillAuthorized, false, "realtime must see the switch before sending")
     XCTAssertTrue(fellBack.isEmpty, "the chat fallback must not run as the new account")
@@ -217,7 +217,7 @@ final class WakeWordAccountIsolationTests: XCTestCase {
 
     await WakeWordService.dispatchRealtime(
       "order food", origin: origin, isCurrent: { _ in true }, runRealtime: { _, _ in false },
-      fallback: { fellBack.append($0) })
+      fallback: { command, _ in fellBack.append(command) })
 
     XCTAssertEqual(fellBack, ["order food"])
   }
@@ -228,9 +228,30 @@ final class WakeWordAccountIsolationTests: XCTestCase {
 
     await WakeWordService.dispatchRealtime(
       "order food", origin: origin, isCurrent: { _ in true }, runRealtime: { _, _ in true },
-      fallback: { fellBack.append($0) })
+      fallback: { command, _ in fellBack.append(command) })
 
     XCTAssertTrue(fellBack.isEmpty)
+  }
+
+  func testEveryChatRouteCarriesTheSpeakingAccount() async throws {
+    let origin = try await origin()
+    var routed: [(String, RuntimeOwnerAuthorizationSnapshot)] = []
+
+    WakeWordService.dispatchChat(
+      "order food", origin: origin,
+      handsFree: {
+        routed.append(("hands-free:" + $0, $1))
+        return false
+      },
+      spoken: { routed.append(("spoken:" + $0, $1)) })
+    var fallbackOrigin: RuntimeOwnerAuthorizationSnapshot?
+    await WakeWordService.dispatchRealtime(
+      "order food", origin: origin, isCurrent: { _ in true }, runRealtime: { _, _ in false },
+      fallback: { _, snapshot in fallbackOrigin = snapshot })
+
+    XCTAssertEqual(routed.map(\.0), ["hands-free:order food", "spoken:order food"])
+    XCTAssertEqual(routed.map(\.1), [origin, origin])
+    XCTAssertEqual(fallbackOrigin, origin)
   }
 
   func testTheDefaultCheckRejectsASnapshotFromBeforeAnAccountSwitch() async throws {

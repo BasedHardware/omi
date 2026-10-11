@@ -26,22 +26,37 @@ final class WakeWordService {
     // `submitSpokenCommand` is that entry point. It is not the push-to-talk path: that one
     // presents `.voiceOnly` and owns a `VoiceTurnID` for the whole recording lifecycle,
     // while a wake word owns no turn — the words were already transcribed when it fired.
+    // Every route carries the speaking account to its dispatch: chat can queue a command
+    // behind a reply, and the realtime path waits for its transport.
+    guard let origin = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      return log("WakeWord: no signed-in account — ignoring the command")
+    }
     guard AssistantSettings.shared.wakeWordUsesRealtime else {
-      // Hands-free answers stay in the notch: spoken, with the response glow, and without
-      // the bar growing into a panel. The visible surface remains the fallback.
-      if FloatingControlBarManager.shared.submitHandsFreeCommand(command) { return }
-      log("WakeWord: answering on the visible surface instead")
-      FloatingControlBarManager.shared.submitSpokenCommand(command)
-      return
+      return WakeWordService.dispatchChat(command, origin: origin)
     }
     // Under evaluation (#11801): hand the exchange to the realtime session instead. The
     // words are already transcribed, so what moves is the reply — the model speaks its own
     // answer, barge-in is native rather than text-matched, and a follow-up continues in the
     // same session. Detection is unchanged; both paths read the same ambient transcript.
-    guard let origin = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
-      return log("WakeWord: no signed-in account — ignoring the command")
-    }
     Task { @MainActor in await WakeWordService.dispatchRealtime(command, origin: origin) }
+  }
+
+  /// Hands-free answers stay in the notch: spoken, with the response glow, and without the
+  /// bar growing into a panel. The visible surface remains the fallback. Both routes carry
+  /// the speaking account down to the point where the query is actually sent.
+  static func dispatchChat(
+    _ command: String,
+    origin: RuntimeOwnerAuthorizationSnapshot,
+    handsFree: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      FloatingControlBarManager.shared.submitHandsFreeCommand($0, origin: $1)
+    },
+    spoken: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Void = {
+      FloatingControlBarManager.shared.submitSpokenCommand($0, origin: $1)
+    }
+  ) {
+    if handsFree(command, origin) { return }
+    log("WakeWord: answering on the visible surface instead")
+    spoken(command, origin)
   }
 
   /// Hands a command to the realtime session, or to chat if that fails, only while the
@@ -56,14 +71,16 @@ final class WakeWordService {
     runRealtime: @MainActor (String, @escaping @MainActor () -> Bool) async -> Bool = {
       await RealtimeHubController.shared.runWakeWordTurn($0, isOriginCurrent: $1)
     },
-    fallback: @MainActor (String) -> Void = { FloatingControlBarManager.shared.submitSpokenCommand($0) }
+    fallback: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Void = {
+      FloatingControlBarManager.shared.submitSpokenCommand($0, origin: $1)
+    }
   ) async {
     guard !(await runRealtime(command, { isCurrent(origin) })) else { return }
     guard isCurrent(origin) else {
       return log("WakeWord: account changed before the command was dispatched — dropping it")
     }
     log("WakeWord: realtime session unavailable — falling back to the chat path")
-    fallback(command)
+    fallback(command, origin)
   }
   private(set) var lastTriggeredCommand: String?
 
