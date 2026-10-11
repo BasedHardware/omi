@@ -662,6 +662,7 @@ Future<http.Response?> makeApiCall({
   Duration? timeout,
   int? retries,
   bool signOutOn401 = true,
+  bool Function()? canSend,
 }) async {
   try {
     return await sendUncaughtApiCall(
@@ -672,6 +673,7 @@ Future<http.Response?> makeApiCall({
       timeout: timeout,
       retries: retries,
       signOutOn401: signOutOn401,
+      canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);

@@ -295,9 +295,14 @@ def test_prod_scheduler_and_writer_env_contract():
                 'DREAM_AGENT_MANUAL_RUNS_PER_DAY',
                 'DREAM_AGENT_DAILY_USD',
                 'DREAM_AGENT_CANARY_UID',
+                'DREAM_AGENT_AUTO_APPLY_KINDS',
             }
             for key in service['env']
         )
+    # Spelling stays in Review until auto-apply requires supporting context, on both pass hosts.
+    for name in ('backend', 'backend-sync'):
+        kinds = prod['cloud_run']['services'][name]['env']['DREAM_AGENT_AUTO_APPLY_KINDS']['value']
+        assert set(kinds.split(',')) == {'title', 'overview', 'vocabulary'}
     services = prod['cloud_run']['services']
     # The sweep host and the report host present the same daily allowance; no other host declares one.
     dogfood_caps = {
