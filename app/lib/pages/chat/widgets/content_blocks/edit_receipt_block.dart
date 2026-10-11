@@ -56,8 +56,16 @@ class EditReceiptBlock extends StatefulWidget {
   /// from offering Undo again in between.
   static final Map<String, String> _undoneThisSession = {};
 
+  /// Receipts whose undo the server refused (`unavailable`, 404, 409). Same
+  /// lifetime as [_undoneThisSession]: a rebuild from the original message
+  /// must not put Undo back.
+  static final Set<String> _undoRefusedThisSession = {};
+
   @visibleForTesting
-  static void resetSessionState() => _undoneThisSession.clear();
+  static void resetSessionState() {
+    _undoneThisSession.clear();
+    _undoRefusedThisSession.clear();
+  }
 
   @override
   State<EditReceiptBlock> createState() => _EditReceiptBlockState();
@@ -73,9 +81,9 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
 
   bool get _isUndone => _undoneAt != null;
 
-  bool _undoUnavailable = false;
+  bool get _undoRefused => EditReceiptBlock._undoRefusedThisSession.contains(_block.receiptId);
 
-  bool get _canUndo => _block.undoable && !_isUndone && !_undoUnavailable;
+  bool get _canUndo => _block.undoable && !_isUndone && !_undoRefused;
 
   /// Whether the target still exists to open: a deleted item is gone until its
   /// delete is undone, and an undone create removed what it made.
@@ -90,27 +98,29 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
     if (_isUndoing || !_canUndo) return;
     setState(() => _isUndoing = true);
     final undo = widget.undo ?? const ChatReceiptsApi().undo;
-    final result = await undo(_block.receiptId);
-    if (!mounted) return;
+    final receiptId = _block.receiptId;
+    final result = await undo(receiptId);
+    // Record the outcome before the mounted check. The row may already have
+    // been disposed (a scroll, a provider rebuild) and the next one is built
+    // from the original message.
+    var showError = false;
     switch (result) {
       case ApiSuccess<EditReceiptUndoResult>(:final data) when data.undoneAt != null:
-        EditReceiptBlock._undoneThisSession[_block.receiptId] = data.undoneAt!;
-        setState(() => _isUndoing = false);
+        EditReceiptBlock._undoRefusedThisSession.remove(receiptId);
+        EditReceiptBlock._undoneThisSession[receiptId] = data.undoneAt!;
       case ApiSuccess<EditReceiptUndoResult>():
         // `unavailable`: the undo window closed or the inverse is ambiguous. Retrying cannot help.
-        setState(() {
-          _isUndoing = false;
-          _undoUnavailable = true;
-        });
-        OmiFeedback.error(context, context.l10n.chatBlockUndoFailed);
+        EditReceiptBlock._undoRefusedThisSession.add(receiptId);
+        showError = true;
       case ApiFailure<EditReceiptUndoResult>(:final problem):
-        setState(() {
-          _isUndoing = false;
-          // 404 (not this owner's receipt) and 409 (no longer undoable) are terminal.
-          _undoUnavailable = problem.kind == ApiProblemKind.notFound || problem.statusCode == 409;
-        });
-        OmiFeedback.error(context, context.l10n.chatBlockUndoFailed);
+        // 404 (not this owner's receipt) and 409 (no longer undoable) are terminal.
+        final terminal = problem.kind == ApiProblemKind.notFound || problem.statusCode == 409;
+        if (terminal) EditReceiptBlock._undoRefusedThisSession.add(receiptId);
+        showError = true;
     }
+    if (!mounted) return;
+    setState(() => _isUndoing = false);
+    if (showError) OmiFeedback.error(context, context.l10n.chatBlockUndoFailed);
   }
 
   Future<void> _open() async {
@@ -130,15 +140,22 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
     final (icon, label) = editReceiptKindChrome(context, _block.targetKind);
     final prefix = 'chat-block-editReceipt-${_block.id}';
     final canOpen = _canOpen;
+    final canUndo = _canUndo;
+    // The caption row grows with the text scale. A fixed 32px box clips the
+    // Undo control once the user turns on larger text.
+    final scaledControl = MediaQuery.textScalerOf(context).scale(32);
+    final controlHeight = scaledControl < 32 ? 32.0 : scaledControl;
 
     final Widget? trailing;
     if (_isUndone) {
       trailing = Text(
         l10n.chatBlockUndone,
         key: Key('$prefix-undone'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
       );
-    } else if (_canUndo) {
+    } else if (canUndo) {
       trailing = OmiButton(
         key: Key('$prefix-undo'),
         label: l10n.undo,
@@ -149,7 +166,7 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
           fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
         ),
         size: OmiButtonSize.compact,
-        height: 32,
+        height: controlHeight,
         isLoading: _isUndoing,
         onPressed: _isUndoing ? null : _undo,
       );
@@ -159,6 +176,7 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
 
     return ChatBlockCard(
       key: Key(prefix),
+      explicitChildNodes: canUndo,
       semanticsLabel: '$label: ${_block.summary}${_isUndone ? ', ${l10n.chatBlockUndone}' : ''}',
       onTap: canOpen && !_isOpening ? _open : null,
       child: Column(
@@ -166,16 +184,24 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Undo / Undone sits at the end of the caption row so the receipt stays as compact as
-          // the memory and task chips.
-          SizedBox(
-            height: trailing == null ? null : 32,
-            child: Row(
-              children: [
-                Expanded(child: ChatBlockEyebrow(icon: icon, label: label)),
-                if (_isOpening) OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
-                if (trailing != null) trailing,
-              ],
-            ),
+          // the memory and task chips. The trailing control is capped so a large text
+          // scale ellipsizes instead of overflowing the row.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Row(
+                children: [
+                  Expanded(child: ChatBlockEyebrow(icon: icon, label: label, ellipsis: true)),
+                  if (_isOpening) OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.5),
+                      child: trailing,
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Text(

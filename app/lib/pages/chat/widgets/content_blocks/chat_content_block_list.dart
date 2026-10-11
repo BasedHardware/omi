@@ -72,7 +72,11 @@ class ChatContentBlockList extends StatelessWidget {
       case MemoryLinkContentBlock():
         return MemoryLinkBlock(block: block);
       case EditReceiptContentBlock():
-        return EditReceiptBlock(block: block, fetchConversation: fetchConversation);
+        return EditReceiptBlock(
+          key: ValueKey('edit-receipt-${block.receiptId}'),
+          block: block,
+          fetchConversation: fetchConversation,
+        );
       case QuestionCardContentBlock():
         return QuestionCardBlock(block: block, sendMessage: sendMessage);
       case DiscoveryCardContentBlock():
