@@ -442,19 +442,15 @@ def create_action_item_tool(
     display_tz = configurable.get('user_timezone') or 'UTC'
     anchored_relative = False
     if due_in_minutes is not None:
-        if (
-            due_at is not None
-            or isinstance(due_in_minutes, bool)
-            or not isinstance(due_in_minutes, int)
-            or due_in_minutes <= 0
-            or due_in_minutes > 366 * 24 * 60
-        ):
+        # The model can pass a bool or a non-int despite the annotation.
+        minutes: Any = due_in_minutes
+        if due_at is not None or type(minutes) is not int or minutes <= 0 or minutes > 366 * 24 * 60:
             return 'Error: Use a positive due_in_minutes or an absolute due_at, not both.'
         anchor = runtime.request_at if channel and runtime is not None else datetime.now(timezone.utc)
         if anchor is None:
             return 'Error: Original message time unavailable. Ask for an explicit reminder time.'
         anchored_relative = channel
-        due_at = (anchor + timedelta(minutes=due_in_minutes)).isoformat()
+        due_at = (anchor + timedelta(minutes=minutes)).isoformat()
 
     # Parse or set due date
     if due_at is not None:
