@@ -4,8 +4,9 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from database import review_store
-from database import conversations, action_items, users, candidates, screen_activity, dream_store
+from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
+from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
@@ -25,12 +26,13 @@ READ_COLLECTIONS = {
 }
 
 
-def read_record(uid, ref):
+def read_record(uid, ref, *, control_cache=None):
+    control_cache = {} if control_cache is None else control_cache
     collection, separator, key = ref.partition('/')
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
     if collection == 'conversations':
-        row = conversations.get_conversation(uid, key)
+        row = next(iter(conversations.get_conversations_by_id_without_photos(uid, [key])), None)
         return row if row and conversations.is_visible_conversation(row) and not row.get('is_locked') else None
     if collection in {'memories', 'memory_items'}:
         canonical = read_canonical_memory_item(uid, key)
@@ -44,17 +46,16 @@ def read_record(uid, ref):
         if row.is_locked or row.user_review is False or row.visibility != 'private':
             return None
         return row.model_dump(mode='python')
+    if collection in {'action_items', 'candidates'}:
+        if 'generation' not in control_cache:
+            control_cache['generation'] = get_task_workflow_control(uid).account_generation
     if collection == 'action_items':
         row = action_items.get_action_item(uid, key)
-        generation = get_task_workflow_control(uid).account_generation
+        generation = control_cache['generation']
         return row if row and row.get('account_generation', 0) == generation and not row.get('deleted') else None
     if collection == 'candidates':
         row = candidates.get_candidate(uid, key)
-        if (
-            row
-            and row.account_generation == get_task_workflow_control(uid).account_generation
-            and row.status.value == 'pending'
-        ):
+        if row and row.account_generation == control_cache['generation'] and row.status.value == 'pending':
             return row.model_dump(mode='python')
         return None
     if collection == 'people':
@@ -75,17 +76,26 @@ def read_entity_record(uid, entity_id):
 
 
 def read_changes(uid, lease, caps, vocabulary=None):
+    cache, control_cache = {}, {}
+
+    def read(ref_uid, ref):
+        if ref not in cache:
+            cache[ref] = read_record(ref_uid, ref, control_cache=control_cache)
+        return cache[ref]
+
     dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
-    records = {}
+    records = EvidenceRecords()
     consumed = []
     for snapshot in dirty:
+        if len(records.targets) >= 4:
+            break
         item = snapshot.to_dict()
         # An update after admission belongs to a later pass, even if observed now.
         if item['last_changed_at'] > lease['started_at']:
             continue
         ref = f"{item['collection']}/{item['id']}"
         try:
-            row = read_record(uid, ref)
+            row = read(uid, ref)
         except review_store.ReviewNotFound:
             row = None
         except HTTPException as exc:
@@ -97,30 +107,12 @@ def read_changes(uid, lease, caps, vocabulary=None):
             if not fits_triage(candidate, caps, vocabulary):
                 break
             records[ref] = row
+            records.targets.add(ref)
         consumed.append(item)
-    # Only touched identities, never a full user history. Enrichment shares the
-    # same prompt budget; it cannot displace dirty references already selected.
-    identities = set()
-    for ref, row in list(records.items()):
-        if ref.startswith('conversations/'):
-            for segment in row.get('transcript_segments') or []:
-                if segment.get('person_id'):
-                    identities.add('person:' + segment['person_id'])
-        if row.get('subject_entity_id'):
-            identities.add(row['subject_entity_id'])
-        if row.get('workstream_id'):
-            identities.add(row['workstream_id'])
-    for entity_id in sorted(identities)[:20]:
-        candidate = {**records, 'entity/' + entity_id: read_entity_record(uid, entity_id)}
-        if not fits_triage(candidate, caps, vocabulary):
-            break
-        records = candidate
-    if records and consumed:
-        for row in screen_activity.get_screen_activity(
-            uid, start_date=min(item['last_changed_at'] for item in consumed), end_date=lease['started_at'], limit=30
-        ):
-            candidate = {**records, 'screen/' + row['id']: row}
-            if not fits_triage(candidate, caps, vocabulary):
-                break
-            records = candidate
+    records = add_context(
+        records,
+        context_candidates(uid, records, vocabulary or [], read_record=read, read_entity_record=read_entity_record),
+        caps,
+        vocabulary,
+    )
     return records, consumed
