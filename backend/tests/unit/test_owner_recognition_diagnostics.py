@@ -11,7 +11,7 @@ import pytest
 import config.owner_recognition_diagnostics as contract
 from database import conversations as db
 from models.conversation import Conversation
-from routers.listen import speakers, transcripts
+from routers.listen import conversations, speakers, transcripts
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_speaker_match import _live_matcher, _segment
 from tests.unit.test_owner_speaker_profiles import _Persistence
@@ -160,9 +160,12 @@ def test_finalize_snapshot_with_queue_and_no_tasks_does_not_claim_comparison(mon
     for _ in range(20):
         diagnostic = matcher.diagnostics.checkpoint('c', matcher.queue, matcher.tasks)
     summary = diagnostic['live'][0]
-    assert summary['pending_queue'] == 1 and summary['pending_tasks'] == 0
+    assert 'stop' not in summary and 'pending_queue' not in summary and 'pending_tasks' not in summary
     assert summary.get('comparisons', 0) == 0 and matcher.queue.qsize() == 1
-    assert caplog.text.count('kind=live_stop') == 1
+    assert caplog.text.count('kind=live_checkpoint') == 1
+    assert "'pending_queue': 1" in caplog.text and "'pending_tasks': 0" in caplog.text
+    assert not matcher.diagnostics.current.closed
+    assert not matcher.diagnostics.boundary_snapshot('c')
 
 
 def test_generation_stop_freezes_inflight_metadata_and_does_not_paint_successor(monkeypatch):
@@ -420,10 +423,11 @@ def test_optional_score_fault_does_not_interrupt_identity_publication(monkeypatc
 
 
 @pytest.mark.parametrize('fail', [False, True])
-def test_standalone_boundary_is_claimed_once_before_await_even_on_failure(monkeypatch, fail):
+def test_standalone_boundary_is_claimed_once_before_await_even_on_failure(monkeypatch, caplog, fail):
     matcher, host, _ = live(monkeypatch, [])
     host.speakers = matcher
     calls = []
+    caplog.set_level('INFO')
     processor = transcripts.TranscriptProcessor.__new__(transcripts.TranscriptProcessor)
     processor.host = host
 
@@ -442,19 +446,95 @@ def test_standalone_boundary_is_claimed_once_before_await_even_on_failure(monkey
         assert not calls, 'active segment-loop flushes must not add diagnostic writes'
         matcher.diagnostics.checkpoint('c', matcher.queue, matcher.tasks)
         await processor.flush_speaker_assignments('c')
-        # New sequence/pending counts, stop, and repeated boundaries do not retry.
+        assert not calls, 'an open finalization checkpoint must not claim persistence'
         matcher.diagnostics.observe('no_pcm')
         matcher.diagnostics.stop('drain', matcher.queue, matcher.tasks)
         for _ in range(20):
             matcher.diagnostics.checkpoint('c', matcher.queue, matcher.tasks)
             await processor.flush_speaker_assignments('c')
         assert len(calls) == 1
-        assert calls[0]['live'][0]['stop'] == 'finalized'
+        assert calls[0]['live'][0]['stop'] == 'drain'
+        assert calls[0]['live'][0]['reasons']['no_pcm'] == 1
+        assert caplog.text.count("'reason': 'flush_failed'") == int(fail)
         # A successor owns its own single attempt.
         matcher.diagnostics.begin('c', matcher._generation + 1)
         matcher.diagnostics.stop('rollover', matcher.queue, matcher.tasks)
         await processor.flush_speaker_assignments('c')
         assert len(calls) == 2
         assert calls[1]['live'][0]['generation'] == matcher._generation + 1
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('reason', ['enqueued', 'published', 'profile_loaded', 'scores_generated', 'comparison'])
+def test_progress_logs_are_not_refusals_and_remain_rate_bounded(monkeypatch, caplog, reason):
+    matcher, _, _ = live(monkeypatch, [])
+    caplog.set_level('INFO')
+    for _ in range(100):
+        matcher.diagnostics.observe(reason, 'socket:0')
+    assert snapshot(matcher)['reasons'][reason] == 100
+    assert caplog.text.count('kind=live_progress') == 1
+    assert 'kind=live_refusal' not in caplog.text
+    matcher.diagnostics.observe('no_pcm', 'socket:0')
+    assert caplog.text.count('kind=live_refusal') == 1
+
+
+def test_rollover_persists_comparison_completed_after_open_finalization_checkpoint(monkeypatch, caplog):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, _ = live(monkeypatch, [])
+    matcher.person_embeddings.pop('p1')
+    host.speakers = matcher
+    host.request_conversation_processing = None
+    controller = conversations.LiveConversationController(host)
+    monkeypatch.setattr(conversations, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    calls = []
+    entered, release = asyncio.Event(), asyncio.Event()
+    old = matcher.diagnostics.current
+
+    @observation.observe_query
+    async def query(self, pcm):
+        entered.set()
+        await release.wait()
+        return owner
+
+    async def persist(fn, *args, **kwargs):
+        if fn is db.update_owner_recognition_diagnostics:
+            assert old.closed, 'only a closed generation can write a standalone boundary'
+            calls.append(copy.deepcopy(args[-1]))
+            return True
+        return {}
+
+    monkeypatch.setattr(matcher, '_extract_query', query.__get__(matcher))
+    host.persistence = SimpleNamespace(call=persist)
+    caplog.set_level('INFO')
+
+    async def run():
+        task = asyncio.create_task(matcher.match(1, _segment('inflight', 0, 65)))
+        matcher.tasks.add(task)
+        await entered.wait()
+        matcher.queue.put_nowait(dict(_segment('queued', 70, 5), speaker_id=2, conversation_id='c'))
+        # process_and_create_new schedules finalization before refreshing speakers.
+        assert not await controller.schedule_finalization('c')
+        assert not calls and not old.closed and not old.boundary_claimed
+        assert 'stop' not in snapshot(matcher)
+        assert caplog.text.count('kind=live_checkpoint') == 1
+        release.set()
+        await task
+        matcher.tasks.remove(task)
+        assert snapshot(matcher)['owner_comparisons'] == 1
+        attempts = matcher._embedding_attempts[1]
+        assert attempts == 1
+        # Use the controller's real refresh and the matcher's real clear boundary.
+        host.state.speaker_id_enabled = False
+        await controller._refresh_speakers('next')
+        assert old.closed and len(calls) == 1
+        persisted = calls[0]['live'][0]
+        assert persisted['conversation'] == 'c' and persisted['stop'] == 'rollover'
+        assert persisted['owner_comparisons'] == persisted['comparisons'] == 1
+        assert persisted['attempted'] == persisted['successful'] == attempts
+        assert persisted['pending_tasks'] == 0 and persisted['pending_queue'] == 1
+        assert matcher.diagnostics.current.data['conversation'] == 'next'
+        await controller._persist_speaker_diagnostics('c')
+        assert len(calls) == 1
 
     asyncio.run(run())

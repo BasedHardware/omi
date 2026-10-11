@@ -12,6 +12,7 @@ import config.owner_recognition_diagnostics as contract
 from utils.observability.owner_identity_retry import resolver_trace
 
 logger = logging.getLogger(__name__)
+_LIVE_PROGRESS = frozenset(('enqueued', 'published', 'profile_loaded', 'scores_generated', 'comparison'))
 _UNBOUND = object()
 _LIVE: ContextVar[Any] = ContextVar('owner_recognition_live_diagnostics', default=_UNBOUND)
 
@@ -53,7 +54,7 @@ class LiveGeneration:
         # Reuse #21181's first-block log. No second budget log/cap counter here.
         if reason != 'embedding_budget' and reason not in self.logged:
             self.logged.add(reason)
-            log_summary('live_refusal', self.data)
+            log_summary('live_progress' if reason in _LIVE_PROGRESS else 'live_refusal', self.data)
 
     def stop(self, reason, pending_queue, pending_tasks):
         if not self.closed:
@@ -102,28 +103,35 @@ class LiveDiagnostics:
     def boundary_snapshot(self, conversation):
         """Claim one optional standalone flush per generation, before any await.
 
-        Failed attempts are not retried. Later observations remain available to
-        logs and existing identity/processing writes without another revision.
+        Only closed generations can claim a boundary. Failed attempts are not
+        retried; existing identity/processing writes may still carry the summary.
         """
         rows = [
             row
             for row in self.generations
-            if row.data['conversation'] == conversation and row.data.get('stop') and not row.boundary_claimed
+            if row.data['conversation'] == conversation and row.closed and not row.boundary_claimed
         ]
         for row in rows:
             row.boundary_claimed = True
         return contract.normalize({'live': [row.data for row in rows]})
 
+    def flush_failed(self, snapshot):
+        # A boundary is already frozen; attribute its one failed attempt to the
+        # closed generation rather than the successor that may now be current.
+        for row in snapshot.get('live', []):
+            log_summary('live_refusal', dict(row, reason='flush_failed'))
+
     def checkpoint(self, conversation, queue, tasks):
         row = self.current
         if row is not None and row.data['conversation'] == conversation and not row.closed:
-            values = dict(stop='finalized', pending_queue=queue.qsize(), pending_tasks=len(tasks))
-            if any(row.data.get(k) != v for k, v in values.items()):
-                row.data.update(values)
-                row.data['sequence'] += 1
             if 'finalized' not in row.logged:
                 row.logged.add('finalized')
-                log_summary('live_stop', row.data)
+                # Finalization can run while comparisons are still outstanding.
+                # This sample is log-only; stop() owns the persisted boundary.
+                log_summary(
+                    'live_checkpoint',
+                    dict(row.data, reason='finalized', pending_queue=queue.qsize(), pending_tasks=len(tasks)),
+                )
         return self.snapshot(conversation)
 
     def stop(self, reason, queue, tasks):

@@ -567,7 +567,7 @@ class TranscriptProcessor:
                         boundary_snapshot,
                     )
                 except Exception:
-                    observation.observe('flush_failed')
+                    observation.flush_failed(boundary_snapshot)
             return
         data = await self.cache.get(conversation_id, force_refresh=True)
         if not data:
