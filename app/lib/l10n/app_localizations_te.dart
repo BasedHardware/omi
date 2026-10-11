@@ -9831,6 +9831,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get chatBlockMemory => 'జ్ఞాపకం';
 
   @override
+  String get chatBlockPerson => 'వ్యక్తి';
+
+  @override
+  String get chatBlockUndone => 'రద్దు చేయబడింది';
+
+  @override
+  String get chatBlockUndoFailed => 'ఈ మార్పును రద్దు చేయలేకపోయాము';
+
+  @override
   String get chatBlockQuestion => 'ప్రశ్న';
 
   @override

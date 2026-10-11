@@ -9805,6 +9805,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get chatBlockMemory => 'Спогад';
 
   @override
+  String get chatBlockPerson => 'Людина';
+
+  @override
+  String get chatBlockUndone => 'Скасовано';
+
+  @override
+  String get chatBlockUndoFailed => 'Не вдалося скасувати цю зміну';
+
+  @override
   String get chatBlockQuestion => 'Питання';
 
   @override

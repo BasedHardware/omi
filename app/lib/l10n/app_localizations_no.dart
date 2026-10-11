@@ -9782,6 +9782,15 @@ class AppLocalizationsNo extends AppLocalizations {
   String get chatBlockMemory => 'Minne';
 
   @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Angret';
+
+  @override
+  String get chatBlockUndoFailed => 'Kunne ikke angre endringen';
+
+  @override
   String get chatBlockQuestion => 'Spørsmål';
 
   @override

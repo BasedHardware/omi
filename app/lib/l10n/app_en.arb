@@ -11651,6 +11651,18 @@
     "@chatBlockMemory": {
         "description": "Eyebrow label on a chat memory link block"
     },
+    "chatBlockPerson": "Person",
+    "@chatBlockPerson": {
+        "description": "Caption on a chat card for a change to one of the user's people"
+    },
+    "chatBlockUndone": "Undone",
+    "@chatBlockUndone": {
+        "description": "Shown on a chat change receipt after the change was undone"
+    },
+    "chatBlockUndoFailed": "Couldn't undo that change",
+    "@chatBlockUndoFailed": {
+        "description": "Error when undoing a change from chat fails"
+    },
     "chatBlockQuestion": "Question",
     "@chatBlockQuestion": {
         "description": "Eyebrow label on a chat question card block"

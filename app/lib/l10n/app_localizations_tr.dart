@@ -9793,6 +9793,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chatBlockMemory => 'Anı';
 
   @override
+  String get chatBlockPerson => 'Kişi';
+
+  @override
+  String get chatBlockUndone => 'Geri alındı';
+
+  @override
+  String get chatBlockUndoFailed => 'Bu değişiklik geri alınamadı';
+
+  @override
   String get chatBlockQuestion => 'Soru';
 
   @override

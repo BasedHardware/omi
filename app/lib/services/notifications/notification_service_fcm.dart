@@ -182,7 +182,7 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   @override
-  Future<void> createNotification({
+  Future<bool> createNotification({
     String title = '',
     String body = '',
     int notificationId = 1,
@@ -190,9 +190,10 @@ class _FCMNotificationService implements NotificationInterface {
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     Logger.debug('createNotification: $allowed');
-    if (!allowed) return;
+    if (!allowed) return false;
     Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
+    return true;
   }
 
   @override
