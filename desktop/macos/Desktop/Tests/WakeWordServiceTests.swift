@@ -235,7 +235,7 @@ final class WakeWordAccountIsolationTests: XCTestCase {
 
   func testEveryChatRouteCarriesTheSpeakingAccount() async throws {
     let origin = try await origin()
-    var routed: [(String, RuntimeOwnerAuthorizationSnapshot)] = []
+    var routed: [(String, HandsFreeRequest)] = []
 
     WakeWordService.dispatchChat(
       "order food", origin: origin,
@@ -250,7 +250,8 @@ final class WakeWordAccountIsolationTests: XCTestCase {
       fallback: { _, snapshot in fallbackOrigin = snapshot })
 
     XCTAssertEqual(routed.map(\.0), ["hands-free:order food", "spoken:order food"])
-    XCTAssertEqual(routed.map(\.1), [origin, origin])
+    XCTAssertEqual(routed.map(\.1.origin), [origin, origin])
+    XCTAssertEqual(routed[0].1.id, routed[1].1.id, "one command is one request on both routes")
     XCTAssertEqual(fallbackOrigin, origin)
   }
 

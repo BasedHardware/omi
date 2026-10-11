@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 @MainActor
 final class WakeWordService {
@@ -47,16 +48,17 @@ final class WakeWordService {
   static func dispatchChat(
     _ command: String,
     origin: RuntimeOwnerAuthorizationSnapshot,
-    handsFree: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Bool = {
-      FloatingControlBarManager.shared.submitHandsFreeCommand($0, origin: $1)
+    handsFree: @MainActor (String, HandsFreeRequest) -> Bool = {
+      FloatingControlBarManager.shared.submitHandsFreeCommand($0, request: $1)
     },
-    spoken: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Void = {
-      FloatingControlBarManager.shared.submitSpokenCommand($0, origin: $1)
+    spoken: @MainActor (String, HandsFreeRequest) -> Void = {
+      FloatingControlBarManager.shared.submitSpokenCommand($0, request: $1)
     }
   ) {
-    if handsFree(command, origin) { return }
+    let request = HandsFreeRequest(origin: origin)
+    if handsFree(command, request) { return }
     log("WakeWord: answering on the visible surface instead")
-    spoken(command, origin)
+    spoken(command, request)
   }
 
   /// Hands a command to the realtime session, or to chat if that fails, only while the
@@ -72,7 +74,7 @@ final class WakeWordService {
       await RealtimeHubController.shared.runWakeWordTurn($0, isOriginCurrent: $1)
     },
     fallback: @MainActor (String, RuntimeOwnerAuthorizationSnapshot) -> Void = {
-      FloatingControlBarManager.shared.submitSpokenCommand($0, origin: $1)
+      FloatingControlBarManager.shared.submitSpokenCommand($0, request: HandsFreeRequest(origin: $1))
     }
   ) async {
     guard !(await runRealtime(command, { isCurrent(origin) })) else { return }
@@ -180,5 +182,23 @@ extension RealtimeHubCommitResult {
     case .accepted, .alreadyOwned: return true
     case .deferredForReplacement, .deferredForReconnect, .rejectedNoSession: return false
     }
+  }
+}
+
+/// What a wake-word turn may do once its awaited send returns. The account or the active turn
+/// can change during that await.
+enum WakeWordSendOutcome: Equatable {
+  case commit
+  /// Still this turn, but the account changed: cancel only this turn.
+  case cancelOwnTurn
+  /// Another turn is active now: neither commit nor cancel it.
+  case leaveReplacement
+
+  init(originCurrent: Bool, activeTurnID: VoiceTurnID?, turnID: VoiceTurnID) {
+    guard activeTurnID == turnID else {
+      self = .leaveReplacement
+      return
+    }
+    self = originCurrent ? .commit : .cancelOwnTurn
   }
 }

@@ -3001,8 +3001,6 @@ class FloatingControlBarManager {
     let text: String
     let presentation: QueryPresentation
     let voiceTurnID: VoiceTurnID?
-    /// The account a hands-free command came from; a queued command never runs as another.
-    let origin: RuntimeOwnerAuthorizationSnapshot?
   }
 
   private enum QueryPresentation {
@@ -3180,7 +3178,9 @@ class FloatingControlBarManager {
     let selected = ShortcutSettings.shared.selectedModel
     return selected.isEmpty ? ModelQoS.Claude.defaultSelection : selected
   }
-  private var pendingFollowUpQuery: PendingFollowUpQuery?
+  /// A query waiting for the current reply to stop. One bound to a hands-free request is
+  /// handed out only while that request's account is still current.
+  private var pendingFollowUp = RequestBoundSlot<PendingFollowUpQuery>()
 
   /// Whether the user has enabled the Ask Omi bar (persisted across launches).
   /// Defaults to true for new users.
@@ -3982,7 +3982,7 @@ class FloatingControlBarManager {
   /// Detach the floating UI from any in-flight chat streaming.
   func cancelChat(keepVoiceAlive: Bool = false, stopProvider: Bool = false) {
     activeQueryGeneration += 1
-    pendingFollowUpQuery = nil
+    pendingFollowUp.clear()
     chatCancellable?.cancel()
     chatCancellable = nil
     // Floating close/hide is presentation-only now that default floating
@@ -4112,17 +4112,17 @@ class FloatingControlBarManager {
     _ query: String,
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil,
-    origin: RuntimeOwnerAuthorizationSnapshot? = nil
+    request: HandsFreeRequest? = nil
   ) {
-    // Only the visible path consumes `suppressNextVisibleSurface`, in
-    // `prepareVisibleQueryState`. Every exit before that abandons the query, so a latch set
-    // by `submitHandsFreeCommand` would outlive it and quiet the next typed question once.
+    // Only the visible path consumes the quiet arm, in `prepareVisibleQueryState`. Every
+    // exit before that abandons the query, so it releases the arm its own request set;
+    // it can never clear an arm belonging to another request.
     //
     // A caller that armed a question origin (the follow-up chip, a card action) armed it for
     // *this* send, so an abandoned send has to release that arm too or it lands on the next
     // question. Kept as one guard rather than two so the latch clear stays a single exit.
     guard let window = window, let provider = activeFloatingProvider() else {
-      Self.suppressNextVisibleSurface = false
+      Self.quietSurface.release(request?.id)
       AnalyticsManager.shared.questionOriginationAborted()
       return
     }
@@ -4135,7 +4135,7 @@ class FloatingControlBarManager {
     // `fromVoice` still marks it a voice query, which is what makes the answer spoken.
     if let voiceTurnID {
       // `.voiceOnly` renders nothing, so it never reaches the consumer above either.
-      Self.suppressNextVisibleSurface = false
+      Self.quietSurface.release(request?.id)
       guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
       else {
         AnalyticsManager.shared.questionOriginationAborted()
@@ -4213,7 +4213,7 @@ class FloatingControlBarManager {
     // we need to apply the same router rule here ourselves.
     Task { @MainActor in
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
-        await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice, origin: origin)
+        await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice, request: request)
       }
     }
   }
@@ -4240,7 +4240,7 @@ class FloatingControlBarManager {
     provider: ChatProvider,
     fromVoice: Bool,
     voiceTurnID: VoiceTurnID? = nil,
-    origin: RuntimeOwnerAuthorizationSnapshot? = nil
+    request: HandsFreeRequest? = nil
   ) async {
     await routeQuery(
       message,
@@ -4248,7 +4248,7 @@ class FloatingControlBarManager {
       provider: provider,
       presentation: .visible(fromVoice: fromVoice),
       voiceTurnID: voiceTurnID,
-      origin: origin
+      request: request
     )
   }
 
@@ -4258,26 +4258,27 @@ class FloatingControlBarManager {
     provider: ChatProvider,
     presentation: QueryPresentation,
     voiceTurnID: VoiceTurnID? = nil,
-    origin: RuntimeOwnerAuthorizationSnapshot? = nil
+    request: HandsFreeRequest? = nil
   ) async {
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-        ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
-    else { return }
+        ?? true, request?.isCurrent ?? true
+    else {
+      // A rejected hands-free request must not leave its quiet arm for the next question.
+      Self.quietSurface.release(request?.id)
+      return
+    }
     let turnOwner = chatTurnOwner(for: presentation)
     if provider.isSending {
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
         showSharedProviderBusy(in: barWindow, presentation: presentation)
         return
       }
-      pendingFollowUpQuery = PendingFollowUpQuery(
-        text: message,
-        presentation: presentation,
-        voiceTurnID: voiceTurnID,
-        origin: origin
-      )
+      pendingFollowUp.put(
+        PendingFollowUpQuery(text: message, presentation: presentation, voiceTurnID: voiceTurnID),
+        request: request)
       if case .visible(let fromVoice) = presentation {
-        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice, request: request)
       }
       provider.stopAgent(owner: turnOwner, reason: .superseded)
       return
@@ -4285,7 +4286,7 @@ class FloatingControlBarManager {
 
     // Show the thinking state immediately while the kernel accepts the turn.
     if case .visible(let fromVoice) = presentation {
-      prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+      prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice, request: request)
     }
 
     let routerTracer = QueryTracerContext.current
@@ -4296,7 +4297,7 @@ class FloatingControlBarManager {
       provider: provider,
       presentation: presentation,
       voiceTurnID: voiceTurnID,
-      origin: origin
+      request: request
     )
   }
 
@@ -4306,19 +4307,24 @@ class FloatingControlBarManager {
     provider: ChatProvider,
     presentation: QueryPresentation,
     voiceTurnID: VoiceTurnID?,
-    origin: RuntimeOwnerAuthorizationSnapshot? = nil
+    request: HandsFreeRequest? = nil
   ) async {
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-        ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
-    else { return }
+        ?? true, request?.isCurrent ?? true
+    else {
+      // A rejected hands-free request must not leave its quiet arm for the next question.
+      Self.quietSurface.release(request?.id)
+      return
+    }
     switch presentation {
     case .visible:
       await sendAIQuery(
         message,
         barWindow: barWindow,
         provider: provider,
-        voiceTurnID: voiceTurnID
+        voiceTurnID: voiceTurnID,
+        request: request
       )
     case .voiceOnly:
       guard let voiceTurnID else { return }
@@ -4454,8 +4460,7 @@ class FloatingControlBarManager {
     barWindow: FloatingControlBarWindow,
     provider: ChatProvider
   ) async -> Bool {
-    guard let pending = pendingFollowUpQuery else { return false }
-    pendingFollowUpQuery = nil
+    guard let (pending, request) = pendingFollowUp.take() else { return false }
     barWindow.state.currentQueryFromVoice = pending.presentation.fromVoice
     await routeQuery(
       pending.text,
@@ -4463,7 +4468,7 @@ class FloatingControlBarManager {
       provider: provider,
       presentation: pending.presentation,
       voiceTurnID: pending.voiceTurnID,
-      origin: pending.origin
+      request: request
     )
     return true
   }
@@ -4475,15 +4480,15 @@ class FloatingControlBarManager {
   /// Separate from push-to-talk, which presents `.voiceOnly` and owns a `VoiceTurnID` for
   /// the whole recording lifecycle. A wake word owns no turn — the words were already
   /// transcribed by the time it fires — so it uses the visible surface.
-  func submitSpokenCommand(_ command: String, origin: RuntimeOwnerAuthorizationSnapshot? = nil) {
+  func submitSpokenCommand(_ command: String, request: HandsFreeRequest? = nil) {
     window?.state.answersQuietly = false
-    sendFollowUpQuery(command, fromVoice: true, origin: origin)
+    sendFollowUpQuery(command, fromVoice: true, request: request)
   }
 
   /// Set for exactly one query and consumed by `prepareVisibleQueryState`. A one-shot flag
   /// rather than a parameter because that method is reached through `routeQuery`/
   /// `sendAIQuery`, which are shared with typed queries and push-to-talk.
-  private static var suppressNextVisibleSurface = false
+  private static var quietSurface = QuietSurfaceLatch()
 
   /// Hands-free: speak the answer and leave the bar in the notch.
   ///
@@ -4492,11 +4497,11 @@ class FloatingControlBarManager {
   /// glow already signals that Omi is working, and the answer is spoken. The exchange is
   /// still recorded; it is simply not put in front of you.
   @discardableResult
-  func submitHandsFreeCommand(_ command: String, origin: RuntimeOwnerAuthorizationSnapshot? = nil) -> Bool {
+  func submitHandsFreeCommand(_ command: String, request: HandsFreeRequest) -> Bool {
     let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
-    Self.suppressNextVisibleSurface = true
-    sendFollowUpQuery(trimmed, fromVoice: true, origin: origin)
+    Self.quietSurface.arm(request.id)
+    sendFollowUpQuery(trimmed, fromVoice: true, request: request)
     return true
   }
 
@@ -4504,7 +4509,7 @@ class FloatingControlBarManager {
     _ query: String,
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil,
-    origin: RuntimeOwnerAuthorizationSnapshot? = nil
+    request: HandsFreeRequest? = nil
   ) {
     // A turn that is supplied must be current; no turn is nothing to validate. Same rule
     // `routeQuery` and `dispatchChatQuery` already apply. Requiring one whenever
@@ -4512,16 +4517,16 @@ class FloatingControlBarManager {
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil }) ?? true
     else {
-      Self.suppressNextVisibleSurface = false
+      Self.quietSurface.release(request?.id)
       return
     }
     guard let window = window, window.state.showingAIResponse else {
       // No active conversation — fall back to new conversation
-      openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID, origin: origin)
+      openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID, request: request)
       return
     }
     guard let provider = activeFloatingProvider() else {
-      Self.suppressNextVisibleSurface = false
+      Self.quietSurface.release(request?.id)
       return
     }
 
@@ -4531,17 +4536,14 @@ class FloatingControlBarManager {
     if provider.isSending {
       let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
-        Self.suppressNextVisibleSurface = false
+        Self.quietSurface.release(request?.id)
         showSharedProviderBusy(in: window, presentation: .visible(fromVoice: fromVoice))
         return
       }
-      pendingFollowUpQuery = PendingFollowUpQuery(
-        text: query,
-        presentation: .visible(fromVoice: fromVoice),
-        voiceTurnID: voiceTurnID,
-        origin: origin
-      )
-      prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
+      pendingFollowUp.put(
+        PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice), voiceTurnID: voiceTurnID),
+        request: request)
+      prepareVisibleQueryState(query, in: window, fromVoice: fromVoice, request: request)
       provider.stopAgent(owner: turnOwner, reason: .superseded)
       return
     }
@@ -4550,9 +4552,9 @@ class FloatingControlBarManager {
     Task { @MainActor in
       guard
         voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-          ?? true, origin.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true
+          ?? true, request?.isCurrent ?? true
       else {
-        Self.suppressNextVisibleSurface = false
+        Self.quietSurface.release(request?.id)
         return
       }
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
@@ -4560,7 +4562,8 @@ class FloatingControlBarManager {
           query,
           barWindow: window,
           provider: provider,
-          voiceTurnID: voiceTurnID
+          voiceTurnID: voiceTurnID,
+          request: request
         )
       }
     }
@@ -5156,7 +5159,9 @@ class FloatingControlBarManager {
 
   // MARK: - AI Query
 
-  private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+  private func prepareVisibleQueryState(
+    _ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool, request: HandsFreeRequest? = nil
+  ) {
     activeQueryGeneration += 1
     chatCancellable?.cancel()
     chatCancellable = nil
@@ -5164,8 +5169,7 @@ class FloatingControlBarManager {
     // Called twice for one query — once by `routeQuery` to show the thinking state, again
     // by `sendAIQuery`. The latch is consumed by the first, so this may only ever *set*
     // quiet; clearing here let the second call undo the first and reopen the panel.
-    let presentsSurface = !Self.suppressNextVisibleSurface
-    Self.suppressNextVisibleSurface = false
+    let presentsSurface = Self.quietSurface.presentsSurface(for: request?.id)
     barWindow.beginVisibleMainQuery(
       message, fromVoice: fromVoice, animated: true, presentsSurface: presentsSurface)
   }
@@ -5216,7 +5220,8 @@ class FloatingControlBarManager {
     _ message: String,
     barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
-    voiceTurnID: VoiceTurnID? = nil
+    voiceTurnID: VoiceTurnID? = nil,
+    request: HandsFreeRequest? = nil
   ) async {
     // Defensive cancellation guard. `sendAIQuery` is a long async function
     // (screenshot capture, limiter check, provider.sendMessage). If a parent
@@ -5252,7 +5257,7 @@ class FloatingControlBarManager {
         )
       }
     }
-    prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
+    prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice, request: request)
     let generation = activeQueryGeneration
 
     // Re-check after the await-free setup work above.

@@ -1153,6 +1153,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       _ = cancelTurn(turnID: turnID)
       return false
     }
+    // The send awaited the session: a stale completion never commits or cancels a replacement.
+    switch WakeWordSendOutcome(
+      originCurrent: isOriginCurrent(), activeTurnID: VoiceTurnCoordinator.shared.activeTurnID, turnID: turnID)
+    {
+    case .commit: break
+    case .cancelOwnTurn:
+      _ = cancelTurn(turnID: turnID)
+      return false
+    case .leaveReplacement: return false
+    }
 
     VoiceTurnCoordinator.shared.publish(.finalize(turnID: turnID))
     guard commitTurn().handsOffWakeWordCommand else {
