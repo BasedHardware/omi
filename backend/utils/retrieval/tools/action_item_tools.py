@@ -287,6 +287,14 @@ def get_action_items_tool(
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
+    channel_items = configurable.get('channel_items')
+    if isinstance(channel_items, list):
+        channel_items.extend(
+            {'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')}
+            for item in action_items or ()
+            if item.get('id')
+        )
+
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
@@ -547,10 +555,13 @@ def update_action_item_tool(
     completed: Optional[bool] = None,
     description: Optional[str] = None,
     due_at: Optional[str] = None,
+    delete: bool = False,
+    clear_due_date: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
-    Update an action item's status, description, or due date.
+    Update or soft-delete a task only when the user asks or confirms a proposed correction.
+    Deletion is reversible. clear_due_date removes a due date.
 
     Use this tool when:
     - User asks to mark a task as complete/done
@@ -621,6 +632,13 @@ def update_action_item_tool(
     update_data: Dict[str, Any] = {}
     changes: List[str] = []
 
+    if delete:
+        update_data.update(deleted=True, deleted_at=datetime.now(timezone.utc))
+        changes.append('deleted')
+    if clear_due_date:
+        update_data['due_at'] = None
+        changes.append('due date removed')
+
     if completed is not None:
         update_data['completed'] = completed
         if completed:
@@ -660,9 +678,15 @@ def update_action_item_tool(
     if not update_data:
         return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
 
+    # Import mutation storage only for writes; retrieval and tool schemas need no client.
+    from database import chat_edits
+    from database.chat_edits import envelope
+
     # Update the action item
     try:
-        success = action_items_db.update_action_item(uid, action_item_id, update_data)
+        before_snapshot = chat_edits.snapshot(uid, 'task', action_item_id)
+        write_state = {'before': before_snapshot}
+        success = action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
         if not success:
             return f"Error: Failed to update action item with ID '{action_item_id}'."
 
@@ -674,7 +698,13 @@ def update_action_item_tool(
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
-        result += record_write(uid, 'task', action_item_id, existing_item, updated_item)
+        result += record_write(
+            uid,
+            'task',
+            action_item_id,
+            envelope(before_snapshot, existing_item.get('description', 'Task')),
+            envelope(write_state['after'], updated_item.get('description', 'Task')),
+        )
 
         # Send notification if item was marked as completed
         if completed is True:
@@ -686,7 +716,7 @@ def update_action_item_tool(
 
         # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
         # only for an open task with a due date (#5085).
-        if 'completed' in update_data or 'due_at' in update_data:
+        if 'completed' in update_data or 'due_at' in update_data or 'deleted' in update_data:
             try:
                 sync_action_item_reminder(
                     uid,

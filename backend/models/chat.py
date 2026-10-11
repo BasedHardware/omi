@@ -489,6 +489,25 @@ class ChatEvidenceEnvelope(BaseModel):
         return self
 
 
+class EditReceiptBlock(BaseModel):
+    """Server-authored write receipt. IDs and URLs never encode item content."""
+
+    type: Literal['editReceipt'] = 'editReceipt'
+    id: str
+    receiptId: str
+    targetKind: Literal['conversation', 'memory', 'task', 'person']
+    action: Literal['created', 'updated', 'deleted', 'completed', 'uncompleted', 'renamed']
+    targetId: str
+    summary: str = Field(min_length=1, max_length=300)
+    undoable: bool = True
+    undoneAt: Optional[datetime] = None
+
+
+class UndoChatReceiptResponse(BaseModel):
+    status: Literal['undone', 'already_undone', 'unavailable']
+    block: EditReceiptBlock
+
+
 class Message(BaseModel):
     id: str
     text: str

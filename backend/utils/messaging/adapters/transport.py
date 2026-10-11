@@ -10,9 +10,10 @@ from utils.http_client import get_webhook_client
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, message, *, status_code=None):
+    def __init__(self, message, *, status_code=None, rendering_rejected=False):
         super().__init__(message)
         self.status_code = status_code
+        self.rendering_rejected = rendering_rejected
 
 
 class DeliveryUncertain(ProviderError):
@@ -100,6 +101,17 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
                 await sleep(2**attempt)
                 continue
         if status >= 400 or value.get('ok') is False:
-            raise ProviderError('Provider rejected request', status_code=status)
+            raise ProviderError(
+                'Provider rejected request',
+                status_code=status,
+                rendering_rejected=(
+                    status == 400
+                    and isinstance(value.get('description'), str)
+                    and any(
+                        marker in value['description'].lower()
+                        for marker in ("can't parse entities", 'unsupported start tag', 'wrong entity')
+                    )
+                ),
+            )
         return value
     raise ProviderError('Provider retry budget exhausted')

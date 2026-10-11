@@ -12,9 +12,9 @@ Telegram uses the official [Bot API](https://core.telegram.org/bots/api#sendmess
 preview. It does not require Business mode or a topic. Default streaming is `draft`;
 `OMI_TELEGRAM_STREAMING=edit` explicitly selects edit previews; `none` buffers. Every
 final reply uses `sendMessage`. Drafts are throttled, never counted as final receipts.
-Plain Markdown is normalized and fully escaped to MarkdownV2, then split safely at
-UTF-16 and escape boundaries. This conservative dialect preserves readable prose;
-it does not preserve every Markdown style. Group/bot/edited messages are ignored.
+Standard Markdown is rendered as Telegram HTML, then split at UTF-16 boundaries
+with balanced tags and intact entities. Definite entity-parser rejection falls back
+to plain text; ambiguous delivery failures never trigger a second send. Group/bot/edited messages are ignored.
 
 Linq's current [index](https://docs.linqapp.com/llms.txt) and
 [authentication](https://docs.linqapp.com/channel/imessage/guides/authentication/)

@@ -189,6 +189,8 @@ SCHEMA_GROUPS = {
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
         'schemas': (
+            'EditReceiptBlock',
+            'UndoChatReceiptResponse',
             'MessageConversationStructured',
             'MessageConversation',
             'FileChat',

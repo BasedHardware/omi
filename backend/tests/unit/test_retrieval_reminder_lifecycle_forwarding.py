@@ -19,7 +19,16 @@ def producer(request):
     database = ModuleType('database.action_items')
     database.create_action_item = MagicMock(return_value='task-1')
     database.get_action_item = MagicMock()
-    database.update_action_item = MagicMock(return_value=True)
+
+    def update(*args, **kwargs):
+        if 'expected_chat_state' in kwargs:
+            kwargs['expected_chat_state']['after'] = dict(args[2])
+        return True
+
+    database.update_action_item = MagicMock(side_effect=update)
+    chat_edits = ModuleType('database.chat_edits')
+    chat_edits.snapshot = MagicMock(return_value={'completed': False})
+    chat_edits.envelope = lambda snapshot, summary: {'_snapshot': snapshot, '_summary': summary}
     database.get_action_items = MagicMock(return_value=[])
     notifications = ModuleType('utils.notifications')
     for name in (
@@ -51,6 +60,7 @@ def producer(request):
     langchain_runnables.RunnableConfig = dict
     fakes = {
         'database.action_items': database,
+        'database.chat_edits': chat_edits,
         'database.notifications': notification_db,
         'utils.notifications': notifications,
         'utils.conversations.render': render,
