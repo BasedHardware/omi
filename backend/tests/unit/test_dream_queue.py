@@ -33,7 +33,7 @@ def queue(monkeypatch):
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
     monkeypatch.setattr(
         dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic record ' * 100}}
     )
@@ -128,7 +128,7 @@ def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypat
         + 768
         <= budget
     )
-    assert not fits_triage({**records, 'conversations/next': row}, caps)
+    assert len(records.targets) == 4  # leave capacity for read-only neighbourhoods
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     remaining = {
         f"{snapshot.to_dict()['collection']}/{snapshot.to_dict()['id']}" for snapshot in dream_store.dirty_refs(UID)

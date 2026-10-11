@@ -1,5 +1,30 @@
 # Dream agent phase 1
 
+## Target neighbourhoods and read-only planning
+
+Dirty reads admit at most four editable targets to leave prompt capacity for
+context. Retrieval adds explicit people/entities and conversation tasks,
+same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
+existing Pinecone conversation and canonical memory semantic hits, then nearby
+conversations and screen records. Reads remain owner scoped and visibility checked.
+Queries and result counts are bounded; a retrieval failure fails the pass, rather
+than silently treating a partial neighbourhood as complete evidence.
+
+Context is evidence only in both stages. Guards reject context targets and
+merges whose second operand is context. All role and eligibility metadata enters
+the shared byte-based budget gate. Context admission also reserves worst-case
+triage input/completion before fitting reasoning. Reports include role counts;
+diagnostics never include record contents.
+
+The owner's agent can call `await utils.dream_agent.dry_run(uid, records,
+targets=[...], vocabulary=[...])` inside a pod with authorized, decrypted,
+visibility-checked records. This function performs no database reads, admission,
+product mutations, or report persistence. It returns a plan, guard rejection
+counts, role counts and tokens. The configured inference gateway retains its
+ordinary usage accounting. Supply `turn` for a fully offline replay. Do not print
+or publish the returned private plan. The implementing agent runs synthetic
+fixtures only and does not access production customer records.
+
 The worker defaults off in code. The production runtime declarations enable shadow
 for David's two allowlisted UIDs only; TestFlight stays disabled. Prod backend and
 backend-sync declare 24 scheduled passes/user/day, 20 manual runs/user/day and a

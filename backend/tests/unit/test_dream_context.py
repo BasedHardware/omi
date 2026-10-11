@@ -1,11 +1,14 @@
 """Synthetic contract regressions; no provider or customer reads."""
 
 import json
+import asyncio
 
 import pytest
 
-from models.dream_agent import Triage
-from utils import dream_guards, dream_prompt
+from models.dream_agent import Triage, Cluster, Plan, Edit
+from utils import dream_guards, dream_prompt, dream_agent, dream_context
+from config.dream_agent import Caps
+from utils.llm.shaped_agent import Turn
 
 
 @pytest.mark.parametrize(
@@ -39,3 +42,124 @@ def test_eligibility_eval_removes_wasted_offers():
     before = sum(2 for _ in cases)
     after = sum(value == 'editable' for row in cases for value in dream_guards.summary_eligibility(row).values())
     assert (before, after) == (4, 1)
+
+
+def test_context_is_retained_in_both_stages_and_cannot_be_edited():
+    records = dream_context.EvidenceRecords(
+        {'conversations/a': {'transcript_segments': [{'text': 'Nuvrah'}]}, 'people/p': {'name': 'Nuvra'}},
+        targets=['conversations/a'],
+    )
+    seen = []
+
+    async def turn(uid, lane, mount, messages):
+        payload = json.loads(messages[-1]['content'])
+        seen.append(payload)
+        assert payload['roles'] == {'conversations/a': 'target', 'people/p': 'context'}
+        value = (
+            Triage(clusters=[Cluster(refs=['conversations/a'], problem='spelling')])
+            if len(seen) == 1
+            else Plan(
+                edits=[
+                    Edit(
+                        kind='spelling',
+                        target='people/p',
+                        before='Nuvra',
+                        after='Nuvrah',
+                        reason='Synthetic',
+                        evidence=['people/p'],
+                    )
+                ]
+            )
+        )
+        return Turn(value=value, tokens=100)
+
+    result = asyncio.run(dream_agent.dry_run('synthetic', records, turn=turn))
+    assert not result['plan']['edits']
+    assert result['guard_decisions'] == {'context_target': 1}
+    assert result['role_counts'] == {'target': 1, 'context': 1}
+    assert len(seen) == 2
+
+
+def test_merge_cannot_mutate_context_partner():
+    edit = Edit(
+        kind='merge_memories',
+        target='memory_items/a',
+        other='memory_items/b',
+        before='',
+        after='Toy fact',
+        reason='Synthetic',
+        evidence=['memory_items/a', 'memory_items/b'],
+    )
+    sink = {}
+    assert not dream_guards.filter_plan(
+        Plan(edits=[edit]), {'memory_items/a': {}, 'memory_items/b': {}}, targets=['memory_items/a'], usage_sink=sink
+    ).edits
+    assert sink['rejected'] == {'context_target': 1}
+
+
+def test_neighbourhood_budget_stops_lazy_expensive_queries():
+    targets = {'conversations/a': {'transcript_segments': [{'text': 'solar boat ' * 20}]}}
+    touched = []
+
+    def candidates():
+        for i in range(100):
+            touched.append(i)
+            yield f'conversations/context-{i}', {'transcript_segments': [{'text': 'invented ' * 1000}]}
+
+    records = dream_context.add_context(targets, candidates(), Caps())
+    assert len(touched) < 100
+    assert records.targets == set(targets)
+    assert dream_context.fits_pass(records, Caps())
+
+
+def test_lexical_query_uses_rare_terms_and_vocabulary_near_matches():
+    terms = dream_context.query_terms(
+        {'transcript_segments': [{'text': 'Nuvrah built a window for the garden.'}]}, [{'spelling': 'Nuvra'}]
+    )
+    assert 'nuvrah' in terms and 'Nuvra' in terms
+    assert 'window' not in terms and 'garden' not in terms
+
+
+def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    calls = []
+    monkeypatch.setattr(dream_context.action_items, 'get_action_items', lambda uid, **kwargs: [{'id': 'task'}])
+    monkeypatch.setattr(
+        dream_context,
+        'MemoryService',
+        lambda: SimpleNamespace(read=lambda uid, **kwargs: [], search=lambda uid, query, **kwargs: []),
+    )
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **kwargs: ['lexical'])
+    monkeypatch.setattr(dream_context.vector_db, 'query_vectors', lambda query, uid, **kwargs: ['semantic'])
+    monkeypatch.setattr(dream_context.conversations, 'get_conversations', lambda uid, **kwargs: [{'id': 'adjacent'}])
+    monkeypatch.setattr(dream_context.screen_activity, 'get_screen_activity', lambda uid, **kwargs: [{'id': 'frame'}])
+
+    def read(uid, ref):
+        calls.append((uid, ref))
+        return {'name': 'Nuvra'}
+
+    targets = {
+        'conversations/a': {
+            'created_at': datetime(2030, 1, 1, tzinfo=timezone.utc),
+            'transcript_segments': [{'text': 'Nuvrah', 'person_id': 'p'}],
+        }
+    }
+    rows = list(
+        dream_context.context_candidates('synthetic-owner', targets, [], read_record=read, read_entity_record=read)
+    )
+    assert [ref for ref, _ in rows] == [
+        'entity/person:p',
+        'action_items/task',
+        'conversations/lexical',
+        'conversations/semantic',
+        'conversations/adjacent',
+        'screen/frame',
+    ]
+    assert all(uid == 'synthetic-owner' for uid, _ in calls)
+
+
+def test_invisible_neighbours_are_excluded():
+    records = dream_context.add_context({'people/target': {'name': 'Nuvra'}}, [('people/hidden', None)], Caps())
+    assert list(records) == ['people/target']

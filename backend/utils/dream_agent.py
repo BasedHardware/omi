@@ -12,6 +12,7 @@ from database import dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
 from utils import dream_reads, dream_tools, dream_transport, dream_guards
+from utils.dream_context import EvidenceRecords, target_refs
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
@@ -64,7 +65,13 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
         raise ValueError('dream_unknown_cluster')
     if not refs:
         return Plan(), triage.tokens
-    selected = {ref: records[ref] for ref in refs[:8]}
+    targets = [ref for ref in refs if ref in target_refs(records)][:8]
+    if not targets:
+        return Plan(), triage.tokens
+    # Both stages see the same admitted context; triage-selected targets stay bounded.
+    selected = EvidenceRecords(
+        {ref: row for ref, row in records.items() if ref in targets or ref not in target_refs(records)}, targets=targets
+    )
     main = await run_loop(
         mount(Plan, caps.tokens - triage.tokens),
         evidence_message(
@@ -79,11 +86,37 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
     )
     if main.reason != 'stopped':
         raise ValueError('dream_reasoning_budget')
-    return main.value, triage.tokens + main.tokens
+    return (
+        dream_guards.filter_plan(main.value, selected, targets=targets, usage_sink=usage_sink),
+        triage.tokens + main.tokens,
+    )
 
 
 class IdlePass(Exception):
     """No visible evidence was selected; release the provisional admission."""
+
+
+async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabulary=None):
+    """Plan caller-supplied decrypted evidence without reads, admission or effects.
+
+    The owner supplies records obtained through authorized visibility-aware readers.
+    Inference still uses the configured gateway; this function writes no product state.
+    Supplying `turn` makes provider-free synthetic replays possible.
+    """
+    evidence = EvidenceRecords(records, targets=target_refs(records) if targets is None else targets)
+    if not evidence.targets <= set(evidence):
+        raise ValueError('dream_unknown_target')
+    sink = {'tokens': 0}
+    plan, tokens = await plan_pass(
+        uid, evidence, caps or Caps.from_env(), turn=turn, vocabulary=vocabulary, usage_sink=sink
+    )
+    plan = dream_guards.filter_plan(plan, evidence, targets=evidence.targets, usage_sink=sink)
+    return {
+        'plan': plan.model_dump(mode='python'),
+        'guard_decisions': sink.get('rejected', {}),
+        'role_counts': {'target': len(evidence.targets), 'context': len(evidence) - len(evidence.targets)},
+        'tokens': tokens,
+    }
 
 
 async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None):
@@ -117,6 +150,10 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
+            report['role_counts'] = {
+                'target': len(target_refs(records)),
+                'context': len(records) - len(target_refs(records)),
+            }
             if not records:
                 raise IdlePass()
             if progress is not None:
@@ -128,7 +165,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                     if isinstance(row.get(key), str):
                         names.append({'spelling': row[key]})
             plan, tokens = await plan_pass(uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary)
-            plan = dream_guards.filter_plan(plan, records, usage_sink=report)
+            plan = dream_guards.filter_plan(plan, records, targets=target_refs(records), usage_sink=report)
             report.update(
                 status='planned',
                 tokens=tokens,

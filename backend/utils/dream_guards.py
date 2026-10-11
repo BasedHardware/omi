@@ -3,6 +3,7 @@
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from itertools import islice
 from pathlib import Path
 import re
 import unicodedata
@@ -137,7 +138,10 @@ def summary_field_rejection(kind, row, *, min_words=None):
     if kind == 'overview' and (row.get('structured') or {}).get('sections'):
         return 'nonempty_field'
     speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
-    if len(tokens(speech)) < (MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words):
+    minimum = MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words
+    # Count only enough words to decide admission, rather than normalizing and
+    # allocating every token of a long recording for each prompt projection.
+    if sum(1 for _ in islice(re.finditer(r'[^\W_]+', speech), minimum)) < minimum:
         return 'insufficient_speech'
     return None
 
@@ -181,10 +185,11 @@ def feedback_rejection(feedback):
     return None
 
 
-def filter_plan(plan: Plan, records, *, usage_sink=None):
+def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     """Drop unsafe proposals before any report persistence; diagnostics contain counts only."""
     rejected = Counter()
     edits = []
+    targets = set(records) if targets is None else set(targets)
     for edit in plan.edits:
         reason = spelling_rejection(edit)
         if edit.kind in {'close_task', 'retire_task'}:
@@ -199,6 +204,11 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
                 if edit.target not in records or any(ref not in records for ref in edit.evidence)
                 else summary_rejection(edit, records[edit.target])
             )
+        if not reason and (
+            edit.target not in targets
+            or (edit.kind in {'merge_people', 'merge_memories'} and edit.other not in targets)
+        ):
+            reason = 'context_target'
         if reason:
             rejected[reason] += 1
         else:
