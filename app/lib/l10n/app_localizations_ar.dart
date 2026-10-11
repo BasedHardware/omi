@@ -10907,11 +10907,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'نسخ معلّق $count';
-  }
-
-  @override
   String get captureSourceCall => 'مكالمة';
 
   @override
@@ -11951,8 +11946,6 @@ class AppLocalizationsAr extends AppLocalizations {
         'likely': 'محتمل',
         'soundsLike': 'يشبه صوت $name',
         'notPerson': 'ليس $name',
-        'carried': 'لا يزال $name. تم نقله من محادثتك الأخيرة.',
-        'change': 'تغيير',
         'alsoTitle': 'هل هذا أيضًا $name؟',
         'alsoBody': 'عثر Omi على الصوت نفسه في محادثات سابقة.',
         'confirmed': 'لقد أكدت هذه التسمية',

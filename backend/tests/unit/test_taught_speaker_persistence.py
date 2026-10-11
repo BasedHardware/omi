@@ -183,7 +183,7 @@ async def fresh_live_match(monkeypatch, uid, vector):
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: vector)
     matcher = speakers.SpeakerMatcher(host)
     # End the worker deterministically once loading finishes; no timer/sleep.
-    matcher.queue = SimpleNamespace(get=AsyncMock(side_effect=asyncio.TimeoutError))
+    monkeypatch.setattr(matcher.queue, 'get', AsyncMock(side_effect=asyncio.TimeoutError))
     await matcher.load_and_run()
     await matcher.match(7, {'id': 'later-segment', 'duration': 10, 'abs_start': 0, 'abs_end': 10})
     return matcher, suggestions

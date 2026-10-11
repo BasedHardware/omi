@@ -11033,11 +11033,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Trascrizioni in attesa $count';
-  }
-
-  @override
   String get captureSourceCall => 'Chiamata';
 
   @override
@@ -12085,8 +12080,6 @@ class AppLocalizationsIt extends AppLocalizations {
         'likely': 'Probabile',
         'soundsLike': 'Somiglia a $name',
         'notPerson': 'Non è $name',
-        'carried': 'È ancora $name. Riportato dalla tua ultima conversazione.',
-        'change': 'Cambia',
         'alsoTitle': 'È anche $name?',
         'alsoBody': 'Omi ha trovato la stessa voce in conversazioni precedenti.',
         'confirmed': 'Hai confermato questa etichetta',

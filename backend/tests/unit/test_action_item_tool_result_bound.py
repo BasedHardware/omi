@@ -70,6 +70,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.chat_scope",
     "utils.messaging",
     "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.messaging.turn_context",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
 ]
@@ -116,6 +118,9 @@ def _chat_scope_from_config(configurable):
 _chat_scope = _mod("utils.retrieval.chat_scope")
 _chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
 _chat_scope.chat_scope_from_config = _chat_scope_from_config
+
+_mod("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_load("utils.messaging.turn_context", "utils/messaging/turn_context.py")
 
 ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
 

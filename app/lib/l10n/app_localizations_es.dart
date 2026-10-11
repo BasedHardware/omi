@@ -11005,11 +11005,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcripciones pendientes $count';
-  }
-
-  @override
   String get captureSourceCall => 'Llamada';
 
   @override
@@ -12057,8 +12052,6 @@ class AppLocalizationsEs extends AppLocalizations {
         'likely': 'Probable',
         'soundsLike': 'Suena como $name',
         'notPerson': 'No es $name',
-        'carried': 'Sigue siendo $name. Heredado de tu última conversación.',
-        'change': 'Cambiar',
         'alsoTitle': '¿Es también $name?',
         'alsoBody': 'Omi encontró la misma voz en conversaciones anteriores.',
         'confirmed': 'Confirmaste esta etiqueta',

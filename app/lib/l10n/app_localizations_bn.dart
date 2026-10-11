@@ -10972,11 +10972,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $count';
-  }
-
-  @override
   String get captureSourceCall => 'কল';
 
   @override
@@ -12018,8 +12013,6 @@ class AppLocalizationsBn extends AppLocalizations {
         'likely': 'সম্ভাব্য',
         'soundsLike': '$name-এর মতো শোনাচ্ছে',
         'notPerson': '$name নয়',
-        'carried': 'এখনও $name। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।',
-        'change': 'পরিবর্তন',
         'alsoTitle': 'এটিও কি $name?',
         'alsoBody': 'Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।',
         'confirmed': 'আপনি এই লেবেল নিশ্চিত করেছেন',

@@ -10953,11 +10953,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'लंबित ट्रांसक्रिप्शन $count';
-  }
-
-  @override
   String get captureSourceCall => 'कॉल';
 
   @override
@@ -12003,8 +11998,6 @@ class AppLocalizationsHi extends AppLocalizations {
         'likely': 'संभावित',
         'soundsLike': '$name जैसी लग रही है',
         'notPerson': '$name नहीं',
-        'carried': 'अब भी $name। आपकी पिछली बातचीत से जारी।',
-        'change': 'बदलें',
         'alsoTitle': 'क्या यह भी $name है?',
         'alsoBody': 'Omi को यही आवाज़ पिछली बातचीतों में मिली।',
         'confirmed': 'आपने इस लेबल की पुष्टि की',

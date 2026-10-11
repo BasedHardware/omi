@@ -94,7 +94,7 @@ def test_digest_append_only_and_byte_prefix_stable(monkeypatch):
             'created_at': datetime.now(timezone.utc),
         }
     ]
-    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": rows)
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="", exclude_session=None: rows)
     mount = Mount(instructions='stable', skills=('channel skill',), cache_breakpoint=True)
     before = mount.messages([{'role': e['role'], 'content': e['content']} for e in old])
     asyncio.run(history.append_digest(store, 'u', session, old))
@@ -111,7 +111,7 @@ def test_long_digest_uses_summary_once(monkeypatch):
     monkeypatch.setattr(
         history,
         'recent_activity',
-        lambda uid, since="": [
+        lambda uid, since="", exclude_session=None: [
             {
                 'id': 'other',
                 'chat_session_id': 'elsewhere',
@@ -138,7 +138,7 @@ def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
     message = adapter.parse(body)[0]
     proof = store.mint('u', adapter.channel, adapter.provider, 'token')['proof']
     store.consume(proof, message)
-    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": [])
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="", exclude_session=None: [])
     entered, proceed = None, None
     active = 0
     maximum = 0
@@ -248,7 +248,7 @@ def test_app_return_appends_channel_activity_without_rewriting_prefix(monkeypatc
     monkeypatch.setattr(app_awareness, 'MessagingStore', lambda: store)
     monkeypatch.setattr(app_awareness, 'require_access', lambda uid: None)
     other = []
-    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": other)
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="", exclude_session=None: other)
     first = SimpleNamespace(id='human1', text='first', sender='human', created_at=datetime.now(timezone.utc))
 
     async def run():

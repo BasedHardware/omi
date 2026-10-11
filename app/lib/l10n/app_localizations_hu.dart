@@ -11018,11 +11018,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Függő átiratok $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hívás';
 
   @override
@@ -12068,8 +12063,6 @@ class AppLocalizationsHu extends AppLocalizations {
         'likely': 'Valószínű',
         'soundsLike': '$name hangjához hasonlít',
         'notPerson': 'Nem $name',
-        'carried': 'Továbbra is $name. Átvéve az előző beszélgetésedből.',
-        'change': 'Módosítás',
         'alsoTitle': 'Ő is $name?',
         'alsoBody': 'Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.',
         'confirmed': 'Megerősítetted ezt a címkét',

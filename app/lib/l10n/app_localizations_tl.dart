@@ -11067,11 +11067,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Mga transcript na naghihintay $count';
-  }
-
-  @override
   String get captureSourceCall => 'Tawag';
 
   @override
@@ -12120,8 +12115,6 @@ class AppLocalizationsTl extends AppLocalizations {
         'likely': 'Posible',
         'soundsLike': 'Parang si $name',
         'notPerson': 'Hindi si $name',
-        'carried': 'Si $name pa rin. Dinala mula sa huli mong usapan.',
-        'change': 'Baguhin',
         'alsoTitle': 'Si $name rin ba ito?',
         'alsoBody': 'Nahanap ni Omi ang parehong boses sa mga naunang usapan.',
         'confirmed': 'Kinumpirma mo ang label na ito',

@@ -10810,11 +10810,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '대기 중인 전사 $count';
-  }
-
-  @override
   String get captureSourceCall => '통화';
 
   @override
@@ -11847,8 +11842,6 @@ class AppLocalizationsKo extends AppLocalizations {
         'likely': '추정',
         'soundsLike': '$name님 목소리와 비슷해요',
         'notPerson': '$name님 아님',
-        'carried': '계속 $name님이에요. 지난 대화에서 이어졌어요.',
-        'change': '변경',
         'alsoTitle': '이분도 $name님인가요?',
         'alsoBody': 'Omi가 이전 대화에서 같은 목소리를 찾았어요.',
         'confirmed': '이 라벨을 확인했어요',

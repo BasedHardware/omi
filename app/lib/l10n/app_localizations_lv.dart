@@ -11001,11 +11001,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Gaidošas transkripcijas $count';
-  }
-
-  @override
   String get captureSourceCall => 'Zvans';
 
   @override
@@ -12048,8 +12043,6 @@ class AppLocalizationsLv extends AppLocalizations {
         'likely': 'Iespējams',
         'soundsLike': 'Izklausās pēc $name',
         'notPerson': 'Nav $name',
-        'carried': 'Joprojām $name. Pārnests no jūsu pēdējās sarunas.',
-        'change': 'Mainīt',
         'alsoTitle': 'Vai šī ir arī $name?',
         'alsoBody': 'Omi atrada to pašu balsi iepriekšējās sarunās.',
         'confirmed': 'Jūs apstiprinājāt šo birku',

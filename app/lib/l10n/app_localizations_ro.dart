@@ -11025,11 +11025,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcrieri în așteptare $count';
-  }
-
-  @override
   String get captureSourceCall => 'Apel';
 
   @override
@@ -12075,8 +12070,6 @@ class AppLocalizationsRo extends AppLocalizations {
         'likely': 'Probabil',
         'soundsLike': 'Sună ca $name',
         'notPerson': 'Nu este $name',
-        'carried': 'Tot $name. Preluat din ultima ta conversație.',
-        'change': 'Schimbă',
         'alsoTitle': 'Este și aceasta $name?',
         'alsoBody': 'Omi a găsit aceeași voce în conversații anterioare.',
         'confirmed': 'Ai confirmat această etichetă',

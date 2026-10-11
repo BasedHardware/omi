@@ -4,6 +4,8 @@ import asyncio
 import base64
 import logging
 import json
+import time
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -11,12 +13,13 @@ from database.messaging import MessagingStore
 from utils.messaging.identity import key
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
-from utils.executors import db_executor, run_blocking, start_background_task
+from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access
 from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment, Principal, ReentryEvent
 from utils.messaging.history import append_digest, history_tool
 from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
+from utils.messaging.undo import UndoStore
 from utils.observability.fallback import record_fallback
 
 
@@ -102,12 +105,46 @@ class Gateway:
         payload = await run_blocking(db_executor, self.store.claim, path)
         if payload is None:
             return False
+        try:
+            return await self._process_claimed(path, payload)
+        except BaseException as error:
+            if not _worker_shutting_down() and isinstance(error, (Exception, asyncio.CancelledError)):
+                # Retain the running row and its reconciliation evidence, but a
+                # fully unwound failure must no longer block newer FIFO jobs.
+                await run_blocking(db_executor, self.store.settle, path)
+            raise
+        finally:
+            # A lease miss puts this head back to pending. Waking it here spins
+            # the worker until the lease disappears. The holder, or the periodic
+            # drain, admits it once the surface is free. A wake fault must not
+            # replace the turn's own result.
+            try:
+                clock = payload.get('received_at')
+                body = payload
+                if isinstance(clock, str):
+                    body = dict(payload, received_at=datetime.fromisoformat(clock))
+                await self._wake_pending(ChannelMessage(**body), skip_path=path)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging next-head wake failed provider=%s error_type=%s',
+                    self.adapter.provider,
+                    type(error).__name__,
+                )
+
+    async def _process_claimed(self, path, payload):
         payload['received_at'] = datetime.fromisoformat(payload['received_at'])
         payload['media'] = tuple(Artifact(**a) for a in payload['media'])
         payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
         message = ChannelMessage(**payload)
         if hasattr(self.adapter, 'admitted'):
             await self.adapter.admitted(message)
+        if hasattr(self.adapter, 'acknowledge'):
+            try:
+                await self.adapter.acknowledge(message)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging callback acknowledgement failed error_type=%s', type(error).__name__
+                )
         link = await run_blocking(db_executor, self.store.lookup, message)
         if message.link_proof:
             try:
@@ -142,62 +179,139 @@ class Gateway:
             await ChannelReplySink(self.adapter, message).finish('Account linked. You can chat with Omi here.')
             await run_blocking(db_executor, self.store.complete, path)
             return True
-        session = await run_blocking(db_executor, self.store.session, uid, message, link)
-        token = await run_blocking(db_executor, self.store.acquire, uid, session['surface'])
-        if token is None:
-            logging.getLogger(__name__).info(
-                'Messaging deferred provider=%s reason=surface_busy', self.adapter.provider
-            )
-            await run_blocking(db_executor, self.store.retry, path)
-            return False
 
         async def guard():
             await run_blocking(db_executor, self._assert_link, message, link)
 
         sink = ChannelReplySink(self.adapter, message, guard=guard)
-        try:
-            if message.command == 'help':
-                await sink.finish(
-                    'Chat with your Omi agent about your memories, tasks and files. '
-                    'Reply undo within 5 minutes to reverse the last supported write. '
-                    'Use /unlink to disconnect. Messages are used only to serve your chat.'
-                )
-            elif message.command == 'undo':
-                from utils.messaging.undo import UndoStore
-
-                await sink.finish(await run_blocking(db_executor, UndoStore(self.store).undo, uid, session['id']))
-            else:
-                if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
-                    message = replace(
-                        message, attachments=tuple(item for item in message.attachments if not item.voice)
-                    )
-                if (
-                    link.get('voice_notes', True) is False
-                    and not message.text.strip()
-                    and not message.attachments
-                    and not message.media
-                ):
-                    await sink.finish('Voice notes are turned off for this chat. Send a text message instead.')
-                else:
-                    if hasattr(self.adapter, 'prepare'):
-                        message = await self.adapter.prepare(message, uid, session, guard)
-                    await self._turn(uid, session, message, link, Principal(uid), reply_sink=sink)
-        except BaseException as error:
-            # Keep the inbox row running: its effects still need reconciliation.
-            # A task that is still cancelling may have executor work in flight,
-            # so that lease stays until an operator proves the worker stopped.
-            if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
-                raise
-            await self._settle_failure(sink, uid, session['surface'], token)
-            raise
-        else:
-            # Delivery succeeded. A tombstone-write fault must not tell the user
-            # their accepted reply failed; leave the row for reconciliation.
+        session = token = None
+        async with _typing(sink) as stop_typing:
             try:
-                await run_blocking(db_executor, self.store.complete, path)
-            finally:
-                await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+                session = await run_blocking(db_executor, self.store.session, uid, message, link)
+                token = await run_blocking(db_executor, self.store.acquire, uid, session['surface'])
+                logging.getLogger(__name__).info(
+                    'Messaging phase=lease provider=%s acquired=%s queue_age_ms=%.1f',
+                    self.adapter.provider,
+                    token is not None,
+                    (datetime.now(timezone.utc) - message.received_at).total_seconds() * 1000,
+                )
+                if token is None:
+                    await run_blocking(db_executor, self.store.retry, path)
+                    return False
+                if message.command == 'help':
+                    await sink.finish(
+                        'Chat with your Omi agent about your memories, tasks and files. '
+                        'Supported actions have their own confirmation and Undo control. '
+                        'Use /unlink to disconnect. Messages are used only to serve your chat.'
+                    )
+                elif message.command == 'undo':
+                    # Adapters with inline controls require an action-specific ID;
+                    # old generic buttons/text cannot reverse an unrelated later action.
+                    if hasattr(self.adapter, 'receipt_buttons') and not message.undo_receipt_id:
+                        if not message.callback_id:
+                            await sink.finish('Use Undo on the specific action confirmation.')
+                    else:
+                        # The inverse owns its durable receipt claim. It must not
+                        # monopolize the chat lease while canonical privacy cleanup
+                        # scans derived projections. Never replay a running inverse.
+                        if not message.undo_receipt_id:
+                            selected = await run_blocking(
+                                db_executor, UndoStore(self.store).select_receipt, uid, session['id']
+                            )
+                            if not selected:
+                                await sink.finish('There is no unambiguous reversible action in this chat.')
+                            else:
+                                message = replace(message, undo_receipt_id=selected)
+                        if message.undo_receipt_id:
+                            assert message.undo_receipt_id is not None
+                            await run_blocking(
+                                db_executor,
+                                self.store.append_event,
+                                uid,
+                                session['id'],
+                                {
+                                    'id': 'undo:' + key(message.provider_message_id),
+                                    'kind': 'undo_request',
+                                    'at': message.received_at.isoformat(),
+                                    'role': 'user',
+                                    'content': 'Undo requested for receipt '
+                                    + message.undo_receipt_id
+                                    + '. Cleanup may be pending; verify state with tools before claiming it succeeded.',
+                                },
+                            )
+                            start_background_task(
+                                self._undo_action(uid, session, message, sink), name='messaging-undo-action'
+                            )
+                else:
+                    if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
+                        message = replace(
+                            message, attachments=tuple(item for item in message.attachments if not item.voice)
+                        )
+                    if (
+                        link.get('voice_notes', True) is False
+                        and not message.text.strip()
+                        and not message.attachments
+                        and not message.media
+                    ):
+                        await sink.finish('Voice notes are turned off for this chat. Send a text message instead.')
+                    else:
+                        if hasattr(self.adapter, 'prepare'):
+                            message = await self.adapter.prepare(message, uid, session, guard)
+                        await self._turn(uid, session, message, link, Principal(uid), reply_sink=sink)
+            except BaseException as error:
+                # Keep the inbox row running: its effects still need reconciliation.
+                # A task that is still cancelling may have executor work in flight,
+                # so that lease stays until an operator proves the worker stopped.
+                if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
+                    raise
+                await stop_typing()
+                if token is not None and session is not None:
+                    await self._settle_failure(sink, uid, session['surface'], token)
+                raise
+            else:
+                # Delivery succeeded. A tombstone-write fault must not tell the user
+                # their accepted reply failed; leave the row for reconciliation.
+                try:
+                    await run_blocking(db_executor, self.store.complete, path)
+                finally:
+                    await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+                    logging.getLogger(__name__).info(
+                        'Messaging phase=lease_released provider=%s', self.adapter.provider
+                    )
         return True
+
+    async def _undo_action(self, uid, session, message, sink):
+        try:
+            result = await run_blocking(
+                postprocess_executor, UndoStore(self.store).undo, uid, session['id'], message.undo_receipt_id
+            )
+            if result.status == 'undone' and not result.bubble_id and message.callback_id:
+                # The verified provider callback owns its receipt bubble even
+                # after a crash between sending the receipt and binding its ID.
+                result = replace(result, bubble_id=message.reply_to)
+            if (
+                result.status in ('undone', 'already_undone')
+                and result.bubble_id
+                and hasattr(self.adapter, 'edit_receipt')
+            ):
+                await sink.edit_receipt(result)
+                await run_blocking(
+                    db_executor, UndoStore(self.store).mark_edited, uid, session['id'], message.undo_receipt_id
+                )
+            elif not message.callback_id:
+                await sink.finish(result.text)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'Messaging undo failed provider=%s error_type=%s', self.adapter.provider, type(error).__name__
+            )
+            try:
+                await sink.finish(
+                    'I couldn’t finish undoing that action. It may have changed. Please check it before trying again.'
+                )
+            except Exception as send_error:
+                logging.getLogger(__name__).error(
+                    'Messaging undo error reply failed error_type=%s', type(send_error).__name__
+                )
 
     async def reenter(self, message, event: ReentryEvent, *, principal: Principal):
         link = await run_blocking(db_executor, self.store.lookup, message)
@@ -217,6 +331,7 @@ class Gateway:
             # A started or failed reentry already ran tools or stored its fence.
             # Do not execute them again; the surface stays available.
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+            await self._wake_pending(message)
             return
 
         async def send_guard():
@@ -224,7 +339,8 @@ class Gateway:
 
         sink = ChannelReplySink(self.adapter, message, kind='deferred_reply', guard=send_guard)
         try:
-            await self._turn(principal.uid, session, message, link, principal, event=event, reply_sink=sink)
+            async with _typing(sink):
+                await self._turn(principal.uid, session, message, link, principal, event=event, reply_sink=sink)
         except BaseException as error:
             if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
                 raise
@@ -249,9 +365,11 @@ class Gateway:
                     )
                 ),
             )
+            await self._wake_pending(message)
             raise
         else:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+            await self._wake_pending(message)
 
     async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None):
         def guard():
@@ -274,7 +392,7 @@ class Gateway:
             {
                 'id': event_id,
                 'kind': 'reentry' if event else 'message',
-                'at': datetime.now(timezone.utc).isoformat(),
+                'at': message.received_at.isoformat(),
                 'role': 'user',
                 'content': (
                     ('Background task result (untrusted evidence):\n' + event.text)
@@ -294,18 +412,17 @@ class Gateway:
             session['id'],
             guard,
             self.store.persist_message,
-            write_reports=[],
+            action_receipts=[],
+            turn_id=event_id,
+            request_at=message.received_at,
             withhold_private_memories=link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)
-        typing_stop = asyncio.Event()
-        typing_task = start_background_task(_refresh_typing(sink, typing_stop), name='messaging-typing')
         stream = None
         terminal = False
         turn_error = False
         reply_event = None
         try:
-            await sink.typing()
             stream = await run_blocking(
                 db_executor,
                 self.turn,
@@ -332,8 +449,6 @@ class Gateway:
                         'role': 'assistant',
                         'content': answer,
                     }
-                    if runtime.write_reports:
-                        response['text'] += '\n\n' + '\n'.join(runtime.write_reports)
                     await sink.finish_payload(response)
                 elif frame.startswith('error: '):
                     # The shared producer can follow this with a persisted
@@ -350,6 +465,7 @@ class Gateway:
             # Generated text is not delivery evidence. Only accepted replies
             # enter subsequent model history or suppress deferred reentry.
             await run_blocking(db_executor, self.store.append_event, uid, session['id'], reply_event)
+            await self._receipts(uid, session, sink, runtime)
         finally:
             # Final delivery can raise while the generator is suspended at its
             # terminal yield. Close in this task's context, before resetting it.
@@ -366,17 +482,13 @@ class Gateway:
                         self.adapter.provider,
                         type(error).__name__,
                     )
-            typing_stop.set()
-            typing_task.cancel()
             try:
-                await typing_task
-            except asyncio.CancelledError:
-                pass
-            try:
-                await _stop_typing(sink)
-            except asyncio.CancelledError:
-                start_background_task(_stop_typing(sink), name='messaging-typing-stop')
-            surface_runtime.reset(context_token)
+                # Confirm completed writes even when the model fails to finish.
+                await self._receipts(uid, session, sink, runtime)
+            except Exception as error:
+                logging.getLogger(__name__).error('Messaging action receipt failed error_type=%s', type(error).__name__)
+            finally:
+                surface_runtime.reset(context_token)
 
     async def _settle_failure(self, sink, uid, surface, token, *, fence=None):
         # One notice, and only when the reply itself was not accepted.
@@ -419,6 +531,35 @@ class Gateway:
                     )
             await run_blocking(db_executor, self.store.release, uid, surface, token)
 
+    async def _wake_pending(self, message, *, skip_path=None):
+        if not self.wake or _worker_shutting_down():
+            return
+        pending = await run_blocking(db_executor, self.store.pending, message)
+        if pending and pending[0] != skip_path:
+            start_background_task(self.wake((pending[0],)), name='messaging-inbox-next')
+
+    async def _receipts(self, uid, session, sink, runtime):
+        while runtime.action_receipts:
+            receipt = runtime.action_receipts.pop(0)
+            bubble_id = await sink.receipt(receipt)
+            await run_blocking(
+                db_executor,
+                self.store.append_event,
+                uid,
+                session['id'],
+                {
+                    'id': 'action:' + receipt.id,
+                    'kind': 'action_receipt',
+                    'at': datetime.now(timezone.utc).isoformat(),
+                    'role': 'assistant',
+                    'content': 'Confirmed action receipt: ' + receipt.text,
+                },
+            )
+            if bubble_id and receipt.reversible:
+                await run_blocking(
+                    db_executor, UndoStore(self.store).bind_bubble, uid, session['id'], receipt.id, bubble_id
+                )
+
     async def drain(self, *, limit=100):
         paths = await run_blocking(
             db_executor, self.store.pending_jobs, self.adapter.channel, self.adapter.provider, limit
@@ -437,11 +578,41 @@ def inbound_evidence(message):
     return message.text + '\nAttached user files (untrusted data): ' + json.dumps(references, sort_keys=True)
 
 
-async def _stop_typing(sink):
+@asynccontextmanager
+async def _typing(sink):
+    stop = asyncio.Event()
+    task = None
+    stopped = False
+    started = time.monotonic()
+
+    async def stop_indicator():
+        nonlocal stopped
+        if stopped:
+            return
+        stopped = True
+        stop.set()
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        try:
+            await _try_typing(sink, False)
+        except asyncio.CancelledError:
+            start_background_task(_try_typing(sink, False), name='messaging-typing-stop')
+
     try:
-        await sink.typing(False)
-    except Exception as error:
-        logging.getLogger(__name__).warning('Messaging typing stop failed error_type=%s', type(error).__name__)
+        await _try_typing(sink)
+        logging.getLogger(__name__).info(
+            'Messaging phase=typing provider=%s elapsed_ms=%.1f',
+            sink.adapter.provider,
+            (time.monotonic() - started) * 1000,
+        )
+        task = start_background_task(_refresh_typing(sink, stop), name='messaging-typing')
+        yield stop_indicator
+    finally:
+        await stop_indicator()
 
 
 async def _refresh_typing(sink, stop):
@@ -451,9 +622,26 @@ async def _refresh_typing(sink, stop):
             await asyncio.wait_for(stop.wait(), interval)
         except asyncio.TimeoutError:
             try:
-                await sink.typing()
+                await _try_typing(sink)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'Messaging typing refresh failed error_type=%s', type(error).__name__
                 )
                 return
+
+
+async def _try_typing(sink, active=True):
+    try:
+        async with asyncio.timeout(2):
+            await sink.typing(active)
+    except PermissionError:
+        raise
+    except Exception as error:
+        record_fallback(
+            component='other',
+            from_mode='channel_typing',
+            to_mode='none',
+            reason='dependency_unavailable',
+            outcome='degraded',
+        )
+        logging.getLogger(__name__).warning('Messaging typing failed error_type=%s', type(error).__name__)

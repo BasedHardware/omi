@@ -10967,11 +10967,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'رونویسی‌های در انتظار $count';
-  }
-
-  @override
   String get captureSourceCall => 'تماس';
 
   @override
@@ -12016,8 +12011,6 @@ class AppLocalizationsFa extends AppLocalizations {
         'likely': 'احتمالاً',
         'soundsLike': 'شبیه $name است',
         'notPerson': '$name نیست',
-        'carried': 'همچنان $name. از آخرین گفتگوی شما منتقل شد.',
-        'change': 'تغییر',
         'alsoTitle': 'آیا این هم $name است؟',
         'alsoBody': 'Omi همین صدا را در گفتگوهای قبلی پیدا کرد.',
         'confirmed': 'شما این برچسب را تأیید کردید',
