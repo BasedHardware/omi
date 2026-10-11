@@ -12,7 +12,7 @@ from database import dream_scheduler, dream_store, dream_feedback, review_change
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
-from utils.dream_context import EvidenceRecords, target_refs
+from utils.dream_context import EvidenceRecords, target_refs, cluster_hints
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
@@ -82,7 +82,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             Plan,
             caps.tokens - triage.tokens,
             names=person_names(records),
-            clusters=triage.value.model_dump(),
+            clusters=cluster_hints(triage.value, selected),
             vocabulary=vocabulary,
         ),
         partial(invoke, uid, dream_transport.MAIN_LANE),

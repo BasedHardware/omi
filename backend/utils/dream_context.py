@@ -14,6 +14,7 @@ from utils.dream_prompt import (
     mount,
     COMPLETION_RESERVE,
     TRIAGE_INSTRUCTIONS,
+    person_names,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
@@ -34,6 +35,32 @@ def target_refs(records):
     return getattr(records, 'targets', set(records))
 
 
+PROBLEMS = ('spelling', 'duplicates', 'entity', 'tasks', 'quality')
+
+
+def cluster_hints(triage, records):
+    # A compact union per problem preserves every admitted evidence association.
+    # Repeated clusters/refs cannot inflate the paid reasoning metadata.
+    return {
+        'clusters': [
+            {
+                'problem': problem,
+                'refs': sorted(
+                    {
+                        ref
+                        for cluster in triage.clusters
+                        if cluster.problem == problem
+                        for ref in cluster.refs
+                        if ref in records
+                    }
+                ),
+            }
+            for problem in PROBLEMS
+            if any(cluster.problem == problem for cluster in triage.clusters)
+        ]
+    }
+
+
 def fits_pass(records, caps, vocabulary=None):
     if not fits_triage(records, caps, vocabulary):
         return False
@@ -42,7 +69,15 @@ def fits_pass(records, caps, vocabulary=None):
         budget = triage_budget(caps)
         triage = evidence_message(records, Triage, budget, vocabulary=vocabulary)
         ceiling = input_ceiling(mount(Triage, budget, TRIAGE_INSTRUCTIONS).messages(triage), Triage.model_json_schema())
-        evidence_message(records, Plan, caps.tokens - ceiling - COMPLETION_RESERVE, vocabulary=vocabulary)
+        worst_clusters = {'clusters': [{'problem': problem, 'refs': list(records)} for problem in PROBLEMS]}
+        evidence_message(
+            records,
+            Plan,
+            caps.tokens - ceiling - COMPLETION_RESERVE,
+            vocabulary=vocabulary,
+            clusters=worst_clusters,
+            names=person_names(records),
+        )
     except ValueError:
         return False
     return True
@@ -74,6 +109,8 @@ def identities(row):
 
 def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_record):
     """Yield lazily: once the evidence budget is full no later-tier query runs."""
+    if not target_refs(targets):
+        return
     subjects = set().union(*(identities(row) for row in targets.values()))
     for entity_id in sorted(subjects)[:8]:
         yield 'entity/' + entity_id, read_entity_record(uid, entity_id)
@@ -87,7 +124,7 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
                 task_ref = 'action_items/' + task['id']
                 yield task_ref, read_record(uid, task_ref)
     # Bounded canonical list: same-subject facts, then lexical candidates.
-    memories = MemoryService().read(uid, limit=40)
+    memories = MemoryService().read(uid, limit=40, authoritative=True)
     pool = {'memory_items/' + memory.id: memory.model_dump(mode='python') for memory in memories}
     for ref, row in pool.items():
         if identities(row) & subjects:
