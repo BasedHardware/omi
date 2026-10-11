@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "לא נפתח? שלחו את זה אל {address}",
     "chatAppsLinkExpired": "הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.",
     "chatAppsIMessageTo": "אל: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "לסמן את “{task}” כבוצעה?",
+    "reviewProposalRetireTask": "להסיר את המשימה “{task}”?",
+    "reviewProposalMergePeople": "האם “{name}” הוא אותו אדם כמו “{other}”?",
+    "reviewProposalMergeMemories": "למזג שני זיכרונות כפולים?",
+    "reviewProposalMemory": "לעדכן את הזיכרון הזה?",
+    "reviewProposalEntitySummary": "לעדכן את הסיכום של “{name}”?",
+    "reviewProposalGeneric": "להחיל את התיקון המוצע הזה?",
+    "reviewProposalApply": "החל",
+    "reviewProposalSuggested": "מוצע",
+    "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל."
 }

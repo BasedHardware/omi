@@ -12761,4 +12761,42 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '将“$task”标记为已完成？';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '删除任务“$task”？';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name”和“$other”是同一个人吗？';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => '合并两条重复的记忆？';
+
+  @override
+  String get reviewProposalMemory => '更新这条记忆？';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '更新“$name”的摘要？';
+  }
+
+  @override
+  String get reviewProposalGeneric => '应用这条建议的修正？';
+
+  @override
+  String get reviewProposalApply => '应用';
+
+  @override
+  String get reviewProposalSuggested => '建议';
+
+  @override
+  String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
 }

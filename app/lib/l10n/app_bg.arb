@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "До: Omi · {address}",
     "chatAppsInsightsSubtitle": "Позволи на Omi да ти изпраща обобщение или прозрение тук.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Чакаме да докоснеш „Старт“ в Telegram…"
+    "chatAppsTelegramWaiting": "Чакаме да докоснеш „Старт“ в Telegram…",
+    "reviewProposalCloseTask": "Да се отбележи ли „{task}“ като изпълнена?",
+    "reviewProposalRetireTask": "Да се премахне ли задачата „{task}“?",
+    "reviewProposalMergePeople": "„{name}“ и „{other}“ един и същ човек ли са?",
+    "reviewProposalMergeMemories": "Да се обединят ли два дублирани спомена?",
+    "reviewProposalMemory": "Да се актуализира ли този спомен?",
+    "reviewProposalEntitySummary": "Да се актуализира ли обобщението за „{name}“?",
+    "reviewProposalGeneric": "Да се приложи ли тази предложена корекция?",
+    "reviewProposalApply": "Приложи",
+    "reviewProposalSuggested": "Предложено",
+    "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено."
 }

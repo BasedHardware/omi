@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "খোলেনি? এটি {address} নম্বরে টেক্সট করুন",
     "chatAppsLinkExpired": "লিংকটির মেয়াদ শেষ। নতুন লিংকের জন্য Open Telegram-এ ট্যাপ করুন।",
     "chatAppsIMessageTo": "প্রাপক: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "“{task}” সম্পন্ন হিসেবে চিহ্নিত করবেন?",
+    "reviewProposalRetireTask": "“{task}” কাজটি সরিয়ে দেবেন?",
+    "reviewProposalMergePeople": "“{name}” আর “{other}” কি একই ব্যক্তি?",
+    "reviewProposalMergeMemories": "দুটি সদৃশ স্মৃতি একত্র করবেন?",
+    "reviewProposalMemory": "এই স্মৃতিটি আপডেট করবেন?",
+    "reviewProposalEntitySummary": "“{name}”-এর সারাংশ আপডেট করবেন?",
+    "reviewProposalGeneric": "এই প্রস্তাবিত সংশোধনটি প্রয়োগ করবেন?",
+    "reviewProposalApply": "প্রয়োগ করুন",
+    "reviewProposalSuggested": "প্রস্তাবিত",
+    "reviewProposalConflict": "Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।"
 }

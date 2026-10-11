@@ -4086,5 +4086,15 @@
     "chatAppsIMessageTo": "Címzett: Omi · {address}",
     "chatAppsInsightsSubtitle": "Engedd, hogy Omi itt küldjön összefoglalót vagy meglátást.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Várakozás arra, hogy az Indításra koppints a Telegramban…"
+    "chatAppsTelegramWaiting": "Várakozás arra, hogy az Indításra koppints a Telegramban…",
+    "reviewProposalCloseTask": "Késznek jelölöd ezt: „{task}”?",
+    "reviewProposalRetireTask": "Eltávolítod a(z) „{task}” feladatot?",
+    "reviewProposalMergePeople": "„{name}” ugyanaz a személy, mint „{other}”?",
+    "reviewProposalMergeMemories": "Összevonsz két ismétlődő emléket?",
+    "reviewProposalMemory": "Frissíted ezt az emléket?",
+    "reviewProposalEntitySummary": "Frissíted „{name}” összefoglalóját?",
+    "reviewProposalGeneric": "Alkalmazod ezt a javasolt javítást?",
+    "reviewProposalApply": "Alkalmaz",
+    "reviewProposalSuggested": "Javasolt",
+    "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva."
 }

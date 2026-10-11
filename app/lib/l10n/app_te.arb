@@ -11427,5 +11427,15 @@
     "chatAppsTextThisTo": "తెరుచుకోలేదా? దీన్ని {address}కు పంపండి",
     "chatAppsLinkExpired": "ఆ లింక్ గడువు ముగిసింది. కొత్తది కోసం Telegram తెరవండి నొక్కండి.",
     "chatAppsIMessageTo": "గ్రహీత: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "“{task}”ని పూర్తయినట్లు గుర్తించాలా?",
+    "reviewProposalRetireTask": "“{task}” పనిని తీసివేయాలా?",
+    "reviewProposalMergePeople": "“{name}” మరియు “{other}” ఒకే వ్యక్తా?",
+    "reviewProposalMergeMemories": "రెండు నకిలీ జ్ఞాపకాలను విలీనం చేయాలా?",
+    "reviewProposalMemory": "ఈ జ్ఞాపకాన్ని నవీకరించాలా?",
+    "reviewProposalEntitySummary": "“{name}” సారాంశాన్ని నవీకరించాలా?",
+    "reviewProposalGeneric": "ఈ సూచించిన సవరణను వర్తింపజేయాలా?",
+    "reviewProposalApply": "వర్తింపజేయి",
+    "reviewProposalSuggested": "సూచించినది",
+    "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు."
 }

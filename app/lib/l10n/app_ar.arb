@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "إلى: Omi · {address}",
     "chatAppsInsightsSubtitle": "دع Omi يرسل لك ملخصًا أو رؤية هنا.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "بانتظار أن تضغط على «ابدأ» في Telegram…"
+    "chatAppsTelegramWaiting": "بانتظار أن تضغط على «ابدأ» في Telegram…",
+    "reviewProposalCloseTask": "هل تريد وضع علامة على “{task}” كمكتملة؟",
+    "reviewProposalRetireTask": "هل تريد إزالة المهمة “{task}”؟",
+    "reviewProposalMergePeople": "هل “{name}” هو نفس الشخص “{other}”؟",
+    "reviewProposalMergeMemories": "هل تريد دمج ذكريين مكررين؟",
+    "reviewProposalMemory": "هل تريد تحديث هذه الذكرى؟",
+    "reviewProposalEntitySummary": "هل تريد تحديث ملخص “{name}”؟",
+    "reviewProposalGeneric": "هل تريد تطبيق هذا الإصلاح المقترح؟",
+    "reviewProposalApply": "تطبيق",
+    "reviewProposalSuggested": "مقترح",
+    "reviewProposalConflict": "تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء."
 }

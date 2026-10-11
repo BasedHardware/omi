@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Till: Omi · {address}",
     "chatAppsInsightsSubtitle": "Låt Omi skicka en sammanfattning eller en insikt hit.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Väntar på att du trycker på Starta i Telegram …"
+    "chatAppsTelegramWaiting": "Väntar på att du trycker på Starta i Telegram …",
+    "reviewProposalCloseTask": "Markera ”{task}” som klar?",
+    "reviewProposalRetireTask": "Ta bort uppgiften ”{task}”?",
+    "reviewProposalMergePeople": "Är ”{name}” samma person som ”{other}”?",
+    "reviewProposalMergeMemories": "Slå ihop två dubbletter av minnen?",
+    "reviewProposalMemory": "Uppdatera det här minnet?",
+    "reviewProposalEntitySummary": "Uppdatera sammanfattningen för ”{name}”?",
+    "reviewProposalGeneric": "Tillämpa den här föreslagna rättelsen?",
+    "reviewProposalApply": "Tillämpa",
+    "reviewProposalSuggested": "Föreslaget",
+    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades."
 }

@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Προς: Omi · {address}",
     "chatAppsInsightsSubtitle": "Άσε το Omi να σου στέλνει εδώ μια σύνοψη ή μια πληροφορία.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Αναμονή να πατήσεις «Έναρξη» στο Telegram…"
+    "chatAppsTelegramWaiting": "Αναμονή να πατήσεις «Έναρξη» στο Telegram…",
+    "reviewProposalCloseTask": "Να σημειωθεί το «{task}» ως ολοκληρωμένο;",
+    "reviewProposalRetireTask": "Να αφαιρεθεί η εργασία «{task}»;",
+    "reviewProposalMergePeople": "Είναι ο/η «{name}» το ίδιο πρόσωπο με τον/την «{other}»;",
+    "reviewProposalMergeMemories": "Να συγχωνευθούν δύο διπλές αναμνήσεις;",
+    "reviewProposalMemory": "Να ενημερωθεί αυτή η ανάμνηση;",
+    "reviewProposalEntitySummary": "Να ενημερωθεί η σύνοψη για «{name}»;",
+    "reviewProposalGeneric": "Να εφαρμοστεί αυτή η προτεινόμενη διόρθωση;",
+    "reviewProposalApply": "Εφαρμογή",
+    "reviewProposalSuggested": "Προτεινόμενο",
+    "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα."
 }

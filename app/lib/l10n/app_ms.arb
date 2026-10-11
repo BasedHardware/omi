@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "Kepada: Omi · {address}",
     "chatAppsInsightsSubtitle": "Benarkan Omi menghantar rumusan atau pandangan kepada anda di sini.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…"
+    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…",
+    "reviewProposalCloseTask": "Tandakan “{task}” sebagai selesai?",
+    "reviewProposalRetireTask": "Alih keluar tugas “{task}”?",
+    "reviewProposalMergePeople": "Adakah “{name}” orang yang sama dengan “{other}”?",
+    "reviewProposalMergeMemories": "Gabungkan dua memori pendua?",
+    "reviewProposalMemory": "Kemas kini memori ini?",
+    "reviewProposalEntitySummary": "Kemas kini ringkasan untuk “{name}”?",
+    "reviewProposalGeneric": "Gunakan pembetulan yang dicadangkan ini?",
+    "reviewProposalApply": "Gunakan",
+    "reviewProposalSuggested": "Dicadangkan",
+    "reviewProposalConflict": "Ini telah berubah sejak Dream mencadangkannya, jadi tiada apa yang digunakan."
 }

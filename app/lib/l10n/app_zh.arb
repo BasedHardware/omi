@@ -3990,5 +3990,15 @@
     "chatAppsIMessageTo": "收件人：Omi · {address}",
     "chatAppsInsightsSubtitle": "允许 Omi 在这里向你发送回顾或洞察。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…"
+    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…",
+    "reviewProposalCloseTask": "将“{task}”标记为已完成？",
+    "reviewProposalRetireTask": "删除任务“{task}”？",
+    "reviewProposalMergePeople": "“{name}”和“{other}”是同一个人吗？",
+    "reviewProposalMergeMemories": "合并两条重复的记忆？",
+    "reviewProposalMemory": "更新这条记忆？",
+    "reviewProposalEntitySummary": "更新“{name}”的摘要？",
+    "reviewProposalGeneric": "应用这条建议的修正？",
+    "reviewProposalApply": "应用",
+    "reviewProposalSuggested": "建议",
+    "reviewProposalConflict": "Dream 提出建议后内容已有变化，因此未应用任何更改。"
 }

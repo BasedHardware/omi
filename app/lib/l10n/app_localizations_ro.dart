@@ -13021,4 +13021,42 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Marchezi „$task” ca finalizată?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Elimini sarcina „$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '„$name” este aceeași persoană cu „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Unești două amintiri duplicate?';
+
+  @override
+  String get reviewProposalMemory => 'Actualizezi această amintire?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Actualizezi rezumatul pentru „$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Aplici această corectare sugerată?';
+
+  @override
+  String get reviewProposalApply => 'Aplică';
+
+  @override
+  String get reviewProposalSuggested => 'Sugerat';
+
+  @override
+  String get reviewProposalConflict => 'S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.';
 }

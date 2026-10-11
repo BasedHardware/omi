@@ -13018,4 +13018,42 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Késznek jelölöd ezt: „$task”?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Eltávolítod a(z) „$task” feladatot?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '„$name” ugyanaz a személy, mint „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Összevonsz két ismétlődő emléket?';
+
+  @override
+  String get reviewProposalMemory => 'Frissíted ezt az emléket?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Frissíted „$name” összefoglalóját?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Alkalmazod ezt a javasolt javítást?';
+
+  @override
+  String get reviewProposalApply => 'Alkalmaz';
+
+  @override
+  String get reviewProposalSuggested => 'Javasolt';
+
+  @override
+  String get reviewProposalConflict => 'Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.';
 }

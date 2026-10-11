@@ -12962,4 +12962,42 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označiť „$task“ ako hotové?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Odstrániť úlohu „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je „$name“ tá istá osoba ako „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Zlúčiť dve duplicitné spomienky?';
+
+  @override
+  String get reviewProposalMemory => 'Aktualizovať túto spomienku?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Aktualizovať zhrnutie pre „$name“?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Použiť túto navrhovanú opravu?';
+
+  @override
+  String get reviewProposalApply => 'Použiť';
+
+  @override
+  String get reviewProposalSuggested => 'Navrhnuté';
+
+  @override
+  String get reviewProposalConflict => 'Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.';
 }

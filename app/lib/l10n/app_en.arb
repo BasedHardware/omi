@@ -15688,5 +15688,68 @@
     "@chatAppsIncludedWithPro": {
         "description": "Small all-caps tag: chat apps come with the Omi Pro plan"
     },
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Mark “{task}” as done?",
+    "@reviewProposalCloseTask": {
+        "description": "Dream suggestion card: mark an open task as done",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalRetireTask": "Remove the task “{task}”?",
+    "@reviewProposalRetireTask": {
+        "description": "Dream suggestion card: remove (cancel) an open task",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergePeople": "Is “{name}” the same person as “{other}”?",
+    "@reviewProposalMergePeople": {
+        "description": "Dream suggestion card: merge two people who are the same person",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "other": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergeMemories": "Merge two duplicate memories?",
+    "@reviewProposalMergeMemories": {
+        "description": "Dream suggestion card: merge two duplicate memories"
+    },
+    "reviewProposalMemory": "Update this memory?",
+    "@reviewProposalMemory": {
+        "description": "Dream suggestion card: rewrite one memory"
+    },
+    "reviewProposalEntitySummary": "Update the summary for “{name}”?",
+    "@reviewProposalEntitySummary": {
+        "description": "Dream suggestion card: update a person, organization or project summary",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalGeneric": "Apply this suggested fix?",
+    "@reviewProposalGeneric": {
+        "description": "Dream suggestion card fallback when the change has no specific wording"
+    },
+    "reviewProposalApply": "Apply",
+    "@reviewProposalApply": {
+        "description": "Button: apply a change Dream suggested"
+    },
+    "reviewProposalSuggested": "Suggested",
+    "@reviewProposalSuggested": {
+        "description": "Label above the value Dream suggests, shown under the current value"
+    },
+    "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
+    "@reviewProposalConflict": {
+        "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"
+    }
 }

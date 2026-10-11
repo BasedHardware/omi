@@ -4025,5 +4025,15 @@
     "chatAppsIMessageTo": "Para: Omi · {address}",
     "chatAppsInsightsSubtitle": "Deixe a Omi enviar um resumo ou um insight para você aqui.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Aguardando você tocar em Iniciar no Telegram…"
+    "chatAppsTelegramWaiting": "Aguardando você tocar em Iniciar no Telegram…",
+    "reviewProposalCloseTask": "Marcar “{task}” como concluída?",
+    "reviewProposalRetireTask": "Remover a tarefa “{task}”?",
+    "reviewProposalMergePeople": "“{name}” é a mesma pessoa que “{other}”?",
+    "reviewProposalMergeMemories": "Mesclar duas memórias duplicadas?",
+    "reviewProposalMemory": "Atualizar esta memória?",
+    "reviewProposalEntitySummary": "Atualizar o resumo de “{name}”?",
+    "reviewProposalGeneric": "Aplicar esta correção sugerida?",
+    "reviewProposalApply": "Aplicar",
+    "reviewProposalSuggested": "Sugerido",
+    "reviewProposalConflict": "Isto mudou desde que o Dream sugeriu, então nada foi aplicado."
 }
