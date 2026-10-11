@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
 
@@ -93,10 +94,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int batteryLevel = -1;
   bool isCharging = false;
   final _chargeStarts = ChargeStartTracker();
+  late final FullyChargedAlertGate _fullyChargedAlert;
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
-  bool _hasFullyChargedAlerted = false;
   bool _havingNewFirmware = false;
   bool get havingNewFirmware =>
       _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
@@ -149,10 +150,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
     Future<DeviceConnection?> Function(String)? chargingConnectionLoader,
+    DateTime Function()? clock,
+    Duration? fullyChargedMinimumDwell,
+    FullyChargedNotification? fullyChargedNotification,
+    FullyChargedLevelMismatch? fullyChargedLevelMismatch,
   })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+    _fullyChargedAlert = FullyChargedAlertGate(
+      now: clock ?? DateTime.now,
+      minimumDwell: fullyChargedMinimumDwell ?? FullyChargedAlertGate.minimumOnChargerDwell,
+      onFullyCharged: fullyChargedNotification ?? _showFullyChargedNotification,
+      onLevelMismatch: ({required int notifiedAtLevel, required int correctedLevel}) {
+        _recordFullyChargedLevelMismatch(notifiedAtLevel: notifiedAtLevel, correctedLevel: correctedLevel);
+        fullyChargedLevelMismatch?.call(notifiedAtLevel: notifiedAtLevel, correctedLevel: correctedLevel);
+      },
+    );
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
   }
@@ -185,6 +199,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = null;
     _bleChargingStatusListener?.cancel();
     _bleChargingStatusListener = null;
+    _fullyChargedAlert.onUnplugged();
     _discoveryTimer?.cancel();
     _discoveryTimer = null;
     _disconnectDebouncer.cancel();
@@ -486,16 +501,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;
         }
-        if (isCharging && batteryLevel >= 100 && !_hasFullyChargedAlerted) {
-          _hasFullyChargedAlerted = true;
-          final ctx = globalNavigatorKey.currentContext;
-          NotificationService.instance.createNotification(
-            title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is fully charged",
-            body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
-          );
-        } else if (!isCharging || batteryLevel < 100) {
-          _hasFullyChargedAlerted = false;
-        }
+        // Every callback is a sample, including a repeat of the cached percent.
+        // A stale 100 from before this charge cannot notify; the gate requires
+        // a sample timestamped after the charge-start edge.
+        _onFullyChargedBatterySample(value);
         // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
         // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
         final delta = (_lastNotifiedBatteryLevel - value).abs();
@@ -541,11 +550,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
       // An initial read made by a sync wake is observation, not a charge-start event.
       if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
+      final wasCharging = isCharging;
       if (isCharging != currentStatus) {
         isCharging = currentStatus;
         notifyListeners();
       }
       BatteryWidgetService().updateChargingState(currentStatus);
+      _noteChargingForFullyChargedAlert(currentStatus, wasCharging: wasCharging);
     }
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
@@ -559,22 +570,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         initialObservationDone = true;
         final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
         if (chargeStarted && allowResume) captureProvider?.onChargingStarted();
+        final wasCharging = isCharging;
         if (isCharging != charging) {
           isCharging = charging;
-
           BatteryWidgetService().updateChargingState(charging);
-          if (!charging) {
-            _hasFullyChargedAlerted = false;
-          } else if (batteryLevel >= 100 && !_hasFullyChargedAlerted) {
-            _hasFullyChargedAlerted = true;
-            final ctx = globalNavigatorKey.currentContext;
-            NotificationService.instance.createNotification(
-              title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is fully charged",
-              body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
-            );
-          }
           notifyListeners();
         }
+        _noteChargingForFullyChargedAlert(charging, wasCharging: wasCharging);
       },
     );
     if (!_isCurrent(generation)) {
@@ -582,6 +584,48 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _bleChargingStatusListener = null;
     }
   }
+
+  void _showFullyChargedNotification(int _) {
+    final ctx = globalNavigatorKey.currentContext;
+    NotificationService.instance.createNotification(
+      title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is fully charged",
+      body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
+    );
+  }
+
+  void _recordFullyChargedLevelMismatch({required int notifiedAtLevel, required int correctedLevel}) {
+    // No battery-notification analytics event exists. Keep the property name
+    // stable so device logs can be counted for stale fuel-gauge frequency.
+    Logger.debug(
+      'Fully charged notification mismatch: fully_charged_notified_at_level=$notifiedAtLevel corrected_level=$correctedLevel',
+    );
+  }
+
+  void _onFullyChargedBatterySample(int level) {
+    _fullyChargedAlert.onBatterySample(level);
+  }
+
+  /// False→true restarts dwell, including a reconnect: link loss clears
+  /// [isCharging] without counting as an unplug. A repeated charging sample
+  /// on the same link does not move the anchor.
+  void _noteChargingForFullyChargedAlert(bool charging, {required bool wasCharging}) {
+    if (!charging) {
+      _fullyChargedAlert.onUnplugged();
+      return;
+    }
+    if (!wasCharging || !_fullyChargedAlert.hasChargeWindow) {
+      _fullyChargedAlert.onChargeStarted();
+    }
+  }
+
+  @visibleForTesting
+  DateTime? get fullyChargedChargeStartedAt => _fullyChargedAlert.chargeStartedAt;
+
+  @visibleForTesting
+  bool get hasFullyChargedAlerted => _fullyChargedAlert.hasAlerted;
+
+  @visibleForTesting
+  void onFullyChargedBatterySampleForTesting(int level) => _onFullyChargedBatterySample(level);
 
   /// Updates battery level with throttling logic. Returns true if notifyListeners was called.
   /// This method is exposed for testing the throttling behavior.
@@ -750,6 +794,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
+    _fullyChargedAlert.dispose();
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
     _firmwarePromptTimer?.cancel();
@@ -768,6 +813,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
+    // Link loss is not an unplug. Drop the pending dwell fire, keep the
+    // once-per-cycle alert, and let the next charging observation restart dwell.
+    _fullyChargedAlert.onLinkLost();
     isCharging = false;
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
@@ -904,10 +952,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     }
 
-    // Then set up listeners for battery changes and charging status
-    await initiateBleBatteryListener();
-    if (!_isCurrent(generation)) return;
+    // Anchor the charge-start edge before subscribing to battery so a
+    // subscribe snapshot is a sample after the edge, not a stale cache.
     await initiateChargingStatusListener(allowCaptureResume: !syncOnly);
+    if (!_isCurrent(generation)) return;
+    await initiateBleBatteryListener();
     if (!_isCurrent(generation)) return;
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;

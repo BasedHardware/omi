@@ -380,4 +380,51 @@ void main() {
     expect(emitted.single, containsPair('reason_code', -1));
     expect(emitted.single, containsPair('app_state', 'unknown'));
   });
+
+  test('reconnect while charging restarts fully-charged dwell and ignores a stale 100', () async {
+    final notifications = <int>[];
+    var now = DateTime.utc(2026, 10, 11, 8);
+    final transport = _ChargingTransport();
+    final device = _device('reconnect-charged');
+    final connection = OmiDeviceConnection(device, transport);
+    final provider = DeviceProvider(
+      chargingConnectionLoader: (_) async => connection,
+      bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'),
+      clock: () => now,
+      fullyChargedNotification: notifications.add,
+    );
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = device;
+    provider.batteryLevel = 100;
+
+    await provider.initiateChargingStatusListener();
+    final firstEdge = provider.fullyChargedChargeStartedAt;
+    expect(firstEdge, now);
+    expect(notifications, isEmpty);
+    expect(provider.hasFullyChargedAlerted, isFalse);
+
+    now = now.add(const Duration(seconds: 30));
+    provider.onDeviceDisconnected();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    provider.connectedDevice = device;
+    now = now.add(const Duration(seconds: 1));
+    await provider.initiateChargingStatusListener();
+
+    expect(notifications, isEmpty);
+    expect(provider.hasFullyChargedAlerted, isFalse);
+    expect(provider.fullyChargedChargeStartedAt, isNotNull);
+    expect(provider.fullyChargedChargeStartedAt!.isAfter(firstEdge!), isTrue);
+
+    final restarted = provider.fullyChargedChargeStartedAt!;
+    now = restarted.add(const Duration(seconds: 30));
+    provider.onFullyChargedBatterySampleForTesting(100);
+    expect(notifications, isEmpty, reason: 'a sample during the new dwell must not inherit the old window');
+
+    now = restarted.add(const Duration(seconds: 60, milliseconds: 1));
+    provider.onFullyChargedBatterySampleForTesting(100);
+    provider.onFullyChargedBatterySampleForTesting(100);
+    expect(notifications, [100]);
+    expect(provider.hasFullyChargedAlerted, isTrue);
+  });
 }
