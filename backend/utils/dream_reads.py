@@ -31,7 +31,7 @@ def read_record(uid, ref):
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
     if collection == 'conversations':
-        row = conversations.get_conversation(uid, key)
+        row = next(iter(conversations.get_conversations_by_id_without_photos(uid, [key])), None)
         return row if row and conversations.is_visible_conversation(row) and not row.get('is_locked') else None
     if collection in {'memories', 'memory_items'}:
         canonical = read_canonical_memory_item(uid, key)
