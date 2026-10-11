@@ -350,6 +350,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         report,
         success=success,
         consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
+        deferred=deferred,
         release=release,
         refund=refund,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),

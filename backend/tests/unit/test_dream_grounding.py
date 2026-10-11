@@ -217,6 +217,74 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     assert result['status'] == 'complete'
     assert applied == ['conversations/empty']
     assert finished[0]['consumed'] == []
+    assert finished[0]['deferred'] == {'conversations/film'}
+
+
+def test_capped_target_skips_hydration_and_reasoning_until_next_utc_day(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from tests.support.dream_firestore import DreamFirestore
+    from utils import dream_reads
+
+    uid = 'synthetic-deferred'
+    now = datetime(2026, 10, 11, 23, 30, tzinfo=timezone.utc)
+    midnight = datetime(2026, 10, 12, tzinfo=timezone.utc)
+    item = {'collection': 'conversations', 'id': 'film', 'version': 'v1', 'last_changed_at': now}
+    lease = {
+        'run_id': 'synthetic',
+        'started_at': now,
+        'day': '2026-10-11',
+        'mode': 'on',
+        'score': 1,
+        'watermark': dream_store.EPOCH,
+        'dirty_dropped': 0,
+        'dirty_dropped_reported': 0,
+    }
+    db = DreamFirestore()
+    db.rows[('dream_users', uid)] = {'lease': lease, 'score': 1}
+    path = ('dream_users', uid, 'dirty', dream_store.dirty_id('conversations', 'film'))
+    db.rows[path] = item.copy()
+    monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
+    dream_store.finish(
+        uid,
+        lease,
+        {},
+        success=True,
+        consumed=[item],
+        deferred={'conversations/film'},
+        now=now.astimezone(timezone(timedelta(hours=7))),
+        firestore_client=db,
+    )
+    assert db.rows[path]['deferred_until'] == midnight
+    assert db.rows[path]['version'] == 'v1'
+    # The write signal merges metadata, so an intervening product update cannot
+    # cause more reasoning while the same daily attention allowance is exhausted.
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    db.rows[('users', uid)] = {}
+    dream_store.mark_dirty(uid, [('conversations', 'film')], firestore_client=db)
+    assert db.rows[path]['deferred_until'] == midnight
+    db.rows[path]['last_changed_at'] = now
+    original = dream_store.dirty_refs
+    monkeypatch.setattr(dream_store, 'dirty_refs', lambda *a, **k: original(uid, firestore_client=db))
+    loaded = []
+    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref, **kw: loaded.append(ref) or records()[ref])
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **kw: [])
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
+    monkeypatch.setattr(dream_store, 'acquire', lambda *a, **kw: lease)
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
+    monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
+    monkeypatch.setattr(dream_store, 'finish', lambda *a, **kw: None)
+    monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 0)
+    planner = AsyncMock(return_value=(Plan(), 100))
+    monkeypatch.setattr(dream_agent, 'plan_pass', planner)
+    lease['started_at'] = midnight - timedelta(microseconds=1)
+    assert asyncio.run(dream_agent.run_pass(uid, turn=AsyncMock()))['reason'] == 'idle'
+    planner.assert_not_called()
+    assert loaded == []
+    lease['started_at'] = midnight
+    assert asyncio.run(dream_agent.run_pass(uid, turn=AsyncMock()))['status'] == 'complete'
+    planner.assert_called_once()
+    assert loaded == ['conversations/film']
 
 
 def test_read_only_eval_shows_zero_ungrounded_auto_applies_and_question():
