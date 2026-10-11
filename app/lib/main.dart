@@ -71,6 +71,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -530,7 +531,21 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
-  final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry();
+  late final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry(
+    captureContext: () {
+      final context = globalNavigatorKey.currentContext;
+      if (context == null) return (source: 'unknown', mode: 'unknown');
+      final capture = context.read<CaptureProvider>();
+      if (capture.isPhoneMicBatchRecording) return (source: 'phone_mic', mode: 'batch');
+      if (capture.isPendantBatchRecording) return (source: 'pendant', mode: 'batch');
+      final source = capture.liveCaptureSource;
+      if (source == null) return (source: 'none', mode: 'none');
+      if (source == 'phone') return (source: 'phone_mic', mode: 'live');
+      if (source == 'apple_watch') return (source: 'watch', mode: 'live');
+      if (source == 'omi' || source == 'friend') return (source: 'pendant', mode: 'live');
+      return (source: 'other', mode: 'live');
+    },
+  );
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
     identityEpoch: () => AnalyticsManager.identityEpoch,
@@ -691,6 +706,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => MessagingChannelsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => FolderProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => McpProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),

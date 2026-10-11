@@ -11326,186 +11326,107 @@
     "dreamReportPrivacyHeld": "{count, plural, =1{1 извештај задржан због приватности} other{{count} извештаја задржано због приватности}}",
     "speakerTagPromptExcerptSaved": "Одговор је сачуван за овај исечак.",
     "pinPersonDescription": "Закачени људи остају на врху вашег списка „Људи“ и не уклања их функција „Почисти“.",
-    "buildAndShareApp": "Направи и дели своју прилагођену апликацију",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
-    "membersAndCounting": "8000+ чланова и наставља се.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
-    },
-    "privacyIntro": "На Omi, посвећени смо заштити ваше приватности. Ова страница вам омогућава да контролишете како се ваши подаци чувају и користе.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
-    "dataProtectionDesc": "Ваши подаци су подразумевано заштићени јаким шифровањем. Прегледајте своја подешавања и будуће опције приватности испод.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
-    },
-    "transcriptionConfig": "Конфигуриши STT добављача",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
-    "importDataConfig": "Увези податке из других извора",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
-    },
-    "understandingSubtitle": "Речи разумене из твоих разговора.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
-    "rememberingSubtitle": "Чињенице и детаљи запамћени за тебе.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
-    },
-    "debugLogsDesc": "Помаже у дијагностицирању проблема",
-    "deleteKnowledgeGraphMessage": "Ово ће обрисати све изведене податке графа знања (чворове и конекције). Ваше оригиналне успомене остају безбедне. Граф ће бити обновљен током времена или при следећем захтеву.",
-    "deleteKnowledgeGraphDesc": "Очисти све чворове и конекције",
-    "enhanceTranscriptAccuracyDesc": "Како се наш модел побољшава, можемо пружити боље резултате преписа за твоје снимке.",
-    "bestInClassTranscription": "Најбоље препознавање говора без постављања",
-    "optimizedForConversation": "Оптимизовано за разговор",
-    "highAccuracy": "Висока тачност",
-    "privacyFirst": "Приватност прво",
-    "keepGoing": "Настави, чиниш одличан посао",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
-    "personalGrowthJourney": "Твој путь личног развоја са AI који слуша сваку твоју реч.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
-    },
-    "configureSttProvider": "Конфигуриши STT провајдера",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
-    "clearAllNodesAndConnections": "Очисти све чворове и везе",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
-    },
-    "welcomeToOmiDescription": "Добродошли у Omi! Твој AI пратилац је спреман да те помогне са разговорима, задацима и још много чега.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
-    "conversationsProcessedAutomatically": "Разговори се обрађују аутоматски",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Добити увиде и резимеа мгновено",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
-    "dailyScoreDescription": "Оцена која те помаже да боље\nфокусираш се на извршење.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
-    },
-    "startConversation": "Почни разговор и нека магија почне",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
-    "wearableAiCompanion": "Носиви AI пратилац",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
-    "organizeAndControlMemories": "Организуј и контролиши своје меморије",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
-    "setAllMemoriesToPrivate": "Постави све меморије на приватну видљивост",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
-    "setAllMemoriesToPublic": "Постави све меморије на јавну видљивост",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
-    },
-    "selectPreferredLanguageForBestExperience": "Изаберите префериран језик за најбољи Omi искуство",
-    "enableFeaturesForBestExperience": "Омогућите функције за најбоље Omi искуство на вашем уређају.",
-    "deliveryTimeDescription": "Када желите да примите ваш дневни резиме",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
-    "configureSTTProvider": "Конфигуришите STT провајдера",
-    "setConversationEndDescription": "Поставите када разговори аутоматски завршавају",
-    "clearNodesDescription": "Очистите све чворове и веза",
-    "deleteKnowledgeGraphWarning": "Ово ће обрисати све изведене податке графа знања. Ваше оригиналне успомене остају безбедне.",
-    "createAndShareYourApp": "Направите и делите своју апликацију",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
-    "e2eeDescription": "Криптировање од краја до краја је золни стандард за приватност. Када је омогућено, ваши подаци су криптовани на вашем уређају пре него што буду послати нашим серверима. То значи да нико, чак ни Omi, не може приступити вашем садржају.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
-    "secureEncryptionDescription": "Ваши подаци су криптовани са кључем јединственим за вас на нашим серверима, смештеним на Google Cloud. То значи да ваш сирови садржај није приступачан никоме, укључујући Omi особље или Google, директно из базе podataka.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
-    "e2eeCardDescription": "Омогућите за максималну безбедност где само вас можете приступити вашим подацима. Додирни да сазнаш више.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
-    },
-    "yourOmiUnleashed": "Твој Omi, ослобођен. Иди без ограничења за бесконачне могућности.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
-    },
-    "privacyIntroText": "У Omi, озбиљно узимамо вашу приватност. Желимо да будемо транспарентни у вези са подаците које скупљамо и како их користимо да унапредимо наш производ за вас. Ево шта требате знати:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
-    "commitmentText": "Обавезани смо да користимо податке које скупљамо само да направимо Omi бољи производ за вас. Ваша приватност и поверење су од крајње важности за нас.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Хвала вам што сте драгоцени корисник Omi. Ако имате неке питање или забринутости, слободно нас контактирајте на team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
-    },
-    "knowledgeGraphDeleteDescription": "Ово ће обрисати све изведене податке графа знања (чворове и конексије). Ваша оригинална меморија остаће безбедна. Граф ће бити обновљен течајом времена или при следећем захтеву.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
-    },
-    "howPeopleWorks": "Када се особа направи, можете да идете на транскрипцију разговора и доделите јој одговарајуће сегменте, на тај начин Omi ће бити способна да препозна и њихов говор!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
-    "buildAndShareYourCustomApp": "Направите и поделите своју прилагођену апликацију",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
-    "onboardingChooseYourPreference": "Одаберите своју преференцу",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Дајте потребан приступ",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
-    },
-    "apiEnvironmentDescription": "Одабери са којим backend-ом да се повежеш",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
-    "phoneCallsUpsellFeature4": "Твоји позиви су приватни и безбедни",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
-    "omisStorageDesc": "Када твој Omi није повезан са твојим телефоном, снимци аудио се чувају локално на уграђеној меморији. Никада не губиш снимак.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
-    "permissionsSetupDescription": "Омогући неколико дозвола да Omi может радити своју магију.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
-    },
-    "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација",
-    "backgroundModeNote": "Засад ради само са Omi уређајима и непрекидно се побољшава.",
-    "alwaysInContext": "Увек у контексту",
-    "speakerTagPromptSubtitle": "Брза провера гласова из последња два дана",
-    "pinPersonSubtitle": "Задржи особу {name} и очекуј је у својим разговорима",
-    "pinPersonHonestLine": "Omi пита пре него што упари сличне гласове.",
-    "speakerTagPromptHintConfirm": "Да повећава поузданост особе {name}.",
-    "onboardingRatingPromptBody": "Оцена са 5 звездица нам заиста много помаже ❤️",
+    "chatAppsProblemFailed": "Нешто је пошло наопако. Покушајте поново.",
+    "chatAppsIsConnected": "{app} је повезан",
+    "chatAppsRefreshFailed": "Освежавање није успело. Приказујемо последње познато стање.",
+    "chatAppsReadOnlyBanner": "Само за читање. Одговорите Omi-ју у апликацији {app}.",
+    "chatAppsWaitlistConfirmed": "Хвала. WhatsApp ће се појавити овде када буде спреман.",
+    "chatAppsUseTelegramForNow": "За сада користи Telegram",
+    "chatAppsCouldNotOpen": "Није могуће отворити {app}. Проверите да ли је инсталиран и покушајте поново.",
+    "chatAppsTryPromise": "Шта сам јуче обећао Сави?",
+    "chatAppsDoesSave": "Чува сећања и управља вашим задацима",
+    "chatAppsOnTheList": "На листи",
+    "chatAppsNoChatsTitle": "Још нема разговора",
+    "chatAppsInChannel": "У апликацији {app}",
+    "chatAppsConnectTelegramMessage": "Omi ће отворити Telegram са приватном везом која је само за вас.",
+    "chatAppsOpenMessages": "Отвори Поруке",
+    "chatAppsDisconnectTitle": "Прекинути везу са {app}?",
+    "chatAppsPrivateMemoriesSubtitle": "Здравље, новац и све што сте означили као приватно остаје ван апликација за ћаскање.",
+    "chatAppsConnectIMessageMessage": "Пошаљите Omi једну поруку са броја који желите да користите. Код у њој повезује тај број са вашим налогом.",
+    "chatAppsWhatsAppMessage": "Радимо на томе да Omi стигне на WhatsApp. Појавиће се овде када буде спреман.",
+    "chatAppsNoChatsMessage": "Разговори које водите са Omi у апликацији {app} појављују се овде.",
+    "chatAppsViewChats": "Прикажи разговоре",
+    "chatAppsDisconnectMessage": "Omi ће престати да одговара у апликацији {app} и обрисаће историју разговора коју чува за њу. Поруке које су већ у апликацији {app} остају тамо.",
+    "chatAppsReadOnlyFooter": "Ови разговори су овде само за читање. Одговорите у апликацији {app}.",
+    "chatAppsAddToContacts": "Додај Omi у контакте",
+    "chatAppsProPerkContext": "Omi памти контекст у свакој апликацији",
+    "chatAppsWhatsAppMeantime": "Telegram и iMessage већ раде, са истим сећањима и задацима.",
+    "chatAppsComingLater": "Стиже касније",
+    "chatAppsProblemRateLimited": "Превише покушаја. Сачекајте минут и покушајте поново.",
+    "chatAppsMessage": "Порука",
+    "chatAppsOpenApp": "Отвори {app}",
+    "chatAppsTelegramSubtitle": "Подесите са два додира",
+    "chatAppsLoadFailedTitle": "Није могуће учитати апликације за ћаскање",
+    "chatAppsInsights": "Увиди од Omi-ја",
+    "chatAppsShowInAppOff": "Искључено: виде се само у апликацији {app}.",
+    "chatAppsProPerkText": "Пишите Omi из Telegram-а и iMessage-а",
+    "chatAppsVoiceNotesSubtitle": "Пошаљите гласовну белешку и Omi ће одговорити.",
+    "chatAppsPartOfPro": "Апликације за ћаскање су део плана Pro",
+    "chatAppsMessagesApp": "Поруке",
+    "chatAppsTelegramOtherDevice": "Telegram на другом уређају?",
+    "chatAppsHeroMessage": "Питајте о свом дану, чувајте сећања и управљајте задацима из Telegram-а или iMessage-а. Ваши разговори остају у апликацији коју користите, а Omi памти о чему сте причали свуда.",
+    "chatAppsTryRemind": "Подсети ме да у недељу назовем маму",
+    "chatAppsChannelsTitle": "Апликације за ћаскање",
+    "chatAppsDoesAnswer": "Одговара на питања о вашим разговорима и сећањима",
+    "chatAppsChannelChats": "Разговори у апликацији {app}",
+    "chatAppsIncludedWithPro": "УКЉУЧЕНО У OMI PRO",
+    "chatAppsLink": "Веза",
+    "chatAppsNeverMessagesOthers": "Никада не пише другима уместо вас",
+    "chatAppsNotConnectedTitle": "Није повезано",
+    "chatAppsTelegramPrivacyNote": "Ваше разговоре са Omi чува и Telegram. Omi одговара само вама, никада другима, а везу можете прекинути кад год желите.",
+    "chatAppsProblemOffline": "Нисте на мрежи. Проверите везу и покушајте поново.",
+    "chatAppsIMessageSubtitle": "Пишите Omi са свог броја телефона",
+    "chatAppsPrivateMemories": "Задржи приватна сећања у апликацији",
+    "chatAppsConnectTelegramTitle": "Повежи Telegram",
+    "chatAppsInsightsSubtitle": "Дозволите да вам Omi овде пошаље резиме или увид.",
+    "chatAppsTelegramWaiting": "Чекамо да у Telegram-у додирнете Покрени…",
+    "chatAppsEntrySubtitle": "Разговарајте са Omi у апликацијама које већ користите сваког дана.",
+    "chatAppsConnectedAs": "Повезано као {handle}",
+    "chatAppsProPerkSave": "Чувајте сећања и управљајте задацима директно из ћаскања",
+    "chatAppsConnectIMessageTitle": "Пошаљите поруку Omi да се повежете",
+    "chatAppsWaitingMessage": "Пошаљите поруку у апликацији Поруке. Овај екран се ажурира чим је Omi прими.",
+    "chatAppsShowInApp": "Прикажи ове разговоре у апликацији Omi",
+    "chatAppsCodeExpiredMessage": "Затражите нови код и пошаљите га из апликације Поруке.",
+    "chatAppsNoMessages": "Нема порука",
+    "chatAppsHeroTitle": "Ћаскајте са Omi тамо где већ ћаскате",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage и још",
+    "chatAppsCodeExpiresIn": "Код истиче за {time}",
+    "chatAppsNotConnectedMessage": "Веза са овом апликацијом за ћаскање је прекинута.",
+    "chatAppsRepliesOnlyNote": "Omi одговара само вама. Никада не пише први.",
+    "chatAppsDisconnectFooter": "Прекидом везе брише се историја коју Omi чува за {app}.",
+    "chatAppsReplyThereAnytime": "Пишите Omi у апликацији {app} било када.",
+    "chatAppsTryAsking": "Покушајте да питате",
+    "chatAppsTelegramStepReturn": "Вратите се овде. Потврдићемо да је успело.",
+    "chatAppsDoesFiles": "Шаље и прима фајлове, фотографије и гласовне белешке",
+    "chatAppsTryWeek": "Резимирај ми недељу у три реда",
+    "chatAppsChannelFooter": "Ваши разговори у апликацији {app} остају у апликацији {app}. Omi и даље зна о чему сте причали у апликацији и у другим апликацијама за ћаскање.",
+    "chatAppsWhatsAppTitle": "WhatsApp стиже",
+    "chatAppsCodeExpiredTitle": "Овај код је истекао",
+    "chatAppsProblemUnavailable": "Апликације за ћаскање још нису доступне за ваш налог.",
+    "chatAppsWhatOmiDoes": "Шта Omi ради у апликацијама за ћаскање",
+    "chatAppsVoiceNotes": "Гласовне белешке",
+    "chatAppsNotAvailableYet": "Још није доступно",
+    "chatAppsOpenMessagesAgain": "Поново отвори Поруке",
+    "chatAppsConnectedOn": "Повезано {date}",
+    "chatAppsWaitingTitle": "Чекамо вашу поруку",
+    "chatAppsEntryTitle": "Ћаскајте са Omi",
+    "chatAppsTelegramStepOpen": "Испод додирните Отвори Telegram",
+    "chatAppsShowInAppOn": "Укључено: појављују се у апликацији Omi као разговори само за читање.",
+    "chatAppsDisconnectChannel": "Прекини везу са {app}",
+    "chatAppsTelegramStepStart": "У ћаскању са Omi додирните Покрени",
+    "chatAppsLocked": "Потребан је Omi Pro",
+    "chatAppsIMessageBody": "Здраво Omi, код за повезивање {code}",
+    "chatAppsChatIn": "Ћаскање у апликацији {app}",
+    "chatAppsContactsApp": "Контакти",
+    "chatAppsCodeNote": "Код важи једном и истиче за 10 минута.",
+    "chatAppsMoreComing": "Стижу и друге апликације.",
+    "chatAppsInTheMeantime": "У међувремену",
+    "chatAppsGetNewCode": "Затражи нови код",
+    "chatAppsNotifyMe": "Обавести ме",
+    "chatAppsPrefilled": "Унапред попуњено",
+    "chatAppsTextThisTo": "Није се отворило? Пошаљите ово на {address}",
+    "chatAppsLinkExpired": "Та веза је истекла. Додирните Отвори Telegram за нову.",
+    "chatAppsIMessageTo": "За: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO",
     "maxDeviceNameBytesExceeded": "Максимално 25 бајтова ({count} бајтова, знакови који нису АСЦИИ користе више бајтова)"
 }

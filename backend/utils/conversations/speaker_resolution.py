@@ -782,12 +782,27 @@ def apply_speaker_resolution(
     identities: Mapping[int, Identity],
     identity_statuses: Mapping[int, str],
     *,
+    owner_voiceprint_available: bool,
     contradicted_segment_ids: Optional[set[str]] = None,
 ) -> None:
     scope = f'conversation:{conversation.id}'
     origin = _started_at(conversation)
+    contradicted = contradicted_segment_ids or set()
+    preserved_voices = {
+        new_id
+        for segment in conversation.transcript_segments
+        if not owner_voiceprint_available
+        and segment.is_user
+        and segment.id is not None
+        and not (segment.id in contradicted and segment.speaker_label_source == 'auto')
+        and (new_id := speaker_ids.get(segment.id)) is not None
+        and (
+            ((identity := identities.get(new_id)) is not None and not identity.is_user)
+            or identity_statuses.get(new_id) == SpeakerIdentityStatus.no_match
+        )
+    }
     for segment in conversation.transcript_segments:
-        if segment.id in (contradicted_segment_ids or set()) and segment.speaker_label_source == 'auto':
+        if segment.id in contradicted and segment.speaker_label_source == 'auto':
             segment.is_user = False
             segment.person_id = None
             segment.speaker_identity_status = SpeakerIdentityStatus.unknown
@@ -814,6 +829,11 @@ def apply_speaker_resolution(
             }
         segment.assign_resolved_speaker(new_id, scope)
         identity = identities.get(new_id)
+        if new_id in preserved_voices:
+            # A reduced roster cannot reject an established owner or establish
+            # the owner-versus-person margin for any segment of its voice. Keep
+            # unlabeled members unlabeled. Manual receipts still win on write.
+            continue
         if identity is not None:
             segment.is_user = identity.is_user
             segment.person_id = identity.person_id
@@ -823,12 +843,9 @@ def apply_speaker_resolution(
             segment.speaker_match_source = MATCH_SOURCE
             segment.speaker_label_source = 'auto'
         elif new_id in identity_statuses:
-            if (
-                identity_statuses[new_id] == SpeakerIdentityStatus.unknown
-                and segment.speaker_match_source != MATCH_SOURCE
-            ):
+            if identity_statuses[new_id] == SpeakerIdentityStatus.unknown:
                 # No new identity evidence (missing prints/short audio) cannot
-                # revoke a capture decision that this stage did not make.
+                # revoke an existing decision, including a prior partial pass.
                 continue
             # Conversation-wide evidence supersedes capture's automatic owner
             # guesses too. Manual voices are absent from this map, and the
@@ -1540,6 +1557,7 @@ def _resolve(
         resolution.speaker_ids,
         resolution.voice_identities,
         resolution.voice_identity_statuses,
+        owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
     )
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:

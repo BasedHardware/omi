@@ -68,6 +68,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.messaging",
+    "utils.messaging.undo",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
 ]
@@ -76,6 +78,7 @@ _SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
 for _p in [
     "database",
     "utils",
+    "utils.messaging",
     "utils.conversations",
     "utils.retrieval",
     "utils.retrieval.tools",
@@ -92,6 +95,7 @@ for _name, _attrs in {
     ],
     "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
     "utils.retrieval.agentic": ["agent_config_context"],
+    "utils.messaging.undo": ["record_write"],
 }.items():
     _m = _mod(_name)
     for _a in _attrs:

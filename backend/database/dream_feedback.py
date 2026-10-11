@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -12,10 +13,11 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from models.dream_agent import Feedback
+from utils.dream_guards import feedback_rejection
 
 
 def words(text):
-    return re.findall(r'\w+', text.casefold())
+    return re.findall(r'\w+', unicodedata.normalize('NFC', text).casefold())
 
 
 def strings(value):
@@ -51,7 +53,7 @@ def _name_terms(inputs, vocabulary):
 
     token_pattern = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*", re.UNICODE)
     for text in strings(inputs):
-        tokens = token_pattern.findall(text)
+        tokens = token_pattern.findall(unicodedata.normalize('NFC', text))
         run = []
         for token in tokens:
             normalized = words(token)
@@ -70,11 +72,53 @@ def _name_terms(inputs, vocabulary):
 
 
 def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
+    reason = feedback_rejection(report)
+    if reason:
+        raise ValueError(reason)
     text = report.reproduction
     output = words(text)
+    # References and storage IDs are private even when too short for the n-gram gate.
+    identifiers = set()
+
+    def collect(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if '/' in str(key):
+                    identifiers.update((str(key), str(key).rsplit('/', 1)[-1]))
+                if (key == 'id' or str(key).endswith('_id')) and isinstance(item, str):
+                    identifiers.add(item)
+                collect(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                collect(item)
+
+    collect(inputs)
+    if uid:
+        identifiers.add(uid)
+    for identifier in identifiers:
+        needle = words(identifier)
+        if needle and any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
+            raise ValueError('feedback_record_reference')
+    # Reject short quoted input too, across scripts and Unicode normalization forms.
+    source_texts = list(strings(inputs))
+    source_words = [words(source) for source in source_texts]
+    for quoted in re.findall(r'["“«「‘\'](.*?)["”»」’\']', text, flags=re.DOTALL):
+        needle = words(quoted)
+        literal = unicodedata.normalize('NFC', quoted).casefold().strip()
+        if needle and (
+            any(literal in unicodedata.normalize('NFC', source).casefold() for source in source_texts)
+            or any(
+                any(source[i : i + len(needle)] == needle for i in range(len(source) - len(needle) + 1))
+                for source in source_words
+            )
+        ):
+            raise ValueError('feedback_input_overlap')
+    for needle in source_words:
+        if needle and any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
+            raise ValueError('feedback_input_overlap')
     grams = {tuple(output[i : i + 4]) for i in range(max(0, len(output) - 3))}
     # Also check across field boundaries: concatenation cannot evade the gate.
-    source = words(' '.join(strings(inputs)))
+    source = words(' '.join(source_texts))
     if any(tuple(source[i : i + 4]) in grams for i in range(max(0, len(source) - 3))):
         raise ValueError('feedback_input_overlap')
     names = _name_terms(inputs, vocabulary)

@@ -34,6 +34,9 @@ def state_ref(database, uid):
     return database.collection('dream_users').document(uid)
 
 
+# Bound retries of a consumed product version after billable reasoning failures.
+# Refreshed versions reset their streak; ambiguous worker timeouts retain leases.
+POISON_FAILURE_LIMIT = 3
 DIRTY_LIMIT = 500
 WRITE_CHUNK = 400  # Leave room for state/report writes in Firestore's 500-write limit.
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -67,6 +70,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
                     'version': str(uuid4()),
                     'last_changed_at': firestore.SERVER_TIMESTAMP,
                     'change_count': firestore.Increment(1),
+                    'failed_passes': 0,
                 },
                 merge=True,
             )
@@ -207,12 +211,15 @@ def assert_lease(uid, run_id, *, firestore_client=None):
         raise RuntimeError('dream_lease_lost')
 
 
-def finish(uid, lease, report, *, success, consumed=(), release=True, refund=False, firestore_client=None):
+def finish(
+    uid, lease, report, *, success, consumed=(), release=True, refund=False, count_failure=False, firestore_client=None
+):
     database = client(firestore_client)
     state = state_ref(database, uid)
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
     spend = database.collection('dream_spend').document(lease['day'])
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
+    failure_eligible = count_failure and not success and release and not refund
 
     @firestore.transactional
     def complete(tx):
@@ -223,16 +230,27 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
-        queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database) if success else []
+        queued = (
+            dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
+            if success or failure_eligible
+            else []
+        )
         versions = {item['version'] for item in consumed}
-        acknowledged = [s for s in queued if success and s.to_dict()['version'] in versions]
-        remaining = [s for s in queued if not success or s.to_dict()['version'] not in versions]
+        touched = [s for s in queued if s.to_dict()['version'] in versions]
+        poisoned = [
+            s
+            for s in touched
+            if failure_eligible and int(s.to_dict().get('failed_passes', 0)) + 1 >= POISON_FAILURE_LIMIT
+        ]
+        acknowledged = touched if success else poisoned
+        acknowledged_paths = {s.reference.path for s in acknowledged}
+        remaining = [s for s in queued if s.reference.path not in acknowledged_paths]
         queued_after = queued_count - len(acknowledged)
-        settled = {**report, 'records_queued_after': queued_after}
+        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned)}
         encoded = _review_store().encode_doc(uid, {'source': settled})
         watermark = lease['watermark']
-        if success and consumed:
-            frontier = max(item['last_changed_at'] for item in consumed)
+        if acknowledged:
+            frontier = max(s.to_dict()['last_changed_at'] for s in acknowledged)
             if remaining:
                 frontier = min(
                     frontier, min(s.to_dict()['last_changed_at'] for s in remaining) - timedelta(microseconds=1)
@@ -240,6 +258,12 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
             watermark = max(watermark, frontier)
         for snapshot in acknowledged:
             tx.delete(snapshot.reference)
+        if failure_eligible:
+            for snapshot in remaining:
+                if snapshot.to_dict()['version'] in versions:
+                    tx.update(
+                        snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1}
+                    )
         tx.set(
             run,
             {
@@ -253,6 +277,7 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
                 'records_queued_after': queued_after,
                 'tokens': int(report.get('tokens', 0)),
                 'cost_usd': float(report.get('cost_usd', 0)),
+                'poisoned': len(poisoned),
             },
         )
         patch = {
@@ -261,7 +286,9 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': max(0, data['score'] - lease['score']) if success and queued_after == 0 else data['score'],
+            'score': (
+                max(0, data['score'] - lease['score']) if (success or poisoned) and queued_after == 0 else data['score']
+            ),
         }
         if refund:
             # A midnight completion must not decrement the new day's allowance.
@@ -269,9 +296,12 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
                 counter = 'manual_runs' if lease.get('trigger') == 'manual' else 'passes'
                 patch[counter] = max(0, int(data.get(counter, 0)) - 1)
             tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
+        if poisoned:
+            patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         tx.update(state, patch)
+        return settled
 
-    complete(database.transaction())
+    report.update(complete(database.transaction()))
 
 
 def own_runs(uid, *, limit=10, firestore_client=None):

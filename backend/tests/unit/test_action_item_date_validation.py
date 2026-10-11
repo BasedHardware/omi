@@ -123,6 +123,8 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
+    "utils.messaging",
+    "utils.messaging.undo",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
     "utils.conversations",
@@ -268,6 +270,7 @@ langchain_messages.HumanMessage = MagicMock()
 _stub_package("utils")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
+_stub_package("utils.messaging")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
 
@@ -337,6 +340,7 @@ conv_folder_stub.build_folders_context = MagicMock(return_value="")
 # Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
 gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
 gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+_stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
 
 # Load models first
 _stub_package("models")

@@ -82,3 +82,11 @@ retry/suppression, source delegation, canonical corrections, memory-history
 revert, field undo/redo, graph redirects, project identity and encrypted storage.
 Run both through `backend/test.sh`; the integration file requires a loopback
 `FIRESTORE_EMULATOR_HOST` and `BACKEND_PYTEST_MARK_EXPR=integration`.
+
+Dream conversation polish uses the same journal for `structured.title` and
+`structured.overview`. Title changes render with the existing `title_conversation`
+kind; overview changes use `other`. Both include a conversation reference and the
+new text as the snippet. Overview writes clear stale `structured.sections` and
+`structured.note_claims` in that entry, so undo restores all three fields together.
+These are internal edits; Review question kinds are unchanged. Dream self-report
+edit kinds are strings, so OpenAPI and regenerated Dart require no enum change.

@@ -4,23 +4,29 @@
 
 class GeneratedChatSessionResponse {
   final String? appId;
+  final String? channel;
+  final String? channelLinkId;
   final DateTime createdAt;
   final String id;
   final int messageCount;
   final String? pluginId;
   final String? preview;
   final bool starred;
+  final String? surface;
   final String title;
   final DateTime updatedAt;
 
   const GeneratedChatSessionResponse({
     this.appId,
+    this.channel,
+    this.channelLinkId,
     required this.createdAt,
     required this.id,
     required this.messageCount,
     this.pluginId,
     this.preview,
     required this.starred,
+    this.surface,
     required this.title,
     required this.updatedAt,
   });
@@ -28,12 +34,15 @@ class GeneratedChatSessionResponse {
   factory GeneratedChatSessionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedChatSessionResponse(
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      channel: _readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString, requiredField: false, nullable: true),
+      channelLinkId: _readFieldValue<String>(_readField(json, const ["channel_link_id"]), "channel_link_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       messageCount: _required(_readFieldValue<int>(_readField(json, const ["message_count"]), "message_count", _readInt, requiredField: true, nullable: false), "message_count"),
       pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
       preview: _readFieldValue<String>(_readField(json, const ["preview"]), "preview", _readString, requiredField: false, nullable: true),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: true, nullable: false), "starred"),
+      surface: _readFieldValue<String>(_readField(json, const ["surface"]), "surface", _readString, requiredField: false, nullable: true),
       title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
     );
@@ -42,12 +51,15 @@ class GeneratedChatSessionResponse {
   Map<String, dynamic> toJson() {
     return {
       'app_id': appId,
+      'channel': channel,
+      'channel_link_id': channelLinkId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'id': id,
       'message_count': messageCount,
       'plugin_id': pluginId,
       'preview': preview,
       'starred': starred,
+      'surface': surface,
       'title': title,
       'updated_at': updatedAt.toUtc().toIso8601String(),
     };

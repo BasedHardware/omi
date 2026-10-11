@@ -357,7 +357,7 @@ def test_excerpts_keep_transcript_evidence_when_summary_is_large():
         },
         chars=160,
     )['conversations/c1']
-    assert 'Synthetic misspelled name' in excerpt['transcript_segments']
+    assert 'Synthetic misspelled name' in excerpt
 
 
 def test_large_input_stops_before_gateway_access(monkeypatch):
@@ -374,10 +374,13 @@ def test_large_input_stops_before_gateway_access(monkeypatch):
 
 
 def test_evidence_shrinks_to_the_triage_budget():
-    records = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
-    messages = dream_prompt.evidence_message(records, Triage, 6000, chars=240)
-    assert len(__import__('json').loads(messages[0]['content'])['records']) == 50
-    framed = dream_prompt.mount(Triage, 6000).messages(messages)
+    oversized = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
+    with pytest.raises(ValueError, match='dream_evidence_token_budget'):
+        dream_prompt.evidence_message(oversized, Triage, 6000)
+    records = dict(list(oversized.items())[:4])
+    messages = dream_prompt.evidence_message(records, Triage, 6000)
+    assert len(__import__('json').loads(messages[0]['content'])['records']) == 4
+    framed = dream_prompt.mount(Triage, 6000, dream_prompt.TRIAGE_INSTRUCTIONS).messages(messages)
     assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000
 
 
@@ -388,3 +391,37 @@ def test_canonical_dirty_hook_uses_committed_id_when_input_has_no_id(monkeypatch
     writer = dream_dirty.after_write('memory_items')(lambda uid, data: 'canonical-generated-id')
     writer(uid=UID, data={'content': 'Synthetic new memory'})
     assert calls == [(UID, [('memory_items', 'canonical-generated-id')])]
+
+
+@pytest.mark.parametrize('kind', ['title', 'overview'])
+def test_summary_proposals_are_shadow_only(monkeypatch, pass_context, kind):
+    records = pass_context[1]
+    records['conversations/c1'] = {
+        'id': 'c1',
+        'structured': {'title': '', 'overview': ''},
+        'transcript_segments': [{'text': 'We will build a toy boat. ' * 7}],
+    }
+    edit = Edit(
+        kind=kind,
+        target='conversations/c1',
+        before='',
+        after=(
+            'Building a toy boat' if kind == 'title' else '## Toy boat\n\n- We will build and test a toy boat tomorrow.'
+        ),
+        reason='Missing heading',
+        evidence=['conversations/c1'],
+    )
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=[edit]), 100)))
+    monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: pytest.fail('shadow mutated conversation'))
+    result = asyncio.run(dream_agent.run_pass(UID))
+    assert result['status'] == 'complete'
+    assert result['proposed']['edits'] == [edit.model_dump()]
+    assert result['outcomes'][0]['status'] == 'shadow'
+
+
+def test_feedback_record_ref_is_removed_before_shadow_persistence(monkeypatch, pass_context):
+    plan = Plan(feedback=[feedback('The defect affects conversations/c1.')])
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(plan, 100)))
+    result = asyncio.run(dream_agent.run_pass(UID))
+    assert result['proposed']['feedback'] == []
+    assert result['outcomes'] == [{'tool': 'feedback', 'status': 'privacy_rejected'}]
