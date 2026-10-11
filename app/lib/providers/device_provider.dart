@@ -151,6 +151,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     CaptureWedgeMonitor? captureWedgeMonitor,
     Future<DeviceConnection?> Function(String)? chargingConnectionLoader,
     DateTime Function()? clock,
+    Duration Function()? monotonicNow,
     Duration? fullyChargedMinimumDwell,
     FullyChargedNotification? fullyChargedNotification,
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
@@ -160,8 +161,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _fullyChargedAlert = FullyChargedAlertGate(
       now: clock ?? DateTime.now,
+      monotonicNow: monotonicNow,
       minimumDwell: fullyChargedMinimumDwell ?? FullyChargedAlertGate.minimumOnChargerDwell,
-      onFullyCharged: fullyChargedNotification ?? _showFullyChargedNotification,
+      onFullyCharged: (level) {
+        // Test doubles are the presentation. Production waits until the
+        // permission check inside createNotification returns.
+        if (fullyChargedNotification != null) {
+          fullyChargedNotification(level);
+          final deviceId = _fullyChargedAlert.lastFiredDeviceId;
+          if (deviceId != null) _fullyChargedAlert.markPresented(deviceId);
+          return;
+        }
+        _showFullyChargedNotification();
+      },
       onLevelMismatch: ({required int notifiedAtLevel, required int correctedLevel}) {
         _recordFullyChargedLevelMismatch(notifiedAtLevel: notifiedAtLevel, correctedLevel: correctedLevel);
         fullyChargedLevelMismatch?.call(notifiedAtLevel: notifiedAtLevel, correctedLevel: correctedLevel);
@@ -199,7 +211,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = null;
     _bleChargingStatusListener?.cancel();
     _bleChargingStatusListener = null;
-    _fullyChargedAlert.onUnplugged();
+    _fullyChargedAlert.reset();
     _discoveryTimer?.cancel();
     _discoveryTimer = null;
     _disconnectDebouncer.cancel();
@@ -477,9 +489,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation) || connectedDevice == null) {
       return;
     }
+    final batteryDeviceId = connectedDevice!.id;
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
-      connectedDevice!.id,
+      batteryDeviceId,
       onBatteryLevelChange: (int value) {
         if (!_isCurrent(generation)) return;
         if (batteryLevel != value) {
@@ -494,17 +507,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = globalNavigatorKey.currentContext;
-          NotificationService.instance.createNotification(
+          unawaited(NotificationService.instance.createNotification(
             title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
             body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
-          );
+          ));
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;
         }
         // Every callback is a sample, including a repeat of the cached percent.
         // A stale 100 from before this charge cannot notify; the gate requires
-        // a sample timestamped after the charge-start edge.
-        _onFullyChargedBatterySample(value);
+        // a sample timestamped after the charge-start edge. Attribute it to the
+        // device this listener was opened for, not whichever device is current.
+        _fullyChargedAlert.onBatterySample(batteryDeviceId, value);
         // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
         // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
         final delta = (_lastNotifiedBatteryLevel - value).abs();
@@ -585,47 +599,68 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
-  void _showFullyChargedNotification(int _) {
+  void _showFullyChargedNotification() {
+    final deviceId = _fullyChargedAlert.lastFiredDeviceId;
+    if (deviceId == null) return;
+    unawaited(_presentFullyChargedNotification(deviceId));
+  }
+
+  Future<void> _presentFullyChargedNotification(String deviceId) async {
+    final generation = _sessionGeneration;
     final ctx = globalNavigatorKey.currentContext;
-    NotificationService.instance.createNotification(
+    final presented = await NotificationService.instance.createNotification(
       title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is fully charged",
       body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
     );
+    if (!_isCurrent(generation) || !presented) return;
+    _fullyChargedAlert.markPresented(deviceId);
   }
 
   void _recordFullyChargedLevelMismatch({required int notifiedAtLevel, required int correctedLevel}) {
-    // No battery-notification analytics event exists. Keep the property name
-    // stable so device logs can be counted for stale fuel-gauge frequency.
+    // No structured analytics event exists for local device notifications
+    // (registry covers notification opens and battery-indicator clicks, not
+    // this alert). One debug line per charge cycle, after createNotification
+    // has passed its permission check. "Attempt" — the OS may still drop it.
     Logger.debug(
-      'Fully charged notification mismatch: fully_charged_notified_at_level=$notifiedAtLevel corrected_level=$correctedLevel',
+      'Fully charged notification mismatch attempt: fully_charged_notified_at_level=$notifiedAtLevel corrected_level=$correctedLevel',
     );
   }
 
-  void _onFullyChargedBatterySample(int level) {
-    _fullyChargedAlert.onBatterySample(level);
-  }
-
-  /// False→true restarts dwell, including a reconnect: link loss clears
-  /// [isCharging] without counting as an unplug. A repeated charging sample
-  /// on the same link does not move the anchor.
+  /// False→true restarts dwell for this device, including a reconnect: link
+  /// loss clears [isCharging] without counting as an unplug. A repeated
+  /// charging sample on the same link does not move the anchor.
   void _noteChargingForFullyChargedAlert(bool charging, {required bool wasCharging}) {
+    final deviceId = connectedDevice?.id;
+    if (deviceId == null || deviceId.isEmpty) return;
     if (!charging) {
-      _fullyChargedAlert.onUnplugged();
+      _fullyChargedAlert.onUnplugged(deviceId);
       return;
     }
-    if (!wasCharging || !_fullyChargedAlert.hasChargeWindow) {
-      _fullyChargedAlert.onChargeStarted();
+    if (!wasCharging || !_fullyChargedAlert.hasChargeWindowFor(deviceId)) {
+      _fullyChargedAlert.onChargeStarted(deviceId);
     }
   }
 
   @visibleForTesting
-  DateTime? get fullyChargedChargeStartedAt => _fullyChargedAlert.chargeStartedAt;
+  DateTime? get fullyChargedChargeStartedAt {
+    final id = connectedDevice?.id;
+    if (id == null) return null;
+    return _fullyChargedAlert.chargeStartedAtFor(id);
+  }
 
   @visibleForTesting
-  bool get hasFullyChargedAlerted => _fullyChargedAlert.hasAlerted;
+  bool get hasFullyChargedAlerted {
+    final id = connectedDevice?.id;
+    if (id == null) return false;
+    return _fullyChargedAlert.hasAlertedFor(id);
+  }
 
   @visibleForTesting
-  void onFullyChargedBatterySampleForTesting(int level) => _onFullyChargedBatterySample(level);
+  void onFullyChargedBatterySampleForTesting(int level, {DateTime? at}) {
+    final id = connectedDevice?.id;
+    if (id == null) return;
+    _fullyChargedAlert.onBatterySample(id, level, at: at);
+  }
 
   /// Updates battery level with throttling logic. Returns true if notifyListeners was called.
   /// This method is exposed for testing the throttling behavior.
@@ -813,9 +848,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
-    // Link loss is not an unplug. Drop the pending dwell fire, keep the
-    // once-per-cycle alert, and let the next charging observation restart dwell.
-    _fullyChargedAlert.onLinkLost();
+    // Link loss is not an unplug. Drop the pending dwell fire, keep this
+    // device's once-per-cycle alert, and let the next charging observation
+    // restart dwell. A different device does not inherit the alert.
+    if (disconnectedDeviceId != null) _fullyChargedAlert.onLinkLost(disconnectedDeviceId);
     isCharging = false;
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));

@@ -384,6 +384,14 @@ void main() {
   test('reconnect while charging restarts fully-charged dwell and ignores a stale 100', () async {
     final notifications = <int>[];
     var now = DateTime.utc(2026, 10, 11, 8);
+    var mono = Duration.zero;
+    void advance(Duration duration) {
+      now = now.add(duration);
+      mono += duration;
+    }
+
+    void advanceTo(DateTime target) => advance(target.difference(now));
+
     final transport = _ChargingTransport();
     final device = _device('reconnect-charged');
     final connection = OmiDeviceConnection(device, transport);
@@ -391,6 +399,7 @@ void main() {
       chargingConnectionLoader: (_) async => connection,
       bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'),
       clock: () => now,
+      monotonicNow: () => mono,
       fullyChargedNotification: notifications.add,
     );
     addTearDown(transport.notifications.close);
@@ -404,11 +413,11 @@ void main() {
     expect(notifications, isEmpty);
     expect(provider.hasFullyChargedAlerted, isFalse);
 
-    now = now.add(const Duration(seconds: 30));
+    advance(const Duration(seconds: 30));
     provider.onDeviceDisconnected();
     await Future<void>.delayed(const Duration(milliseconds: 20));
     provider.connectedDevice = device;
-    now = now.add(const Duration(seconds: 1));
+    advance(const Duration(seconds: 1));
     await provider.initiateChargingStatusListener();
 
     expect(notifications, isEmpty);
@@ -417,11 +426,11 @@ void main() {
     expect(provider.fullyChargedChargeStartedAt!.isAfter(firstEdge!), isTrue);
 
     final restarted = provider.fullyChargedChargeStartedAt!;
-    now = restarted.add(const Duration(seconds: 30));
+    advanceTo(restarted.add(const Duration(seconds: 30)));
     provider.onFullyChargedBatterySampleForTesting(100);
     expect(notifications, isEmpty, reason: 'a sample during the new dwell must not inherit the old window');
 
-    now = restarted.add(const Duration(seconds: 60, milliseconds: 1));
+    advanceTo(restarted.add(const Duration(seconds: 60, milliseconds: 1)));
     provider.onFullyChargedBatterySampleForTesting(100);
     provider.onFullyChargedBatterySampleForTesting(100);
     expect(notifications, [100]);
