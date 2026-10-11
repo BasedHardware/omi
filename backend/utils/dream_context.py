@@ -1,10 +1,12 @@
 """Bounded target neighbourhoods, cheapest first, using existing read indexes."""
 
 from datetime import timedelta
+from functools import partial
 from difflib import SequenceMatcher
 
 from database import action_items, vector_db
-from database.dream_context_reads import temporal_neighbours
+from database.dream_context_reads import temporal_neighbours, subject_memory_refs
+from utils.observability.fallback import record_fallback
 from utils.conversations.search import keyword_search_conversation_ids
 from utils.dream_guards import common_words, timestamp, tokens
 from utils.dream_prompt import (
@@ -113,38 +115,38 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         return
     subjects = set().union(*(identities(row) for row in targets.values()))
     for entity_id in sorted(subjects)[:8]:
-        yield 'entity/' + entity_id, read_entity_record(uid, entity_id)
+        yield 'entity/' + entity_id, partial(read_entity_record, uid, entity_id)
     for ref, row in targets.items():
         linked = row.get('conversation_id')
         if linked:
             linked_ref = 'conversations/' + linked.removeprefix('conversations/')
-            yield linked_ref, read_record(uid, linked_ref)
+            yield linked_ref, partial(read_record, uid, linked_ref)
         if ref.startswith('conversations/'):
             for task in action_items.get_action_items(uid, conversation_id=ref.split('/', 1)[1], limit=8):
                 task_ref = 'action_items/' + task['id']
-                yield task_ref, read_record(uid, task_ref)
-    # Bounded canonical list: same-subject facts, then lexical candidates.
-    memories = MemoryService().read(uid, limit=40, authoritative=True)
-    pool = {'memory_items/' + memory.id: memory.model_dump(mode='python') for memory in memories}
-    for ref, row in pool.items():
-        if identities(row) & subjects:
-            yield ref, read_record(uid, ref)
+                yield task_ref, partial(read_record, uid, task_ref)
+    # Read only bounded same-subject references; never scan an unrelated memory list.
+    for subject in sorted(subjects)[:8]:
+        for ref in subject_memory_refs(uid, subject):
+            yield ref, partial(read_record, uid, ref)
     queries = list(dict.fromkeys(' '.join(query_terms(row, vocabulary)) for row in targets.values()))[:4]
     for query in filter(None, queries):
-        for ref, row in pool.items():
-            if set(tokens(query)) & set(tokens(row.get('content') or '')):
-                yield ref, read_record(uid, ref)
-        for key in keyword_search_conversation_ids(uid=uid, query=query, limit=4, raise_on_error=True):
+        try:
+            keys = keyword_search_conversation_ids(uid=uid, query=query, limit=4, raise_on_error=True)
+        except Exception:
+            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+            keys = []
+        for key in keys:
             ref = 'conversations/' + key
-            yield ref, read_record(uid, ref)
+            yield ref, partial(read_record, uid, ref)
     for query in filter(None, queries):
         # These existing search APIs include synchronous embedding calls.
         for key in submit_with_context(llm_executor, vector_db.query_vectors, query, uid, k=3).result():
             ref = 'conversations/' + key
-            yield ref, read_record(uid, ref)
+            yield ref, partial(read_record, uid, ref)
         for match in submit_with_context(llm_executor, MemoryService().search, uid, query, limit=3).result():
             ref = 'memory_items/' + match.memory.id
-            yield ref, read_record(uid, ref)
+            yield ref, partial(read_record, uid, ref)
     for row in list(targets.values())[:4]:
         time = timestamp(row.get('created_at') or row.get('timestamp'))
         if time is None:
@@ -152,15 +154,28 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         start, end = time - timedelta(hours=2), time + timedelta(hours=2)
         for neighbour in temporal_neighbours(uid, 'conversations', start, time, end):
             ref = 'conversations/' + neighbour['id']
-            yield ref, read_record(uid, ref)
+            yield ref, partial(read_record, uid, ref)
         for screen in temporal_neighbours(uid, 'screen_activity', start, time, end):
             yield 'screen/' + screen['id'], screen
 
 
 def add_context(targets, candidates, caps, vocabulary=None):
     records = EvidenceRecords(targets, targets=target_refs(targets))
-    for ref, row in candidates:
-        if ref in records or not row:
+    seen = set(records)
+    for ref, load in candidates:
+        if ref in seen:
+            continue
+        seen.add(ref)
+        # Ref/role admission precedes hydration. Projectors trim evidence to fit;
+        # reserve the minimum excerpt and bounded name metadata up front.
+        probe = EvidenceRecords(
+            {**records, ref: {'name': 'x' * 120, 'content': 'x' * 1500, 'transcript_segments': [{'text': 'x' * 1500}]}},
+            targets=records.targets,
+        )
+        if not fits_pass(probe, caps, vocabulary):
+            break
+        row = load() if callable(load) else load
+        if not row:
             continue
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):

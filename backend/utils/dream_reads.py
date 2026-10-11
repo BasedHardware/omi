@@ -26,7 +26,7 @@ READ_COLLECTIONS = {
 }
 
 
-def read_record(uid, ref):
+def read_record(uid, ref, *, control_cache=None):
     collection, separator, key = ref.partition('/')
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
@@ -45,17 +45,18 @@ def read_record(uid, ref):
         if row.is_locked or row.user_review is False or row.visibility != 'private':
             return None
         return row.model_dump(mode='python')
+    if collection in {'action_items', 'candidates'}:
+        if control_cache is None:
+            control_cache = {}
+        if 'generation' not in control_cache:
+            control_cache['generation'] = get_task_workflow_control(uid).account_generation
     if collection == 'action_items':
         row = action_items.get_action_item(uid, key)
-        generation = get_task_workflow_control(uid).account_generation
+        generation = control_cache['generation']
         return row if row and row.get('account_generation', 0) == generation and not row.get('deleted') else None
     if collection == 'candidates':
         row = candidates.get_candidate(uid, key)
-        if (
-            row
-            and row.account_generation == get_task_workflow_control(uid).account_generation
-            and row.status.value == 'pending'
-        ):
+        if row and row.account_generation == control_cache['generation'] and row.status.value == 'pending':
             return row.model_dump(mode='python')
         return None
     if collection == 'people':
@@ -76,6 +77,13 @@ def read_entity_record(uid, entity_id):
 
 
 def read_changes(uid, lease, caps, vocabulary=None):
+    cache, control_cache = {}, {}
+
+    def read(ref_uid, ref):
+        if ref not in cache:
+            cache[ref] = read_record(ref_uid, ref, control_cache=control_cache)
+        return cache[ref]
+
     dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
     records = EvidenceRecords()
     consumed = []
@@ -88,7 +96,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
             continue
         ref = f"{item['collection']}/{item['id']}"
         try:
-            row = read_record(uid, ref)
+            row = read(uid, ref)
         except review_store.ReviewNotFound:
             row = None
         except HTTPException as exc:
@@ -104,9 +112,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
         consumed.append(item)
     records = add_context(
         records,
-        context_candidates(
-            uid, records, vocabulary or [], read_record=read_record, read_entity_record=read_entity_record
-        ),
+        context_candidates(uid, records, vocabulary or [], read_record=read, read_entity_record=read_entity_record),
         caps,
         vocabulary,
     )
