@@ -5,6 +5,8 @@ import json
 
 from prometheus_client import Counter
 
+POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
+
 PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])

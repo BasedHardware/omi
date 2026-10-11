@@ -1,6 +1,7 @@
 """Unified Review orchestration; source lifecycles retain their existing owners."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Sequence
 
 from database import candidates, conversations, review_changes, review_store as store
 from models.action_item import TaskCreatePayload
@@ -10,10 +11,13 @@ from models.review import (
     ReviewEvidence,
     PersonRef,
     ReviewAnswer,
+    ReviewAnswerV2,
     ReviewAnswerReceipt,
     ReviewChange,
     ReviewItem,
+    ReviewItemV2,
     ReviewItemsResponse,
+    ReviewItemsResponseV2,
     SpeakerItem,
     TaskItem,
     TranscriptLine,
@@ -28,7 +32,7 @@ def one_line(text: str | None, limit: int = 180) -> str | None:
     return ' '.join(text.split())[:limit] if text else None
 
 
-def rank_review_items(items: list[ReviewItem], remaining: int) -> list[ReviewItem]:
+def rank_review_items(items: Sequence[ReviewItem | ReviewItemV2], remaining: int) -> list[ReviewItem | ReviewItemV2]:
     """Phase 1 heuristic: identity resolution wins by number of conversations unlocked.
 
     Speaker: 4 × affected conversations, identity merge: 3 × combined conversations,
@@ -127,7 +131,7 @@ def _task_item(uid: str, candidate) -> ReviewItem:
     )
 
 
-def _sources(uid: str) -> list[tuple[ReviewItem, dict, str]]:
+def _sources(uid: str) -> list[tuple[ReviewItem | ReviewItemV2, dict, str]]:
     from database.task_intelligence_control import get_task_workflow_control
     from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 
@@ -156,32 +160,46 @@ def _sources(uid: str) -> list[tuple[ReviewItem, dict, str]]:
             source = candidate.model_dump(mode='python')
             result.append((_task_item(uid, candidate), source, store.fingerprint(source)))
     for proposal in store.list_proposals(uid):
-        item = ReviewItem.model_validate(proposal['item'])
-        result.append((item, {}, proposal['evidence_version']))
+        item = ReviewItemV2.model_validate(proposal['item'])
+        if item.agent_proposal and not review_changes.agent_change_allowed(uid, proposal['source']['edit_key']):
+            continue
+        result.append((item, proposal.get('source', {}), proposal['evidence_version']))
     return result
 
 
-def get_items(uid: str) -> ReviewItemsResponse:
+def get_items(uid: str, *, include_agent_proposals: bool = False):
     remaining = store.remaining_today(uid)
-    if not remaining:
-        return ReviewItemsResponse(items=[], remaining_today=0)
     eligible = []
-    for item, source, version in _sources(uid):
-        if store.offer_item(uid, item, source, version):
-            eligible.append(item)
-    return ReviewItemsResponse(items=rank_review_items(eligible, remaining), remaining_today=remaining)
+    if remaining:
+        for item, source, version in _sources(uid):
+            if item.kind == 'agent_proposal' and not include_agent_proposals:
+                continue
+            if store.offer_item(uid, item, source, version):
+                eligible.append(item)
+    ranked = rank_review_items(eligible, remaining)
+    if include_agent_proposals:
+        return ReviewItemsResponseV2(
+            items=[ReviewItemV2.model_validate(item.model_dump()) for item in ranked], remaining_today=remaining
+        )
+    return ReviewItemsResponse(
+        items=[ReviewItem.model_validate(item.model_dump(exclude={'agent_proposal'})) for item in ranked],
+        remaining_today=remaining,
+    )
 
 
-def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) -> ReviewAnswerReceipt:
+def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *, schedule=None) -> ReviewAnswerReceipt:
     kind = item_id.partition(':')[0]
     if not answer.not_sure and getattr(answer, kind, None) is None:
         raise store.ReviewConflict('Answer kind does not match item')
-    state = store.begin_answer(uid, item_id, store.fingerprint(answer.model_dump(mode='json')))
+    answer_data = answer.model_dump(mode='json')
+    if answer_data.get('agent_proposal') is None:
+        answer_data.pop('agent_proposal', None)
+    state = store.begin_answer(uid, item_id, store.fingerprint(answer_data))
     if state['retry']:
         return ReviewAnswerReceipt(
             item_id=item_id, applied=state['applied'], remaining_today=store.remaining_today(uid)
         )
-    item = ReviewItem.model_validate(state['item'])
+    item = ReviewItemV2.model_validate(state['item'])
     uncertain = answer.not_sure or bool(answer.same_person and answer.same_person.decision == 'not_sure')
     applied = False
     try:
@@ -189,6 +207,13 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
             # Do not call speaker skip: it permanently marks that source answered.
             # Review stores an evidence version, permitting a new-evidence question.
             pass
+        elif item.agent_proposal:
+            from utils.dream_tools import answer_proposal
+
+            payload = getattr(answer, 'agent_proposal', None)
+            if payload is None:
+                raise store.ReviewConflict('Agent proposal answer required')
+            applied = answer_proposal(uid, item.agent_proposal, state['source'], payload.decision)
         elif item.speaker:
             prompt = SpeakerTagPrompt.model_validate(state['source'])
             payload = answer.speaker

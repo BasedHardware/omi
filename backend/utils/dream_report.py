@@ -67,11 +67,24 @@ def project_run(uid, run_id, doc):
     edits = []
     for index, edit in enumerate(proposed.get('edits', [])):
         outcome = edit_outcomes[index]['status'] if index < len(edit_outcomes) else 'invalid_evidence'
-        if outcome not in {'shadow', 'applied', 'suppressed', 'suggest_only', 'edit_cap', 'invalid_evidence'}:
+        outcome = {'suggested': 'suggest_only', 'already_suggested': 'suggest_only', 'suggestion_cap': 'edit_cap'}.get(
+            outcome, outcome
+        )
+        if outcome not in {
+            'shadow',
+            'applied',
+            'suppressed',
+            'suggest_only',
+            'edit_cap',
+            'invalid_evidence',
+        }:
             outcome = 'invalid_evidence'
         edits.append(
             {
                 'kind': edit['kind'],
+                'policy': edit.get(
+                    'policy', 'auto' if edit['kind'] in {'title', 'overview', 'spelling'} else 'suggest'
+                ),
                 'target_label': target_label(edit['target'], records.get(edit['target'])),
                 'before': edit.get('before', ''),
                 'after': edit.get('after', ''),
@@ -103,7 +116,10 @@ def project_run(uid, run_id, doc):
             questions=[{'kind': row['kind'], 'text': row['title']} for row in proposed.get('questions', [])],
             slow_tasks=[{'description': row['description']} for row in proposed.get('slow_tasks', [])],
             vocabulary=[
-                {key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')}
+                {
+                    **{key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')},
+                    'policy': row.get('policy', 'auto'),
+                }
                 for row in proposed.get('vocabulary', [])
             ],
             feedback=[

@@ -12,12 +12,20 @@ class DreamRunRequest(BaseModel):
 
 class DreamReportEdit(BaseModel):
     kind: str
+    policy: Literal['auto', 'suggest'] = 'suggest'
     target_label: str
     before: str
     after: str
     reason: str
     evidence_count: int
-    outcome: Literal['shadow', 'applied', 'suppressed', 'suggest_only', 'edit_cap', 'invalid_evidence']
+    outcome: Literal[
+        'shadow',
+        'applied',
+        'suppressed',
+        'suggest_only',
+        'edit_cap',
+        'invalid_evidence',
+    ]
 
 
 class DreamReportQuestion(BaseModel):
@@ -30,6 +38,7 @@ class DreamReportTask(BaseModel):
 
 
 class DreamReportTerm(BaseModel):
+    policy: Literal['auto', 'suggest'] = 'auto'
     kind: str
     spelling: str
     aliases: list[str]
