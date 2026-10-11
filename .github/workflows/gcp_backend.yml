@@ -471,3 +471,23 @@ jobs:
           python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"
+
+      - name: Record deployed release ancestry metadata
+        if: always() && github.event.inputs.mode == 'deploy'
+        env:
+          RELEASE_SHA: ${{ github.event.inputs.release_sha || github.sha }}
+          ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          {
+            echo "### Deployed Release Ancestry Metadata"
+            echo ""
+            echo "- **Release SHA**: \`${RELEASE_SHA}\`"
+            echo "- **Environment**: \`${ENVIRONMENT}\`"
+            echo "- **Run ID**: \`${{ github.run_id }}\`"
+            echo "- **Run Attempt**: \`${{ github.run_attempt }}\`"
+            echo ""
+            echo "To verify whether a commit is contained in this live release:"
+            echo "\`\`\`bash"
+            echo "python3 backend/scripts/verify_deploy_ancestry.py --release ${RELEASE_SHA} --contains <merge_sha>"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

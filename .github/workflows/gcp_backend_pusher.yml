@@ -840,6 +840,37 @@ jobs:
       - name: Show Output
         run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
 
+      - name: Verify and record deployed release ancestry guard
+        if: always()
+        env:
+          RELEASE_SHA: ${{ env.CHECKED_OUT_SHA || github.sha }}
+          TRIGGER_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deploy Ancestry Guard Summary"
+            echo ""
+            echo "- **Deployed Release SHA**: \`${RELEASE_SHA}\`"
+            echo "- **Service**: \`${{ env.SERVICE }}\`"
+            echo "- **Environment**: \`${{ github.event.inputs.environment }}\`"
+            echo "- **Run ID**: \`${{ github.run_id }}\`"
+            echo ""
+            echo "To verify commit ancestry post-deploy:"
+            echo "\`\`\`bash"
+            echo "python3 backend/scripts/verify_deploy_ancestry.py --release ${RELEASE_SHA} --contains <merge_sha>"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -f backend/scripts/verify_deploy_ancestry.py ]]; then
+            python3 backend/scripts/verify_deploy_ancestry.py \
+              --release "${RELEASE_SHA}" \
+              --contains "${TRIGGER_SHA}" \
+              --token "${GH_TOKEN}" || {
+                echo "::warning title=Deploy Ancestry Guard::Advisory check: trigger SHA ${TRIGGER_SHA} was not verified as an ancestor of deployed release ${RELEASE_SHA}."
+              }
+          fi
+
       - name: Record live-capacity-gate break-glass use
         if: always() && env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
         env:

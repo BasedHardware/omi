@@ -86,3 +86,25 @@ kubectl -n prod-omi-backend get secret prod-omi-backend-secrets -o json \
 ```
 
 This checks only key names. It must not decode, log, or store secret values.
+
+## Post-deploy ancestry verification
+
+During and after rollouts, deploy verification often requires proving that an intended PR merge or candidate commit is contained within the deployed release SHA. To check this mechanically without cloning a full Git repository:
+
+```bash
+python3 backend/scripts/verify_deploy_ancestry.py \
+  --release <deployed_release_sha> \
+  --contains <candidate_or_merge_sha>
+```
+
+Options:
+- `--json`: Output machine-readable JSON status for automated verification gates.
+- `--quiet`: Suppress diagnostic output and rely strictly on process exit code.
+- `--repository <owner/repo>`: Target repository (defaults to `BasedHardware/omi` or `$GITHUB_REPOSITORY`).
+- `--token <token>`: GitHub authentication token (defaults to `$GH_TOKEN` or `$GITHUB_TOKEN`).
+
+Exit codes:
+- `0`: `<contains>` is an ancestor of `<release>` (the intended change is confirmed live).
+- `1`: `<contains>` is NOT an ancestor of `<release>`.
+- `2`: Resolution, network, or argument error.
+
