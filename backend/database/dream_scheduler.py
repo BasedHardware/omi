@@ -43,7 +43,10 @@ def candidates(*, limit=100, now=None, firestore_client=None):
             {
                 snapshot.id: snapshot.to_dict() or {}
                 for snapshot in database.get_all(
-                    [database.collection('users').document(row.id) for row in rows], transaction=tx, timeout=3
+                    [database.collection('users').document(row.id) for row in rows],
+                    transaction=tx,
+                    timeout=3,
+                    field_paths=['subscription.plan', 'plan'],
                 )
             }
             if rows

@@ -104,8 +104,9 @@ def test_scheduling_reads_current_subscription_for_idle_and_changed_owners(monke
     ]
     plans = {'free': '', 'paid': next(iter(PAID_PLAN_IDS))}
 
-    def get_all(refs, *, transaction, timeout):
+    def get_all(refs, *, transaction, timeout, field_paths):
         assert timeout == 3 and transaction is not None
+        assert field_paths == ['subscription.plan', 'plan']
         return [
             SimpleNamespace(id=ref.id, to_dict=lambda uid=ref.id: {'subscription': {'plan': plans[uid]}})
             for ref in refs
