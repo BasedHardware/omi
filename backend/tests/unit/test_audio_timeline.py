@@ -187,6 +187,30 @@ class TestSendMap:
         assert translated[0]['start'] == translated[0]['end']
         assert translator.rejected_segments == 1
 
+    def test_decimal_provider_timestamps_round_to_nearest_sample(self):
+        """Regression: float products like 2.01 * 16000 evaluate to
+        32159.999... and must round to 32160, not truncate to 32159.
+
+        The elapsed-send cursor (``note_accepted_spans``) already uses
+        ``round``; both conversion sites in ``translate`` must match so a
+        timestamp exactly on a send boundary maps into the send that begins
+        there.
+        """
+        # The raw float trap the issue pins.
+        assert int(2.01 * RATE) == 32159 and round(2.01 * RATE) == 32160
+        assert int(8001 / RATE * RATE) == 8000 and round(8001 / RATE * RATE) == 8001
+        assert sum(
+            1 for i in range(360000) if int((i / 100) * RATE) != round((i / 100) * RATE)
+        ) == 2356
+
+        timeline = CaptureTimeline(sample_rate=RATE)
+        timeline.accept(_pcm(4 * RATE), arrival_wall=1.0, arrival_monotonic=0.0)
+        translator = ProviderEpochTranslator(timeline, RATE)
+        translator.note_accepted(0, 4 * RATE)
+        translated = translator.translate([{'start': 2.01, 'end': 3.01, 'text': 'x'}])
+        assert translated and translated[0]['_capture_start_sample'] == 32160
+        assert translated[0]['_capture_end_sample'] == 48160
+
     def test_clock_only_mode_keeps_provider_times_and_unmapped_segments(self):
         """project_times=False (flag-off sessions): persistence stays legacy.
 
