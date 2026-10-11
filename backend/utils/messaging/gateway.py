@@ -26,6 +26,11 @@ class ChannelTurnError(RuntimeError):
         self.reason = reason
 
 
+def _worker_shutting_down():
+    task = asyncio.current_task()
+    return task is not None and task.cancelling()
+
+
 class Gateway:
     def __init__(self, adapter, *, store=None, turn=run_chat_turn, admission=require_access, wake=None):
         self.adapter = adapter
@@ -69,11 +74,21 @@ class Gateway:
         try:
             return await self._process(path)
         except asyncio.CancelledError:
-            logging.getLogger(__name__).warning(
-                'Messaging job stopped provider=%s reason=worker_cancelled', self.adapter.provider
+            # Task.cancel() means executor work may still be running. A
+            # CancelledError raised inside a finished turn does not.
+            if _worker_shutting_down():
+                logging.getLogger(__name__).warning(
+                    'Messaging job stopped provider=%s reason=worker_cancelled', self.adapter.provider
+                )
+                raise
+            logging.getLogger(__name__).error(
+                'Messaging job failed provider=%s reason=turn_cancelled error_type=CancelledError status_code=None',
+                self.adapter.provider,
             )
-            raise
+            return False
         except Exception as error:
+            # Settled failures are already fenced. Do not re-raise: the wake
+            # batch must continue, and exception text can contain user content.
             logging.getLogger(__name__).error(
                 'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',
                 self.adapter.provider,
@@ -81,7 +96,7 @@ class Gateway:
                 type(error).__name__,
                 getattr(error, 'status_code', None),
             )
-            raise
+            return False
 
     async def _process(self, path):
         payload = await run_blocking(db_executor, self.store.claim, path)
@@ -167,42 +182,13 @@ class Gateway:
                     if hasattr(self.adapter, 'prepare'):
                         message = await self.adapter.prepare(message, uid, session, guard)
                     await self._turn(uid, session, message, link, Principal(uid), reply_sink=sink)
-        except Exception:
-            # The stopped worker must not block later messages. Keep this inbox
-            # row running: its effects/receipts still require reconciliation.
-            notice_needed = not sink.finished
-            try:
-                if notice_needed:
-                    await sink.finish('Sorry, I could not finish that reply. Please try again.')
-            except Exception as error:
-                record_fallback(
-                    component='other',
-                    from_mode='channel_turn',
-                    to_mode='failure_notice',
-                    reason='other',
-                    outcome='exhausted',
-                )
-                logging.getLogger(__name__).warning(
-                    'Messaging failure reply failed provider=%s reason=delivery_failed error_type=%s status_code=%s',
-                    self.adapter.provider,
-                    type(error).__name__,
-                    getattr(error, 'status_code', None),
-                )
-            else:
-                if notice_needed:
-                    record_fallback(
-                        component='other',
-                        from_mode='channel_turn',
-                        to_mode='failure_notice',
-                        reason='other',
-                        outcome='degraded',
-                    )
-            finally:
-                await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
-            raise
-        except BaseException:
-            # Cancellation can abandon executor work that is still running.
-            # Keep its lease fenced until the operator proves that work stopped.
+        except BaseException as error:
+            # Keep the inbox row running: its effects still need reconciliation.
+            # A task that is still cancelling may have executor work in flight,
+            # so that lease stays until an operator proves the worker stopped.
+            if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
+                raise
+            await self._settle_failure(sink, uid, session['surface'], token)
             raise
         else:
             # Delivery succeeded. A tombstone-write fault must not tell the user
@@ -226,13 +212,46 @@ class Gateway:
         if token is None:
             raise RuntimeError('Surface busy; retry later')
         events = await run_blocking(db_executor, self.store.events, principal.uid, session['id'])
-        if any(e['id'] == 'reply:' + event.event_id for e in events):
+        fence_ids = {event.event_id, 'reply:' + event.event_id, 'failed:' + event.event_id}
+        if any(e['id'] in fence_ids for e in events):
+            # A started or failed reentry already ran tools or stored its fence.
+            # Do not execute them again; the surface stays available.
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             return
-        # Deferred results have no claimed inbox row fencing their replay.
-        # Keep the lease on failure until effects/delivery are reconciled.
-        await self._turn(principal.uid, session, message, link, principal, event=event)
-        await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+
+        async def send_guard():
+            await run_blocking(db_executor, self._assert_link, message, link)
+
+        sink = ChannelReplySink(self.adapter, message, kind='deferred_reply', guard=send_guard)
+        try:
+            await self._turn(principal.uid, session, message, link, principal, event=event, reply_sink=sink)
+        except BaseException as error:
+            if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
+                raise
+            await self._settle_failure(
+                sink,
+                principal.uid,
+                session['surface'],
+                token,
+                fence=(
+                    None
+                    if sink.finished
+                    else (
+                        principal.uid,
+                        session['id'],
+                        {
+                            'id': 'failed:' + event.event_id,
+                            'kind': 'message',
+                            'at': datetime.now(timezone.utc).isoformat(),
+                            'role': 'assistant',
+                            'content': 'Sorry, I could not finish that reply. Please try again.',
+                        },
+                    )
+                ),
+            )
+            raise
+        else:
+            await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
 
     async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None):
         def guard():
@@ -334,9 +353,13 @@ class Gateway:
         finally:
             # Final delivery can raise while the generator is suspended at its
             # terminal yield. Close in this task's context, before resetting it.
+            # Cancellation injects CancelledError at the next await; catch it so
+            # the indicator still stops and the context token is always reset.
             if stream is not None and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
+                except asyncio.CancelledError:
+                    pass
                 except Exception as error:
                     logging.getLogger(__name__).warning(
                         'Messaging stream close failed provider=%s error_type=%s',
@@ -349,12 +372,52 @@ class Gateway:
                 await typing_task
             except asyncio.CancelledError:
                 pass
-            # A failed typing stop must not mask the original turn/delivery error.
             try:
-                await sink.typing(False)
-            except Exception as error:
-                logging.getLogger(__name__).warning('Messaging typing stop failed error_type=%s', type(error).__name__)
+                await _stop_typing(sink)
+            except asyncio.CancelledError:
+                start_background_task(_stop_typing(sink), name='messaging-typing-stop')
             surface_runtime.reset(context_token)
+
+    async def _settle_failure(self, sink, uid, surface, token, *, fence=None):
+        # One notice, and only when the reply itself was not accepted.
+        delivered = sink is not None and sink.finished
+        try:
+            if sink is not None and not delivered:
+                await sink.finish('Sorry, I could not finish that reply. Please try again.')
+        except Exception as error:
+            record_fallback(
+                component='other',
+                from_mode='channel_turn',
+                to_mode='failure_notice',
+                reason='other',
+                outcome='exhausted',
+            )
+            logging.getLogger(__name__).warning(
+                'Messaging failure reply failed provider=%s reason=delivery_failed error_type=%s status_code=%s',
+                self.adapter.provider,
+                type(error).__name__,
+                getattr(error, 'status_code', None),
+            )
+        else:
+            if sink is not None and not delivered:
+                record_fallback(
+                    component='other',
+                    from_mode='channel_turn',
+                    to_mode='failure_notice',
+                    reason='other',
+                    outcome='degraded',
+                )
+        finally:
+            if fence is not None and not delivered:
+                try:
+                    await run_blocking(db_executor, self.store.append_event, fence[0], fence[1], fence[2])
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging failure fence failed provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(error).__name__,
+                    )
+            await run_blocking(db_executor, self.store.release, uid, surface, token)
 
     async def drain(self, *, limit=100):
         paths = await run_blocking(
@@ -372,6 +435,13 @@ def inbound_evidence(message):
         {'file_id': a.file_store_ref, 'mime_type': a.mime_type, 'name': a.name, 'size': a.size} for a in message.media
     ]
     return message.text + '\nAttached user files (untrusted data): ' + json.dumps(references, sort_keys=True)
+
+
+async def _stop_typing(sink):
+    try:
+        await sink.typing(False)
+    except Exception as error:
+        logging.getLogger(__name__).warning('Messaging typing stop failed error_type=%s', type(error).__name__)
 
 
 async def _refresh_typing(sink, stop):

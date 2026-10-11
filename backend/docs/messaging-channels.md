@@ -68,10 +68,14 @@ An injected `wake(paths)` may instead publish content-free task pointers in Stag
 Stage B must call it on startup and periodically for each registered adapter. A job
 moves `pending -> running -> done`. Completed jobs retain content-free dedup tombstones.
 A running job with ambiguous tool/delivery outcomes is **not automatically replayed**.
-A handled inbound worker failure closes its stream, stops typing, attempts a guarded failure
-reply, and releases the surface lease so new inbound messages can progress. The failed
-inbox row stays running for reconciliation; process loss/cancellation still retains its lease.
-Deferred reentry failures retain their lease too, since no claimed inbox row fences replay.
+A handled inbound worker failure closes its stream, stops typing, attempts one guarded
+failure reply, and releases the surface lease so new inbound messages can progress. The
+failed inbox row stays running and is not replayed. A `CancelledError` from a finished
+turn is the same settled failure. Only a worker task that is still cancelling retains
+its lease, because executor work may still be running. A settled deferred reentry
+writes a content-free failure fence, sends at most one notice, and releases the lease.
+A later reentry that sees the fence, the started reentry, or the delivered reply does
+not run the turn again. Process-loss leases still need operator reconciliation.
 Assistant events are recorded only after delivery succeeds. Error frames are drained
 through the shared producer's terminal fallback; an error without a reply fails visibly.
 Surface leases use atomic create and a random ownership token. They cannot be stolen,

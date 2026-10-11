@@ -103,6 +103,9 @@ class TestProviderContracts(AdapterContract):
         'error_fallback',
         'empty',
         'cancelled',
+        'tool',
+        'timeout',
+        'unavailable',
         'completion',
         'history',
     ],
@@ -154,6 +157,8 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
             try:
                 if failure == 'cancelled' and len(turns) == 1:
                     raise asyncio.CancelledError
+                if failure == 'tool' and len(turns) == 1:
+                    raise RuntimeError('Synthetic tool failure')
                 if failure == 'empty' and len(turns) == 1:
                     return
                 if failure in ('error_frame', 'error_fallback') and len(turns) == 1:
@@ -187,22 +192,19 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
         assert store.jobs[link_job]['status'] == 'done'
         assert next(iter(store.identities.values()))['active']
         first = await deliver('text', 'first')
-        if failure == 'cancelled':
-            with pytest.raises(asyncio.CancelledError):
-                await gateway.process(first)
-            assert store.leases
-            assert store.jobs[first]['status'] == 'running'
-            assert cleaned == [True]
-            assert usage.get() is None
-            return
         if failure in ('rejected', 'failure_rejected'):
             # Typing succeeds, final text is rejected, typing stops, failure reply succeeds.
             adapter.transport.responses = [(200, {}, {}), (400, {'error': 'synthetic'}, {}), (200, {}, {})]
             if failure == 'failure_rejected':
                 adapter.transport.responses.append((400, {'error': 'synthetic'}, {}))
+        elif failure == 'timeout':
+            adapter.transport.responses = (
+                [(200, {}, {})] + [DeliveryUncertain('Provider transport outcome unknown')] * 4 + [(200, {}, {})]
+            )
+        elif failure == 'unavailable':
+            adapter.transport.responses = [(200, {}, {})] + [(503, {'error': 'synthetic'}, {})] * 4 + [(200, {}, {})]
         if failure not in (None, 'error_fallback'):
-            with pytest.raises((ProviderError, RuntimeError)):
-                await gateway.process(first)
+            assert not await gateway.process(first)
             assert store.jobs[first]['status'] == 'running'  # no replay of ambiguous effects
             if failure in ('completion', 'history'):
                 assert adapter.sent[-1]['text'] == 'Synthetic answer'
@@ -228,11 +230,17 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
     sends = [call[2]['json'] for call in adapter.transport.calls if call[1].endswith('/messages')]
     assert sends[0]['message']['parts'][0]['value'].startswith('Account linked.')
     assert all('parts' not in body and body['message']['idempotency_key'] for body in sends)
+    keys = [body['message']['idempotency_key'] for body in sends]
+    assert all(isinstance(item, str) and 1 <= len(item) <= 255 for item in keys)
+    if failure in ('timeout', 'unavailable'):
+        assert keys[1] == keys[2] == keys[3] == keys[4]
+        assert len({keys[0], keys[1], keys[5], keys[6]}) == 4
+    else:
+        assert len(keys) == len(set(keys))
+    assert 'Synthetic answer' not in caplog.text
+    assert 'Synthetic tool failure' not in caplog.text
+    assert code not in caplog.text
     typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
-    if failure == 'cancelled':
-        assert typing == ['POST', 'DELETE']
-        assert 'reason=worker_cancelled' in caplog.text
-        return
     assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
     if failure not in (None, 'error_fallback'):
         reason = {
@@ -242,10 +250,16 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
             'history': 'worker_error',
             'error_frame': 'turn_error_frame',
             'empty': 'missing_terminal_reply',
+            'tool': 'worker_error',
+            'timeout': 'delivery_uncertain',
+            'unavailable': 'worker_error',
+            'cancelled': 'turn_cancelled',
         }[failure]
         assert 'reason=' + reason in caplog.text
     if failure == 'rejected':
         assert 'status_code=400' in caplog.text
+    if failure == 'unavailable':
+        assert 'status_code=503' in caplog.text
 
 
 def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
@@ -275,13 +289,79 @@ def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
         adapter.transport.responses = [(200, {}, {}), (400, {}, {}), (200, {}, {})]
         with pytest.raises(ProviderError):
             await gateway.reenter(message, event, principal=principal)
-        assert store.leases
+        assert not store.leases
         session = next(iter(store.sessions.values()))
-        assert not any(e['id'] == 'reply:event' for e in store.events('user', session['id']))
-        with pytest.raises(RuntimeError, match='Surface busy'):
-            await gateway.reenter(message, event, principal=principal)
+        events = store.events('user', session['id'])
+        assert not any(e['id'] == 'reply:event' for e in events)
+        assert any(e['id'] == 'failed:event' for e in events)
+        assert 'could not finish' in adapter.sent[-1]['text']
+        sent = len(adapter.sent)
+        await gateway.reenter(message, event, principal=principal)
+        assert len(adapter.sent) == sent
+        assert not store.leases
 
     asyncio.run(run())
+
+
+def test_task_cancellation_retains_lease_until_worker_stops(adapter, monkeypatch, caplog):
+    if adapter.channel != 'imessage':
+        return
+    import threading
+    from utils.messaging import history
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    code = '0123456789ABCDEF0123456789ABCDEF'
+    proof = store.mint('user', 'imessage', 'linq', 'code')['proof']
+    store.proofs[code] = store.proofs.pop(proof)
+    release_thread = threading.Event()
+    started = threading.Event()
+
+    def turn(*args, **kwargs):
+        started.set()
+        release_thread.wait(5)
+
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'Synthetic answer'}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+
+    async def deliver(kind, message_id, text=None):
+        value = json.loads(fixture('linq', kind))
+        value['data']['id'] = message_id
+        if text:
+            value['data']['parts'][0]['value'] = text
+        return (await gateway.webhook(*signed(adapter, json.dumps(value).encode())))['jobs'][0]
+
+    async def run():
+        link_job = await deliver('start', 'link', f'Hi Omi, link code {code}')
+        assert await gateway.process(link_job)
+        first = await deliver('text', 'first')
+        task = asyncio.create_task(gateway.process(first))
+        assert await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert store.leases
+        assert store.jobs[first]['status'] == 'running'
+        assert 'reason=worker_cancelled' in caplog.text
+        assert all('could not finish' not in (item.get('text') or '') for item in adapter.sent)
+        typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
+        assert typing and typing[0] == 'POST' and 'DELETE' in typing
+        second = await deliver('text', 'second')
+        assert not await gateway.process(second)
+        assert store.jobs[second]['status'] == 'pending'
+        assert store.leases
+        assert code not in caplog.text
+
+    try:
+        asyncio.run(run())
+    finally:
+        release_thread.set()
 
 
 @pytest.mark.parametrize('status,body', [(429, {}), (200, {'error_code': 429})])

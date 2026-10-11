@@ -18,6 +18,8 @@ class ProviderError(RuntimeError):
 class DeliveryUncertain(ProviderError):
     """The provider may have accepted the send; operator reconciliation required."""
 
+    reason = 'delivery_uncertain'
+
 
 class ProviderLogFilter(logging.Filter):
     def filter(self, record):

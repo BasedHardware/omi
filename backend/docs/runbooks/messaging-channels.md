@@ -153,10 +153,14 @@ requires `message.parts` and `message.idempotency_key`, with `preferred_service`
 at the top level. Synthetic transport replay now rejects the old shape.
 
 Current worker logs report provider, bounded reason, exception type and HTTP
-status only, including terminal 429 responses. A handled turn failure attempts a short guarded failure reply,
+status only, including terminal 429 responses. A handled turn failure attempts one short guarded failure reply,
 closes the stream in its owning task, stops typing, and releases the surface
 lease. The failed inbox row remains running and is never automatically replayed.
-Cancellation and failed deferred reentry retain their leases for reconciliation.
+A finished turn that raises `CancelledError` follows that same path. A worker
+task that is still cancelling retains its lease, because thread-pool work may
+still be running. A settled deferred reentry stores a failure fence, sends at
+most one notice, and releases the lease so the chat is not stuck; a retry sees
+the fence and does not run the turn again. Process loss still retains the lease.
 Only delivered assistant replies enter model event history. A failure to complete
 the inbox tombstone after successful delivery does not send a contradictory apology.
 Error frames are drained for a terminal fallback before being treated as silent failure.
