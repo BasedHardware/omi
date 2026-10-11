@@ -43,7 +43,7 @@ class VoiceRecovery:
             self.ring_ref = ref(proven) if proven else None
             self.watermark = proven.total_bytes_written if proven else 0
             bounds = proven.get_time_range() if proven else None
-            self.audio_watermark = bounds[1] if bounds else 0
+            self.audio_watermark = max(self.audio_watermark, bounds[1] if bounds else self.audio_watermark)
             self.fresh_bytes = 0
             return
         if current is None or self.tranches >= RECOVERY_MAX_TRANCHES:

@@ -191,6 +191,9 @@ def test_ring_wrap_and_replacement_cannot_reuse_old_proof():
     assert recovery.tranches == 1
     replacement.write_positioned(_pcm(10), 10)
     recovery.observe(replacement, [(10, 20)])
+    assert not recovery.grant(60)  # old capture positions remain old across ring replacement
+    replacement.write_positioned(_pcm(10), 20)
+    recovery.observe(replacement, [(20, 30)])
     assert recovery.grant(60)
     assert recovery.tranches == 2
 
