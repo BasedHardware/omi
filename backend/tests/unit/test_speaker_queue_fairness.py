@@ -317,25 +317,40 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
         matcher.queue.put_nowait(_work(1, start=0, seconds=5, segment=f'rejector-{i}'))
     matcher.queue.put_nowait(_work(2, start=6, seconds=5))
     order = []
+    completed = []
     original = matcher.match
     finished = asyncio.Event()
+    rejector_finished = asyncio.Event()
+    original_extract = matcher._extract_query
+
+    async def extract_query(pcm):
+        # The owner has reserved the last token, but the denied rejector can
+        # finish before its embedding. Exercise that schedule without sleeps.
+        await rejector_finished.wait()
+        return await original_extract(pcm)
 
     async def match(voice, work):
         order.append(voice)
         await original(voice, work)
-        if len(order) == 2:
+        completed.append(voice)
+        if voice == 1:
+            rejector_finished.set()
+        if len(completed) == 2:
             finished.set()
 
+    monkeypatch.setattr(matcher, '_extract_query', extract_query)
     monkeypatch.setattr(matcher, 'match', match)
     host.spawn = lambda coro, **kwargs: asyncio.create_task(coro)
     runner = asyncio.create_task(matcher.load_and_run())
     try:
         await asyncio.wait_for(finished.wait(), timeout=1)
         assert order == [2, 1]
+        assert completed == [1, 2]
         assert matcher.speaker_to_person[2] == ('user', 'User')
         assert matcher._embedding_attempts[2] == 1 and matcher._embedding_attempts[1] == 8
         assert matcher._socket_embedding_tokens == 0
     finally:
+        rejector_finished.set()
         runner.cancel()
         with pytest.raises(asyncio.CancelledError):
             await runner
