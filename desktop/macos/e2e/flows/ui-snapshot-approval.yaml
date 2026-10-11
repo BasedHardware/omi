@@ -15,6 +15,7 @@ covers:
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker.swift
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker+Tree.swift
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotOrdering.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/InvisibleFormatMarks.swift
   - desktop/macos/Desktop/Sources/Automation/CaptureScreenExclusion.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+CaptureExclusion.swift
 preconditions:
@@ -61,6 +62,10 @@ steps:
   - id: S6c
     name: A screenshot leaves out the apps Omi never reads
     do: "Put a Terminal window in front, covering part of the screen, and ask Omi what is on the screen. After Allow Once, the saved screenshot (the path in the reply) shows the screen without the Terminal window; the app log has 'capture_screen: leaving out'."
+
+  - id: S6d
+    name: WhatsApp's invisible marks never show
+    do: "With WhatsApp open and in the background, ask Omi what is in the WhatsApp window. The card's App row reads 'WhatsApp · net.whatsapp.WhatsApp' with no '⟨U+200E⟩' (WhatsApp's own name starts with U+200E). After Allow Once, the snapshot's labels read 'Send', 'Photo' and the like, with no invisible mark in front."
 
   - id: S7
     name: Deny never reads

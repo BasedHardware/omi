@@ -827,6 +827,24 @@ final class ApprovalCardTests: XCTestCase {
     XCTAssertEqual(presentation.target, "Text⟨U+202E⟩Edit · com.apple.TextEdit")
   }
 
+  func testTheMarkAnAppStartsItsOwnNameWithIsDroppedButAnOverrideStillShows() throws {
+    let whatsapp = DesktopToolApprovalTargetApp(name: "\u{200E}WhatsApp", bundleID: "net.whatsapp.WhatsApp")
+    let store = makeSnapshotStore(RecordingResolver(), apps: ["net.whatsapp.whatsapp": whatsapp])
+    store.ingest(message: try snapshotFrame(resourceRef: "net.whatsapp.whatsapp"))
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
+
+    XCTAssertEqual(presentation.target, "WhatsApp · net.whatsapp.WhatsApp")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}Notes\u{FEFF}\u{200B}"), "Notes")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200E}Whats\u{202E}App"), "Whats⟨U+202E⟩App")
+    XCTAssertEqual(
+      InvisibleFormatMarks.strippingHarmless("\u{200E}Send \u{1F469}\u{200D}\u{1F4BB}"),
+      "Send \u{1F469}\u{200D}\u{1F4BB}")
+    XCTAssertTrue(InvisibleFormatMarks.containsBidiControl("a\u{2067}b"))
+    XCTAssertFalse(InvisibleFormatMarks.containsBidiControl("\u{200E}a\u{200F}b"))
+  }
+
   func testAnAppNameCannotForgeTheBundleIDOrRunLong() throws {
     let spoof = DesktopToolApprovalTargetApp(name: "TextEdit · com.apple.TextEdit", bundleID: "com.evil.app")
     let store = makeSnapshotStore(RecordingResolver(), apps: ["com.evil.app": spoof])
@@ -845,7 +863,7 @@ final class ApprovalCardTests: XCTestCase {
         "TextEdit com.apple.TextEdit",
         separator)
     }
-    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Text\u{2063}Edit\u{E0041}"), "Text⟨U+2063⟩Edit")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Text\u{2066}Edit\u{E0041}"), "Text⟨U+2066⟩Edit")
     XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Café 2 (Beta)"), "Café 2 (Beta)")
   }
 }
