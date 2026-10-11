@@ -494,8 +494,8 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
     )
     monkeypatch.setattr(
         kg_graph_traversal,
-        "fetch_authoritative_product_memory_items",
-        lambda **_kwargs: [],
+        "fetch_authoritative_product_memory_items_by_ids",
+        lambda *_args, **_kwargs: [],
     )
 
     result = kg_graph_traversal.traverse_knowledge_graph(
