@@ -104,7 +104,7 @@ def test_neighbourhood_budget_stops_lazy_expensive_queries():
     def candidates():
         for i in range(100):
             touched.append(i)
-            yield f'conversations/context-{i}', {'transcript_segments': [{'text': 'invented ' * 1000}]}
+            yield f'conversations/context-{i}', {'transcript_segments': [{'text': 'invented ' * 1000}]}, 'links'
 
     records = dream_context.add_context(targets, candidates(), Caps())
     assert len(touched) < 100
@@ -153,7 +153,7 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
     rows = list(
         dream_context.context_candidates('synthetic-owner', targets, [], read_record=read, read_entity_record=read)
     )
-    assert [ref for ref, _ in rows] == [
+    assert [ref for ref, _, _ in rows] == [
         'entity/person:p',
         'action_items/task',
         'conversations/lexical',
@@ -162,14 +162,16 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
         'screen/frame',
     ]
     assert calls == []
-    for ref, load in rows:
+    for ref, load, _ in rows:
         if callable(load):
             load()
     assert all(uid == 'synthetic-owner' for uid, _ in calls)
 
 
 def test_invisible_neighbours_are_excluded():
-    records = dream_context.add_context({'people/target': {'name': 'Nuvra'}}, [('people/hidden', None)], Caps())
+    records = dream_context.add_context(
+        {'people/target': {'name': 'Nuvra'}}, [('people/hidden', None, 'links')], Caps()
+    )
     assert list(records) == ['people/target']
 
 
@@ -263,10 +265,12 @@ def test_context_deduplicates_before_hydration_and_stops_before_unfitting_read(m
         calls.append('read')
         return {'name': 'Synthetic context'}
 
-    rows = dream_context.add_context(targets, [('people/a', load), ('people/b', load), ('people/b', load)], Caps())
+    rows = dream_context.add_context(
+        targets, [(ref, load, 'links') for ref in ('people/a', 'people/b', 'people/b')], Caps()
+    )
     assert len(rows) == 2 and calls == ['read']
     monkeypatch.setattr(dream_context, 'fits_pass', lambda *a: False)
-    dream_context.add_context(targets, [('people/c', load)], Caps())
+    dream_context.add_context(targets, [('people/c', load, 'links')], Caps())
     assert calls == ['read']
 
 

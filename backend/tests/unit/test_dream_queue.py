@@ -128,7 +128,7 @@ def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypat
         + 768
         <= budget
     )
-    assert len(records.targets) == 4  # leave capacity for read-only neighbourhoods
+    assert len(records.targets) > 4  # unused neighbourhood capacity returns to dirty targets
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     remaining = {
         f"{snapshot.to_dict()['collection']}/{snapshot.to_dict()['id']}" for snapshot in dream_store.dirty_refs(UID)
@@ -192,14 +192,34 @@ def test_idle_pass_refunds_and_can_admit_again(queue, monkeypatch):
     turn = AsyncMock(side_effect=AssertionError('idle called model'))
     report = asyncio.run(dream_agent.run_pass(UID, turn=turn))
     assert report['status'] == 'not_admitted' and report['reason'] == 'idle'
-    assert report['cost_usd_reserved'] == 0 and report['dirty_read'] == 1
-    assert dream_store.dirty_count(UID) == 0
+    assert report['cost_usd_reserved'] == 0 and report['dirty_read'] == 0
+    assert report['dirty_counts']['unavailable'] == 1
+    assert dream_store.dirty_count(UID) == 1
     state = queue.rows[('dream_users', UID)]
-    assert state['passes'] == 0 and state['score'] == 0 and state['lease'] is None
+    assert state['passes'] == 0 and state['score'] > 0 and state['lease'] is None
     assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
     turn.assert_not_called()
     dream_store.mark_dirty(UID, [('conversations', 'new')])
     assert dream_store.acquire(UID, Caps(passes=1)) is not None
+
+
+def test_successful_report_settles_only_visible_admitted_versions(queue, monkeypatch):
+    from models.dream_agent import Plan
+
+    seed(queue, 35)
+    monkeypatch.setattr(
+        dream_reads,
+        'read_record',
+        lambda uid, ref, **kwargs: {'structured': {'title': 'Toy boat'}} if ref.endswith(('/0', '/1', '/2')) else None,
+    )
+    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(), 1)))
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == 'complete'
+    assert report['dirty_read'] == report['role_counts']['target'] == 3
+    assert report['dirty_counts']['attempted'] == 35
+    assert report['dirty_counts']['unavailable'] == 32
+    assert dream_store.dirty_count(UID) == report['records_queued_after'] == 32
+    assert all(count == 0 for path in report['retrieval_counts'].values() for count in path.values())
 
 
 def test_legacy_events_are_ignored_and_idle_does_not_count(queue):
@@ -385,7 +405,7 @@ def test_local_gateway_config_failure_refunds_before_dispatch(queue, monkeypatch
 def test_pre_model_timeout_refunds_but_retains_worker_safety_lease(queue, monkeypatch):
     seed(queue, 1)
 
-    def timed_out(*args):
+    def timed_out(*args, **kwargs):
         raise TimeoutError('synthetic storage timeout')
 
     monkeypatch.setattr(dream_reads, 'read_changes', timed_out)
@@ -424,8 +444,8 @@ def test_three_failed_reasoning_passes_settle_only_consumed_versions(queue, monk
     # Keep an unread older row behind the poisoned frontier.
     real_read = dream_reads.read_changes
 
-    def read_one(*args):
-        records, consumed = real_read(*args)
+    def read_one(*args, **kwargs):
+        records, consumed = real_read(*args, **kwargs)
         return {'conversations/1': records['conversations/1']}, consumed[:1]
 
     monkeypatch.setattr(dream_reads, 'read_changes', read_one)

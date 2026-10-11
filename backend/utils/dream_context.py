@@ -10,7 +10,6 @@ from utils.observability.fallback import record_fallback
 from utils.conversations.search import keyword_search_conversation_ids
 from utils.dream_guards import common_words, timestamp, tokens
 from utils.dream_prompt import (
-    project_record,
     fits_triage,
     evidence_message,
     triage_budget,
@@ -18,11 +17,15 @@ from utils.dream_prompt import (
     COMPLETION_RESERVE,
     TRIAGE_INSTRUCTIONS,
     person_names,
+    text,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
+from fastapi import HTTPException
+from database import review_store
 from utils.memory.memory_service import MemoryService
 from utils.executors import llm_executor, submit_with_context
+from utils.dream_diagnostics import path_count
 
 
 class EvidenceRecords(dict):
@@ -86,12 +89,13 @@ def fits_pass(records, caps, vocabulary=None):
 
 
 def query_terms(row, vocabulary=()):
-    text = (
-        project_record('conversations/query', row, chars=3000, names={})
-        if 'transcript_segments' in row
-        else ' '.join(str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label'))
-    )
-    words = list(dict.fromkeys(word for word in tokens(text) if len(word) > 3 and word not in common_words()))
+    # Query content, never the projector's synthetic "title/overview" headers.
+    content = ' '.join(
+        [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
+        + [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
+        + [str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label')]
+    )[:3000]
+    words = list(dict.fromkeys(word for word in tokens(content) if len(word) > 3 and word not in common_words()))
     near = [
         entry['spelling']
         for entry in vocabulary
@@ -109,76 +113,129 @@ def identities(row):
     return refs
 
 
-def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_record):
+def query_candidates(report, path, query):
+    """Count provider calls separately from returned references and hydration."""
+    path_count(report, path, 'attempted')
+    try:
+        rows = list(query())
+        path_count(report, path, 'found', len(rows))
+        yield from rows
+    except Exception:
+        path_count(report, path, 'failed')
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+
+
+def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_record, diagnostics=None):
     """Yield lazily: once the evidence budget is full no later-tier query runs."""
     if not target_refs(targets):
         return
+    diagnostics = {} if diagnostics is None else diagnostics
+    targets = {ref: row for ref, row in targets.items() if ref in target_refs(targets)}
     subjects = set().union(*(identities(row) for row in targets.values()))
     for entity_id in sorted(subjects)[:8]:
-        yield 'entity/' + entity_id, partial(read_entity_record, uid, entity_id)
-    for ref, row in targets.items():
+        path_count(diagnostics, 'links', 'found')
+        yield 'entity/' + entity_id, partial(read_entity_record, uid, entity_id), 'links'
+    for ref, row in list(targets.items())[:4]:
         linked = row.get('conversation_id')
         if linked:
             linked_ref = 'conversations/' + linked.removeprefix('conversations/')
-            yield linked_ref, partial(read_record, uid, linked_ref)
+            path_count(diagnostics, 'links', 'found')
+            yield linked_ref, partial(read_record, uid, linked_ref), 'links'
         if ref.startswith('conversations/'):
-            for task in action_items.get_action_items(uid, conversation_id=ref.split('/', 1)[1], limit=8):
+            for task in query_candidates(
+                diagnostics,
+                'links',
+                partial(action_items.get_action_items, uid, conversation_id=ref.split('/', 1)[1], limit=8),
+            ):
                 task_ref = 'action_items/' + task['id']
-                yield task_ref, partial(read_record, uid, task_ref)
+                yield task_ref, partial(read_record, uid, task_ref), 'links'
     # Read only bounded same-subject references; never scan an unrelated memory list.
     for subject in sorted(subjects)[:8]:
-        for ref in subject_memory_refs(uid, subject):
-            yield ref, partial(read_record, uid, ref)
+        for ref in query_candidates(diagnostics, 'links', partial(subject_memory_refs, uid, subject)):
+            yield ref, partial(read_record, uid, ref), 'links'
     queries = list(dict.fromkeys(' '.join(query_terms(row, vocabulary)) for row in targets.values()))[:4]
     for query in filter(None, queries):
-        try:
-            keys = keyword_search_conversation_ids(uid=uid, query=query, limit=4, raise_on_error=True)
-        except Exception:
-            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
-            keys = []
-        for key in keys:
+        for key in query_candidates(
+            diagnostics,
+            'lexical',
+            partial(keyword_search_conversation_ids, uid=uid, query=query, limit=4, raise_on_error=True),
+        ):
             ref = 'conversations/' + key
-            yield ref, partial(read_record, uid, ref)
+            yield ref, partial(read_record, uid, ref), 'lexical'
     for query in filter(None, queries):
         # These existing search APIs include synchronous embedding calls.
-        for key in submit_with_context(llm_executor, vector_db.query_vectors, query, uid, k=3).result():
+        for key in query_candidates(
+            diagnostics,
+            'semantic',
+            lambda: submit_with_context(
+                llm_executor, vector_db.query_vectors, query, uid, k=3, raise_on_unavailable=True
+            ).result(),
+        ):
             ref = 'conversations/' + key
-            yield ref, partial(read_record, uid, ref)
-        for match in submit_with_context(llm_executor, MemoryService().search, uid, query, limit=3).result():
+            yield ref, partial(read_record, uid, ref), 'semantic'
+        for match in query_candidates(
+            diagnostics,
+            'semantic',
+            lambda: submit_with_context(llm_executor, MemoryService().search, uid, query, limit=3).result(),
+        ):
             ref = 'memory_items/' + match.memory.id
-            yield ref, partial(read_record, uid, ref)
+            yield ref, partial(read_record, uid, ref), 'semantic'
     for row in list(targets.values())[:4]:
         time = timestamp(row.get('created_at') or row.get('timestamp'))
         if time is None:
             continue
         start, end = time - timedelta(hours=2), time + timedelta(hours=2)
-        for neighbour in temporal_neighbours(uid, 'conversations', start, time, end):
+        for neighbour in query_candidates(
+            diagnostics, 'temporal', partial(temporal_neighbours, uid, 'conversations', start, time, end)
+        ):
             ref = 'conversations/' + neighbour['id']
-            yield ref, partial(read_record, uid, ref)
-        for screen in temporal_neighbours(uid, 'screen_activity', start, time, end):
-            yield 'screen/' + screen['id'], screen
+            yield ref, partial(read_record, uid, ref), 'temporal'
+        for screen in query_candidates(
+            diagnostics, 'temporal', partial(temporal_neighbours, uid, 'screen_activity', start, time, end)
+        ):
+            yield 'screen/' + screen['id'], screen, 'temporal'
 
 
-def add_context(targets, candidates, caps, vocabulary=None):
+def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None):
+    diagnostics = {} if diagnostics is None else diagnostics
     records = EvidenceRecords(targets, targets=target_refs(targets))
     seen = set(records)
-    for ref, load in candidates:
+    for ref, load, path in candidates:
         if ref in seen:
+            path_count(diagnostics, path, 'duplicate')
             continue
         seen.add(ref)
-        # Ref/role admission precedes hydration. Projectors trim evidence to fit;
-        # reserve the minimum excerpt and bounded name metadata up front.
+        # Probe metadata only: a fabricated 1500-character row rejected short,
+        # useful neighbours before reading them and prevented later tiers running.
         probe = EvidenceRecords(
-            {**records, ref: {'name': 'x' * 120, 'content': 'x' * 1500, 'transcript_segments': [{'text': 'x' * 1500}]}},
+            {**records, ref: {}},
             targets=records.targets,
         )
         if not fits_pass(probe, caps, vocabulary):
+            path_count(diagnostics, path, 'budget_skipped')
             break
-        row = load() if callable(load) else load
+        if callable(load):
+            path_count(diagnostics, path, 'attempted')
+        try:
+            row = load() if callable(load) else load
+        except (review_store.ReviewNotFound, HTTPException) as exc:
+            if isinstance(exc, review_store.ReviewNotFound) or exc.status_code in {402, 404}:
+                path_count(diagnostics, path, 'unavailable')
+                continue
+            path_count(diagnostics, path, 'failed')
+            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+            continue
+        except Exception:
+            path_count(diagnostics, path, 'failed')
+            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+            continue
         if not row:
+            path_count(diagnostics, path, 'unavailable')
             continue
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):
+            path_count(diagnostics, path, 'budget_skipped')
             break
         records = candidate
+        path_count(diagnostics, path, 'added')
     return records

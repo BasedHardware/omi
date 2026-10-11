@@ -16,6 +16,7 @@ from utils.dream_context import EvidenceRecords, target_refs, cluster_hints
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
+from utils.dream_diagnostics import initialize, counts_only
 
 from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
 
@@ -96,6 +97,36 @@ class IdlePass(Exception):
     """No visible evidence was selected; release the provisional admission."""
 
 
+async def dry_run_retrieval(uid, records, *, targets=None, caps=None, vocabulary=None):
+    """Retrieve authorized caller-supplied targets; return counts without planning/effects.
+
+    Calls the same visibility-aware links/search/temporal readers as a pass.
+    No lease, admission, inference, acknowledgement, product writes or report writes.
+    Embedding search may call the existing provider. The caller owns authorization.
+    """
+    caps = caps or Caps.from_env()
+    evidence = EvidenceRecords(records, targets=target_refs(records) if targets is None else targets)
+    if not evidence.targets <= set(evidence):
+        raise ValueError('dream_unknown_target')
+    diagnostics = initialize({})
+    if vocabulary is None:
+        vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
+    evidence = await run_blocking(
+        postprocess_executor,
+        dream_reads.retrieve_context,
+        uid,
+        evidence,
+        caps,
+        vocabulary,
+        diagnostics=diagnostics,
+    )
+    return {
+        **counts_only(diagnostics),
+        'role_counts': {'target': len(evidence.targets), 'context': len(evidence) - len(evidence.targets)},
+        'triage_fits': dream_reads.fits_triage(evidence, caps, vocabulary),
+    }
+
+
 async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabulary=None):
     """Plan caller-supplied decrypted evidence without reads, admission or effects.
 
@@ -140,6 +171,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         'reasoning_evidence_chars': 0,
         'cost_usd': 0.0,
     }
+    initialize(report)
     consumed = []
     refund = False
     success = False
@@ -149,7 +181,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
             # Retrieval coordinates storage and embedding providers; leave CRUD workers free.
             records, consumed = await run_blocking(
-                postprocess_executor, dream_reads.read_changes, uid, lease, caps, vocabulary
+                postprocess_executor, dream_reads.read_changes, uid, lease, caps, vocabulary, diagnostics=report
             )
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)

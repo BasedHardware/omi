@@ -191,8 +191,12 @@ def query_vectors(
     ends_at: Optional[int] = None,
     k: int = 5,
     query_vector: Optional[List[float]] = None,
+    *,
+    raise_on_unavailable: bool = False,
 ) -> List[str]:
     if index is None:
+        if raise_on_unavailable:
+            raise RuntimeError('Conversation vector index unavailable')
         return []
 
     filter_data: Dict[str, Any] = {'uid': uid}

@@ -130,7 +130,7 @@ def pass_context(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)

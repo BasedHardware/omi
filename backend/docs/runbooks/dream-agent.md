@@ -2,19 +2,69 @@
 
 ## Target neighbourhoods and read-only planning
 
-Dirty reads admit at most four editable targets to leave prompt capacity for
-context. Retrieval adds explicit people/entities and conversation tasks,
+Dirty reads initially admit up to four editable targets for neighbourhood retrieval,
+then return unused context capacity to additional dirty targets under the existing
+triage budget. This is an initial allocation, not a four-target pass cap.
+Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
 existing Pinecone conversation and canonical memory semantic hits, then nearby
 conversations and screen records. Reads remain owner scoped and visibility checked.
-Queries and result counts are bounded; a retrieval failure fails the pass, rather
-than silently treating a partial neighbourhood as complete evidence.
+Queries and result counts are bounded. Failed queries or hydration reads increment
+the affected path's failure count and emit shared degraded fallback telemetry;
+remaining paths can still contribute. Missing/locked/hidden hydration results
+count as unavailable rather than provider failures.
 
 Context is evidence only in both stages. Guards reject context targets and
 merges whose second operand is context. All role and eligibility metadata enters
 the shared byte-based budget gate. Context admission also reserves worst-case
 triage input/completion before fitting reasoning. Reports include role counts;
 diagnostics never include record contents.
+
+Encrypted pass reports and the counts-only pass log include `retrieval_counts`
+for `links`, `lexical`, `semantic`, and `temporal`. Each path has `attempted`
+(provider/query and reference-hydration calls), `found` (returned candidate refs,
+including duplicates), `added` (unique visible context admitted), and `failed`
+(query/hydration errors). Additional counts are `duplicate`, `unavailable`, and
+`budget_skipped`. A zero attempted count means that path was not reached or had
+no applicable query; it does not certify provider health. A budget stop leaves
+later tiers unattempted. Context added during retrieval may subsequently become
+a dirty target; final `role_counts` describes the model input.
+
+`dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
+`failed`, `newer` and `budget_deferred`. The last count includes the unread suffix
+deferred when the evidence budget fills. `dirty_read` now counts admitted versions
+only; previously it also counted unavailable versions that were acknowledged.
+Only versions present as editable targets are eligible for pass acknowledgement
+or failed-reasoning retry settlement. Unavailable/budget-deferred versions remain
+queued. Permanently absent or hidden records may therefore recur in diagnostics;
+the existing queue overflow/retention policy is unchanged.
+
+Prometheus exports `omi_dream_retrieval_total{path,count}` and
+`omi_dream_dirty_read_total{count}` with only these closed labels. These diagnostics
+and the dry-run result contain no refs, IDs, provider messages or user text.
+
+For the counts-only owner investigation, use the retrieval entrypoint inside a pod
+running this source, with `uid` and `records` already obtained by the authorized
+owner through visibility-aware readers:
+
+```python
+import asyncio
+import json
+from utils.dream_agent import dry_run_retrieval
+
+counts = asyncio.run(dry_run_retrieval(uid, records))
+print(json.dumps(counts, sort_keys=True))
+```
+
+This runs the pass's linked, lexical, semantic and temporal retrieval with the
+same budget and hydration checks, and returns only `role_counts`, `triage_fits`,
+`retrieval_counts` and zero-initialized `dirty_counts`. It does not acquire a
+lease, admit a pass, call the planning model, settle dirty versions, mutate
+product records or persist a report. It reads vocabulary unless explicitly
+supplied; semantic retrieval can make ordinary embedding-provider calls with
+their normal infrastructure usage accounting. `targets=[...]` can mark a subset
+of supplied records editable. The existing `dry_run` below still plans supplied
+evidence without retrieval. The implementing agent uses synthetic fixtures only.
 
 The owner's agent can call `await utils.dream_agent.dry_run(uid, records,
 targets=[...], vocabulary=[...])` inside a pod with authorized, decrypted,
@@ -113,7 +163,7 @@ would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
 versions actually selected; failed passes retain the queue. Missing or invisible
-records are acknowledged without purchasing inference. A pass with no visible
+records stay queued and are not acknowledged by the pass. A pass with no visible
 records returns `not_admitted` and refunds its provisional admission/reservation.
 
 The dirty set is authoritative. The timestamp `watermark` is a diagnostic

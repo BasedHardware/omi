@@ -160,7 +160,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         frames=[FrameQuestion(screen_ref='screen/1', question='What image?')],
         feedback=[feedback],
     )
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -222,7 +222,7 @@ def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeyp
         dream_agent, 'plan_pass', stall if stalled_stage == 'plan' else AsyncMock(return_value=(Plan(), 0))
     )
     monkeypatch.setattr(
-        dream_agent.dream_reads, 'read_changes', lambda *a: ({'conversations/c1': {'content': 'synthetic'}}, [])
+        dream_agent.dream_reads, 'read_changes', lambda *a, **k: ({'conversations/c1': {'content': 'synthetic'}}, [])
     )
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
