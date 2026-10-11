@@ -13,7 +13,8 @@ Covers the routing and prompt contracts:
    ``execute_agentic_chat_stream`` with the ordinary arguments; the legacy
    ``execute_persona_chat_stream`` entrypoint is never called.
 4. ``execute_agentic_chat_stream`` passes the assembled system prompt (with the
-   app overlay) plus history, tools, and session/context to the live runner.
+   app overlay) plus history, tools, session/context, and selected feature lane
+   to the live runner.
 """
 
 import os
@@ -261,7 +262,11 @@ async def test_selected_persona_routes_through_agentic_stream_with_ordinary_argu
     [(("chat",), CHAT_APP_MARKER), (("persona",), PERSONA_MARKER)],
     ids=["chat-app", "persona-app"],
 )
-async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabilities, marker):
+@pytest.mark.parametrize("provider,expected_feature", [("anthropic", "chat_agent"), ("openai", "chat_graph")])
+async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(
+    monkeypatch, capabilities, marker, provider, expected_feature
+):
+    monkeypatch.setenv("CHAT_PROVIDER", provider)
     selected_app = _app(capabilities=capabilities, persona_prompt=PERSONA_MARKER, chat_prompt=CHAT_APP_MARKER)
     history = [
         _message("my favorite food is hot pot"),
@@ -273,11 +278,14 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
     callback_data = {}
     captured = {}
 
-    async def runner(system_prompt, messages, tool_schemas, tool_registry, callback, full_response, _guard, cfg):
+    async def runner(
+        system_prompt, messages, tool_schemas, tool_registry, callback, full_response, _guard, cfg, *, model_feature
+    ):
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
         captured["tool_names"] = list(tool_registry.keys())
         captured["configurable"] = cfg
+        captured["model_feature"] = model_feature
         full_response.append("hi")
         await callback.put_data("hi")
         await callback.end()
@@ -326,6 +334,7 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
 
     assert captured["configurable"]["chat_scope"] == {"conversation_id": "conv-1"}
     assert captured["configurable"]["chat_session_id"] == "session-1"
+    assert captured["model_feature"] == expected_feature
 
     assert callback_data["answer"] == "hi"
     assert chunks[-1] is None
