@@ -238,11 +238,13 @@ method.
   reads them with `ui_snapshot`.
 - **Invisible marks.** Snapshot lines drop control characters, the harmless
   marks apps put around their own words (WhatsApp starts nearly every label
-  with U+200E) and the bidirectional controls. The card's App row drops only
-  U+200E and shows every other invisible or bidirectional character as its
-  code point. The right-to-left mark (U+200F) and the Arabic letter mark
-  (U+061C) count as bidirectional controls, because each moves the digits
-  and spaces beside it.
+  with U+200E) and the bidirectional controls. The card's App row drops
+  U+200E, and one U+200F at the very start of the name (a right-to-left
+  locale's label starts with it, as an English one starts with U+200E), and
+  shows every other invisible or bidirectional character as its code point.
+  The right-to-left mark (U+200F) and the Arabic letter mark (U+061C) count
+  as bidirectional controls anywhere else, because each moves the digits and
+  spaces beside it.
 - **Refusal floor.** One list, `agent/src/runtime/ui-automation-safety-floor.ts`,
   generated into `GeneratedUIAutomationSafetyFloor.swift`. The kernel refuses a
   malformed bundle id, every `com.omi.*` build, sign-in, SSO, authorization and
@@ -313,7 +315,13 @@ method.
   children per container (its first and last 100, the rest counted as omitted
   and the walk carrying on), 3 s for the whole read including the window list
   and the pane check, a 0.25 s messaging timeout per element, and the first
-  timeout from a hung app stops the walk with what it already read. The walk
+  timeout from a hung app stops the walk with what it already read. When
+  the app stops answering with fewer than five elements read, the walk is
+  tried once more after 0.5 s; when the whole read fails because the app did
+  not answer (`app_not_responding`, as WhatsApp does right after it is
+  reopened), it is tried again after 0.5 s and then 1 s, all within the same
+  3 s: WebKit (Safari, Mail) builds a background window's tree lazily, so the
+  first read can time out. The walk
   runs off the main actor and stops when the calling task is cancelled. The
   result fits the 8 KB model budget; the rest is reachable with
   `search_tool_output`.

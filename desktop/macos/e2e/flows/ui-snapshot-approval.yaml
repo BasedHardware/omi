@@ -71,6 +71,10 @@ steps:
     name: A named app is read in that app
     do: "With a draft typed in WhatsApp's message box, ask Omi 'What does my draft in WhatsApp say?'. Omi reads WhatsApp's window with a WhatsApp card. No Messages card or Messages history read appears, and Omi does not ask which app or chat you mean."
 
+  - id: S6f
+    name: A background Safari window is read on the first call
+    do: "Open a web page in Safari, put another app in front, and ask Omi what is in the Safari window. After the card, the read returns the page's elements instead of app_not_responding (WebKit builds the tree lazily; Omi reads once more after a short pause). Then quit WhatsApp, reopen it, and right away ask what is in its window: the first ask reads it (Omi reads again after 0.5 s and 1 s when the app does not answer yet). If either still says app_not_responding, write down how many elements the header counts."
+
   - id: S7
     name: Deny never reads
     do: "Ask to read Notes and press Deny. The card reads 'Denied, not run', the model says it was denied, and the ledger row is failed with error_code approval_denied and no dispatched_at_ms."

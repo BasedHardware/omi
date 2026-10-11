@@ -149,6 +149,50 @@ final class WindowSnapshotWalkerTests: XCTestCase {
     XCTAssertEqual(result.nodes.map(\.label?.text), ["Before"])
   }
 
+  /// WebKit builds a background window's tree lazily: a read that times out
+  /// with almost nothing read is tried once more after a short pause.
+  func testAnAppThatStopsAnsweringWithAlmostNothingReadIsReadOnceMore() throws {
+    let clock = FixtureClock()
+    var lazy = axNode("AXButton", "Later", actions: ["AXPress"])
+    lazy.timesOutUntil = clock.now + 0.2
+    let source = FixtureAccessibilitySource(
+      windows: [window("Page", children: [axNode("AXButton", "Before", actions: ["AXPress"]), lazy])], clock: clock)
+
+    let result = try WindowSnapshotWalker(fixture: source, clock: clock).snapshot(WindowSnapshotRequest()).get()
+
+    XCTAssertNil(result.stopReason)
+    XCTAssertEqual(result.nodes.compactMap(\.label?.text).filter { $0 != "Page" }.sorted(), ["Before", "Later"])
+    XCTAssertEqual(clock.pauses, [0.5])
+  }
+
+  func testAWindowThatDoesNotAnswerAtFirstIsReadAgainAndAHungOneAtMostTwice() throws {
+    let clock = FixtureClock()
+    var page = window("Page", children: [axNode("AXButton", "Go", actions: ["AXPress"])])
+    page.timesOutUntil = clock.now + 0.2
+    let source = FixtureAccessibilitySource(windows: [page], clock: clock)
+    let result = try WindowSnapshotWalker(fixture: source, clock: clock).snapshot(WindowSnapshotRequest()).get()
+    XCTAssertTrue(result.nodes.contains { $0.label?.text == "Go" })
+    XCTAssertEqual(clock.pauses, [0.5])
+
+    let hungClock = FixtureClock()
+    var hung = window("Page", children: [axNode("AXButton", "Go", actions: ["AXPress"])])
+    hung.timesOut = true
+    let hungSource = FixtureAccessibilitySource(windows: [hung], clock: hungClock)
+    let failure = WindowSnapshotWalker(fixture: hungSource, clock: hungClock).snapshot(WindowSnapshotRequest())
+    guard case .failure(let error) = failure else { return XCTFail("expected a failure") }
+    XCTAssertEqual(error.reason, "app_not_responding")
+    XCTAssertEqual(hungClock.pauses, [0.5, 1.0], "read again at most twice, within the deadline")
+
+    // An app just reopened answers nothing for a moment longer: the second wait catches it.
+    let slowClock = FixtureClock()
+    var reopened = window("Chats", children: [axNode("AXButton", "Send", actions: ["AXPress"])])
+    reopened.timesOutUntil = slowClock.now + 1.2
+    let slowSource = FixtureAccessibilitySource(windows: [reopened], clock: slowClock)
+    let slow = try WindowSnapshotWalker(fixture: slowSource, clock: slowClock).snapshot(WindowSnapshotRequest()).get()
+    XCTAssertTrue(slow.nodes.contains { $0.label?.text == "Send" })
+    XCTAssertEqual(slowClock.pauses, [0.5, 1.0])
+  }
+
   func testASecureFieldNeverHasItsValueRequestedAndItsChildrenAreNeverWalked() throws {
     let recorder = FixtureAXRecorder()
     let source = FixtureAccessibilitySource(

@@ -850,7 +850,23 @@ final class ApprovalCardTests: XCTestCase {
     XCTAssertEqual(
       DesktopToolApprovalRequest.cardAppName("\u{200E}Not\u{200B}es\u{FEFF}"), "Not⟨U+200B⟩es⟨U+FEFF⟩")
     XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Text\u{2063}Edit"), "Text⟨U+2063⟩Edit")
-    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}Notes"), "⟨U+200F⟩Notes")
+    // One right-to-left mark at the very start is a right-to-left locale's own; any other still shows.
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}Notes"), "Notes")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}\u{200F}Notes"), "⟨U+200F⟩Notes")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("No\u{200F}tes"), "No⟨U+200F⟩tes")
+  }
+
+  /// A Hebrew or Arabic label starts with U+200F the way an English WhatsApp label starts with U+200E.
+  func testOneLeadingDirectionMarkIsALabelsOwnAndAnyOtherIsABidiControl() {
+    XCTAssertFalse(InvisibleFormatMarks.labelContainsBidiControl("\u{200F}\u{05E9}\u{05DC}\u{05D7}"))
+    XCTAssertFalse(InvisibleFormatMarks.labelContainsBidiControl("\u{200F}\u{0625}\u{0631}\u{0633}\u{0627}\u{0644}"))
+    XCTAssertFalse(InvisibleFormatMarks.labelContainsBidiControl("\u{200E}Send"))
+    XCTAssertTrue(InvisibleFormatMarks.labelContainsBidiControl("\u{200F}\u{05E9}\u{200F}\u{05DC}"))
+    XCTAssertTrue(InvisibleFormatMarks.labelContainsBidiControl("Acct \u{200F}1234"))
+    XCTAssertTrue(InvisibleFormatMarks.labelContainsBidiControl("\u{061C}Send"))
+    XCTAssertTrue(InvisibleFormatMarks.labelContainsBidiControl("\u{200F}\u{202E}Send"))
+    XCTAssertEqual(InvisibleFormatMarks.strippingLeadingDirectionMark("\u{200F}\u{05E9}"), "\u{05E9}")
+    XCTAssertEqual(InvisibleFormatMarks.strippingLeadingDirectionMark("a\u{200F}"), "a\u{200F}")
   }
 
   /// The right-to-left and Arabic letter marks reorder the digits beside

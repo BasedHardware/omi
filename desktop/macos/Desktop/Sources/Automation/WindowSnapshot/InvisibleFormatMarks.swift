@@ -42,6 +42,22 @@ enum InvisibleFormatMarks {
     }
   }
 
+  /// `text` without one U+200E or U+200F at its very start. An app's
+  /// localised labels start with the mark of their own direction (WhatsApp
+  /// starts English labels with U+200E, and a right-to-left locale's with
+  /// U+200F); one there only sets the label's direction and moves nothing
+  /// before it. Any other right-to-left mark, and every other bidirectional
+  /// control, stays.
+  static func strippingLeadingDirectionMark(_ text: String) -> String {
+    guard let first = text.unicodeScalars.first, first == "\u{200E}" || first == "\u{200F}" else { return text }
+    return String(String.UnicodeScalarView(text.unicodeScalars.dropFirst()))
+  }
+
+  /// Whether a label holds a bidirectional control other than one leading direction mark.
+  static func labelContainsBidiControl(_ label: String) -> Bool {
+    containsBidiControl(strippingLeadingDirectionMark(label))
+  }
+
   /// `text` without U+200E LEFT-TO-RIGHT MARK, the one mark an app's own
   /// name is known to start with; every other invisible character is kept,
   /// so the card can show it as its code point.
