@@ -43,11 +43,14 @@ def store(monkeypatch):
     monkeypatch.setattr(conversations, 'db', db)
     monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
 
     async def post(url, **kwargs):
         body = kwargs['json']

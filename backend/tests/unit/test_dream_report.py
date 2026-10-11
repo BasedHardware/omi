@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -43,12 +45,15 @@ def store(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '3')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(dream_report, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
-    monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
     monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic sync'}})
     return db
 

@@ -97,6 +97,9 @@ def test_real_pass_routes_ungrounded_to_spelling_question_with_shared_cap(monkey
     rows = records()
     lease = {'run_id': 'synthetic', 'mode': 'on'}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
