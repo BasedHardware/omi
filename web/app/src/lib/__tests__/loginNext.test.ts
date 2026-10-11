@@ -18,6 +18,14 @@ describe('safeNextPath', () => {
       '/\\evil.example',
       'javascript:alert(1)',
       '/\u0000//evil.example',
+      // URL normalization turns these into protocol-relative URLs.
+      '/.//evil.example',
+      '/.//evil.example/phish',
+      '/%2f%2fevil.example',
+      '/%2F%2Fevil.example/phish',
+      '/%5C%5Cevil.example',
+      '/%09//evil.example',
+      '/%6cogin',
     ]) {
       expect(safeNextPath(raw)).toBe(DEFAULT_AFTER_LOGIN);
     }

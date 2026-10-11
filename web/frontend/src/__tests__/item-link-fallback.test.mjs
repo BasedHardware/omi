@@ -75,6 +75,13 @@ describe('private item links', () => {
     }
   });
 
+  it('never echoes the id as HTML', () => {
+    assert.doesNotMatch(fallbackSource, /dangerouslySetInnerHTML|innerHTML|>\s*\{id\}/);
+    for (const source of Object.values(pageSources)) {
+      assert.doesNotMatch(source, /dangerouslySetInnerHTML|>\s*\{id\}/);
+    }
+  });
+
   it('are universal links for the app, alongside the existing paths', () => {
     const paths = aasa.applinks.details[0].components.map((c) => c['/']);
     for (const kind of ITEM_LINK_KINDS) assert.ok(paths.includes(`/${kind}/*`), kind);

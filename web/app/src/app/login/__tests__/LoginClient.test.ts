@@ -139,4 +139,10 @@ describe('LoginClient return path', () => {
     render(createElement(LoginClient));
     await waitFor(() => expect(routerHarness.push).toHaveBeenCalledWith('/home'));
   });
+
+  it('ignores a next that normalizes into a protocol-relative URL', async () => {
+    query = 'next=%2F.%2F%2Fevil.example';
+    render(createElement(LoginClient));
+    await waitFor(() => expect(routerHarness.push).toHaveBeenCalledWith('/home'));
+  });
 });
