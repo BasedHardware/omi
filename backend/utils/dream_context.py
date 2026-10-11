@@ -19,6 +19,7 @@ from utils.dream_prompt import (
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
 from utils.memory.memory_service import MemoryService
+from utils.executors import llm_executor, submit_with_context
 
 
 class EvidenceRecords(dict):
@@ -136,10 +137,11 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
             ref = 'conversations/' + key
             yield ref, read_record(uid, ref)
     for query in filter(None, queries):
-        for key in vector_db.query_vectors(query, uid, k=3):
+        # These existing search APIs include synchronous embedding calls.
+        for key in submit_with_context(llm_executor, vector_db.query_vectors, query, uid, k=3).result():
             ref = 'conversations/' + key
             yield ref, read_record(uid, ref)
-        for match in MemoryService().search(uid, query, limit=3):
+        for match in submit_with_context(llm_executor, MemoryService().search, uid, query, limit=3).result():
             ref = 'memory_items/' + match.memory.id
             yield ref, read_record(uid, ref)
     for row in list(targets.values())[:4]:
