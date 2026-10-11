@@ -23,6 +23,12 @@ def admission(monkeypatch):
     database = DreamFirestore()
     database.rows[('users', UID)] = {}
     database.rows[('dream_users', UID)] = {'sequence': 2, 'watermark': 0, 'score': 2}
+    database.rows[('dream_users', UID, 'dirty', 'read')] = {
+        'collection': 'conversations',
+        'id': 'c1',
+        'version': 'read-version',
+        'last_changed_at': NOW,
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     # Strict fixture validates read-before-write; the production transactional
