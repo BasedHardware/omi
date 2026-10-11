@@ -72,3 +72,15 @@ summary that omitted a fact elsewhere in the same entity record. This is a small
 synthetic comparison, not an estimate of production recall; repeated trials of
 one fixture are not independent examples. An initial tunnel outage produced only
 connection failures and zero observed model usage; that incomplete run is excluded.
+
+## Conversation quality extension
+
+The current fixture has 29 cases (18 defects, 11 clean), adding empty English and
+Vietnamese titles, clean bilingual speech, and another invented Vietnamese brand
+misspelling. Five repeats now require 90 defect trials and 55 clean trials, with
+the same recall/false-positive thresholds and five canary hits. Run `--arm after`
+to evaluate the current prompt alone. `quality-results.json` records the
+2026-10-11 dev run on image `efb0e31`: 84/90 defect hits, 12/55 clean false
+positives, 5/5 canary hits, and zero errors. Both untitled cases and the Vietnamese
+brand case hit 5/5; the new clean bilingual case had zero clusters in 5/5.
+The other clean false positives are screening candidates, not applied edits.

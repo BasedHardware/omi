@@ -264,3 +264,10 @@ def test_manual_refund_after_midnight_does_not_decrement_new_day(store):
     store.rows[('dream_users', UID)].update(day='2099-01-01', manual_runs=2, passes=1)
     dream_store.finish(UID, lease, {'tokens': 0}, success=False, refund=True)
     assert store.rows[('dream_users', UID)]['manual_runs'] == 2
+
+
+def test_untitled_summary_target_is_visible_in_report():
+    assert (
+        dream_report.target_label('conversations/synthetic', {'structured': {'title': ''}}) == 'Untitled conversation'
+    )
+    assert dream_report.target_label('conversations/synthetic', None) == 'Deleted item'

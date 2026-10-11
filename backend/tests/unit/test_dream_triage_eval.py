@@ -51,5 +51,5 @@ def test_eval_requires_five_canary_hits_and_no_errors():
 
 def test_invented_fixture_covers_all_classes_and_both_projections():
     cases = evaluation.load_cases(evaluation.DEFAULT_FIXTURE)
-    assert len(cases) == 25
-    assert sum(case['expected_problem'] is not None for case in cases) == 15
+    assert len(cases) == 29
+    assert sum(case['expected_problem'] is not None for case in cases) == 18

@@ -40,3 +40,68 @@ All five runs retained two edits: 10 kept, 0 dropped, 0 validation errors by
 any type, 0 failed runs, and 10,485 observed tokens. All other Plan lists were
 empty. This small fixture confirms live transport compatibility; the invalid
 item recovery contract is proved by deterministic mixed-item regressions.
+
+## Conversation quality fixtures
+
+`quality-fixtures.json` adds four invented cases: untitled English and Vietnamese
+conversations, clean bilingual speech, and an explicit invented brand misspelling
+inside Vietnamese speech. Each runs separately five times so the clean case
+cannot inherit another case's defect. Use the same dev tunnel procedure above:
+
+```sh
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --check-fixture \
+  --fixture backend/evals/dream_reasoning/quality-fixtures.json
+# With the verified dev tunnel and existing service token:
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --live \
+  --fixture backend/evals/dream_reasoning/quality-fixtures.json \
+  --output backend/evals/dream_reasoning/quality-results.json
+```
+
+The 2026-10-11 final five-repeat run used dev gateway image `efb0e31` with
+verified dev ADC/accounting. Configured routes were reserved-only Gemini
+`gemini-2.5-flash` with Luna fallback for reasoning, and `gpt-6-luna` with
+`reasoning_effort: none` for triage. These are configuration observations;
+provider identity per request was not attested.
+
+| Case | Expected edit hits | Title proposals | Language feedback | Privacy rejects |
+| --- | --- | --- | --- | --- |
+| Untitled English | 5/5 | 5 | 0 | 0 |
+| Untitled Vietnamese | 5/5 | 5 | 0 | 0 |
+| Clean bilingual | clean 5/5 | 0 | 0 | 0 |
+| Vietnamese brand misspelling | 5/5 | 0 | 0 | 0 |
+
+There were no feedback items at all, no invalid items, and no transport errors;
+observed usage was 42,503 tokens. The privacy metric conservatively counts all
+privacy-gate rejections, including names and record IDs as well as quotes.
+An initial prompt produced two unnecessary success reports (one privacy reject).
+A follow-up prompt suppressed them but missed two Vietnamese titles and one
+spelling edit. The final prompt explicitly requests supported empty-title and
+spelling repairs. These earlier failures remain diagnostic evidence, not passing
+runs. Five repeats of four small invented cases do not estimate production quality
+or prove that arbitrary paraphrases can be detected by a lexical privacy gate.
+
+## Deterministic guard regression fixtures
+
+`guard-fixtures.json` adds independent near-empty untitled, good Markdown overview,
+clean bilingual and sufficiently long empty-title cases. Five repeats exercise
+post-model filtering with the same `utils/dream_guards.py` and feedback privacy
+validation used before shadow persistence. Overview edits remain enabled for
+empty fields only and require `## heading`, a blank line and `- ` bullets, matching
+`render_sections_markdown` and the notes generator's body contract.
+
+```sh
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --check-fixture \
+  --fixture backend/evals/dream_reasoning/guard-fixtures.json
+# With the verified dev tunnel and existing service token:
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --live \
+  --fixture backend/evals/dream_reasoning/guard-fixtures.json \
+  --output backend/evals/dream_reasoning/guard-results.json
+```
+
+Rows and totals include `raw_edits_by_kind`, post-guard `edits_by_kind`, fixed-reason
+`rejected` counts, and existing `dropped_invalid`/`validation_errors`. The first
+three cases require no edits; the bilingual case also requires no feedback. The
+fourth requires a grounded title to verify useful output can still survive.
+Schema item drops and policy rejections are counted separately. These invented
+fixtures supplement deterministic regression tests; they do not estimate quality
+on real conversations. Earlier receipts above predate the deterministic policy.

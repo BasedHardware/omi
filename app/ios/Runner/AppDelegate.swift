@@ -197,6 +197,13 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
+      guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
+        result(FlutterMethodNotImplemented); return
+      }
+      OmiBleManager.shared.setDeviceHealthPolicy(enabled: args["enabled"] as? Bool == true, epoch: epoch.int64Value, retire: args["retire"] as? Bool == true)
+      result(nil)
+    }
     let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
     periodicSyncChannel = syncChannel
     syncChannel.setMethodCallHandler { [weak self] call, result in

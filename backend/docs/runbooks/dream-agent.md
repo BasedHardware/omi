@@ -357,3 +357,49 @@ stays behind unread rows; the dirty set remains the read authority.
 `backend/scripts/dream_reasoning_eval.py` exercises the real reasoning lane on a
 verified dev tunnel with invented evidence and no product effects. Fixture and
 five-run counts are under `backend/evals/dream_reasoning/`.
+
+Conversation `title` and `overview` edits require that conversation as evidence,
+exact `before`, and a nonempty bounded `after` (120/1,000 characters). A deterministic
+post-model gate runs before shadow persistence and again at apply: only empty
+titles or empty/whitespace overviews may be filled, with at least 40 transcript
+words across segments (`MIN_SUMMARY_TRANSCRIPT_WORDS` in `utils/dream_guards.py`).
+Existing overview sections are also preserved. Placeholder/absence/meta text in
+English or Vietnamese is rejected, as are titles shorter than three words, titles
+with no accent-insensitive transcript token match, and overviews shorter than
+eight words. Overviews must have the generator's `## heading`, blank line, `- ` bullet body
+shape from `render_sections_markdown`; a flat sentence is rejected. Non-English
+and mixed-language speech are valid and never translated. User titles, locks and visibility are respected.
+Apply fences speech and the fields it owns; separate title/overview edits can
+share a pass snapshot. Review journals each edit with undo and durable suppression.
+Overview edits clear old sections/claims atomically, preserving them for undo.
+Shadow reports proposals without applying them; no mode or cohort change is made.
+
+Feedback must be a generic invented failure description, with no success reports
+for clean input. Before shadow persistence or developer storage, the privacy gate
+normalizes Unicode and rejects supplied refs/IDs, full evidence text, short quoted
+substrings (including scripts without word boundaries), four-word overlap and
+proper names/vocabulary. Names are collected conservatively; lexical checks cannot
+prove absence of arbitrary semantic paraphrases. Invented language/quality evals
+and final five-repeat dev receipts are under `evals/dream_triage/quality-results.json`
+and `evals/dream_reasoning/quality-results.json`.
+
+
+Deterministic feedback policy first drops non-failure classes (`success`, `none`,
+`ok`), `info` severity and English/Vietnamese assurances of accuracy, no issues or
+no required edits (`not_a_failure`). The typed model accepts those class labels
+only so the policy can drop and count them; they never reach storage. It also
+rejects English/Vietnamese language or translation
+complaints (`language_not_defect`) and generic collection/hex refs or bare UUIDs
+(`ref_leak`), including refs absent from the supplied evidence. The existing
+privacy gate still applies. At most one privacy-valid feedback item survives per
+pass (`feedback_cap`). Run reports, counts-only logs and
+`omi_dream_rejected_total{reason}` count policy rejections by fixed reason; rejected
+proposal text is removed before shadow persistence. Short spelling-option arrays
+still contribute to `dropped_invalid.questions` and
+`validation_errors["questions.spelling.options:too_short"]`.
+
+`evals/dream_reasoning/guard-fixtures.json` contains invented near-empty untitled,
+good Markdown overview, clean bilingual and grounded empty-title cases. The dev
+eval applies the same policy and privacy checks, records raw/post-guard edits by
+kind plus rejection counts, and requires five repeats of every case. See that
+folder's README for the verified dev tunnel procedure.
