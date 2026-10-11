@@ -211,7 +211,7 @@ def test_legacy_events_are_ignored_and_idle_does_not_count(queue):
     report = asyncio.run(dream_agent.run_pass(UID, turn=AsyncMock(side_effect=AssertionError())))
     assert report['status'] == 'not_admitted'
     assert event in queue.rows
-    assert queue.rows[('dream_users', UID)]['passes'] == 0
+    assert queue.rows[('dream_users', UID)].get('passes', 0) == 0
 
 
 def gateway_response(status):
@@ -539,7 +539,9 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *args: [{'spelling': 'Synthetic'}])
+    monkeypatch.setattr(
+        dream_store, 'vocabulary', lambda *args: [{'spelling': 'Synthetic', 'authorship': 'user_authored'}]
+    )
     applied = []
     monkeypatch.setattr(
         dream_agent.dream_tools, 'apply_grounded_edit', lambda uid, edit, records: applied.append(edit) or 'applied'

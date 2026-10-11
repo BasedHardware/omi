@@ -364,6 +364,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         cleanup_cursor=cleanup_cursor,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
     )
+    if report.get('reason') == 'idle':
+        report.pop('run_id', None)
     record_pass(report)
     return report
 

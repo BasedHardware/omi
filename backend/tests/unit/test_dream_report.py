@@ -50,7 +50,9 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic sync'}})
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda uid, ref, **kwargs: {'structured': {'title': 'Synthetic sync'}}
+    )
     return db
 
 
@@ -104,7 +106,7 @@ def test_manual_respects_global_ceiling(store, client):
 
 def test_manual_idle_refunds_correct_allowance(store, client, monkeypatch):
     dream_store.mark_dirty(UID, [('conversations', 'deleted')])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: None)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
     response = client.post('/v1/dream/runs', json={})
     assert response.status_code == 200 and response.json()['status'] == 'idle'
     state = store.rows[('dream_users', UID)]
@@ -200,7 +202,7 @@ def test_run_now_and_list_decrypt_same_contract_without_refs(store, client, monk
     assert listed['runs'] == [run]
     assert listed['manual_runs_today'] == 1 and listed['passes_today'] == 0
     assert listed['queued_changes'] == 0
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: None)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
     assert client.get('/v1/dream/runs').json()['runs'][0]['edits'][0]['target_label'] == 'Deleted item'
 
 
