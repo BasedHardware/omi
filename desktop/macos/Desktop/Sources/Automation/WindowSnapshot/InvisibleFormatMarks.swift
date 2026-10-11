@@ -11,31 +11,43 @@ import Foundation
 ///
 /// The bidirectional embeddings, overrides and isolates (U+202A–U+202E,
 /// U+2066–U+2069) are different: they reorder everything after them, so one
-/// label can read as another. They are never dropped quietly where a person
-/// decides: the card shows each as its code point, and a commit whose
-/// preview holds one offers only Deny.
+/// label can read as another. So are the right-to-left mark (U+200F) and the
+/// Arabic letter mark (U+061C): each is a strong right-to-left character, so
+/// in a left-to-right line it moves the digits and spaces beside it
+/// ("1234 \u{200F}5678" can read "5678 1234"). None of them is dropped
+/// quietly where a person decides: the card shows each as its code point,
+/// and a commit whose preview holds one offers only Deny.
 ///
 /// The zero-width joiner (U+200D) and non-joiner (U+200C) are neither: they
 /// hold emoji sequences and Persian words together, so message text keeps
 /// them.
 enum InvisibleFormatMarks {
-  /// Marks that are invisible and reorder nothing: the left-to-right,
-  /// right-to-left and Arabic letter marks, the zero-width space, the word
-  /// joiner and the invisible math operators, the byte-order mark, the soft
-  /// hyphen and the Mongolian vowel separator.
+  /// Marks that are invisible and reorder nothing: the left-to-right mark,
+  /// the zero-width space, the word joiner and the invisible math operators,
+  /// the byte-order mark, the soft hyphen and the Mongolian vowel separator.
   static func isHarmless(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar.value {
-    case 0x00AD, 0x061C, 0x180E, 0x200B, 0x200E, 0x200F, 0x2060...0x2064, 0xFEFF: return true
+    case 0x00AD, 0x180E, 0x200B, 0x200E, 0x2060...0x2064, 0xFEFF: return true
     default: return false
     }
   }
 
-  /// Embeddings, overrides and isolates: they reorder the text after them.
+  /// Embeddings, overrides and isolates, which reorder the text after them,
+  /// and the right-to-left and Arabic letter marks, which reorder the digits
+  /// and spaces beside them.
   static func isBidiControl(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar.value {
-    case 0x202A...0x202E, 0x2066...0x2069: return true
+    case 0x061C, 0x200F, 0x202A...0x202E, 0x2066...0x2069: return true
     default: return false
     }
+  }
+
+  /// `text` without U+200E LEFT-TO-RIGHT MARK, the one mark an app's own
+  /// name is known to start with; every other invisible character is kept,
+  /// so the card can show it as its code point.
+  static func strippingLeftToRightMarks(_ text: String) -> String {
+    guard text.unicodeScalars.contains("\u{200E}") else { return text }
+    return String(String.UnicodeScalarView(text.unicodeScalars.filter { $0 != "\u{200E}" }))
   }
 
   /// `text` without its harmless marks; every other character, bidirectional controls included, is kept.
@@ -44,7 +56,7 @@ enum InvisibleFormatMarks {
     return String(String.UnicodeScalarView(text.unicodeScalars.filter { !isHarmless($0) }))
   }
 
-  /// Whether `text` holds a bidirectional embedding, override or isolate.
+  /// Whether `text` holds a bidirectional embedding, override or isolate, or a right-to-left or Arabic letter mark.
   static func containsBidiControl(_ text: String) -> Bool {
     text.unicodeScalars.contains(where: isBidiControl)
   }

@@ -836,13 +836,32 @@ final class ApprovalCardTests: XCTestCase {
       approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
 
     XCTAssertEqual(presentation.target, "WhatsApp · net.whatsapp.WhatsApp")
-    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}Notes\u{FEFF}\u{200B}"), "Notes")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200E}Notes\u{200E}"), "Notes")
     XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200E}Whats\u{202E}App"), "Whats⟨U+202E⟩App")
     XCTAssertEqual(
       InvisibleFormatMarks.strippingHarmless("\u{200E}Send \u{1F469}\u{200D}\u{1F4BB}"),
       "Send \u{1F469}\u{200D}\u{1F4BB}")
     XCTAssertTrue(InvisibleFormatMarks.containsBidiControl("a\u{2067}b"))
-    XCTAssertFalse(InvisibleFormatMarks.containsBidiControl("\u{200E}a\u{200F}b"))
+    XCTAssertFalse(InvisibleFormatMarks.containsBidiControl("\u{200E}a\u{200B}b"))
+  }
+
+  /// A look-alike app name cannot hide a zero-width character on the card.
+  func testAnAppNameShowsEveryInvisibleCharacterButTheLeftToRightMark() {
+    XCTAssertEqual(
+      DesktopToolApprovalRequest.cardAppName("\u{200E}Not\u{200B}es\u{FEFF}"), "Not⟨U+200B⟩es⟨U+FEFF⟩")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Text\u{2063}Edit"), "Text⟨U+2063⟩Edit")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("\u{200F}Notes"), "⟨U+200F⟩Notes")
+  }
+
+  /// The right-to-left and Arabic letter marks reorder the digits beside
+  /// them, so they count with the bidirectional controls and are never
+  /// dropped as harmless.
+  func testTheRightToLeftAndArabicLetterMarksAreBidiControls() {
+    for mark in ["\u{200F}", "\u{061C}"] {
+      XCTAssertTrue(InvisibleFormatMarks.containsBidiControl("Acct \(mark)1234 5678\(mark)"), mark.debugDescription)
+      XCTAssertEqual(InvisibleFormatMarks.strippingHarmless("a\(mark)b"), "a\(mark)b")
+    }
+    XCTAssertFalse(InvisibleFormatMarks.containsBidiControl("\u{200E}Send"))
   }
 
   func testAnAppNameCannotForgeTheBundleIDOrRunLong() throws {
