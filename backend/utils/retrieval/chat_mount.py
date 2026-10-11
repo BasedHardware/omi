@@ -2,6 +2,9 @@
 
 from utils.llm.shaped_agent import Mount, Budget
 from utils.chat_followup import FOLLOWUP_PROMPT_SECTION
+from utils.executors import db_executor, run_blocking
+from utils.messaging.turn_context import channel_evidence as channel_evidence
+from utils.messaging.projection import surface_runtime
 
 # These are chat-only mounted instructions, never shared invocation policy.
 _CHAT_RETRIEVAL_SKILL = """Use conversation search for events and memory retrieval for
@@ -33,3 +36,15 @@ def chat_mount(tool_schemas: list, *, deadline_seconds: float = 150.0) -> Mount:
         budget=Budget(turns=12, tool_calls=25, deadline_seconds=deadline_seconds),
         cache_breakpoint=True,
     )
+
+
+async def load_legacy_prompt_for_surface(loader, uid, app, messages, *, context, tz, platform, blocking=run_blocking):
+    """Only app runners consume the legacy prompt; channels own a shaped mount.
+
+    Keep the loader injectable so the existing app prompt/parity seams remain
+    intact. Channel calls avoid its discarded memory/context and prompt IO.
+    """
+    runtime = surface_runtime.get()
+    if runtime is not None and runtime.surface != 'app':
+        return ''
+    return await blocking(db_executor, loader, uid, app, messages, context=context, tz=tz, platform=platform)

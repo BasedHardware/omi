@@ -31,7 +31,7 @@ async def summarize(uid, text):
 async def append_digest(store, uid, session, events, *, summary=summarize):
     since = events[-1].get('at', '') if events else ''
     # Existing paginated reader owns decryption; scan to the surface watermark.
-    rows = await run_blocking(db_executor, recent_activity, uid, since)
+    rows = await run_blocking(db_executor, recent_activity, uid, since, session['id'])
     activity = [
         row for row in rows if row.get('chat_session_id') != session['id'] and row['created_at'].isoformat() > since
     ]
@@ -50,13 +50,19 @@ async def append_digest(store, uid, session, events, *, summary=summarize):
     await run_blocking(db_executor, store.append_event, uid, session['id'], event)
 
 
-def recent_activity(uid, since=""):
+def recent_activity(uid, since="", exclude_session=None):
     # The iterator is newest-first and paginated. Never silently drop older activity.
     rows = []
-    for row in chat_db.iter_all_messages(uid, batch_size=100):
+    for row in chat_db.iter_all_messages(uid, batch_size=20 if not since else 100):
         if since and row["created_at"].isoformat() <= since:
             break
+        if exclude_session is not None and row.get('chat_session_id') == exclude_session:
+            continue
         rows.append(row)
+        # Bootstrap awareness is recent context, not a lifetime history import.
+        # Older facts remain available through memory and history tools.
+        if not since and len(rows) >= 20:
+            break
     return sorted(rows, key=lambda r: (r['created_at'], r['id']))
 
 

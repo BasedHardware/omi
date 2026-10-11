@@ -14,6 +14,7 @@ from utils.messaging.adapters.rendering import telegram
 from utils.messaging.adapters.transport import request_json
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 from utils.messaging.identity import key
+from utils.messaging.turn_context import bound_provider_clock
 
 
 class TelegramAdapter(BaseAdapter):
@@ -56,6 +57,12 @@ class TelegramAdapter(BaseAdapter):
         if not sender.get('id') or not item.get('message_id') or 'update_id' not in update:
             raise ValueError('Incomplete Telegram update')
         text = callback.get('data', '') if callback else item.get('text', item.get('caption', ''))
+        receipt_id = None
+        if callback and text.startswith('undo:'):
+            receipt_id = text[5:]
+            if not re.fullmatch(r'[a-f0-9]{32}', receipt_id):
+                return ()
+            text = 'undo'
         if callback and text != 'undo':
             if not text.startswith('ask:'):
                 return ()
@@ -66,6 +73,16 @@ class TelegramAdapter(BaseAdapter):
             proof = text.split(' ', 1)[1].strip()
             if not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', proof):
                 raise ValueError('Invalid link token')
+        stamp = None if callback else item.get('date')
+        if stamp is not None and (not isinstance(stamp, int) or isinstance(stamp, bool)):
+            raise ValueError('Invalid Telegram message time')
+        if stamp is None:
+            received_at = datetime.now(timezone.utc)
+        else:
+            try:
+                received_at = bound_provider_clock(datetime.fromtimestamp(stamp, timezone.utc))
+            except (OverflowError, OSError, ValueError):
+                raise ValueError('Invalid Telegram message time') from None
         attachments = []
         for field, default_mime, default_name in (
             ('voice', 'audio/ogg', 'voice.ogg'),
@@ -93,7 +110,7 @@ class TelegramAdapter(BaseAdapter):
                 str(chat['id']),
                 str(item['message_id']) if not callback else 'callback:' + str(callback['id']),
                 text,
-                datetime.now(timezone.utc),
+                received_at,
                 reply_to=str(item['message_id']),
                 link_proof=proof,
                 unlink=command == '/unlink',
@@ -103,6 +120,8 @@ class TelegramAdapter(BaseAdapter):
                     else ('undo' if command in ('undo', '/undo') else None)
                 ),
                 attachments=tuple(attachments),
+                callback_id=str(callback['id']) if callback else None,
+                undo_receipt_id=receipt_id,
                 display_name=sender.get('username') if isinstance(sender.get('username'), str) else None,
             ),
         )
@@ -139,6 +158,8 @@ class TelegramAdapter(BaseAdapter):
         await self.pace(message.external_chat_id)
         await self.pace('__global__', 1 / 30)
         body = {'chat_id': message.external_chat_id}
+        if message.callback_id and message.reply_to:
+            body['reply_parameters'] = {'message_id': int(message.reply_to)}
         if draft:
             if self.capabilities.streaming == 'none':
                 return
@@ -184,13 +205,38 @@ class TelegramAdapter(BaseAdapter):
                 'deleteMessage', {'chat_id': message.external_chat_id, 'message_id': preview}, idempotent=True
             )
 
+        return str(value['result']['message_id'])
+
     def buttons(self, suggestions):
         rows = []
         for suggestion in suggestions[:3]:
             if isinstance(suggestion, str) and len(('ask:' + suggestion).encode()) <= 64:
                 rows.append([{'text': suggestion, 'callback_data': 'ask:' + suggestion}])
-        rows.append([{'text': 'Undo last write', 'callback_data': 'undo'}])
-        return {'inline_keyboard': rows}
+        return {'inline_keyboard': rows} if rows else None
+
+    def receipt_buttons(self, receipt):
+        if receipt.reversible:
+            return {'inline_keyboard': [[{'text': 'Undo', 'callback_data': 'undo:' + receipt.id}]]}
+        return None
+
+    async def acknowledge(self, message):
+        if message.callback_id:
+            await self.api('answerCallbackQuery', {'callback_query_id': message.callback_id}, idempotent=True)
+
+    async def edit_receipt(self, message, result):
+        # The receipt delivery ID (or its authenticated callback bubble) owns the edit.
+        if result.bubble_id and result.bubble_text:
+            await self.api(
+                'editMessageText',
+                {
+                    'chat_id': message.external_chat_id,
+                    'message_id': int(result.bubble_id),
+                    'text': self.render(result.bubble_text)[-1],
+                    'parse_mode': 'MarkdownV2',
+                    'reply_markup': {'inline_keyboard': []},
+                },
+                idempotent=True,
+            )
 
     async def action(self, message, action, value):
         if action != 'react' or len(value) > 16:

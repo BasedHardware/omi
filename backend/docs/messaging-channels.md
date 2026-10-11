@@ -78,12 +78,19 @@ A later reentry that sees the fence, the started reentry, or the delivered reply
 not run the turn again. Process-loss leases still need operator reconciliation.
 Assistant events are recorded only after delivery succeeds. Error frames are drained
 through the shared producer's terminal fallback; an error without a reply fails visibly.
+Action inverses own separate once-only receipt claims; slow domain cleanup does not
+occupy the chat lease. Settled failures retain their running inbox row for reconciliation
+but carry a FIFO settlement marker so new messages can proceed.
+
 Surface leases use atomic create and a random ownership token. They cannot be stolen,
 even after a timeout: operator recovery must first establish the previous worker is
 stopped, reconcile effects, then reset the affected job/lease. This follows the existing
 dream worker's safety model. A contender returns the job to pending without running it.
 The key is `(uid, surface)`; independent surfaces/users can progress independently.
 No in-process lock is relied on for multi-worker correctness.
+Typing starts after linked-account admission and before session/context preparation,
+then refreshes while the turn runs. Initial awareness loads twenty recent messages;
+older history remains searchable instead of importing lifetime history on the first turn.
 
 Exactly-once external delivery is not claimed. A process can fail after a provider send
 and before inbox completion. Stage B should use provider idempotency keys or reconcile
