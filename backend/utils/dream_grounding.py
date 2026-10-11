@@ -60,7 +60,9 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
                 continue
             if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
                 return True
-            if ref in records and ref not in visited:
+            if ref not in records:
+                return True
+            if ref not in visited:
                 visited.add(ref)
                 if traces_target(records[ref], visited):
                     return True
