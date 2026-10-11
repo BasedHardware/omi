@@ -9703,6 +9703,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatBlockMemory => 'זיכרון';
 
   @override
+  String get chatBlockPerson => 'אדם';
+
+  @override
+  String get chatBlockUndone => 'בוטל';
+
+  @override
+  String get chatBlockUndoFailed => 'לא ניתן היה לבטל את השינוי';
+
+  @override
   String get chatBlockQuestion => 'שאלה';
 
   @override

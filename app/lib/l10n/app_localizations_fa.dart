@@ -9778,6 +9778,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatBlockMemory => 'خاطره';
 
   @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'لغو شد';
+
+  @override
+  String get chatBlockUndoFailed => 'لغو این تغییر ممکن نشد';
+
+  @override
   String get chatBlockQuestion => 'پرسش';
 
   @override

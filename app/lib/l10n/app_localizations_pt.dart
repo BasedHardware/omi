@@ -9795,6 +9795,15 @@ class AppLocalizationsPt extends AppLocalizations {
   String get chatBlockMemory => 'Memória';
 
   @override
+  String get chatBlockPerson => 'Pessoa';
+
+  @override
+  String get chatBlockUndone => 'Desfeito';
+
+  @override
+  String get chatBlockUndoFailed => 'Não foi possível desfazer esta alteração';
+
+  @override
   String get chatBlockQuestion => 'Pergunta';
 
   @override

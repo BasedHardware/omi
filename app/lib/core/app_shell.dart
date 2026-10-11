@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -71,6 +72,12 @@ class _AppShellState extends State<AppShell> {
     // To do, a conversation, the Conversations tab, device settings.
     if (uri.host == 'app' && _appLinkRoutes.contains(uri.pathSegments.firstOrNull)) {
       await HomeNavigation.openRoute(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
+      return;
+    }
+    // h.omi.me item links (chat edit receipts, messaging channels) open the item in Home.
+    final itemRoute = HomeDeepLink.itemRouteFromAppLink(uri);
+    if (itemRoute != null) {
+      await HomeNavigation.openRoute(itemRoute);
       return;
     }
     if (uri.pathSegments.isEmpty) {

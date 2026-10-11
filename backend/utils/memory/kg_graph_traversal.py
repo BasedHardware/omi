@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
@@ -20,7 +20,11 @@ from utils.memory.memory_system import (  # compatibility exports; never a gate
     MemorySystem as MemorySystem,
     resolve_memory_system as resolve_memory_system,
 )
-from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from models.product_memory import MemoryItem
+from utils.memory.product_memory_read_service import (
+    MAX_PRODUCT_MEMORY_READ_LIMIT,
+    fetch_authoritative_product_memory_items_by_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +84,22 @@ def user_allows_kg_traversal(uid: str, *, db_client: Any = None) -> bool:
     return bool(uid.strip())
 
 
-def _long_term_memory_ids(uid: str, *, db_client: Any) -> Set[str]:
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+def _graph_memory_items(uid: str, memory_ids: Iterable[str], *, db_client: Any) -> List[MemoryItem]:
+    # Graph references are candidates, not authority. Fetch only referenced IDs,
+    # retaining the existing owner/document identity fence and 500-ID batch cap.
+    ids = list(dict.fromkeys(memory_ids))
+    items: List[MemoryItem] = []
+    for offset in range(0, len(ids), MAX_PRODUCT_MEMORY_READ_LIMIT):
+        items.extend(
+            fetch_authoritative_product_memory_items_by_ids(
+                uid, ids[offset : offset + MAX_PRODUCT_MEMORY_READ_LIMIT], db_client=db_client
+            )
+        )
+    return items
+
+
+def _long_term_memory_ids(uid: str, memory_ids: Iterable[str], *, db_client: Any) -> Set[str]:
+    items = _graph_memory_items(uid, memory_ids, db_client=db_client)
     return {item.memory_id for item in items if is_indexable_long_term_atom(item)}
 
 
@@ -194,7 +212,6 @@ def traverse_knowledge_graph(
         result.skipped_reason = "invalid_uid"
         return result
 
-    allowed_memory_ids = _long_term_memory_ids(uid, db_client=client)
     if graph is None:
         get_knowledge_graph = cast(Callable[[str], Dict[str, Any]], getattr(kg_db, "get_knowledge_graph"))
         graph = get_knowledge_graph(uid)
@@ -210,6 +227,16 @@ def traverse_knowledge_graph(
     if not result.seed_node_ids:
         return result
 
+    # Only edge references can contribute to a triple; unrelated corpus rows
+    # cannot affect traversal. Do not truncate references: batch all of them.
+    referenced_ids = (
+        memory_id
+        for edge in edges
+        if isinstance((raw_ids := edge.get("memory_ids")), list)
+        for memory_id in cast(List[Any], raw_ids)
+        if isinstance(memory_id, str)
+    )
+    allowed_memory_ids = _long_term_memory_ids(uid, referenced_ids, db_client=client)
     adjacency = _build_adjacency(edges)
     visited_nodes: Set[str] = set()
     collected_edge_ids: Set[str] = set()
@@ -260,9 +287,7 @@ def traverse_knowledge_graph(
                 cited_ids.append(memory_id)
 
     if cited_ids:
-        items_by_id = {
-            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-        }
+        items_by_id = {item.memory_id: item for item in _graph_memory_items(uid, cited_ids, db_client=client)}
         for memory_id in cited_ids:
             item = items_by_id.get(memory_id)
             if item and is_indexable_long_term_atom(item):

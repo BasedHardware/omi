@@ -142,6 +142,8 @@ def rename_person(
     uid: str,
     arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
+    *,
+    expected_chat_state: dict | None = None,
 ) -> Dict[str, Any]:
     """Correct a recognised person's display name, retaining the prior one as an alias."""
     person_id = _required_person_id(arguments)
@@ -151,7 +153,12 @@ def rename_person(
     normalized_name = normalized_person_alias(name)
     if normalized_name is None:
         raise ToolExecutionError("name must contain 1 to 128 characters", code=-32602)
-    if not users_db.update_person(uid, person_id, normalized_name):
+    updated = (
+        users_db.update_person(uid, person_id, normalized_name, expected_chat_state=expected_chat_state)
+        if expected_chat_state is not None
+        else users_db.update_person(uid, person_id, normalized_name)
+    )
+    if not updated:
         raise ToolExecutionError("Person not found", code=-32001, http_status=404)
     # Deliberately no transcript samples in the response: a correction does not
     # need them and returning them would widen what this scope discloses.

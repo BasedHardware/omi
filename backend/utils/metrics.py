@@ -1375,6 +1375,16 @@ PUSHER_READY.set(1)
 PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 
+OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_requests_total',
+    'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
+    'omi_sync_job_poll_throttled_total',
+    'GET /v2/sync-local-files/{job_id} requests rejected by the per-UID poll ceiling',
+)
+
+
 # GET /v1/action-items read-cost controls (see database/action_items_cache.py).
 # `action_items_list` was 48.8% of every billable Firestore document read before
 # the 12/min per-uid cap shipped (#12258); the residual cost is a small number of

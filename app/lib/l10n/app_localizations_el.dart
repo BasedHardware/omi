@@ -9851,6 +9851,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatBlockMemory => 'Ανάμνηση';
 
   @override
+  String get chatBlockPerson => 'Άτομο';
+
+  @override
+  String get chatBlockUndone => 'Αναιρέθηκε';
+
+  @override
+  String get chatBlockUndoFailed => 'Δεν ήταν δυνατή η αναίρεση αυτής της αλλαγής';
+
+  @override
   String get chatBlockQuestion => 'Ερώτηση';
 
   @override

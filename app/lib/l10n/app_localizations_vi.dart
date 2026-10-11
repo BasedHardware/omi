@@ -9781,6 +9781,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatBlockMemory => 'Ký ức';
 
   @override
+  String get chatBlockPerson => 'Người';
+
+  @override
+  String get chatBlockUndone => 'Đã hoàn tác';
+
+  @override
+  String get chatBlockUndoFailed => 'Không thể hoàn tác thay đổi này';
+
+  @override
   String get chatBlockQuestion => 'Câu hỏi';
 
   @override

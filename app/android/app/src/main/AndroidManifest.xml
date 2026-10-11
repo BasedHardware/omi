@@ -183,6 +183,16 @@
                     android:scheme="https"
                     android:pathPattern="/tasks/.*" />
             </intent-filter>
+            <!-- Private item links (chat edit receipts, messaging channels). Singular paths only:
+                 /conversations/ and /tasks/ are public share pages. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/conversation/.*" />
+                <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/task/.*" />
+                <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/memory/.*" />
+            </intent-filter>
         </activity>
 
         <!-- Don't delete the meta-data below.

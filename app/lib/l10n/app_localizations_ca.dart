@@ -9837,6 +9837,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get chatBlockMemory => 'Record';
 
   @override
+  String get chatBlockPerson => 'Persona';
+
+  @override
+  String get chatBlockUndone => 'Desfet';
+
+  @override
+  String get chatBlockUndoFailed => 'No s\'ha pogut desfer aquest canvi';
+
+  @override
   String get chatBlockQuestion => 'Pregunta';
 
   @override
