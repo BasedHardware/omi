@@ -125,6 +125,7 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
     from types import SimpleNamespace
 
     calls = []
+    monkeypatch.setattr(dream_context.vector_db, 'index', object())
     monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
     monkeypatch.setattr(dream_context.action_items, 'get_action_items', lambda uid, **kwargs: [{'id': 'task'}])
     monkeypatch.setattr(
@@ -180,6 +181,7 @@ def test_semantic_embedding_calls_use_llm_pool(monkeypatch):
     from types import SimpleNamespace
 
     submitted = []
+    monkeypatch.setattr(dream_context.vector_db, 'index', object())
     monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
 
     def submit(pool, fn, *args, **kwargs):
@@ -276,6 +278,8 @@ def test_context_deduplicates_before_hydration_and_stops_before_unfitting_read(m
 
 def test_typesense_outage_keeps_other_context_tiers(monkeypatch):
     from types import SimpleNamespace
+
+    monkeypatch.setattr(dream_context.vector_db, 'index', object())
 
     monkeypatch.setattr(dream_context, 'subject_memory_refs', lambda *a: [])
 

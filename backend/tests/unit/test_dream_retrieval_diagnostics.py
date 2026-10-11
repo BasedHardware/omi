@@ -133,6 +133,7 @@ def test_owner_retrieval_dry_run_exercises_all_paths_without_admission_or_writes
         dream_context, 'keyword_search_conversation_ids', lambda **k: ['private-lex', 'private-lex', 'private-target']
     )
     monkeypatch.setattr(dream_context.vector_db, 'query_vectors', fail)
+    monkeypatch.setattr(dream_context.vector_db, 'index', object())
     monkeypatch.setattr(
         dream_context,
         'MemoryService',
@@ -210,5 +211,5 @@ def test_unconfigured_conversation_vector_index_is_counted_as_failed(monkeypatch
 
     monkeypatch.setattr(vector_db, 'index', None)
     with pytest.raises(RuntimeError, match='index unavailable'):
-        vector_db.query_vectors('synthetic', 'synthetic', raise_on_unavailable=True)
+        dream_context.semantic_conversation_refs('synthetic', 'synthetic')
     assert vector_db.query_vectors('synthetic', 'synthetic') == []

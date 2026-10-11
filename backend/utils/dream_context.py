@@ -113,6 +113,14 @@ def identities(row):
     return refs
 
 
+def semantic_conversation_refs(query, uid):
+    # The shared search API intentionally returns [] when unconfigured; Dream
+    # diagnostics must distinguish an unavailable index from a healthy no-hit.
+    if vector_db.index is None:
+        raise RuntimeError('Conversation vector index unavailable')
+    return vector_db.query_vectors(query, uid, k=3)
+
+
 def query_candidates(report, path, query):
     """Count provider calls separately from returned references and hydration."""
     path_count(report, path, 'attempted')
@@ -167,9 +175,7 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         for key in query_candidates(
             diagnostics,
             'semantic',
-            lambda: submit_with_context(
-                llm_executor, vector_db.query_vectors, query, uid, k=3, raise_on_unavailable=True
-            ).result(),
+            lambda: submit_with_context(llm_executor, semantic_conversation_refs, query, uid).result(),
         ):
             ref = 'conversations/' + key
             yield ref, partial(read_record, uid, ref), 'semantic'

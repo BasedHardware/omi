@@ -1,8 +1,15 @@
 """Closed, counts-only retrieval and queue diagnostics shared by reports/metrics."""
 
+from typing import TypedDict
+
 PATHS = ('links', 'lexical', 'semantic', 'temporal')
 PATH_COUNTS = ('attempted', 'found', 'added', 'failed', 'duplicate', 'unavailable', 'budget_skipped')
 DIRTY_COUNTS = ('fetched', 'attempted', 'found', 'admitted', 'unavailable', 'failed', 'newer', 'budget_deferred')
+
+
+class DiagnosticCounts(TypedDict):
+    retrieval_counts: dict[str, dict[str, int]]
+    dirty_counts: dict[str, int]
 
 
 def initialize(report):
@@ -15,7 +22,7 @@ def path_count(report, path, count, amount=1):
     initialize(report)['retrieval_counts'][path][count] += amount
 
 
-def counts_only(report):
+def counts_only(report) -> DiagnosticCounts:
     """Allowlisted names only, including when projecting a historical report."""
     return {
         'retrieval_counts': {
