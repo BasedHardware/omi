@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/chat_apps/channel_chats_page.dart';
 import 'package:omi/pages/settings/chat_apps/channel_settings_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 
 import 'chat_apps_fixture.dart';
 
@@ -41,7 +42,11 @@ void main() {
       (tester) async {
         await pump(tester, ChannelSettingsPage(linkId: linkIdTelegram));
         expect(find.text('@sam'), findsOneWidget);
-        expect(find.textContaining('Connected Oct 10, 2026'), findsOneWidget);
+        // The wire parser stores linked_at in local time; the page prints that day.
+        final connectedOn = OmiDateFormat.of(tester.element(find.text('@sam'))).date(
+          DateTime.parse('2026-10-10T12:00:00Z').toLocal(),
+        );
+        expect(find.text('Connected $connectedOn'), findsOneWidget);
         expect(find.text('Show these chats in the Omi app'), findsOneWidget);
         expect(
           find.text('Off: you only see them in Telegram.'),
