@@ -1,14 +1,13 @@
 """Repository-owned Firestore query and index requirements.
-The Firebase manifest is generated from this registry.  Query specs are added
-incrementally: a registered query spec both builds its production query and
-declares the exact composite index that query needs.  Existing index-only
-requirements remain explicit here until their callers are migrated.
+The generated Firebase manifest follows query specs that own their builders and indexes.
+Index-only requirements stay explicit until callers migrate to query specs.
 """
 
 from __future__ import annotations
 
 from typing import Any
 from database.review_queries import REVIEW_QUERY_SPECS
+from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -33,12 +32,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
-    FirestoreIndexRequirement(
-        'messaging_inbox_fifo',
-        'inbox',
-        'COLLECTION',
-        (_asc('status'), _asc('created_at'), _asc('__name__')),
-    ),
+    *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
         'proactivity_followup_source_outcomes',
         'proactivity_items',
