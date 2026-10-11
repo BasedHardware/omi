@@ -24,7 +24,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Sequence
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 DEFAULT_REPO = "BasedHardware/omi"

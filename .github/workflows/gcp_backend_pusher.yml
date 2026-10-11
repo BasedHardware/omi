@@ -844,7 +844,7 @@ jobs:
         if: always()
         env:
           RELEASE_SHA: ${{ env.CHECKED_OUT_SHA || github.sha }}
-          TRIGGER_SHA: ${{ github.sha }}
+          TRIGGER_SHA: ${{ env.CHECKED_OUT_SHA || github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
