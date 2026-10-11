@@ -17,6 +17,7 @@ from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItemV2
 from utils.entity_pages import resolve_entity
 from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
+from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 
 
 def edit_key(edit, records=None):
@@ -303,6 +304,36 @@ def apply_edit(uid, edit, records, *, expected_records=None):
         expected_records=expected_records,
     )
     return 'applied'
+
+
+def apply_grounded_edit(uid, edit, records):
+    """Automatic spelling alone requires current independent support and fences.
+
+    Explicit user acceptance keeps using apply_edit through the Review path.
+    """
+    validate_edit(edit, records)
+    sources = {ref: records[ref] for ref in {edit.target, *edit.evidence}}
+    fences = proposal_fences(uid, {'records': sources})
+    raw_vocabulary = review_store.user(uid).collection('dream_vocabulary').document('current').get().to_dict()
+    revalidate_proposal(uid, {'records': sources})
+    vocabulary = (review_store.decode_doc(uid, raw_vocabulary) or {}).get('source', [])
+    reason = spelling_grounding_rejection(edit, sources, vocabulary)
+    if reason:
+        raise ValueError('dream_' + reason)
+    # Fence the current vocabulary snapshot too; a concurrent removal must win.
+    fences['dream_vocabulary/current'] = raw_vocabulary
+    return apply_edit(uid, edit, sources, expected_records=fences)
+
+
+def suggest_spelling(uid, edit, records):
+    validate_edit(edit, records)
+    review_store.enqueue_review_proposal(
+        uid,
+        spelling_question(edit),
+        edit_key=edit_key(edit, records),
+        evidence_version=review_store.fingerprint({ref: records[ref] for ref in {edit.target, *edit.evidence}}),
+    )
+    return 'suggested'
 
 
 def proposal_record(uid, ref, snapshot):

@@ -2,6 +2,20 @@
 
 ## Target neighbourhoods and read-only planning
 
+Spelling auto-apply additionally requires the corrected form in a cited
+independent record or existing persisted vocabulary. The target itself, aliases
+of the same record, and facts derived from the target conversation cannot supply
+independent support. Matching preserves accents and whole-word boundaries.
+Proposed vocabulary from the same model response does not count.
+Unsupported corrections become spelling questions with a custom-answer option,
+sharing the three-suggestion daily budget. Capped questions remain visible as
+suggestions in the run report, with an explicit cap outcome. The guard reports
+`ungrounded_spelling` counts. Automatic spelling revalidates evidence and fences
+its records and vocabulary snapshot in the existing Review journal transaction.
+
+Once this change is deployed and owner dry runs pass, spelling can return to the
+production AUTO allowlist. This series does not change production configuration.
+
 Dirty reads admit at most four editable targets to leave prompt capacity for
 context. Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,

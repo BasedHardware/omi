@@ -29,6 +29,7 @@ REJECTION_REASONS = {
     'bad_target',
     'common_word',
     'context_target',
+    'ungrounded_spelling',
 }
 
 logger = logging.getLogger(__name__)

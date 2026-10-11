@@ -16,3 +16,11 @@ vocabulary near-matches, and stop lazy retrieval at the full-payload budget.
 Retrieval tier tests exercise owner-scoped linked, lexical, semantic and temporal
 providers with synthetic responses. `utils.dream_agent.dry_run` is the owner
 entrypoint documented in the Dream runbook.
+
+Spelling regressions run through `test_dream_grounding.py` and the real two-stage
+dry-run function. An invented, explicitly confirmed film name used to accept an
+unsupported correction automatically: **ungrounded auto-applies 1 → 0**;
+**Review spelling questions 0 → 1**. Cited independent spelling and persisted
+vocabulary still permit automatic correction. Derived facts and substring or
+accent-insensitive matches cannot authorize it. These are deterministic scripted
+model-response comparisons, not measured live-model accuracy.

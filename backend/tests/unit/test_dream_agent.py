@@ -131,7 +131,7 @@ def pass_context(monkeypatch):
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
     monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [{'spelling': 'Meeting'}])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -196,7 +196,7 @@ def test_undo_markers_and_edit_caps_stop_effects(monkeypatch, pass_context):
         dream_agent.review_changes, 'agent_change_allowed', lambda uid, key: key != dream_tools.edit_key(edits[0])
     )
     applied = []
-    monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: applied.append(a[1].before) or 'applied')
+    monkeypatch.setattr(dream_tools, 'apply_grounded_edit', lambda *a: applied.append(a[1].before) or 'applied')
     result = asyncio.run(dream_agent.run_pass(UID, caps=Caps(edits=1)))
     assert applied == ['one']
     assert [o['status'] for o in result['outcomes']] == ['suppressed', 'applied', 'edit_cap']
@@ -475,7 +475,7 @@ def test_tier_routes_and_shadow_labels(monkeypatch, pass_context, mode):
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=edits), 100)))
     calls = []
     monkeypatch.setattr(
-        dream_tools, 'apply_edit', lambda uid, edit, records: calls.append(('auto', edit.kind)) or 'applied'
+        dream_tools, 'apply_grounded_edit', lambda uid, edit, records: calls.append(('auto', edit.kind)) or 'applied'
     )
     monkeypatch.setattr(
         dream_tools, 'suggest_edit', lambda uid, edit, records: calls.append(('suggest', edit.kind)) or 'suggested'
