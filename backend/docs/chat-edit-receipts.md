@@ -57,3 +57,14 @@ Mobile recognizes the same fallback body and renders each native receipt once;
 older clients still receive readable text. Channel prose and existing create-only
 blocks keep their existing behavior. Person receipts have Undo, but no item URL
 or open-item button because there is no person deep-link route.
+
+Combined mobile acceptance was run with UI PR #21234 at
+`1fcd6b13508e24a26503bb48901bf8e1f013731b` in an isolated integration worktree.
+The branches merge cleanly after separating their changelog filenames. Both
+light/dark receipt render tests, real backend fixture decoding and Undo state
+updates passed (5 tests); the hermetic app runner also passed 138 spine tests.
+Backend receipt/edit/rendering/app-parity tests passed on the combined tree.
+Before/after-Undo PNGs were inspected in both themes. Fixtures live at
+`app/test/fixtures/backend_edit_receipts.json` and are pinned against the real
+serializer in `testing.messaging.receipt_payloads`. Merge UI #21234 first so
+native receipt rendering and Undo exist before this backend emits edit blocks.
