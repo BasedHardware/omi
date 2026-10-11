@@ -59,8 +59,10 @@ from utils.other.portability_read import (
     verified_encrypted_read,
 )
 import config.speaker_match_scores as match_scores
+import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
 from utils.other.storage import list_audio_chunks
+from utils.observability.fallback import record_fallback
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
     claim_authorized_first_open_work,
@@ -264,8 +266,67 @@ def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: O
         _drop_match_scores(data)
 
 
+def _merge_owner_diagnostics(payload: dict, current: dict, path=None) -> None:
+    """Optional plaintext metadata; existing content commits must win every size/fault race."""
+    if owner_diagnostics.FIELD not in payload:
+        return
+    try:
+        value = owner_diagnostics.merge(current.get(owner_diagnostics.FIELD), payload.pop(owner_diagnostics.FIELD))
+        if value:
+            for row in value.get('live', []):
+                if row.get('scores_generated'):
+                    scores = payload.get(match_scores.FIELD, current.get(match_scores.FIELD))
+                    row['scores'] = 'present' if scores and scores is not firestore.DELETE_FIELD else 'absent'
+            value = owner_diagnostics.normalize(value)
+            candidate = {**current, **payload, owner_diagnostics.FIELD: value}
+            if (
+                document_size.estimate_firestore_document_bytes(candidate, path if isinstance(path, str) else None)
+                <= 900 * 1024
+            ):
+                payload[owner_diagnostics.FIELD] = value
+    except Exception:
+        payload.pop(owner_diagnostics.FIELD, None)
+        record_fallback(
+            component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
+        )
+
+
+def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnostics: dict, *, firestore_client=None):
+    """Metadata-only terminal flush, including generations that never produced an identity map."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def persist(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        current = snapshot.to_dict() or {}
+        if any(current.get(k) for k in ('deleted', 'is_locked')):
+            return False
+        patch = {owner_diagnostics.FIELD: diagnostics}
+        _merge_owner_diagnostics(patch, current, ref.path)
+        if patch and patch.get(owner_diagnostics.FIELD) != current.get(owner_diagnostics.FIELD):
+            transaction.update(ref, patch)
+        return True
+
+    return run_transactional(client, persist)
+
+
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    if owner_diagnostics.FIELD in data:
+        try:
+            value = owner_diagnostics.normalize(data[owner_diagnostics.FIELD])
+        except Exception:
+            value = {}
+            record_fallback(
+                component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
+            )
+        if value:
+            data[owner_diagnostics.FIELD] = value
+        else:
+            data.pop(owner_diagnostics.FIELD, None)
     segments = data.get('transcript_segments')
     try:
         _reveal_match_scores_for_read(data, uid)
@@ -669,6 +730,9 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
         except Exception:
             # Omitting this optional update leaves the current stored blob intact.
             match_scores.record_failure(logger, reason='malformed_doc')
+    if owner_diagnostics.FIELD in write_data:
+        payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
+        _merge_owner_diagnostics(payload, existing)
     write_data.update(_prepare_conversation_for_write(payload, uid, level))
     write_data['data_protection_level'] = level
 
@@ -2985,6 +3049,7 @@ def update_conversation_segments(
     live_capture_reasons: Optional[Dict[str, str]] = None,
     live_capture_proofs: Optional[Dict[str, CaptureWindowProof]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
+    owner_recognition_diagnostics: Optional[dict] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
 
@@ -3134,6 +3199,8 @@ def update_conversation_segments(
                 )
             except Exception:
                 _drop_match_scores(update_payload)
+        if owner_recognition_diagnostics is not None:
+            update_payload[owner_diagnostics.FIELD] = owner_recognition_diagnostics
         if capture_evidence is not None:
             update_payload['capture_evidence'] = capture_evidence
         if remap:
@@ -3165,6 +3232,7 @@ def update_conversation_segments(
             # with finalize) must still be cleared in this same write.
             clear_client_processing(prepared_payload)
         _guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
+        _merge_owner_diagnostics(prepared_payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
             return planned.with_segments(accepted)

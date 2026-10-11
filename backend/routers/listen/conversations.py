@@ -258,6 +258,19 @@ class LiveConversationController:
         )
 
     async def schedule_finalization(self, conversation_id: str) -> bool:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation:
+            snapshot = observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            if snapshot:
+                try:
+                    await self.host.persistence.call(
+                        conversations_db.update_owner_recognition_diagnostics,
+                        self.host.request.uid,
+                        conversation_id,
+                        snapshot,
+                    )
+                except Exception:
+                    observation.observe('flush_failed')
         if not self.host.request_conversation_processing and not is_listen_finalization_dispatch_enabled():
             logger.warning('Pusher unavailable; finalization remains queued conversation=%s', conversation_id)
             return False

@@ -479,11 +479,37 @@ conversation's `speaker_resolution` tells clients whether ids are people:
 open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
 it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
 `..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
-Every early exit records an anonymous reason (`no_audio`, `unaligned_audio`, or
+Every early exit retains its aggregate reason (`no_audio`, `unaligned_audio`, or
 `no_embeddings`) so a successful sync reprocess cannot conceal an unavailable
 resolution. The Flutter transcript presents anonymous IDs as provisional when
 the status is `unavailable`; those chunk-local IDs must not be displayed as
 dozens of confirmed participants.
+
+Owner-recognition diagnostics are observation only: matching thresholds, budgets,
+queue ordering, and identity labels stay unchanged. Live refusals emit at most
+one `event=owner_recognition_diagnostics` summary per reason per generation,
+plus bounded finalization/drain/rollover summaries. Logs carry UID,
+conversation, recording, socket, and speaker scope; UID never enters a
+Prometheus label. Budget refusals reuse the existing `cap=voice|socket|both`
+counters and first-block log, while the generation summary retains those counts.
+Resolver exits carry the same attribution and pass name, including separate
+`private_cloud_disabled` and `endpoint_unconfigured` reasons.
+
+The conversation's internal `owner_recognition_diagnostics` field contains
+only whitelisted counts, enums, durations, and IDs: no transcript, audio,
+embeddings, distances, or secrets. It is omitted from client JSON and schema.
+At most four live generations, eight scopes per summary, and 8 KiB of encoded
+metadata survive. The first-resolver summary is immutable across later repair
+and reprocessing; transactional merges retain newer live sequences. Live
+metadata piggybacks on identity flushes, with a metadata-only transactional
+read/update when no labels were produced and at finalization boundaries.
+Unchanged snapshots do not write. This adds bounded document writes/reads,
+not an embedding retry or a per-segment diagnostic write. Optional metadata
+is omitted if the resulting document exceeds the conservative 900 KiB size
+guard; failures preserve existing metadata and allow content writes to continue.
+A stopped generation freezes its summary so an in-flight old task cannot claim
+success in the successor. Queue/task counts describe the sampled boundary,
+not a completed queue barrier or proof that an owner was present.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
