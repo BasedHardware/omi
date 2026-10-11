@@ -14,6 +14,7 @@ const scoped = [
   ["get_memories", ["memories"]],
   ["search_memories", ["memories"]],
   ["get_action_items", ["action_items"]],
+  ["get_commitments", ["window", "people", "commitments", "unattributed"]],
 ] as const;
 
 describe("manifest-owned tool result projection", () => {

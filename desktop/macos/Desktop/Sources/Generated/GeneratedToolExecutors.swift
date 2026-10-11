@@ -24,6 +24,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case createStandingTrigger = "create_standing_trigger"
   case closeFact = "close_fact"
   case getActionItems = "get_action_items"
+  case getCommitments = "get_commitments"
   case createActionItem = "create_action_item"
   case createContextReminder = "create_context_reminder"
   case updateActionItem = "update_action_item"
@@ -62,8 +63,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4091ca56341e6b1ad3383255cae1299ad2c283052826bf2c19b70447cdc3200e"
-  static let chatFirstManifestDigest = "sha256:fe76965fa939c00fc301084866afa42c96459d648cf72cace5b5cbde8eaacc4d"
+  static let manifestDigest = "sha256:cb20ed7eaa0c014500a84f934777f8e8821cc3156ee40285c74196b6367fd60c"
+  static let chatFirstManifestDigest = "sha256:9be7fa2a0e9283a0b3df4545ec40b96b4a078d492017f5dc5dc5862a978b4cd0"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -94,6 +95,7 @@ enum GeneratedToolExecutors {
     .createStandingTrigger: .chatToolExecutor,
     .closeFact: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
+    .getCommitments: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
     .createContextReminder: .chatToolExecutor,
     .updateActionItem: .chatToolExecutor,
@@ -176,6 +178,7 @@ enum GeneratedToolExecutors {
     case createStandingTrigger
     case closeFact
     case getActionItems
+    case getCommitments
     case createActionItem
     case createContextReminder
     case updateActionItem
@@ -229,6 +232,7 @@ enum GeneratedToolExecutors {
     case .createStandingTrigger: return .createStandingTrigger
     case .closeFact: return .closeFact
     case .getActionItems: return .getActionItems
+    case .getCommitments: return .getCommitments
     case .createActionItem: return .createActionItem
     case .createContextReminder: return .createContextReminder
     case .updateActionItem: return .updateActionItem

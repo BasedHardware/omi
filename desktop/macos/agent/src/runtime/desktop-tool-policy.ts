@@ -112,6 +112,7 @@ const LOCAL_READ_TOOLS = new Set([
   "get_memories",
   "search_memories",
   "get_action_items",
+  "get_commitments",
   "get_email_insights",
   "get_local_status",
   "get_product_kb",
