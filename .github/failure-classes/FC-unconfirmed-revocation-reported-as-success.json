@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-unconfirmed-revocation-reported-as-success",
+  "violated_contract": "A credential revocation endpoint must not answer success unless the credential was actually removed. The mobile app renders any 2xx from DELETE /v1/apps/{app_id}/keys/{key_id} as a confirmed revocation (AddAppProvider.deleteApiKey awaits deleteApiKeyServer, which throws only on a non-200, and ApiKeysWidget then shows 'API key revoked successfully'), so a delete that matched no stored key while the route dropped the data layer's result left the user believing a credential was dead when nothing had been revoked.",
+  "canonical_prevention": "Keep the deletion outcome from the data layer and classify a no-op revocation once at the route boundary as a refusal (404 'API key not found') instead of returning the generic success payload, so every client that treats 2xx as a confirmed mutation inherits the same classification rather than each caller deciding whether the delete happened.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_app_api_key_revoke_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/apps.py",
+    "backend/database/apps.py"
+  ],
+  "status": "open"
+}

@@ -212,12 +212,18 @@
         ".github/scripts/verify_release_eligibility.py",
         ".github/scripts/verify_backend_release_admission.py",
         ".github/scripts/verify_auto_backend_release_admission.py",
-        ".github/scripts/check_backend_deploy_source_admission.py"
+        ".github/scripts/check_backend_deploy_source_admission.py",
+        ".github/actions/firestore-readiness/action.yml",
+        ".github/workflows/**"
       ],
       "tests": [
-        "tests/unit/test_reconcile_firestore_indexes.py",
         "tests/unit/test_backend_runtime_env_validator.py",
-        "tests/unit/test_verify_backend_release_vector.py"
+        "tests/unit/test_firestore_index_rules.py",
+        "tests/unit/test_firestore_query_shapes.py",
+        "tests/unit/test_firestore_shape_recorder.py",
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_verify_backend_release_vector.py",
+        "tests/unit/test_workflow_contracts.py"
       ],
       "checks": [],
       "invariants": [
@@ -244,6 +250,7 @@
       "tests": [
         "tests/unit/test_sync_v2.py",
         "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_sync_status_read_ownership.py",
         "tests/unit/test_audio_merge_tasks.py",
         "tests/unit/test_sync_fair_use_gate.py",
         "tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py"
@@ -252,6 +259,7 @@
       "invariants": [
         "task retries do not double-count usage or completed segments",
         "segment failures cannot be reported as completed work",
+        "status reads cannot bypass run ownership or overwrite a concurrent terminal result; abandoned Cloud Tasks still recover through the lease-owning finalizer",
         "enqueued jobs retain staged blobs until handler completion",
         "fresh v2 Sync admission runs a credential-free local Firestore, Redis, storage, and separate Cloud Tasks-worker stack gauntlet in blocking PR CI"
       ]
@@ -571,12 +579,14 @@
       "risk": "high",
       "sources": [
         ".github/actions/deploy-backend-stack/**",
+        ".github/actions/sync-backfill-lifecycle/**",
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
         ".github/workflows/gcp_llm_gateway.yml",
         ".github/workflows/gcp_memory_maintenance_job.yml",
         ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",
+        ".github/workflows/gcp_x_connector_sync_job.yml",
         ".github/workflows/sync_ledger_fence_cutover.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
@@ -593,11 +603,14 @@
         "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
         "backend/scripts/validate_memory_maintenance_scheduler.py",
+        "backend/scripts/validate_x_connector_sync_scheduler.py",
+        "backend/scripts/scheduler_reconcile.py",
         "backend/scripts/validate-backend-runtime-env.py"
       ],
       "tests": [
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_plan_quota_env_retirement.py",
         "tests/unit/test_verify_backend_release_vector.py",
         "tests/unit/test_resolve_cloud_run_tagged_url.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
@@ -610,6 +623,8 @@
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
         "tests/unit/test_validate_memory_maintenance_scheduler.py",
+        "tests/unit/test_validate_x_connector_sync_scheduler.py",
+        "tests/unit/test_scheduler_reconcile.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
@@ -622,6 +637,7 @@
         "normal deploys cannot change the serving sync ledger fence mode",
         "production backend traffic shifts only after the Cloud Run-only candidate vector passes, then rolls back if the post-promotion serving route or known-audio smoke fails",
         "memory-maintenance job deploys fail unless the exact enabled hourly OAuth Scheduler trigger targets that deployed job",
+        "x-connector-sync job deploys fail unless the exact enabled 6h OAuth Scheduler trigger targets that deployed job",
         "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
       ]
     },
@@ -692,7 +708,8 @@
         "backend/scripts/validate_rendered_deployment_contract.py"
       ],
       "tests": [
-        "tests/unit/test_rendered_deployment_contract.py"
+        "tests/unit/test_rendered_deployment_contract.py",
+        "tests/unit/test_plan_quota_env_retirement.py"
       ],
       "checks": [],
       "invariants": [
@@ -761,6 +778,28 @@
         "deletions and both sides of renames select the checks owned by the old and new paths",
         "unmapped backend production paths cannot be hidden by adding one direct test",
         "desktop-only pushes do not require a backend virtual environment"
+      ]
+    },
+    {
+      "id": "daily_memory_sweep_admission",
+      "risk": "high",
+      "sources": [
+        "backend/utils/memory/daily_memory_sweep.py",
+        "backend/modal/daily_memory_sweep_job.py",
+        "backend/scripts/jit_qa_sweep_repair.py"
+      ],
+      "tests": [
+        "tests/unit/test_daily_memory_sweep.py",
+        "tests/unit/test_daily_memory_sweep_job.py",
+        "tests/unit/test_daily_sweep_summary_agent.py",
+        "tests/unit/test_jit_qa_sweep_repair.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
+      "invariants": [
+        "FC-daily-memory-sweep-fence: common admission binds one invocation per owner/window/generation before dispatch",
+        "claim-bound skip consumes the existing attestation without authorizing another dispatch"
       ]
     }
   ]

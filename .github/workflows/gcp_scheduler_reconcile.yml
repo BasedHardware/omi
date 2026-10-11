@@ -1,0 +1,65 @@
+name: Reconcile Cloud Scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to inspect
+        required: true
+        type: choice
+        options: [development, prod]
+      operation:
+        description: Prod is read-only; development can be reconciled
+        required: true
+        default: check
+        type: choice
+        options: [check, reconcile]
+      production_confirmation:
+        description: For an approved production reconcile, type APPLY_PROD_SCHEDULER
+        required: false
+        type: string
+
+concurrency:
+  group: cloud-scheduler-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Scheduler reconciler dependencies
+        run: python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
+      - name: Reconcile dev or check prod scheduler manifest
+        env:
+          ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}
+          OPERATION: ${{ github.event.inputs.operation }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          PROD_CONFIRMATION: ${{ github.event.inputs.production_confirmation }}
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == "reconcile" ]]; then
+            if [[ "$INPUT_ENVIRONMENT" == "prod" && "$PROD_CONFIRMATION" != "APPLY_PROD_SCHEDULER" ]]; then
+              echo "Production reconcile requires the typed confirmation after prod environment approval." >&2
+              exit 1
+            fi
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment "$ENVIRONMENT" --project "$PROJECT_ID" --apply
+          fi
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$ENVIRONMENT" --project "$PROJECT_ID" --check

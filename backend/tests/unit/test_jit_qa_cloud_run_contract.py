@@ -577,6 +577,21 @@ def test_workflow_backend_memory_literal_matches_contract():
     assert f"resource_flags+=(--memory={CONTRACT.BACKEND_MEMORY})" in text
 
 
+def test_workflow_http_services_pin_keyless_streaming_stt_chain():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert f"QA_STT_SERVICE_MODELS: {CONTRACT.STT_SERVICE_MODELS}" in text
+    assert "@STT_SERVICE_MODELS=${QA_STT_SERVICE_MODELS}" in text
+    for profile in ("backend", "desktop"):
+        literals, _ = CONTRACT.resource_environment(profile)
+        assert literals["STT_SERVICE_MODELS"] == CONTRACT.STT_SERVICE_MODELS
+        assert "soniox" not in literals["STT_SERVICE_MODELS"].split(",")
+    # Only the FastAPI HTTP services run the fail-closed streaming validation;
+    # the gateway and the jobs keep their own profiles without the pin.
+    for profile in ("gateway", "drain", "sweep"):
+        literals, _ = CONTRACT.resource_environment(profile)
+        assert "STT_SERVICE_MODELS" not in literals
+
+
 def test_qa_workflows_admit_only_proven_merged_ancestors():
     for workflow in (WORKFLOW, TYPESENSE_WORKFLOW):
         text = workflow.read_text(encoding="utf-8")
@@ -703,6 +718,7 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
         "REDIS_HOST": "10.0.0.10",
         "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
         "SOURCE_SHA": "b" * 40,
+        "QA_STT_SERVICE_MODELS": CONTRACT.STT_SERVICE_MODELS,
     }
     rendered = subprocess.run(
         ["bash", "-c", f"set -euo pipefail\n{common_line}\nprintf '%s' \"$common\""],
@@ -750,6 +766,7 @@ def test_qa_cloud_run_service_secret_rendering_is_scoped_per_service():
         "REDIS_HOST": "10.0.0.10",
         "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
         "SOURCE_SHA": "b" * 40,
+        "QA_STT_SERVICE_MODELS": CONTRACT.STT_SERVICE_MODELS,
     }
 
     with tempfile.TemporaryDirectory() as directory:

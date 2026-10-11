@@ -27,7 +27,7 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_jit_qa_emulator_key_32_bytes")  
 # Canonical migration is fenced by the deployment intake mode.  This local
 # proof opts into write mode only inside the emulator process; cloud operators
 # still read the real deployment environment and admission decision.
-os.environ.setdefault("MEMORY_MODE", "write")
+os.environ.setdefault("MEMORY_ENABLED", "on")
 
 from models.memory_apply import WriterMode  # noqa: E402
 from scripts import jit_qa_seed_and_verify as operator  # noqa: E402

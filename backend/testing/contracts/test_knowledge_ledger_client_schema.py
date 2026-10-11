@@ -44,17 +44,34 @@ LEDGER_MEMORY_FIELDS = {
 
 EVIDENCE_FIELDS = {
     'artifact_ref',
+    'attribution',
     'capture_confidence',
+    'captured_at',
     'client_device_id',
     'created_at',
     'evidence_id',
     'extractor_id',
     'extractor_version',
     'independence_group',
+    'lineage_id',
+    'quote_refs',
     'redaction_status',
     'source_id',
     'source_signal',
     'source_type',
+    'source_version',
+}
+
+CAPTURE_CONTEXT_FIELDS = {
+    'attribution',
+    'captured_at',
+    'independence_group',
+    'lineage_id',
+    'quote_refs',
+    'source_id',
+    'source_signal',
+    'source_type',
+    'source_version',
 }
 
 
@@ -90,12 +107,16 @@ def test_knowledge_ledger_v1_schema_is_additive_and_evidence_is_optional():
     spec = _spec()
     memory = _schema(spec, 'MemoryDB')
     evidence = _schema(spec, 'Evidence')
+    capture_context = _schema(spec, 'MemoryCaptureContext')
 
     assert LEDGER_MEMORY_FIELDS <= memory['properties'].keys()
     assert EVIDENCE_FIELDS == evidence['properties'].keys()
+    assert CAPTURE_CONTEXT_FIELDS == capture_context['properties'].keys()
     assert set(memory['required']) == {'content', 'created_at', 'id', 'layer', 'uid', 'updated_at'}
     assert set(evidence['required']) == {'evidence_id', 'independence_group'}
+    assert set(capture_context['required']) == {'source_type'}
     assert 'evidence' not in memory['required']
+    assert 'capture_context' not in memory['required']
 
     # Version is intentionally open-ended so a v1 decoder can identify and
     # quarantine a future version instead of treating it as a current row.
@@ -123,23 +144,33 @@ def test_legacy_v1_and_future_wire_fixtures_validate_at_the_shared_boundary():
     assert 'future_evidence_field' in fixtures['future']['evidence'][0]
 
 
-def test_optional_evidence_type_is_rendered_for_each_generator():
+def test_optional_evidence_and_capture_context_types_are_rendered_for_each_generator():
     spec = _spec()
     schemas = spec['components']['schemas']
     memory = _schema(spec, 'MemoryDB')
 
-    dart_fields = generate_dart_models.fields_for_schema('MemoryDB', memory, ('Evidence', 'MemoryDB'), schemas)
+    dart_fields = generate_dart_models.fields_for_schema(
+        'MemoryDB', memory, ('Evidence', 'MemoryDB', 'MemoryCaptureContext'), schemas
+    )
     dart_evidence = next(field for field in dart_fields if field.wire_name == 'evidence')
     assert dart_evidence.required is False
     assert dart_evidence.dart_type.annotation == 'List<GeneratedEvidence>?'
+    dart_capture_context = next(field for field in dart_fields if field.wire_name == 'capture_context')
+    assert dart_capture_context.required is False
+    assert dart_capture_context.dart_type.annotation == 'GeneratedMemoryCaptureContext?'
 
     swift_type, swift_optional = generate_swift_openapi_types._swift_type(
         memory['properties']['evidence'], required=False
     )
     assert (swift_type, swift_optional) == ('[Evidence]', True)
+    swift_capture_type, swift_capture_optional = generate_swift_openapi_types._swift_type(
+        memory['properties']['capture_context'], required=False
+    )
+    assert (swift_capture_type, swift_capture_optional) == ('MemoryCaptureContext', True)
 
     typescript_memory = generate_ts_openapi_types.schema_to_ts(memory)
     assert 'evidence?: Array<Evidence>;' in typescript_memory
+    assert 'capture_context?: MemoryCaptureContext | null;' in typescript_memory
 
 
 def test_checked_in_mobile_desktop_windows_and_web_artifacts_share_the_same_mapping():

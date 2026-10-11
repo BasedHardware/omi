@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,13 +9,19 @@ from utils.memory.belief_model import (
     FADING_BAND_MIN,
     HALF_LIFE_DAYS_BY_CLASS,
     CurrencyBand,
+    belief_automation_enabled,
     belief_model_enabled,
     belief_view,
     compute_currency,
     currency_band,
     derive_half_life_days,
+    belief_view_for_record,
+    public_belief_overlay,
+    public_belief_overlay_json,
+    record_passes_proactive_bar,
     resolve_last_evidenced_at,
     passes_proactive_bar,
+    temporal_view_allows_record,
 )
 
 NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
@@ -176,6 +184,128 @@ def test_proactive_bar_requires_current_user_and_not_contradicted():
     assert passes_proactive_bar(current, subject_scope="primary_user", confidence=0.0) is False
 
 
+def _proactive_record(**updates):
+    record = {
+        "captured_at": NOW,
+        "created_at": NOW,
+        "half_life_days": None,
+        "last_corroborated_at": None,
+        "valid_to": None,
+        "invalid_at": None,
+        "user_asserted": False,
+        "manually_added": False,
+        "belief_class": "identity",
+        "kind": "fact",
+        "category": None,
+        "tier": "long_term",
+        "subject_scope": "primary_user",
+        "superseded_by": None,
+        "confidence": None,
+        "arguments": {},
+        "evidence": [],
+    }
+    record.update(updates)
+    return SimpleNamespace(**record)
+
+
+def test_record_proactive_bar_requires_verified_owner_authorship():
+    unknown = _proactive_record()
+    ocr = _proactive_record(
+        evidence=[
+            {
+                "source_type": "screen",
+                "source_signal": "ocr",
+                "attribution": "screen",
+                "source_state": "active",
+                "redaction_status": "active",
+            }
+        ]
+    )
+    owner_speech = _proactive_record(
+        evidence=[
+            {
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "attribution": "user_spoken",
+                "source_state": "active",
+                "redaction_status": "active",
+            }
+        ]
+    )
+
+    assert record_passes_proactive_bar(unknown, now=NOW) is False
+    assert record_passes_proactive_bar(ocr, now=NOW) is False
+    assert record_passes_proactive_bar(owner_speech, now=NOW) is True
+
+
+def test_record_proactive_bar_accepts_canonical_manual_and_review_authority():
+    manual = _proactive_record(manually_added=True)
+    reviewed = _proactive_record(reviewed=True, user_review=True)
+    owner_speech_not_yet_reviewed = _proactive_record(
+        reviewed=False,
+        user_review=None,
+        evidence=[
+            {
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "attribution": "user_spoken",
+                "source_state": "active",
+                "redaction_status": "active",
+            }
+        ],
+    )
+
+    assert record_passes_proactive_bar(manual, now=NOW) is True
+    assert record_passes_proactive_bar(reviewed, now=NOW) is True
+    assert record_passes_proactive_bar(owner_speech_not_yet_reviewed, now=NOW) is True
+
+
+def test_record_proactive_bar_rejects_explicit_review_rejection_and_redaction():
+    rejected = _proactive_record(
+        user_review=False,
+        evidence=[
+            {
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "attribution": "user_spoken",
+                "source_state": "active",
+                "redaction_status": "active",
+            }
+        ],
+    )
+    redacted = _proactive_record(
+        evidence=[
+            {
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "attribution": "user_spoken",
+                "source_state": "active",
+                "redaction_status": "redacted",
+            }
+        ],
+    )
+
+    assert record_passes_proactive_bar(rejected, now=NOW) is False
+    assert record_passes_proactive_bar(redacted, now=NOW) is False
+
+
+def test_record_proactive_bar_suppression_remains_a_veto_for_owner_speech():
+    suppressed = _proactive_record(
+        arguments={"memory_use": {"suppressed": True}},
+        evidence=[
+            {
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "attribution": "user_spoken",
+                "source_state": "active",
+                "redaction_status": "active",
+            }
+        ],
+    )
+
+    assert record_passes_proactive_bar(suppressed, now=NOW) is False
+
+
 def test_flag_defaults_off(monkeypatch):
     monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
     assert belief_model_enabled() is False
@@ -183,6 +313,20 @@ def test_flag_defaults_off(monkeypatch):
     assert belief_model_enabled() is False
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     assert belief_model_enabled() is True
+
+
+def test_automation_pause_is_independent_from_read_flag(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.delenv("MEMORY_BELIEF_AUTOMATION_PAUSED", raising=False)
+    assert belief_automation_enabled() is True
+
+    monkeypatch.setenv("MEMORY_BELIEF_AUTOMATION_PAUSED", "true")
+    assert belief_automation_enabled() is False
+    assert belief_model_enabled() is True
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "false")
+    monkeypatch.setenv("MEMORY_BELIEF_AUTOMATION_PAUSED", "false")
+    assert belief_automation_enabled() is False
 
 
 def test_class_priors_match_the_ratified_table():
@@ -215,11 +359,11 @@ def test_subject_scope_never_defaults_unknown_to_the_user():
 def test_horizon_from_extraction_honors_user_asserted_and_overrides():
     from utils.memory.belief_model import horizon_from_extraction
 
-    assert horizon_from_extraction(belief_class="state", user_asserted=True) == ("state", None)
+    assert horizon_from_extraction(belief_class="state", user_asserted=True) == ("state", 30.0)
     assert horizon_from_extraction(belief_class="identity") == ("identity", None)
     assert horizon_from_extraction(belief_class="episodic") == ("episodic", 7.0)
     assert horizon_from_extraction(belief_class="plan", half_life_days_override=7) == ("plan", 7)
-    assert horizon_from_extraction(belief_class="unknown") == ("state", 30.0)
+    assert horizon_from_extraction(belief_class="unknown") == (None, None)
 
 
 def test_record_view_reads_category_from_item_audit_bag():
@@ -241,6 +385,28 @@ def test_record_view_reads_category_from_item_audit_bag():
     )
     view = belief_view_for_record(record, now=NOW)
     assert view.half_life_days is None
+
+
+def test_record_view_ages_from_original_evidence_time_when_processing_is_delayed():
+    from types import SimpleNamespace
+
+    record = SimpleNamespace(
+        captured_at=NOW,
+        created_at=NOW,
+        evidence=[SimpleNamespace(captured_at=NOW - timedelta(days=30))],
+        half_life_days=None,
+        last_corroborated_at=None,
+        valid_to=None,
+        user_asserted=False,
+        manually_added=False,
+        belief_class="state",
+        kind="fact",
+        category=None,
+        tier="long_term",
+    )
+    view = belief_view_for_record(record, now=NOW)
+    assert view.as_of == NOW - timedelta(days=30)
+    assert view.currency == pytest.approx(0.5)
 
 
 def test_public_overlay_is_empty_when_flag_off(monkeypatch):
@@ -286,3 +452,159 @@ def test_public_overlay_includes_band_and_as_of_when_flag_on(monkeypatch):
     assert overlay["currency_band"] == CurrencyBand.fading.value
     assert overlay["as_of"] == CAPTURED
     assert overlay["half_life_days"] == 30
+
+
+def test_manual_known_class_uses_class_horizon(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = type(
+        "Record",
+        (),
+        {
+            "captured_at": CAPTURED,
+            "half_life_days": None,
+            "last_corroborated_at": None,
+            "valid_to": None,
+            "user_asserted": True,
+            "manually_added": True,
+            "belief_class": "state",
+            "kind": "fact",
+            "category": None,
+            "tier": "long_term",
+            "subject_scope": "primary_user",
+        },
+    )()
+    overlay = public_belief_overlay(record, now=NOW)
+    assert overlay["half_life_days"] == 30
+    assert overlay["currency"] == pytest.approx(0.5)
+    assert overlay["currency_band"] == CurrencyBand.fading.value
+
+
+def test_unknown_overlay_is_explicit_and_never_current(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = type(
+        "Record",
+        (),
+        {
+            "captured_at": CAPTURED,
+            "half_life_days": None,
+            "last_corroborated_at": None,
+            "valid_to": None,
+            "user_asserted": False,
+            "manually_added": False,
+            "belief_class": None,
+            "kind": "fact",
+            "category": None,
+            "tier": "long_term",
+            "subject_scope": "primary_user",
+        },
+    )()
+    overlay = public_belief_overlay(record, now=NOW)
+    assert overlay["currency"] is None
+    assert overlay["currency_band"] is None
+    assert overlay["as_of"] == CAPTURED
+    assert overlay["belief_computed_at"] == NOW
+
+
+def test_json_overlay_serializes_assessment_and_evidence_times(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = type(
+        "Record",
+        (),
+        {
+            "captured_at": CAPTURED,
+            "half_life_days": 30,
+            "last_corroborated_at": None,
+            "valid_to": None,
+            "user_asserted": False,
+            "manually_added": False,
+            "belief_class": "state",
+            "kind": "fact",
+            "category": None,
+            "tier": "long_term",
+        },
+    )()
+    payload = public_belief_overlay_json(record, now=NOW)
+    json.dumps(payload)
+    assert payload["as_of"] == CAPTURED.isoformat()
+    assert payload["belief_computed_at"] == NOW.isoformat()
+
+
+def test_proactive_bar_rejects_explicit_use_suppression():
+    current = belief_view(captured_at=NOW, now=NOW, belief_class="identity")
+    assert passes_proactive_bar(current, subject_scope="primary_user", suppressed=True) is False
+
+
+def test_temporal_views_keep_suppressed_records_for_owner_history(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = SimpleNamespace(
+        captured_at=CAPTURED - timedelta(days=60),
+        created_at=CAPTURED - timedelta(days=60),
+        half_life_days=30,
+        last_corroborated_at=None,
+        valid_to=None,
+        invalid_at=None,
+        user_asserted=False,
+        manually_added=False,
+        belief_class="state",
+        kind="fact",
+        category=None,
+        tier="long_term",
+        status="active",
+        arguments={"memory_use": {"suppressed": True}},
+    )
+    assert temporal_view_allows_record(record, view="useful_now", now=NOW) is False
+    assert temporal_view_allows_record(record, view="history", now=NOW) is True
+    assert temporal_view_allows_record(record, view="all", now=NOW) is True
+
+
+def test_history_view_excludes_known_current_records(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = SimpleNamespace(
+        captured_at=NOW,
+        created_at=NOW,
+        half_life_days=30,
+        last_corroborated_at=None,
+        valid_to=None,
+        invalid_at=None,
+        user_asserted=False,
+        manually_added=False,
+        belief_class="state",
+        kind="fact",
+        category=None,
+        tier="long_term",
+        status="active",
+        arguments={},
+    )
+    assert temporal_view_allows_record(record, view="history", now=NOW) is False
+    assert temporal_view_allows_record(record, view="all", now=NOW) is True
+    assert temporal_view_allows_record(record, view="useful_now", now=NOW) is True
+
+
+def test_unclassified_records_are_history_only(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    record = SimpleNamespace(
+        captured_at=NOW,
+        created_at=NOW,
+        half_life_days=None,
+        last_corroborated_at=None,
+        valid_to=None,
+        invalid_at=None,
+        user_asserted=False,
+        manually_added=False,
+        belief_class=None,
+        kind="fact",
+        category=None,
+        tier="long_term",
+        status="active",
+        arguments={},
+    )
+    assert temporal_view_allows_record(record, view="useful_now", now=NOW) is False
+    assert temporal_view_allows_record(record, view="history", now=NOW) is True
+    assert temporal_view_allows_record(record, view="all", now=NOW) is True
+    assert temporal_view_allows_record(record, view="released", now=NOW) is True

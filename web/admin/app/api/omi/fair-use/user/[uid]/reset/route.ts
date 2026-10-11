@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/firebase/admin';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 import { invalidateEnforcementCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const { uid } = await params;
+  const uid = (await params).uid;
+  if (!isSafeDocumentId(uid)) {
+    return NextResponse.json({ error: 'Invalid uid' }, { status: 400 });
+  }
   const adminUid = authResult.uid;
 
   try {

@@ -63,3 +63,15 @@ body.insight-toast-body { background: transparent !important; overflow: hidden; 
   overflow: hidden;
 }
 .whatsnew-list li::before { content: ''; position: absolute; left: 3px; top: 7px; width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a; }
+
+/* Feed bodies are bounded previews; keep the source action visible. */
+.insight-card--proactivity .insight-headline,
+.insight-card--proactivity .insight-advice {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.insight-card--proactivity .insight-headline { -webkit-line-clamp: 2; }
+.insight-card--proactivity .insight-advice { -webkit-line-clamp: 3; }
+.insight-card--proactivity .meeting-btn { flex-shrink: 0; }

@@ -43,6 +43,8 @@ numpy==1.26.4
 
 # Metrics
 prometheus-client==0.21.1
+# Cohort flag evaluation (utils.proactivity_flags) and integration telemetry
+posthog==3.5.2
 
 # LLM services (for process_conversation)
 anthropic>=0.52.0
@@ -62,6 +64,8 @@ langsmith==0.8.5
 # Vector databases
 pinecone==7.3.0
 qdrant-client==1.11.0
+# Conversation search index (process_conversation → lifecycle → typesense_index)
+typesense==0.21.0
 
 # Knowledge graph
 neo4j==5.23.1

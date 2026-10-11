@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/fake_flutter.py",
+  "owner": "V1",
+  "before": "a61402868348d17d071021cca34d0e5cd87e6ed476e6d428a362131d7ea51bd0",
+  "after": "7cfb42ec3a50c406644cada878d979b96d453b379269a7a4d63be7fcbb3829dd",
+  "reason": "Spine A turn 5 final protocol audit against Flutter 3.44.5: fake daemon.connected must report the actual child PID and app.start the actual launch cwd, not fixed decoys. Emit app.stop event on shutdown. This prevents correct process/worktree identity validation from rejecting the fixture."
+}

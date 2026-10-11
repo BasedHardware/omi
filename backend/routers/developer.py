@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -5,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -15,15 +16,20 @@ import database.goals as goals_db
 import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
-from utils.goals_response import normalize_goal_history_entry
+from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
+from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import MAX_ENVELOPE_BYTES
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
     Conversation as OmiConversation,
     CreateConversation,
@@ -46,10 +52,12 @@ from dependencies import (
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
     get_uid_with_conversations_read_ask,
+    get_uid_with_conversations_from_segments_write,
     get_uid_with_conversations_write,
     get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
+    get_developer_memory_default_memory_create_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
@@ -58,6 +66,7 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
@@ -74,20 +83,17 @@ from utils.conversations.transcript_hash import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
-from utils.conversations.mcp_transcript_search import (
-    merge_summary_and_transcript_ids,
-    resolve_mcp_conversation_search_ids,
-)
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
 from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
-    record_and_persist_finalized_meeting_receipt,
+    record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.developer_memory_list import read_developer_memories
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
@@ -345,6 +351,8 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
@@ -356,8 +364,10 @@ def get_memories(
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.error(f"Invalid category in developer memories: {type(e).__name__}")
+            raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
+    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -375,45 +385,18 @@ def get_memories(
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
-    if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
-        valid_memories = []
-        for memory in memories:
-            try:
-                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-            except (AttributeError, TypeError, ValidationError, ValueError):
-                logger.warning("Skipping malformed memory in Developer API list")
-        return valid_memories
-    # Category is a sparse filter.  Read ordered universal pages until the
-    # requested category page is filled instead of filtering after a raw page
-    # (which returned short/empty pages whenever non-matching memories led it).
-    target_end = offset + limit
-    scan_offset = 0
-    matched = []
-    max_scan = 5000
-    while scan_offset < max_scan and len(matched) < target_end:
-        batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
-        if not batch:
-            break
-        scan_offset += len(batch)
-        if allowed is None:
-            matched.extend(batch)
-        else:
-            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
-        if len(batch) < batch_limit:
-            break
-    memories = matched[offset:target_end]
-    valid_memories = []
-    for memory in memories:
-        try:
-            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
-        except (AttributeError, TypeError, ValidationError, ValueError):
-            # MemoryService normally returns validated MemoryDB rows, but a
-            # malformed historical adapter row must not turn this compatibility
-            # endpoint into a 500 for every otherwise healthy memory.
-            logger.warning("Skipping malformed memory in Developer API list")
-    return valid_memories
+    memories = read_developer_memories(
+        service,
+        uid,
+        limit=limit,
+        offset=offset,
+        allowed=allowed,
+        budget=budget,
+        response_model=CleanerMemory,
+        logger=logger,
+    )
+    finish_list_budget(response, budget)
+    return memories
 
 
 @router.get(
@@ -481,7 +464,7 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_create_context),
 ):
     """
     Create a new memory for the authenticated user.
@@ -490,6 +473,11 @@ def create_memory(
     - **category**: Memory category (auto-categorized if not provided)
     - **visibility**: Visibility: public or private (default: private)
     - **tags**: List of tags associated with the memory
+
+    A memory is identified by its text. Sending text the user already has (ignoring surrounding
+    whitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra
+    headers. Use PATCH to change an existing memory's fields. After a delete, the same text creates
+    a new memory.
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
@@ -558,6 +546,10 @@ def create_memories_batch(
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
+
+    Items follow the single-create rule: text the user already has returns the existing memory at
+    that position, so a retried batch creates nothing twice. `created_count` is the number of
+    memories returned.
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories. Gated before any memory
@@ -751,12 +743,28 @@ class CreateActionItemRequest(BaseModel):
     )
 
 
+def _optional_patch_text(value: Optional[str], field_name: str) -> Optional[str]:
+    """Shared guard for optional PATCH text fields: an omitted field (None) leaves the stored value
+    unchanged, but a provided value must contain non-whitespace text and is stored stripped (#13933)."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f'{field_name} cannot be blank')
+    return stripped
+
+
 class UpdateActionItemRequest(BaseModel):
     model_config = ConfigDict(title='UpdateActionItemRequest')
 
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
+
+    @field_validator('description')
+    @classmethod
+    def description_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'description')
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -867,12 +875,15 @@ def create_action_item(
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
     # Send FCM data message if action item has a due date
-    if request.due_at:
+    if action_item.get('due_at'):
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
-            description=request.description.strip(),
-            due_at=request.due_at.isoformat(),
+            description=action_item.get('description', ''),
+            due_at=action_item['due_at'].isoformat(),
+            completed=bool(action_item.get('completed')),
+            status=action_item.get('status'),
+            deleted=bool(action_item.get('deleted')),
         )
 
     return ActionItemResponse(**action_item)
@@ -920,13 +931,16 @@ def create_action_items_batch(
     created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
     # Send FCM messages for items with due dates
-    for idx, item in enumerate(created_items_list):
-        if idx < len(request.action_items) and request.action_items[idx].due_at:
+    for item in created_items_list:
+        if item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
-                description=request.action_items[idx].description.strip(),
-                due_at=request.action_items[idx].due_at.isoformat(),
+                description=item.get('description', ''),
+                due_at=item['due_at'].isoformat(),
+                completed=bool(item.get('completed')),
+                status=item.get('status'),
+                deleted=bool(item.get('deleted')),
             )
 
     # Convert to response objects
@@ -957,6 +971,7 @@ def delete_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     action_items_db.delete_action_item(uid, action_item_id)
+    sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
 
@@ -1005,21 +1020,25 @@ def update_action_item(
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
+    updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
     # (#5085).
     if 'completed' in update_data or 'due_at' in update_data:
-        description = request.description.strip() if request.description else action_item.get('description', '')
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
-            description=description,
-            completed=bool(update_data.get('completed', action_item.get('completed'))),
-            due_at=update_data.get('due_at', action_item.get('due_at')),
+            description=updated_item.get('description', ''),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
+            status=updated_item.get('status'),
+            deleted=bool(updated_item.get('deleted')),
         )
 
-    return action_items_db.get_action_item(uid, action_item_id)
+    return updated_item
 
 
 # ******************************************************
@@ -1123,6 +1142,11 @@ class UpdateConversationRequest(BaseModel):
     )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
+    @field_validator('title')
+    @classmethod
+    def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'title')
+
 
 class DevTranscriptSegment(BaseModel):
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
@@ -1136,6 +1160,21 @@ class DevTranscriptSegment(BaseModel):
     person_id: Optional[str] = Field(default=None, description="ID of person speaking (if known)")
     start: float = Field(description="Start time in seconds (e.g., 0.0, 1.5, 60.2)")
     end: float = Field(description="End time in seconds (e.g., 1.5, 3.0, 65.8)")
+
+
+class CaptureEvidenceLineageUnit(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
+
+class CaptureEvidenceLineage(BaseModel):
+    version: Literal[1] = 1
+    capability: Literal['stable_artifact']
+    capture_root: str = Field(min_length=1, max_length=200)
+    clock_domain: Literal['desktop_session_ms']
+    lineage: Literal['complete', 'incomplete']
+    units: List[CaptureEvidenceLineageUnit] = Field(max_length=64)
 
 
 class CreateConversationFromTranscriptRequest(BaseModel):
@@ -1152,6 +1191,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
             "conversation still lands. Display only — never an input to intelligence."
         ),
     )
+    capture_evidence: Optional[CaptureEvidenceLineage] = None
     client_session_id: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
@@ -1174,18 +1214,11 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
     # Optional for backwards compatibility. When supplied, rotation fragments
     # are persisted but do not create a notes-ready receipt.
-    conversation_finalization_reason: (
-        Literal[
-            'user_stop',
-            'finish_and_continue',
-            'meeting_started',
-            'meeting_ended',
-            'max_duration_rotation',
-            'crash_recovery',
-            'retry',
-        ]
-        | None
-    ) = None
+    # Plain string, not a Literal: this is opaque client-versioned metadata
+    # (only 'max_duration_rotation' is ever compared downstream), and a closed
+    # enum here previously fell out of sync with the desktop client's finalization
+    # reasons, causing every upload carrying a newer reason to fail with a 422.
+    conversation_finalization_reason: Optional[str] = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -1195,6 +1228,20 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError('client_session_id cannot be empty')
+        return value
+
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Reject offset-naive timestamps with a 422 instead of a 500.
+
+        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
+        the reverse) makes the handler's ``finished_at <= started_at`` check
+        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
+        routes (developer and first-party) share this model, so both get the 422.
+        """
+        if value is not None and value.tzinfo is None:
+            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
         return value
 
 
@@ -1313,7 +1360,23 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     those paths, so the empty-list case here only affects users who have never opened the
     conversations tab nor created a single conversation.
     """
-    return folders_db.get_folders(uid)
+    folders = folders_db.get_folders(uid)
+    valid_folders = []
+    for folder in folders:
+        if not folder or not folder.get('id'):
+            logger.warning('Skipping malformed folder in Developer API folder list')
+            continue
+        try:
+            DeveloperFolder.model_validate(folder)
+            valid_folders.append(folder)
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 class DeveloperAskRequest(BaseModel):
@@ -1390,15 +1453,7 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     except ConversationSearchUnavailableError as exc:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    summary_ids = [item["id"] for item in items if item.get("id")]
-    transcript_ids = resolve_mcp_conversation_search_ids(
-        uid,
-        question,
-        limit=request.limit,
-        query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
-    )
-    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
@@ -1460,12 +1515,13 @@ def get_conversations(
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
         offset = max(0, offset)
-        limit = max(1, min(limit, 25 if include_transcript else 100))
+        limit = max(1, min(limit, 200))
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
             status = 400
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
+            raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
         conversations = conversations_db.get_conversations(
             uid,
@@ -1852,6 +1908,8 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    client_kind: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1911,6 +1969,21 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
@@ -1933,7 +2006,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -1947,6 +2020,35 @@ def _create_conversation_from_segments(
     # projection onto the processing row. The coordinator's generic persists
     # never write this field.
     client_projection = _accepted_client_projection(request, transcript_segments)
+
+    # Keep original desktop segment IDs before client compaction. Only a bounded,
+    # validated metadata payload enters the existing conversation write.
+    capture_evidence = None
+    evidence_status = 'missing'
+    evidence_enabled = capture_evidence_dark_write_enabled()
+    if evidence_enabled and request.capture_evidence is not None:
+        candidate = request.capture_evidence.model_dump()
+        if (
+            candidate['capture_root'] != request.client_session_id
+            or not all(unit['end_ms'] > unit['start_ms'] for unit in candidate['units'])
+            or (candidate['lineage'] == 'complete' and not candidate['units'])
+        ):
+            evidence_status = 'ineligible'
+        elif len(json.dumps(candidate, separators=(',', ':')).encode()) > MAX_ENVELOPE_BYTES:
+            evidence_status = 'overflow'
+        else:
+            capture_evidence = candidate
+            evidence_status = 'lineage' if candidate['lineage'] == 'complete' else 'incomplete'
+    if evidence_enabled and capture_evidence is None:
+        capture_evidence = {
+            'version': 1,
+            'capability': 'unknown',
+            'coverage': 'unknown',
+            'origin': 'from_segments',
+            'reason': evidence_status,
+        }
+    if evidence_enabled:
+        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
     # Create conversation object with transcript segments
     if conversation_id:
@@ -1966,6 +2068,7 @@ def _create_conversation_from_segments(
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -1989,7 +2092,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2008,6 +2111,7 @@ def _create_conversation_from_segments(
             client_platform=resolved_client_platform,
             external_data={
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2043,6 +2147,31 @@ def _create_conversation_from_segments(
     if client_projection is not None and not request.client_session_id:
         conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
+        # A delete committing while processing ran must win: re-check intent
+        # before the final persist, otherwise the loser of the admission race
+        # re-persists the row the user just deleted. Both identities are
+        # checked (derived uuid5 and the raw session id, matching admission),
+        # and a hit also purges the processing/processing-completed row this
+        # call may have created or completed, so the retired identity is not
+        # published by our own response path.
+        suppress_id = None
+        if conversation_tombstones.is_deleted(uid, conversation.id):
+            suppress_id = conversation.id
+        elif conversation_tombstones.is_deleted(uid, request.client_session_id):
+            suppress_id = request.client_session_id
+        if suppress_id is not None:
+            logger.info(
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s suppress_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation.id,
+                suppress_id,
+            )
+            try:
+                conversations_db.delete_conversation(uid, conversation.id)
+            except Exception:
+                logger.exception('tombstone suppress row cleanup failed uid=%s conversation=%s', uid, conversation.id)
+            return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,
@@ -2062,9 +2191,16 @@ def _create_conversation_from_segments(
             else {}
         ),
     }
-    receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
+    receipt = record_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
+    # Only new successful ingests reach here; idempotent replays return above.
+    record_product_event(
+        "conversation_created",
+        client_kind=client_kind,
+        app_build=app_build,
+        uid=uid,
+    )
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -2090,6 +2226,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind=extract_client_kind(http_request),
+        app_build=extract_app_build(http_request),
     )
 
 
@@ -2102,7 +2240,7 @@ def create_conversation_from_segments_user(
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(get_uid_with_conversations_from_segments_write),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -2157,6 +2295,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind='unknown',
+        app_build='unknown',
     )
 
 
@@ -2183,7 +2323,12 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    # Lazy: keep developer routes off the merge/memory import graph so stubbed
+    # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
+    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+
+    conversation_tombstones.record_deletion(uid, conversation_id)
+    delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
 
@@ -2266,7 +2411,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2282,7 +2427,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2319,6 +2464,7 @@ class UpdateGoalRequest(BaseModel):
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
     """Convert datetime objects to ISO strings for JSON serialization."""
+    goal = normalize_goal_response(goal)
     if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
         goal['created_at'] = goal['created_at'].isoformat()
     if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
@@ -2341,16 +2487,14 @@ def get_goals(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     limit = max(1, min(limit, 1000))
-    if include_inactive:
-        # Pass the clamp down so the response honours the documented limit. The bound is
-        # applied after the in-Python newest-first sort rather than at the query, because a
-        # Firestore order_by('created_at') would silently exclude legacy goals that lack the
-        # field; see get_all_goals.
-        goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
-    else:
-        goals = goals_db.get_user_goals(uid, limit=limit)
-
-    return [_serialize_goal_datetimes(g) for g in goals]
+    return list_developer_goals(
+        uid,
+        limit=limit,
+        include_inactive=include_inactive,
+        goals_db=goals_db,
+        response_model=GoalResponse,
+        logger=logger,
+    )
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
@@ -2453,7 +2597,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

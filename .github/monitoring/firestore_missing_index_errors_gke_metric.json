@@ -1,0 +1,24 @@
+{
+  "description": "GKE container log entries reporting a Firestore query that requires a composite index.",
+  "filter": "resource.type=\"k8s_container\" AND (textPayload:\"The query requires an index\" OR jsonPayload.message:\"The query requires an index\")",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "labels": [
+      {
+        "key": "namespace_name",
+        "valueType": "STRING",
+        "description": "Kubernetes namespace that emitted the missing-index error."
+      },
+      {
+        "key": "container_name",
+        "valueType": "STRING",
+        "description": "Kubernetes container that emitted the missing-index error."
+      }
+    ]
+  },
+  "labelExtractors": {
+    "namespace_name": "EXTRACT(resource.labels.namespace_name)",
+    "container_name": "EXTRACT(resource.labels.container_name)"
+  }
+}

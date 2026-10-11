@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// Static contracts for the PTT warm mic keep-alive and mic-contention routing
 /// introduced with the Ray-Ban Meta microphone picker. These are labeled
@@ -199,6 +200,46 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     let bridge = try pushToTalkManagerSource()
     XCTAssertTrue(bridge.contains("if automationCaptureBypass, let turnID = currentVoiceTurnID {"))
   }
+
+  #if DEBUG
+    @MainActor
+    func testAutomationBypassStartReturnsSkippedScreenEvidenceWithoutCompositorCapture() {
+      let manager = PushToTalkManager.shared
+      let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+      let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+      manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
+      UserDefaults.standard.set("ptt-bypass-owner", forKey: .authUserId)
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      var compositorInvocations = 0
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+      defer {
+        manager.testingTurnScreenEvidenceCapture = nil
+        manager.cleanup()
+        RealtimeHubController.shared.clearScreenGrounding()
+        if let previousAuthOwner {
+          UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+          UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+      }
+
+      let started = manager.beginPushToTalkForAutomation()
+      XCTAssertEqual(started["listening"], "true")
+      XCTAssertEqual(started["screen_evidence"], "skipped")
+      XCTAssertEqual(VoiceTurnCoordinator.shared.activeTurn?.phase, .recording)
+      XCTAssertEqual(compositorInvocations, 0)
+      XCTAssertEqual(manager.endPushToTalkForAutomation()["finalized"], "true")
+    }
+  #endif
 
   /// The device the snapshot vetted and the device that actually opened are not
   /// the same thing: `.device(nil)` follows the system default, which can become

@@ -15,24 +15,31 @@ cross-platform decision instead of a single-platform drive-by.
 
 ## Fixture files
 
-| File | Rule under contract |
-|---|---|
-| `task_due_buckets.json` | Task due-date bucketing (Today / Tomorrow / Later / No deadline, and the overdue handling models) |
-| `day_keys.json` | Local-calendar-day identity of a UTC instant (conversation day grouping) |
-| `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
-| `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
-| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads |
-| `conversation_duration.json` | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records |
+| File                               | Rule under contract                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `proactivity_v2.json` | Generated feed/outcome decode, mentor conversation and follow-up action-item targets, identity-only mentor push |
+| `task_due_buckets.json`            | Task due-date bucketing (Today / Tomorrow / Later / No deadline, and the overdue handling models)                            |
+| `day_keys.json`                    | Local-calendar-day identity of a UTC instant (conversation day grouping)                                                     |
+| `wire_action_item.json`            | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
+| `section_labels.json`              | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days              |
+| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
+| `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
+| `capture_group_collapse.json`      | One list row per recorded event: which loaded member represents a capture group, and that a lone loaded member is never hidden |
+| `deterministic_title.json`         | The model-free title: first sentence of the joined transcript, 60 code points cut on a word boundary (the clients' last-resort title for an untitled legacy row) |
+
+The [conversation summary contract](conversation-summary.md) and `conversation_summary.json`
+define one primary body across backend, Flutter, macOS, and web, including edited overviews,
+section projections, and unattributed app results.
 
 ## Conformance suites
 
-| Platform | Suite | Runs |
-|---|---|---|
-| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py` | Backend unit suite and Desktop Backend Contracts CI |
-| Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
-| Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter remains pending. | Desktop Swift CI |
-| Web app | `web/app/src/lib/__tests__/knowledgeLedger.test.ts` | `web/app/test.sh`, CI Web App checks |
+| Platform                       | Suite                                                                                                                                                                                    | Runs                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py`                                                                           | Backend unit suite and Desktop Backend Contracts CI       |
+| Flutter app                    | `app/test/parity/parity_contracts_test.dart`                                                                                                                                             | `app/test.sh`, CI Flutter tests                           |
+| Windows desktop                | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts`                                                                     | `npm test` in `desktop/windows`, CI Desktop Windows tests |
+| macOS desktop                  | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter and the capture-group collapse adapter (`CaptureGroupPresentationTests.swift` pins the same cases inline) remain pending. | Desktop Swift CI                                          |
+| Web app                        | `web/app/src/lib/__tests__/knowledgeLedger.test.ts`                                                                                                                                      | `web/app/test.sh`, CI Web App checks                      |
 
 The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,
 Windows, and web adapters plus the backend and standalone MCP suites. It proves
@@ -85,15 +92,11 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
-5. JIT empty watchlist. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
-   `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
-   routes a complete *empty* watchlist to the bounded ambient lane (owner decision
-   2026-09-01: an account with no standing trigger must not go silent). Windows
-   (`desktop/windows/src/shared/jitTriggerRuntime.ts`, `desktop/windows/src/main/jit/jitRuntime.ts`)
-   still returns `none` and suppresses `empty_watchlist`; its ambient lane is
-   caller-controlled and not wired. The beta cohort is macOS-only and the Windows JIT
-   client floor is unmet, so the losing platform is Windows and must adopt the macOS
-   behavior before any Windows cohort activates (JIT decision 19).
+5. JIT proactivity watchlist/ambient parity is retired as of 2026-10-03: both
+   desktop producers are deleted and reservations return a static 410. Shared
+   rollout authority and canonical mirrors remain. See
+   [`backend/docs/proactivity-v2-retirement.md`](../../backend/docs/proactivity-v2-retirement.md).
+
 6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
    vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS
    (`ServerConversation.durationInSeconds`) validate each segment — empty text,

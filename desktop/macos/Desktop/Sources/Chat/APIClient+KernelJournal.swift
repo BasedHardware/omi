@@ -62,23 +62,6 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId)
   }
 
-  func getMessages(
-    sessionId: String,
-    limit: Int = 100,
-    offset: Int = 0,
-    expectedOwnerId: String? = nil
-  ) async throws -> [ChatMessageDB] {
-    let queryItems = [
-      "session_id=\(sessionId)",
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-    return try await get(
-      "v2/desktop/messages?\(queryItems.joined(separator: "&"))",
-      includeBYOK: false,
-      expectedOwnerId: expectedOwnerId)
-  }
-
   /// Stable keyset page used only by the canonical kernel reconciler. The
   /// offset-based message APIs above remain unchanged for rollback clients.
   func getMessagesReconcilePage(

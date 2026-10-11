@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 
+from config.free_tier_rollout import FREE_TIER_DEPLOY_KEYS, validate_free_tier_deploy_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_validation.common import (
     ConfigDict,
@@ -14,6 +15,7 @@ from scripts.runtime_env_validation.common import (
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
     _validate_forbidden_env_entries,
+    _validate_service_identity,
     compute_project,
 )
 from scripts.runtime_env_validation.workflows import _validate_workflow_flags
@@ -81,6 +83,7 @@ def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         services[service] = {
             'env': first_container.get('env', []),
             'flags': _cloud_run_network_flags_from_annotations(annotations),
+            'service_account': template_spec.get('serviceAccountName'),
         }
     return {'services': services}
 
@@ -107,6 +110,12 @@ def _validate_cloud_run(
             errors.append(ValidationError(f'cloud_run/{service}', 'missing service state'))
             continue
         actual_env = _env_entries_by_name(service_state.get('env', []))
+        for name in FREE_TIER_DEPLOY_KEYS:
+            if name in actual_env:
+                try:
+                    validate_free_tier_deploy_value(name, str(actual_env[name].get('value', '')))
+                except ValueError as exc:
+                    errors.append(ValidationError(f'cloud_run/{service}', str(exc)))
         errors.extend(
             _validate_env_entries(
                 scope=f'cloud_run/{service}',
@@ -135,6 +144,14 @@ def _validate_cloud_run(
                 expected=_network_flags(env_config),
                 actual=service_state.get('flags', {}),
                 strict_provisional=strict_provisional,
+            )
+        )
+        errors.extend(
+            _validate_service_identity(
+                scope=f'cloud_run/{service}',
+                service_config=service_config,
+                actual_service_account=service_state.get('service_account'),
+                actual_env_names=set(actual_env),
             )
         )
     state_jobs = _as_config_dict(cloud_run_state.get('jobs'))

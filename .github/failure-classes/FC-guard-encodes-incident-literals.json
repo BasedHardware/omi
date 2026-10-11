@@ -9,7 +9,7 @@
   "evidence_prs": [],
   "scope_hints": [
     ".github/scripts/check_git_author_identity.py",
-    ".github/failure-classes"
+    ".github/failure-classes/**"
   ],
   "status": "open"
 }

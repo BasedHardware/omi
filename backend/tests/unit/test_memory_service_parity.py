@@ -121,6 +121,7 @@ def _load_memory_service(monkeypatch):
         database.memories = memories_db_mod
         database.vector_db = vector_db_mod
     service_mod._prod_get_memories = service_mod.memories_db.get_memories
+    service_mod._prod_get_memories_by_ids = service_mod.memories_db.get_memories_by_ids
     service_mod._prod_list_memory_updated_or_created_index = (
         service_mod.memories_db.list_memory_updated_or_created_index
     )
@@ -208,6 +209,35 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, 
     legacy_create.assert_not_called()
 
 
+def test_evidence_identity_conflict_is_a_client_conflict_not_a_server_fault(service_mod):
+    conflict = service_mod.EvidenceIdentityConflict("conflict")
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical_write = MagicMock(side_effect=conflict)
+    service._canonical.write_batch = MagicMock(side_effect=conflict)
+    memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+    service.ensure_canonical_mutation_ready = MagicMock()
+
+    with pytest.raises(service_mod.HTTPException) as single:
+        service.create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="create_memory",
+        )
+    with pytest.raises(service_mod.HTTPException) as batch:
+        service.create_external_memory_batch(
+            "uid-test",
+            [memory_db],
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="batch_create_memories",
+        )
+
+    assert single.value.status_code == 409
+    assert batch.value.status_code == 409
+
+
 def test_manual_memory_without_route_capability_stays_on_external_contract(service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     memory_db = service_mod.MemoryDB.model_validate(
@@ -256,7 +286,8 @@ def test_direct_user_ledger_admission_requires_fresh_ingress_and_ledger_mode(mon
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
     backend = service_mod.CanonicalMemoryBackend()
     with (
-        patch.object(service_mod, "read_canonical_memories", return_value=[]),
+        patch.object(service_mod, "read_canonical_memories", side_effect=AssertionError("full fetch")),
+        patch.object(service_mod, "read_canonical_scan_page", return_value=([], True)),
         patch.object(service_mod, "search_canonical_memories", return_value=[]),
         patch.object(service_mod, "write_canonical_external_memory", return_value="mem-1"),
         patch.object(service_mod, "delete_canonical_memory"),

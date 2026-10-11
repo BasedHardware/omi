@@ -143,7 +143,8 @@ interface WorkerLeaseOptions {
   onWorkerBindingInvalidated?: (bindingId: string | null) => void;
   onWorkerRecycled?: (
     bindingId: string | null,
-    outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean }
+    outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean },
+    originalError: unknown,
   ) => void;
 }
 
@@ -306,7 +307,7 @@ export class AdapterWorkerPool {
         options.onWorkerRecycled?.(bindingId, {
           stopSucceeded,
           bindingInvalidationSucceeded,
-        });
+        }, error);
       } catch {
         // Telemetry must not prevent deterministic worker cleanup. The thrown
         // recovery error still carries both bounded lifecycle outcomes.

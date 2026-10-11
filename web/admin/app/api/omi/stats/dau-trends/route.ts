@@ -6,7 +6,12 @@ import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 export const dynamic = "force-dynamic";
 
 // Module-level cache (30 min TTL)
-let cache: { data: { date: string; dau: number }[]; days: number; platform: string; timestamp: number } | null = null;
+let cache: {
+  data: { date: string; dau: number }[];
+  days: number;
+  platform: string;
+  timestamp: number;
+} | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
@@ -27,9 +32,16 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
-    const platform = parsePlatformScope(searchParams.get("platform") ?? "macos");
+    const platform = parsePlatformScope(
+      searchParams.get("platform") ?? "macos"
+    );
 
-    if (cache && cache.days === days && cache.platform === platform && Date.now() - cache.timestamp < CACHE_TTL) {
+    if (
+      cache &&
+      cache.days === days &&
+      cache.platform === platform &&
+      Date.now() - cache.timestamp < CACHE_TTL
+    ) {
       return NextResponse.json({ data: cache.data, days });
     }
 
@@ -40,7 +52,7 @@ export async function GET(request: NextRequest) {
     const hogql = `
       SELECT
         toDate(timestamp) as day,
-        count(DISTINCT distinct_id) as users
+        count(DISTINCT COALESCE(person_id, distinct_id)) as users
       FROM events
       WHERE timestamp >= now() - interval ${days} day
         ${scopeFilterAnd(platform)}
@@ -49,7 +61,7 @@ export async function GET(request: NextRequest) {
     `;
 
     const rollingHogql = `
-      SELECT count(DISTINCT distinct_id) as users
+      SELECT count(DISTINCT COALESCE(person_id, distinct_id)) as users
       FROM events
       WHERE timestamp >= now() - interval 24 hour
         ${scopeFilterAnd(platform)}
@@ -79,7 +91,9 @@ export async function GET(request: NextRequest) {
     fromDate.setDate(fromDate.getDate() - days);
 
     const formatDate = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`;
 
     const data: { date: string; dau: number }[] = [];
     const current = new Date(fromDate);

@@ -87,7 +87,7 @@ def test_candidate_router_publishes_complete_lifecycle_openapi(candidate_router_
     assert len(task_union['oneOf']) == 5
     assert len(spec['components']['schemas']['CandidateRecord']['oneOf']) == 6
     workflow_control_schema = spec['components']['schemas']['TaskWorkflowControl']
-    assert 'chat_first_ui' in workflow_control_schema['properties']
+    assert 'chat_first_ui' not in workflow_control_schema['properties']
     assert 'chat_first_ui_enabled' not in workflow_control_schema['properties']
 
 
@@ -132,7 +132,6 @@ def test_candidate_workflow_control_ignores_retired_memory_env(
     assert response.json() == {
         'workflow_mode': 'read',
         'account_generation': 8,
-        'chat_first_ui': True,
     }
 
 
@@ -148,7 +147,6 @@ def test_candidate_workflow_control_fails_closed_when_the_selector_raises(monkey
     response = _workflow_control_client().get('/v1/candidates/control')
 
     assert response.status_code == 200
-    assert response.json()['chat_first_ui'] is False
     assert response.json()['workflow_mode'] == 'off'
     assert 'chat_first_ui_enabled' not in response.json()
 
@@ -170,7 +168,6 @@ def test_candidate_workflow_control_fails_closed_when_control_lookup_raises(monk
     assert response.json() == {
         'workflow_mode': 'off',
         'account_generation': 0,
-        'chat_first_ui': False,
     }
 
 
@@ -206,7 +203,6 @@ def test_candidate_workflow_control_ignores_a_missing_legacy_ui_flag(monkeypatch
     response = _workflow_control_client().get('/v1/candidates/control')
 
     assert response.status_code == 200
-    assert response.json()['chat_first_ui'] is True
     assert 'chat_first_ui_enabled' not in response.json()
 
 
@@ -222,7 +218,6 @@ def test_candidate_workflow_control_is_universal_for_arbitrary_users(monkeypatch
     assert response.json() == {
         'workflow_mode': 'read',
         'account_generation': 8,
-        'chat_first_ui': True,
     }
 
 

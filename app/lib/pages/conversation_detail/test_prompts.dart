@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/ui/ui.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -26,20 +27,14 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         title: Text(context.l10n.testConversationPrompt),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         actions: [
           IconButton(
             onPressed: onTap,
-            icon: loading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
-                  )
-                : const Icon(Icons.send),
+            icon: loading ? const SizedBox(width: 16, height: 16, child: OmiSpinner()) : const Icon(Icons.send),
           ),
         ],
       ),
@@ -66,7 +61,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
               ? const SizedBox.shrink()
               : Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(context.l10n.result, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                  child: Text(context.l10n.result, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
                 ),
           result == ''
               ? const SizedBox.shrink()

@@ -6,6 +6,8 @@ description: >
   private-data permissions, prove activation/relaunch stays quiet, then walk Goal → Tasks.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+History.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingScreenDemoFooter.swift
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationFirstUsePopupActions.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/ThreeDoorsDemoPage.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift

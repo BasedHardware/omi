@@ -1,17 +1,22 @@
+import hashlib
 import os
 import re
-from typing import Mapping, Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
+from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import should_route_features_through_gateway
+from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
 
 logger = logging.getLogger(__name__)
 
 Record = Mapping[str, object]
-
 
 # ---------------------------------------------------------------------------
 # Step 1: Relevance Gate — is this conversation worth evaluating?
@@ -41,7 +46,7 @@ class RelevanceResult(BaseModel):
     context_summary: str = Field(description="Brief summary of what user is discussing (1 sentence).")
 
 
-GATE_PROMPT = """You decide whether {user_name}'s current conversation contains something worth interrupting them about.
+GATE_PROMPT_STABLE = """You decide whether {user_name}'s current conversation contains something worth interrupting them about.
 
 Today is {current_date}. Treat this as the present when judging whether anything is upcoming, time-sensitive, or in the future. Dates in {current_date}'s year or later are normal and current; never decide a correctly stated date is wrong or in the future based on your own assumptions about the year.
 
@@ -67,11 +72,22 @@ IMPORTANT: Most conversations do NOT warrant a notification. Your default answer
 == {user_name}'S GOALS ==
 {goals_text}
 
-== CURRENT CONVERSATION ==
+"""
+
+# Everything after the goals block changes on every single gate call, so it must
+# live after the cache breakpoint. Splitting here is what makes the prefix above
+# readable at all: see utils/llm/prompt_cache.
+GATE_PROMPT_VOLATILE = """== CURRENT CONVERSATION ==
 {current_conversation}
 
 == RECENT NOTIFICATIONS (do not flag similar topics) ==
 {recent_notifications}"""
+
+# GATE_PROMPT is the concatenation of the two blocks above and is kept as the
+# single-string form the eval suites render. Production sends the two blocks as
+# separate content parts so the stable one can end on a cache breakpoint; the
+# bytes the model reads are identical either way.
+GATE_PROMPT = GATE_PROMPT_STABLE + GATE_PROMPT_VOLATILE
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +203,7 @@ APPROVE only if ALL of these are true:
 _BCP47_LANGUAGE_RE = re.compile(r'[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*')
 
 
-def _language_instruction(output_language: str, *, for_critic: bool = False) -> str:
+def language_instruction(output_language: str, *, for_critic: bool = False) -> str:
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
 
@@ -301,7 +317,7 @@ def _str_value(value: object, default: str = "") -> str:
     return default
 
 
-def _format_goals(goals: list[Record]) -> str:
+def format_goals(goals: Sequence[Record]) -> str:
     if not goals:
         return "No active goals set."
     lines: list[str] = []
@@ -315,7 +331,7 @@ def _format_goals(goals: list[Record]) -> str:
     return "\n".join(lines)
 
 
-def _format_current_conversation(messages: list[Record], user_name: str) -> str:
+def format_current_conversation(messages: Sequence[Record], user_name: str) -> str:
     if not messages:
         return "No conversation in progress."
     lines: list[str] = []
@@ -325,7 +341,7 @@ def _format_current_conversation(messages: list[Record], user_name: str) -> str:
     return "\n".join(lines)
 
 
-def _format_recent_notifications(notifications: list[Record]) -> str:
+def format_recent_notifications(notifications: Sequence[Record]) -> str:
     if not notifications:
         return "No recent notifications sent."
     lines: list[str] = []
@@ -341,6 +357,54 @@ def _format_recent_notifications(notifications: list[Record]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def gate_cache_supported() -> bool:
+    """True only when the gate request reaches a model on the explicit-cache contract.
+
+    That contract (``prompt_cache_options`` plus a ``prompt_cache_breakpoint``
+    content part) is the GPT-5.6 request shape, and gpt-x-luna keeps it. A BYOK
+    user's key can reroute this feature to another provider entirely, and a
+    non-gateway deployment resolves the route from the QoS profile, so both are
+    checked before a provider-specific field is put on the wire.
+    """
+    if has_byok_keys():
+        return False
+    if should_route_features_through_gateway():
+        # generated_route_overrides.yaml pins the proactive_notification lane to
+        # openai/gpt-x-luna.
+        return True
+    model, provider = get_model_config('proactive_notification')
+    return provider == 'openai' and uses_explicit_cache_and_chat_sanitizer(model)
+
+
+def gate_cache_enabled() -> bool:
+    return gate_cache_supported()
+
+
+def gate_cache_key(uid: str) -> str:
+    """Per-user routing key for the gate prefix.
+
+    Hashed rather than raw: the key is sent to the provider and only has to be
+    stable per user, not identifying. Versioned so a future prompt edit cannot
+    collide with prefixes written by the previous wording.
+    """
+    return f'omi-mentor-gate-v1-{hashlib.sha256(uid.encode("utf-8")).hexdigest()[:32]}'
+
+
+def build_gate_messages(stable: str, volatile: str, *, cache_enabled: bool) -> list[BaseMessage]:
+    """One user message whose stable half ends on an explicit cache breakpoint.
+
+    Two content parts of one message rather than two messages: the model reads
+    exactly the concatenated text it read before this change, while the provider
+    gains the boundary it needs to serve a read. Without the breakpoint the whole
+    prompt is one unbroken block, which is why this feature reports zero cached
+    tokens today (see utils/llm/prompt_cache).
+    """
+    stable_part: dict[str, Any] = {'type': 'text', 'text': stable}
+    if cache_enabled:
+        stable_part['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
+    return [HumanMessage(content=[stable_part, {'type': 'text', 'text': volatile}])]
+
+
 def evaluate_relevance(
     user_name: str,
     user_facts: str,
@@ -348,23 +412,40 @@ def evaluate_relevance(
     current_messages: list[Record],
     recent_notifications: list[Record],
     current_date: Optional[str] = None,
+    uid: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
+    resolved_date = current_date or current_date_in_tz(None)
 
-    prompt = GATE_PROMPT.format(
+    stable = GATE_PROMPT_STABLE.format(
         user_name=user_name,
         user_facts=user_facts,
         goals_text=goals_text,
+        current_date=resolved_date,
+    )
+    volatile = GATE_PROMPT_VOLATILE.format(
         current_conversation=current_conversation,
         recent_notifications=notifications_text,
-        current_date=current_date or current_date_in_tz(None),
     )
 
-    with_parser = get_llm('proactive_notification').with_structured_output(RelevanceResult)
-    result = cast(RelevanceResult, with_parser.invoke(prompt))
+    # A prefix under the provider's floor is never served back, so marking it
+    # would buy a cache write nobody can read — strictly worse than plain input.
+    cache_enabled = bool(uid) and has_cacheable_prefix(stable) and gate_cache_enabled()
+    messages = build_gate_messages(stable, volatile, cache_enabled=cache_enabled)
+
+    # Bind cache options AFTER with_structured_output. Binding first via
+    # get_llm(..., prompt_cache_options=...) is a silent no-op: RunnableBinding
+    # has no with_structured_output, so the lookup forwards to the unbound model
+    # and prompt_cache_options never reach the wire. That drop is why a split
+    # prefix still recorded zero cached tokens (see prompt_cache.bind_explicit_cache).
+    llm = get_llm('proactive_notification')
+    with_parser: Any = llm.with_structured_output(RelevanceResult)
+    if cache_enabled and uid:
+        with_parser = bind_explicit_cache(with_parser, cache_key=gate_cache_key(uid))
+    result = cast(RelevanceResult, with_parser.invoke(messages))
     return result
 
 
@@ -386,9 +467,9 @@ def generate_notification(
     current_date: Optional[str] = None,
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = GENERATE_PROMPT.format(
@@ -402,7 +483,7 @@ def generate_notification(
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
-        language_instruction=_language_instruction(output_language),
+        language_instruction=language_instruction(output_language),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -426,8 +507,8 @@ def validate_notification(
     current_date: Optional[str] = None,
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    goals_text = _format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    goals_text = format_goals(goals)
 
     prompt = CRITIC_PROMPT.format(
         user_name=user_name,
@@ -435,7 +516,7 @@ def validate_notification(
         draft_reasoning=draft_reasoning,
         current_conversation=current_conversation,
         goals_text=goals_text,
-        language_instruction=_language_instruction(output_language, for_critic=True),
+        language_instruction=language_instruction(output_language, for_critic=True),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -528,9 +609,9 @@ def evaluate_proactive_notification(
     current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = PROACTIVE_PROMPT_TEMPLATE.format(

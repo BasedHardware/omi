@@ -1,0 +1,11 @@
+# Historical bad input from repair PR #9986.
+name: deploy env historical failure
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: backend
+          env_vars: |-
+            STT_PRERECORDED_MODEL=parakeet,modulate-velma-2

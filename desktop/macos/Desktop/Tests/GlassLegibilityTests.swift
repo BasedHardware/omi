@@ -135,6 +135,11 @@ final class GlassLegibilityTests: XCTestCase {
     // was `#FFFFFF`: on the light panel every switch in Settings was a white track on a white
     // ground under a white knob, i.e. identical to "off" and to nothing at all.
     XCTAssertNotEqual(on, off, "The on and off tracks must not resolve to the same colour.")
+    // On-state is neutral ink, like every other selection on glass; the accent is reserved for the
+    // one actionable link on a surface, and a page of blue switches spent it on state.
+    XCTAssertNotEqual(on, Ink.accent, "The on track must be neutral ink, not the accent.")
+    XCTAssertGreaterThanOrEqual(
+      contrast(on, on: off), 3.0, "On and off must differ by luminance, not only by hue.")
 
     let knob = OmiToggleStyle.knobFill
     for (state, track) in [("on", on), ("off", off)] {
@@ -153,6 +158,38 @@ final class GlassLegibilityTests: XCTestCase {
       contrastOnGlass(off), 1.1,
       "The off track vanishes into the glass; it needs more weight than a row wash."
     )
+  }
+
+  // MARK: - Settings selection
+
+  func testSettingsSelectionIsNeutralAndStillReadsAsSelected() {
+    let selected = SettingsSelection.rowFill(isSelected: true, isHovering: false)
+    let selectedHovered = SettingsSelection.rowFill(isSelected: true, isHovering: true)
+    let hovered = SettingsSelection.rowFill(isSelected: false, isHovering: true)
+
+    // The sidebar marks its current page the way the top bar marks its current tab.
+    XCTAssertEqual(selected, GlassShell.pillFill(isSelected: true, isHovering: false))
+    XCTAssertEqual(selectedHovered, selected, "Selected outranks hover.")
+    XCTAssertNotEqual(selected, hovered, "A selected row must not look merely hovered.")
+    XCTAssertNotEqual(selected, Ink.accent)
+    XCTAssertEqual(SettingsSelection.rowWeight(isSelected: true), .medium)
+    XCTAssertEqual(SettingsSelection.rowWeight(isSelected: false), .regular)
+
+    // The label stays readable on the selected wash — the old blue slab needed an inverted label.
+    XCTAssertGreaterThanOrEqual(contrast(Ink.primary, on: selected), 4.5)
+    XCTAssertGreaterThanOrEqual(contrast(SettingsSelection.rowIcon(isSelected: true), on: selected), 3.0)
+
+    // An option's chosen state is carried by an outline you can see, not by a colour.
+    let chosenStroke = SettingsSelection.optionStroke(isSelected: true)
+    XCTAssertNotEqual(chosenStroke, Ink.accent)
+    XCTAssertGreaterThanOrEqual(
+      contrast(chosenStroke, on: SettingsSelection.optionFill(isSelected: true)), 3.0)
+    XCTAssertNotEqual(
+      SettingsSelection.optionFill(isSelected: true), SettingsSelection.optionFill(isSelected: false))
+    XCTAssertGreaterThanOrEqual(contrastOnGlass(SettingsSelection.optionMark(isSelected: true)), 4.5)
+
+    // Sliders draw their value in the switch's on-ink.
+    XCTAssertEqual(SettingsSelection.valueFill, OmiToggleStyle.trackFill(isOn: true))
   }
 
   // MARK: - The washes the converted screens were rebuilt on

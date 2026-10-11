@@ -63,6 +63,7 @@ def _set_e2e_env():
     """
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     os.environ["LOCAL_DEVELOPMENT"] = "true"
+    os.environ["OMI_ENV_STAGE"] = "offline"
     os.environ["ENCRYPTION_SECRET"] = "test-encryption-secret-for-e2e-testing-32chars!"
     os.environ["FIREBASE_PROJECT_ID"] = "test-e2e-project"
     os.environ["GOOGLE_CLOUD_PROJECT"] = "test-e2e-project"
@@ -175,6 +176,22 @@ def _guarded_create_connection(address, timeout=None, source_address=None, *args
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
     if host is not None and host not in _ALLOWED_NETWORK_HOSTS:
+        # RFC 6761 reserves the ".test" TLD so it can never resolve on the real
+        # DNS, which makes it the natural fixture domain for hermetic suites.
+        # Newer config-time validators (SSRF guards resolving webhook targets)
+        # need a successful public-class resolution, so answer reserved .test
+        # names with a deterministic public address instead of tripping the
+        # guard: nothing leaves the process because real connects stay guarded
+        # below. A real DNS lookup must never happen, and a non-.test host
+        # still fails exactly as before.
+        hostname = host.decode("idna") if isinstance(host, bytes) else host
+        if hostname.lower().endswith(".test") or hostname.lower() == "test":
+            # Mirror the shape and public-class answer the SSRF unit tests use
+            # (AF_INET, 8.8.8.8): deterministic on every runner, and the only
+            # address class the config-time validator accepts.
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+            ]
         raise AssertionError(f"Hermetic e2e blocked DNS lookup for {host!r}")
     return _original_getaddrinfo(host, port, *args, **kwargs)
 
@@ -382,6 +399,15 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
         clear_user_data(DEV_UID)
         fake_redis.flushall()
         clear_fake_storage()
+        # Listen admission is process-local; the fixed E2E uid must start with
+        # a fresh burst for each isolated test, just like the fake stores.
+        try:
+            from utils.listen_reconnect_budget import listen_reconnect_budget
+
+            with listen_reconnect_budget._lock:
+                listen_reconnect_budget._buckets.clear()
+        except Exception:
+            pass
         try:
             import utils.http_client as http_client
 

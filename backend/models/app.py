@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Literal, Mapping, Optional, Set
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +276,18 @@ class App(AppBaseModel):
         """
         return {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
 
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> Optional['App']:
+        """Build an App from a raw stored record, returning None if validation fails so one
+        malformed or legacy document cannot crash detail views with HTTP 500."""
+        if not data or not isinstance(data, dict):
+            return None
+        try:
+            return cls(**data)
+        except ValidationError:
+            logger.warning('Skipping malformed app doc %s: ValidationError', data.get('id'))
+            return None
+
 
 class AppCreate(BaseModel):
     id: str
@@ -308,9 +320,9 @@ class AppCreate(BaseModel):
 
 
 class AppUpdate(BaseModel):
+    # No `uid`: ownership is set at creation and an update must never move it.
     id: str
     name: Optional[str] = None
-    uid: Optional[str] = None
     private: Optional[bool] = None
     category: Optional[str] = None
     email: Optional[str] = None

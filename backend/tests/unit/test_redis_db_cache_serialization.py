@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -12,15 +13,18 @@ import database.redis_db as redis_db
 class _FakeRedis:
     def __init__(self) -> None:
         self._store: Dict[str, Any] = {}
+        self.set_calls: List[Dict[str, Any]] = []
+        self.expire_calls: List[tuple[str, int]] = []
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         self._store[key] = value
+        self.set_calls.append({'key': key, 'value': value, 'ex': ex})
 
     def get(self, key: str) -> Optional[Any]:
         return self._store.get(key)
 
     def expire(self, key: str, ttl: int) -> None:
-        return None
+        self.expire_calls.append((key, ttl))
 
     def mget(self, keys: List[str]) -> List[Optional[Any]]:
         return [self._store.get(key) for key in keys]
@@ -49,7 +53,11 @@ def test_money_made_json_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_reviews_json_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-1", "uid-a", {"rating": 5, "text": "great"})
+    # set_app_review_cache is a Lua script (see test_app_review_cache_race_live.py
+    # for its atomicity under concurrent writers) bound to the real Redis client at
+    # import time, so it can't run against this monkeypatched fake -- seed the store
+    # directly to exercise the read side instead.
+    fake_redis._store["plugins:app-1:reviews"] = json.dumps({"uid-a": {"rating": 5, "text": "great"}})
     assert redis_db.get_specific_user_review("app-1", "uid-a") == {"rating": 5, "text": "great"}
     assert redis_db.get_app_reviews("app-1") == {"uid-a": {"rating": 5, "text": "great"}}
 
@@ -96,11 +104,52 @@ def test_geolocation_legacy_literal_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-a", "uid-1", {"rating": 3})
-    redis_db.set_app_review_cache("app-b", "uid-2", {"rating": 5})
+    fake_redis._store["plugins:app-a:reviews"] = json.dumps({"uid-1": {"rating": 3}})
+    fake_redis._store["plugins:app-b:reviews"] = json.dumps({"uid-2": {"rating": 5}})
     reviews = redis_db.get_apps_reviews(["app-a", "app-b", "app-missing"])
     assert reviews == {
         "app-a": {"uid-1": {"rating": 3}},
         "app-b": {"uid-2": {"rating": 5}},
         "app-missing": {},
     }
+
+
+class _MaxMemoryRedis(_FakeRedis):
+    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+
+
+def test_cache_user_geolocation_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_geolocation("uid-1", {"latitude": 37.77, "longitude": -122.42})
+
+
+def test_cache_user_name_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_name("uid-1", "Ada")
+
+
+def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.set_generic_cache("apps:marketplace", {"ok": True}, ttl=120)
+    assert fake_redis.expire_calls == []
+    assert len(fake_redis.set_calls) == 1
+    assert fake_redis.set_calls[0]['ex'] == 120
+    assert redis_db.get_generic_cache("apps:marketplace") == {"ok": True}
+
+
+def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.set_generic_cache("apps:no-ttl", {"ok": True})
+    assert fake_redis.set_calls[0]['ex'] is None
+    assert fake_redis.expire_calls == []
+
+
+def test_cache_set_fail_open_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.cache_user_name("uid-1", "Ada", ttl=3600)
+    assert fake_redis.expire_calls == []
+    assert fake_redis.set_calls == [{'key': 'users:uid-1:name', 'value': 'Ada', 'ex': 3600}]
+
+
+def test_cache_signed_url_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.cache_signed_url("path/a.wav", "https://example.test/a", ttl=60)
+    assert fake_redis.expire_calls == []
+    assert fake_redis.set_calls == [{'key': 'urls:path/a.wav', 'value': 'https://example.test/a', 'ex': 59}]

@@ -1,0 +1,16 @@
+{
+  "id": "mobile-conversation-actions",
+  "kind": "question",
+  "owner": "Mobile product",
+  "question": "Which conversation actions do people use, and from which surface (top bar, overflow menu, page body, row long-press, row swipe)? Counts are taps on the action, not completed outcomes.",
+  "query": "contracts/analytics/consumers/mobile-conversation-actions.sql",
+  "events": [
+    "conversationAction"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "No rows means nobody used a conversation action in this namespace/build; do not infer an instrumentation failure without conversation-page traffic."
+}

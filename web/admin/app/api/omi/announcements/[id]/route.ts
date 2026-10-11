@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const res = await fetch(`${OMI_API_URL}/v1/announcements/${params.id}`, {
+    const res = await fetch(`${OMI_API_URL}/v1/announcements/${encodeURIComponent(params.id)}`, {
       headers: {
         'secret-key': OMI_SECRET_KEY!,
       },
@@ -42,7 +42,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
   try {
     const body = await request.json();
 
-    const res = await fetch(`${OMI_API_URL}/v1/announcements/${params.id}`, {
+    const res = await fetch(`${OMI_API_URL}/v1/announcements/${encodeURIComponent(params.id)}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -75,7 +75,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     const hardDelete = url.searchParams.get('hard') === 'true';
 
     const res = await fetch(
-      `${OMI_API_URL}/v1/announcements/${params.id}?soft_delete=${!hardDelete}`,
+      `${OMI_API_URL}/v1/announcements/${encodeURIComponent(params.id)}?soft_delete=${!hardDelete}`,
       {
         method: 'DELETE',
         headers: {

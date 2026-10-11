@@ -222,6 +222,11 @@ final class WALService: ObservableObject {
   private var flushTimer: Timer?
   private var chunkTimer: Timer?
 
+  #if DEBUG
+    var debugChunkTimer: Timer? { chunkTimer }
+    var debugFlushTimer: Timer? { flushTimer }
+  #endif
+
   // Active capture and frozen persistence batches have separate immutable
   // identities so a failed device-A write can never absorb device-B frames.
   private var activeFrameBuffer: ActiveFrameBuffer?
@@ -579,6 +584,16 @@ final class WALService: ObservableObject {
     chunkTimer = nil
     flushTimer?.invalidate()
     flushTimer = nil
+  }
+
+  deinit {
+    // `Timer.scheduledTimer` retains itself on the current run loop. Releasing
+    // a service that is still recording (tests, or a forgotten stopRecording)
+    // would otherwise leave repeating default-mode sources that end later
+    // `RunLoop.main.run(mode:before:)` drains before queued main-async work.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { stopTimers() }
+    }
   }
 
   private func checkAndChunk() {

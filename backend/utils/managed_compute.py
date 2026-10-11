@@ -9,6 +9,11 @@ known feature keeps paid-path quotas so a Firestore blip cannot strip a paid
 user. Unknown features still deny. Every other dependency error denies with
 ``authorization_unavailable``.
 
+Every terminal ``Decision`` from ``authorize_managed_compute`` emits one INFO line,
+``managed_compute_decision``, including allows. That line is uid-less: no shared
+pseudonym helper is in scope here, and the plan fields are what a deny histogram
+needs. Exception paths keep their existing WARNINGs; the decision line stays INFO.
+
 The free allowlist is this module's frozenset plus the ``chat_`` prefix rule.
 Plan identity comes from ``users_db.get_user_valid_subscription`` and
 ``config.plan_catalog.PAID_PLAN_TYPES``; an unrecognized or malformed plan
@@ -31,10 +36,17 @@ from typing import Any
 import database.users as users_db
 from config.plan_catalog import PAID_PLAN_TYPES, PlanType, WIRE_PLAN_ALIASES
 from utils.byok import get_byok_key, has_validated_byok_keys
-from utils.llm.model_config import get_all_configured_features, get_provider
+from utils.llm.model_config import get_all_configured_features, get_byok_provider, get_provider
 from utils.subscription import request_has_llm_byok_key
 
 logger = logging.getLogger(__name__)
+
+# No request-scoped correlation id is readable from this chokepoint. Callers
+# that have an HTTP request id do not pass it in, and there is no ContextVar
+# for one. Dashboards should treat ``none`` as "not attached", not as a join key.
+_UNAVAILABLE_REQUEST_ID = 'none'
+_LOG_FIELD_MAX = 80
+_LOG_FIELD_EXTRA = '_.:-'
 
 # Sentinel for "the caller did not pass one; read it" — distinct from None,
 # which is a real answer (no valid subscription / not enrolled).
@@ -139,15 +151,16 @@ def _decision(
 
 
 def request_carries_validated_byok_key(feature: str) -> bool:
-    """True when this request carries a validated key for the feature's provider.
+    """True when this request carries a validated key for the feature's selected provider.
 
     Reuses the existing helpers; does not re-implement fingerprint checks.
-    The provider key must actually be on the request so a validated OpenAI
-    header cannot fund a different provider's feature.
+    A feature can have a company-paid Luna route and retain a different
+    provider in its BYOK profile. Either exact feature provider may fund the
+    request; a key for an unrelated provider cannot.
     """
     if not has_validated_byok_keys():
         return False
-    if not get_byok_key(get_provider(feature)):
+    if not any(get_byok_key(provider) for provider in {get_provider(feature), get_byok_provider(feature)}):
         return False
     return request_has_llm_byok_key()
 
@@ -190,6 +203,35 @@ def _resolve_plan(uid: str, subscription: Any) -> tuple[PlanType, bool]:
     return plan, True
 
 
+def _log_field(value: object, *, default: str) -> str:
+    """One key=value token: no whitespace, so a bad feature name cannot split the line."""
+    if not isinstance(value, str) or not value:
+        return default
+    cleaned: list[str] = []
+    for char in value[:_LOG_FIELD_MAX]:
+        cleaned.append(char if char.isalnum() or char in _LOG_FIELD_EXTRA else '_')
+    text = ''.join(cleaned)
+    return text or default
+
+
+def _emit_managed_compute_decision(decision: Decision) -> None:
+    """One INFO line per terminal decision. A logging fault must not change the answer."""
+    try:
+        logger.info(
+            'managed_compute_decision request_id=%s feature=%s funding_owner=%s outcome=%s '
+            'reason=%s plan=%s plan_resolved=%s',
+            _UNAVAILABLE_REQUEST_ID,
+            _log_field(decision.feature, default='unknown'),
+            _log_field(decision.funding_owner, default='unknown'),
+            'allowed' if decision.allowed else 'denied',
+            _log_field(decision.reason, default='unknown'),
+            _log_field(decision.plan.value, default='none') if decision.plan is not None else 'none',
+            'true' if decision.plan_resolved else 'false',
+        )
+    except Exception:
+        return
+
+
 def authorize_managed_compute(
     uid: str | None,
     feature: str,
@@ -203,9 +245,12 @@ def authorize_managed_compute(
     ``subscription`` / ``byok_active`` let a caller that has already read the
     valid subscription (``None`` when there is none) and BYOK enrolment pass
     them in so this answer and the caller's snapshot come from the same reads.
+
+    Emits exactly one ``managed_compute_decision`` INFO line for the terminal
+    ``Decision`` (allow and deny). The uid is not logged.
     """
     try:
-        return _authorize(
+        decision = _authorize(
             uid,
             feature,
             funding_owner,
@@ -214,7 +259,7 @@ def authorize_managed_compute(
         )
     except Exception as exc:
         logger.warning('managed compute authorization unavailable: %s', type(exc).__name__)
-        return _decision(
+        decision = _decision(
             allowed=False,
             reason='authorization_unavailable',
             feature=feature,
@@ -222,6 +267,8 @@ def authorize_managed_compute(
             plan=None,
             plan_resolved=False,
         )
+    _emit_managed_compute_decision(decision)
+    return decision
 
 
 def _authorize(

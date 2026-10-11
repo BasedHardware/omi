@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, List, Optional
+from google.cloud import firestore
 from pydantic import BaseModel, Field
 from models.shared import StatusResponse
 import os
@@ -155,10 +156,35 @@ class TaskIntegrationData(BaseModel):
     list_name: Optional[str] = None
 
 
+CLEARABLE_SELECTION_FIELDS = (
+    'workspace_gid',
+    'workspace_name',
+    'project_gid',
+    'project_name',
+    'default_list_id',
+    'default_list_title',
+    'team_id',
+    'team_name',
+    'space_id',
+    'space_name',
+    'list_id',
+    'list_name',
+)
+
+
+class TaskIntegrationStatus(BaseModel):
+    """Non-secret projection safe for clients, support tooling, and OpenAPI."""
+
+    model_config = {'extra': 'forbid'}
+
+    app_key: str
+    connected: bool
+
+
 class TaskIntegrationsResponse(BaseModel):
     """Response containing all task integrations"""
 
-    integrations: Dict[str, Any] = Field(description="Map of app_key to connection details")
+    integrations: Dict[str, TaskIntegrationStatus] = Field(description="Map of app_key to non-secret status")
     default_app: Optional[str] = Field(description="Default task integration app key")
 
 
@@ -207,7 +233,12 @@ class ClickUpListsResponse(BaseModel):
 @router.get("/v1/task-integrations", response_model=TaskIntegrationsResponse, tags=['task-integrations'])
 def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
     """Get all task integration connections for the current user."""
-    integrations = users_db.get_task_integrations(uid)
+    stored_integrations = users_db.get_task_integrations(uid)
+    integrations = {
+        app_key: TaskIntegrationStatus(app_key=app_key, connected=bool(value.get('connected')))
+        for app_key, value in stored_integrations.items()
+        if isinstance(value, dict)
+    }
     default_app = users_db.get_default_task_integration(uid)
 
     return TaskIntegrationsResponse(integrations=integrations, default_app=default_app)
@@ -234,6 +265,9 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
+    for field in CLEARABLE_SELECTION_FIELDS:
+        if field in data.model_fields_set and getattr(data, field) is None:
+            integration_data[field] = firestore.DELETE_FIELD
 
     users_db.set_task_integration(uid, app_key, integration_data)
 
@@ -445,7 +479,8 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
+        logger.error(f"Error fetching workspaces: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana workspaces due to an internal error")
 
 
 @router.get(
@@ -468,26 +503,39 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
+        projects = []
+        params = {'workspace': workspace_gid, 'archived': 'false', 'opt_fields': 'name,gid,owner', 'limit': 100}
+        seen_offsets = set()
 
         async def _request(client, token):
             return await client.get(
-                f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
+                'https://app.asana.com/api/1.0/projects',
+                params=params,
                 headers={'Authorization': f'Bearer {token}'},
             )
 
-        response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
-        if err:
-            raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+        while True:
+            response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
+            if err:
+                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
 
-        if response.status_code == 200:
             result = response.json()
-            return {'projects': result.get('data', [])}
-        else:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
+            projects.extend(result.get('data', []))
+            next_page = result.get('next_page')
+            if not next_page:
+                return {'projects': projects}
+            offset = next_page.get('offset')
+            if not isinstance(offset, str) or not offset or offset in seen_offsets:
+                raise HTTPException(status_code=502, detail="Invalid Asana project pagination cursor")
+            seen_offsets.add(offset)
+            params['offset'] = offset
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
+        logger.error(f"Error fetching projects: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana projects due to an internal error")
 
 
 @router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
@@ -525,7 +573,8 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
+        logger.error(f"Error fetching teams: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp teams due to an internal error")
 
 
 @router.get(
@@ -565,7 +614,8 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
+        logger.error(f"Error fetching spaces: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp spaces due to an internal error")
 
 
 @router.get(
@@ -605,7 +655,8 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
+        logger.error(f"Error fetching lists: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp lists due to an internal error")
 
 
 # *****************************

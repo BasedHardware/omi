@@ -24,8 +24,8 @@ from utils.other import endpoints as auth
 from utils.client_device import resolve_client_device_from_request
 from utils.llm.clients import get_llm
 from utils.task_intelligence import recommendations
+from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 from utils.task_intelligence.live_recommendation_judgment import LiveRecommendationJudgment
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
 
@@ -43,13 +43,15 @@ def _raise_store_error(exc: Exception) -> NoReturn:
     if isinstance(exc, recommendation_db.AttributionChainNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attribution chain not found') from exc
     if isinstance(exc, recommendation_db.IdempotencyConflictError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Idempotency conflict detected.') from exc
     if isinstance(exc, recommendation_db.StaleSnapshotError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Stale snapshot state detected.') from exc
     if isinstance(exc, recommendation_db.RecommendationGenerationMismatchError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Recommendation generation mismatch.') from exc
     if isinstance(exc, recommendations.SnapshotValidationError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Snapshot validation failed.'
+        ) from exc
     raise exc
 
 

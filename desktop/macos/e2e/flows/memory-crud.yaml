@@ -18,7 +18,7 @@ steps:
       target: memories
       activateApp: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S2
     name: Baseline memories snapshot

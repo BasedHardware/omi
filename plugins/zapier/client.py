@@ -2,9 +2,15 @@ import os
 
 import requests
 
+from typing import Any
+
 from models import ExternalIntegrationCreateConversation, Conversation
 
-from .models import ZapierCreateConversation
+# Fallback to direct package import when running outside parent package context (e.g. test harness)
+try:
+    from .models import ZapierCreateConversation
+except (ImportError, ValueError):
+    from zapier.models import ZapierCreateConversation
 
 # """
 #    Models
@@ -21,12 +27,12 @@ class ZapierDatabasePropertyModel:
         self.id = id
         self.name = name
         self.property_type = property_type
-        pass
 
     @classmethod
     def from_dict(cls, data: dict) -> "ZapierDatabasePropertyModel":
-        model = cls(data["id"], data["name"], data["type"])
-        return model
+        if not isinstance(data, dict):
+            return cls("", "", "")
+        return cls(data.get("id", ""), data.get("name", ""), data.get("type", ""))
 
 
 class ZapierDatabaseModel:
@@ -35,27 +41,38 @@ class ZapierDatabaseModel:
     ) -> None:
         self.id = ""
         self.properties = []
-        pass
 
     @classmethod
     def from_dict(cls, data: dict) -> "ZapierDatabaseModel":
         model = cls()
-        model.id = data["id"]
+        if not isinstance(data, dict):
+            return model
+        model.id = data.get("id", "")
 
         # properties
-        properties: [ZapierDatabasePropertyModel] = []
-        if data["properties"] is not None:
-            for prop in data["properties"].values():
-                properties.append(ZapierDatabasePropertyModel.from_dict(prop))
+        properties: list[ZapierDatabasePropertyModel] = []
+        raw_props = data.get("properties")
+        if isinstance(raw_props, dict):
+            for prop in raw_props.values():
+                if isinstance(prop, dict):
+                    properties.append(ZapierDatabasePropertyModel.from_dict(prop))
+        elif isinstance(raw_props, list):
+            for prop in raw_props:
+                if isinstance(prop, dict):
+                    properties.append(ZapierDatabasePropertyModel.from_dict(prop))
         model.properties = properties
 
         return model
 
     @classmethod
-    def multi_from_dict(cls, data: dict) -> "[ZapierDatabaseModel]":
+    def multi_from_dict(cls, data: Any) -> list["ZapierDatabaseModel"]:
         model = []
-        for item in data:
-            model.append(ZapierDatabaseModel.from_dict(item))
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    model.append(ZapierDatabaseModel.from_dict(item))
+        elif isinstance(data, dict):
+            model.append(ZapierDatabaseModel.from_dict(data))
 
         return model
 
@@ -65,18 +82,20 @@ class ZapierOAuthModel:
         self,
     ) -> None:
         self.access_token = ""
-        pass
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ZapierDatabaseModel":
+    def from_dict(cls, data: dict) -> "ZapierOAuthModel":
         model = cls()
-        model.access_token = data["access_token"]
+        if isinstance(data, dict):
+            model.access_token = data.get("access_token", "")
         return model
 
 
 # """
 #    Client
 # """
+
+DEFAULT_TIMEOUT = 10.0
 
 
 class ZapierClient:
@@ -88,29 +107,30 @@ class ZapierClient:
 
     def __init__(
         self,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
-        pass
+        self.timeout = timeout
 
     def send_hook_conversation_created(self, target_url: str, conversation: ZapierCreateConversation):
-        resp: requests.Response
+        resp: requests.Response | None = None
         err = None
         try:
+            payload = (
+                conversation.model_dump(mode="json")
+                if hasattr(conversation, "model_dump")
+                else conversation.dict()
+                if hasattr(conversation, "dict")
+                else conversation
+            )
             resp = requests.post(
                 target_url,
-                json=conversation.model_dump(mode="json"),
+                json=payload,
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
+                timeout=self.timeout,
             )
-        except requests.exceptions.HTTPError:
-            resp_text = f"{resp}"
-            err = {
-                "error": {
-                    "status": resp.status_code,
-                    "message": resp_text,
-                },
-            }
         except requests.exceptions.Timeout:
             err = {
                 "error": {
@@ -126,22 +146,22 @@ class ZapierClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
-        if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+
+        if err is None and resp is not None and not (200 <= resp.status_code < 300):
+            resp_text = getattr(resp, "text", "") or f"{resp}"
             err = {
                 "error": {
                     "status": resp.status_code,
                     "message": resp_text,
                 },
             }
+
         if err is not None:
             print(err)
             return err
-
-        print(resp)
 
         return {"result": "{}"}
 
@@ -155,37 +175,38 @@ class OmiClient:
 
     def __init__(
         self,
-        base_url,
-        zapier_app_id,
-        zapier_app_sk,
+        base_url: str | None = None,
+        zapier_app_id: str | None = None,
+        zapier_app_sk: str | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
-        self.base_url = base_url
-        self.zapier_app_id = zapier_app_id
-        self.zapier_app_sk = zapier_app_sk
-        pass
+        self.base_url = (base_url or "").rstrip("/")
+        self.zapier_app_id = zapier_app_id or ""
+        self.zapier_app_sk = zapier_app_sk or ""
+        self.timeout = timeout
 
     def create_conversation(self, conversation: ExternalIntegrationCreateConversation, uid: str):
-        resp: requests.Response
+        resp: requests.Response | None = None
         err = None
         url = f"{self.base_url}/v2/integrations/{self.zapier_app_id}/user/conversations?uid={uid}"
         try:
+            payload = (
+                conversation.model_dump(mode="json")
+                if hasattr(conversation, "model_dump")
+                else conversation.dict()
+                if hasattr(conversation, "dict")
+                else conversation
+            )
             resp = requests.post(
                 url,
-                json=conversation.model_dump(mode="json"),
+                json=payload,
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                     "Authorization": f"Bearer {self.zapier_app_sk}",
                 },
+                timeout=self.timeout,
             )
-        except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
-            err = {
-                "error": {
-                    "status": resp.status_code,
-                    "message": resp_text,
-                },
-            }
         except requests.exceptions.Timeout:
             err = {
                 "error": {
@@ -201,27 +222,27 @@ class OmiClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
-        if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+
+        if err is None and resp is not None and not (200 <= resp.status_code < 300):
+            resp_text = getattr(resp, "text", "") or f"HTTP_{resp.status_code}"
             err = {
                 "error": {
                     "status": resp.status_code,
                     "message": resp_text,
                 },
             }
+
         if err is not None:
             print(err)
             return err
 
-        print(resp)
-
         return {"result": "{}"}
 
     def get_latest_conversation(self, uid: str):
-        resp: requests.Response
+        resp: requests.Response | None = None
         err = None
         url = f"{self.base_url}/v2/integrations/{self.zapier_app_id}/conversations?uid={uid}&limit=1"
         try:
@@ -232,15 +253,8 @@ class OmiClient:
                     "Accept": "application/json",
                     "Authorization": f"Bearer {self.zapier_app_sk}",
                 },
+                timeout=self.timeout,
             )
-        except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
-            err = {
-                "error": {
-                    "status": resp.status_code,
-                    "message": resp_text,
-                },
-            }
         except requests.exceptions.Timeout:
             err = {
                 "error": {
@@ -256,28 +270,53 @@ class OmiClient:
         except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
-        if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+
+        if err is None and resp is not None and not (200 <= resp.status_code < 300):
+            resp_text = getattr(resp, "text", "") or f"HTTP_{resp.status_code}"
             err = {
                 "error": {
                     "status": resp.status_code,
                     "message": resp_text,
                 },
             }
+
         if err is not None:
             print(err)
             return err
 
-        print(resp)
+        if resp is None:
+            return {"result": None}
 
         # view
-        resp_json = resp.json()
-        if len(resp_json) > 0:
+        try:
+            resp_json = resp.json()
+        except Exception:
+            return {"result": None}
+
+        if isinstance(resp_json, list) and len(resp_json) > 0:
             latest_conversation_json = resp_json[0]
-            return {"result": Conversation(**latest_conversation_json)}
+            if isinstance(latest_conversation_json, dict):
+                try:
+                    return {"result": Conversation(**latest_conversation_json)}
+                except Exception:
+                    return {"result": None}
+        elif isinstance(resp_json, dict):
+            items = resp_json.get("conversations") or resp_json.get("items")
+            if isinstance(items, list) and len(items) > 0:
+                first = items[0]
+                if isinstance(first, dict):
+                    try:
+                        return {"result": Conversation(**first)}
+                    except Exception:
+                        return {"result": None}
+            elif "id" in resp_json or "created_at" in resp_json:
+                try:
+                    return {"result": Conversation(**resp_json)}
+                except Exception:
+                    return {"result": None}
 
         return {"result": None}
 

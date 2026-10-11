@@ -7,7 +7,7 @@ void main() {
 
   test('Chinese onboarding copy uses natural product language', () {
     expect(l10n.omiYourAiCompanion, 'Omi – 您的 AI 助手');
-    expect(l10n.captureEveryMoment, '记录每个瞬间，AI 为您生成摘要。');
+    expect(l10n.captureEveryMoment, 'Omi 会记录您的对话，\n并为您生成摘要和待办事项。');
     expect(l10n.speakTranscribeSummarize, '开口说，自动转写，智能总结。');
   });
 
@@ -23,7 +23,6 @@ void main() {
     expect(l10n.pinAsBaseline, '设为基准记忆');
     expect(l10n.unpinAsBaseline, '取消基准记忆');
     expect(l10n.baselineMemory, '基准记忆');
-    expect(l10n.alwaysInContext, '始终包含在上下文中');
   });
 
   test('Chinese feedback copy is consistent and interpolates dates', () {

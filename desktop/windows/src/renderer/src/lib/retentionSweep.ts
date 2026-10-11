@@ -1,4 +1,5 @@
 import { omiApi } from './apiClient'
+import { cloudConversationDeletePath } from './conversations/cloudConversationDelete'
 import { fetchAllMemories, deleteMemoriesPaced } from './memoriesBulk'
 import { planRetention, memoryJunkBreakdown, type SweepConvo } from './retentionRules'
 import { invalidateConversationsCache } from './pageCache'
@@ -51,7 +52,7 @@ async function deleteConvosPaced(localIds: string[], cloudIds: string[]): Promis
   }
   for (const id of cloudIds) {
     try {
-      await omiApi.delete(`/v1/conversations/${id}`)
+      await omiApi.delete(cloudConversationDeletePath(id))
       n++
     } catch (e) {
       console.warn('[retention] cloud convo delete failed:', id, (e as Error).message)

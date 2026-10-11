@@ -18,15 +18,7 @@ struct ClaudeAuthSheet: View {
 
         Spacer()
 
-        Button(action: onCancel) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(Ink.rowFillHover)
-            .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: onCancel)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.xl)
@@ -49,7 +41,7 @@ struct ClaudeAuthSheet: View {
             .foregroundColor(Ink.primary)
             .multilineTextAlignment(.center)
 
-          Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
+          Text("Your browser will open to the Omi Pro checkout. After subscribing, return to Omi.")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
@@ -62,7 +54,7 @@ struct ClaudeAuthSheet: View {
             ProgressView()
               .controlSize(.small)
 
-            Text("Complete sign-in in your browser...")
+            Text("Complete sign-in in your browser…")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }
@@ -85,7 +77,7 @@ struct ClaudeAuthSheet: View {
               ProgressView()
                 .controlSize(.mini)
             }
-            Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
+            Text(isConnecting ? "Opening checkout…" : "Upgrade to Omi Pro")
               .scaledFont(size: OmiType.body, weight: .semibold)
           }
           .frame(maxWidth: .infinity)

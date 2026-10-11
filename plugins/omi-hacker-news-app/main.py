@@ -7,10 +7,10 @@ and fetching an item with top-level comments.
 
 from html import unescape
 import re
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -39,19 +39,40 @@ def _clean_text(value: Optional[str]) -> str:
     if not value:
         return ""
 
-    text = unescape(value)
-    text = re.sub(r"</?(p|pre|blockquote|ul|ol|li)[^>]*>", "\n", text, flags=re.IGNORECASE)
+    # Strip actual provider markup before decoding entities. Decoding first turns
+    # escaped literal text such as &lt;vector&gt; into apparent tags and deletes it.
+    text = re.sub(r"</?(p|pre|blockquote|ul|ol|li)[^>]*>", "\n", value, flags=re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<code[^>]*>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"</code>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
+    text = unescape(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
+def _safe_payload(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _safe_text(value: Any) -> str:
+    """Return stripped text for string input and "" for every other type.
+
+    Tool arguments arrive as a flat JSON object, so a field declared as a
+    string can still carry a number, list or object.  Returning "" lets the
+    handler answer with its own validation error instead of raising
+    AttributeError, which surfaces as HTTP 500.
+    """
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
 def _safe_limit(limit: Any) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return 10
     try:
         limit = int(limit)
@@ -73,14 +94,18 @@ def _format_story(hit: dict[str, Any], index: int) -> str:
     points = hit.get("points") or 0
     comments = hit.get("num_comments") or 0
     object_id = hit.get("objectID") or hit.get("story_id")
-    url = hit.get("url") or hit.get("story_url") or f"https://news.ycombinator.com/item?id={object_id}"
+    hn_url = f"https://news.ycombinator.com/item?id={object_id}" if object_id else "https://news.ycombinator.com"
+    url = hit.get("url") or hit.get("story_url") or hn_url
 
-    return (
-        f"{index}. {title}\n"
-        f"   by {author} | {points} points | {comments} comments\n"
-        f"   {url}\n"
-        f"   HN: https://news.ycombinator.com/item?id={object_id}"
-    )
+    lines = [
+        f"{index}. {title}",
+        f"   by {author} | {points} points | {comments} comments",
+        f"   {url}"
+    ]
+    if object_id:
+        lines.append(f"   HN: {hn_url}")
+
+    return "\n".join(lines)
 
 
 @app.get("/")
@@ -180,7 +205,8 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/get_front_page", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_front_page(payload: dict[str, Any]):
+async def get_front_page(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
     try:
         limit = _safe_limit(payload.get("limit"))
         data = await _request_json("/search", {"tags": "front_page", "hitsPerPage": limit})
@@ -196,8 +222,9 @@ async def get_front_page(payload: dict[str, Any]):
 
 
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_stories(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
+async def search_stories(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
+    query = _safe_text(payload.get("query"))
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
@@ -218,20 +245,38 @@ async def search_stories(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_discussion", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_discussion(payload: dict[str, Any]):
+async def get_discussion(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
     item_id = payload.get("item_id")
-    if item_id is None:
+    if item_id is None or item_id == "" or isinstance(item_id, bool):
         return ChatToolResponse(error="Missing required field: item_id")
 
     try:
+        item_id_int = int(item_id)
+        if item_id_int <= 0:
+            return ChatToolResponse(error="item_id must be a positive integer")
         comment_limit = _safe_limit(payload.get("comment_limit"))
-        item = await _request_json(f"/items/{int(item_id)}")
+        item = _safe_payload(await _request_json(f"/items/{item_id_int}"))
 
         title = item.get("title") or "(untitled)"
         author = item.get("author") or "unknown"
         points = item.get("points") or 0
         url = item.get("url") or f"https://news.ycombinator.com/item?id={item_id}"
-        comments = item.get("children", [])[:comment_limit]
+        # Deleted and dead children come back with a null or blank text. Drop
+        # them before slicing so comment_limit counts comments that are
+        # actually rendered, and the header and numbering match what follows.
+        raw_children = item.get("children")
+        children = raw_children if isinstance(raw_children, list) else []
+        comments = []
+        for child in children:
+            if not isinstance(child, dict):
+                continue
+            child_text = _clean_text(child.get("text"))
+            if not child_text:
+                continue
+            comments.append((child.get("author") or "unknown", child_text))
+            if len(comments) >= comment_limit:
+                break
 
         lines = [
             f"{title}",
@@ -247,11 +292,8 @@ async def get_discussion(payload: dict[str, Any]):
         if comments:
             lines.append("")
             lines.append(f"Top {len(comments)} comments:")
-            for index, comment in enumerate(comments, start=1):
-                comment_author = comment.get("author") or "unknown"
-                comment_text = _clean_text(comment.get("text"))
-                if comment_text:
-                    lines.append(f"\n{index}. {comment_author}: {comment_text[:1200]}")
+            for index, (comment_author, comment_text) in enumerate(comments, start=1):
+                lines.append(f"\n{index}. {comment_author}: {comment_text[:1200]}")
         else:
             lines.extend(["", "No top-level comments returned."])
 

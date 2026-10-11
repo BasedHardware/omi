@@ -13,11 +13,18 @@ Names are fixed so chart values, IAM, and download commands stay aligned:
 Also grants objectAdmin to the existing runtime JSON SA used by dev listen
 (nik-164@based-hardware) so export works while GOOGLE_APPLICATION_CREDENTIALS /
 SERVICE_ACCOUNT_JSON still point at that identity.
+
+Parity-pack export is optional dev dogfooding, so a deploy identity that lacks
+the IAM or storage permissions to verify or create these resources must not
+block the backend-listen deploy that runs this script. A permission denial is
+reported as a loud GitHub warning and the script exits 0; any other failure,
+and a publicly readable bucket, still fail the step.
 """
 
 from __future__ import annotations
 
 import subprocess
+import sys
 
 PROJECT = "based-hardware-dev"
 BUCKET = "based-hardware-dev-omi-parity-pack-v0"
@@ -30,6 +37,15 @@ LOCATION = "us-central1"
 # Current dev listen runtime credential (SERVICE_ACCOUNT_JSON).
 RUNTIME_JSON_SA = "nik-164@based-hardware.iam.gserviceaccount.com"
 PREFIX = "parity-pack/v0"
+
+# gcloud stderr markers of an authorization failure (as opposed to a real error).
+PERMISSION_DENIED_MARKERS = (
+    "PERMISSION_DENIED",
+    "Permission denied",
+    "permission denied",
+    "does not have",
+    "403",
+)
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -154,13 +170,29 @@ def assert_not_public() -> None:
         raise SystemExit(f"Refusing public IAM on gs://{BUCKET}")
 
 
+def is_permission_denied(error: subprocess.CalledProcessError) -> bool:
+    stderr = error.stderr or ""
+    return any(marker in stderr for marker in PERMISSION_DENIED_MARKERS)
+
+
 def main() -> int:
-    ensure_gsa()
-    ensure_bucket()
-    ensure_bucket_iam(GSA_EMAIL)
-    ensure_bucket_iam(RUNTIME_JSON_SA)
-    ensure_workload_identity()
-    assert_not_public()
+    try:
+        ensure_gsa()
+        ensure_bucket()
+        ensure_bucket_iam(GSA_EMAIL)
+        ensure_bucket_iam(RUNTIME_JSON_SA)
+        ensure_workload_identity()
+        assert_not_public()
+    except subprocess.CalledProcessError as error:
+        if not is_permission_denied(error):
+            print((error.stderr or "").strip()[:500], file=sys.stderr)
+            raise
+        command = " ".join(error.cmd[:4]) if isinstance(error.cmd, list) else str(error.cmd)
+        print(
+            f"::warning title=Dev parity-pack bucket not ensured::{command} was denied for the deploy identity; "
+            "parity-pack export stays unavailable until that identity is granted access. Continuing the deploy."
+        )
+        return 0
     print(f"Ensured private dev parity-pack bucket gs://{BUCKET}/{PREFIX}")
     return 0
 

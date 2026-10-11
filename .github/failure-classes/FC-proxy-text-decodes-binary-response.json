@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-proxy-text-decodes-binary-response",
+  "violated_contract": "A same-origin API proxy must forward an upstream response body byte-for-byte unless it deliberately re-encodes a known JSON shape. The web app's authenticated proxy (web/app/src/app/api/proxy/[...path]/route.ts) buffered every response it did not special-case through response.text() or response.json(); binary bodies were decoded as UTF-8 and re-sent as a string, so invalid bytes became U+FFFD. The first instance was streaming data-export downloads (53f4e27a6f, fixed by a Content-Disposition branch); the second was the image/png returned by /v1/static-map, which reached the browser as a corrupt image.",
+  "canonical_prevention": "The proxy's fallthrough branch passes response.body through with the upstream Content-Type and Cache-Control instead of reading it as text, so any content type the proxy does not explicitly re-encode is streamed untouched. The route test drives the real handler with a PNG body containing invalid-UTF-8 bytes and asserts a byte-identical response.",
+  "canonical_prevention_artifact": [
+    "web/app/src/app/api/proxy/[...path]/route.ts",
+    "web/app/src/app/api/proxy/[...path]/__tests__/route.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/app/api/proxy/**"
+  ],
+  "status": "open"
+}

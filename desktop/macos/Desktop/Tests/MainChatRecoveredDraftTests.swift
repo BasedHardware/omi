@@ -4,6 +4,28 @@ import XCTest
 
 @MainActor
 final class MainChatRecoveredDraftTests: XCTestCase {
+  @MainActor
+  func testSiriQuestionIsOwnerBoundAndConsumedOnce() throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let owner = try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let store = MainChatNavigationRequestStore(isAuthorized: { authority.isCurrent($0, ownerID: "owner") })
+    store.requestAutoSend(question: "What did I do today?", authorization: owner)
+    let request = store.consumeAutoSendRequest()
+    XCTAssertEqual(request?.question, "What did I do today?")
+    XCTAssertEqual(request?.authorization, owner)
+    XCTAssertNil(store.consumeAutoSendRequest())
+  }
+
+  @MainActor
+  func testStaleSiriQuestionIsNotSentAfterOwnerTransition() throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let owner = try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
+    let store = MainChatNavigationRequestStore(isAuthorized: { authority.isCurrent($0, ownerID: "owner") })
+    store.requestAutoSend(question: "Private question", authorization: owner)
+    authority.beginTransition()
+    XCTAssertNil(store.consumeAutoSendRequest())
+  }
+
   func testColdComposerMergesItsRestoredDraftOnlyWhenItConsumesRecovery() {
     let store = MainChatNavigationRequestStore()
     store.request(draft: "Recovered voice question", disposition: .append)

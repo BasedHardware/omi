@@ -139,6 +139,7 @@ export function useConversations(
         // Use functional update to avoid conversations in dependency array
         const hasMoreData = data.length === limit;
         setHasMore(hasMoreData);
+        setOffset(currentOffset);
 
         setConversations(prev => {
           const newConversations = append ? [...prev, ...sorted] : sorted;
@@ -245,9 +246,7 @@ export function useConversations(
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return;
 
-    const newOffset = offset + limit;
-    setOffset(newOffset);
-    await fetchConversations(newOffset, true);
+    await fetchConversations(offset + limit, true);
   }, [loading, hasMore, offset, limit, fetchConversations]);
 
   // Refresh conversations (reset and reload)

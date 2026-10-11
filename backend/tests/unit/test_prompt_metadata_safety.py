@@ -15,6 +15,13 @@ def test_prompt_metadata_escapes_city_text():
     assert 'Current city-level location: A &lt; B &amp; C' in metadata
 
 
+def test_current_datetime_block_mentions_relative_time_words():
+    metadata = get_current_datetime_block('uid1', tz='America/Los_Angeles')
+
+    assert 'tonight' in metadata
+    assert 'America/Los_Angeles' in metadata
+
+
 def test_geolocation_rejects_coordinates_outside_the_earth():
     for latitude, longitude in ((90.1, 0), (0, 180.1), (float('nan'), 0)):
         try:

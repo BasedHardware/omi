@@ -25,6 +25,11 @@ class SchedulerContract(NamedTuple):
     region: str
     scheduler_job: str
     cloud_run_job: str
+    # The account the trigger must invoke as. Optional because this validator is
+    # shared by three schedulers whose accounts differ, and the repository does not
+    # state the one the hourly maintenance trigger uses; callers that know theirs
+    # pass it and get an exact comparison, the rest keep the nonempty floor below.
+    scheduler_service_account: str | None = None
 
     @property
     def resource_name(self) -> str:
@@ -64,6 +69,14 @@ def validate_scheduler_state(state: Mapping[str, Any], contract: SchedulerContra
     ]
     if not isinstance(service_account, str) or not service_account.strip():
         errors.append("httpTarget.oauthToken.serviceAccountEmail must be a nonempty string")
+    elif contract.scheduler_service_account and service_account != contract.scheduler_service_account:
+        # A nonempty-only check let a trigger invoking as any other account pass this
+        # gate, so a credential pointed at the wrong principal deployed green while
+        # the target lacked run.invoker.
+        errors.append(
+            "httpTarget.oauthToken.serviceAccountEmail must equal "
+            f"{contract.scheduler_service_account!r}; got {service_account!r}"
+        )
     return errors
 
 
@@ -74,6 +87,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--region", required=True)
     parser.add_argument("--scheduler-job", required=True)
     parser.add_argument("--cloud-run-job", required=True)
+    parser.add_argument(
+        "--scheduler-service-account",
+        default=None,
+        help="Exact service account the trigger must invoke as; omitted keeps the nonempty-only check.",
+    )
     return parser
 
 
@@ -81,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         raw_state = json.loads(args.state_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"memory maintenance scheduler contract: invalid state file: {exc}", file=sys.stderr)
         return 2
     if not isinstance(raw_state, Mapping):
@@ -93,6 +111,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         region=args.region,
         scheduler_job=args.scheduler_job,
         cloud_run_job=args.cloud_run_job,
+        scheduler_service_account=args.scheduler_service_account,
     )
     errors = validate_scheduler_state(raw_state, contract)
     if errors:

@@ -6,6 +6,7 @@ import {
   failureFromError,
   isProviderBillingFailure,
   unexpectedQueryErrorDiagnostic,
+  workerRecycleDisposition,
   WORKER_RECYCLED_NEXT_SEND_MESSAGE,
 } from "../src/runtime/failures.js";
 
@@ -71,6 +72,41 @@ describe("provider billing vs worker recycle", () => {
       stopSucceeded: true,
       bindingInvalidationSucceeded: true,
     }).userMessage).not.toBe(WORKER_RECYCLED_NEXT_SEND_MESSAGE);
+  });
+
+  it("same-turn retries a recovered worker unless billing, auth, or recycle failed", () => {
+    const recovered = { stopSucceeded: true, bindingInvalidationSucceeded: true };
+    expect(workerRecycleDisposition({
+      ...recovered,
+      canRetry: true,
+      originalError: new Error("HTTP 503 status code (no body)"),
+    })).toBe("same_turn");
+    expect(workerRecycleDisposition({
+      ...recovered,
+      canRetry: true,
+      originalError: new Error("HTTP 402 status code (no body)"),
+    })).toBe("next_send");
+    expect(workerRecycleDisposition({
+      ...recovered,
+      canRetry: true,
+      originalError: new AdapterRuntimeError({
+        code: "provider_auth_required",
+        failureCode: "authentication",
+        userMessage: "Claude sign-in is required to continue this chat.",
+        retryable: false,
+      }),
+    })).toBe("next_send");
+    expect(workerRecycleDisposition({
+      stopSucceeded: false,
+      bindingInvalidationSucceeded: true,
+      canRetry: true,
+      originalError: new Error("HTTP 503 status code (no body)"),
+    })).toBe("next_send");
+    expect(workerRecycleDisposition({
+      ...recovered,
+      canRetry: false,
+      originalError: new Error("HTTP 503 status code (no body)"),
+    })).toBe("next_send");
   });
 
   it("still invites a next send when the recycled worker was actually poisoned", () => {

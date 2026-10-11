@@ -75,7 +75,13 @@ class LocalOmiClient:
         self._maybe_log(name, response)
         if not (200 <= response.status_code < 300):
             raise self._error_from_response(response)
-        return _unwrap_tool_response(_safe_parse_json(response))
+        result = _unwrap_tool_response(_safe_parse_json(response))
+        # Desktop reports this SQL failure as text inside an ok:true envelope.
+        # Match its full message: successful table headings can start with
+        # "SQL Error:" too. Both `local sql` and `local call` share this boundary.
+        if name == "execute_sql" and result == "SQL Error: The local database could not complete that query.":
+            raise CliError(message=result, exit_code=1)
+        return result
 
     def list_tools(self) -> Any:
         """Return Desktop-local tool descriptors."""
@@ -157,7 +163,20 @@ def _unwrap_tool_response(body: Any) -> Any:
         raise CliError(message=message, detail=json.dumps(body, sort_keys=True), exit_code=1)
 
     result = body["result"] if "result" in body else body
-    return _unwrap_tool_result(result)
+    unwrapped = _unwrap_tool_result(result)
+    if isinstance(unwrapped, Mapping) and unwrapped.get("ok") is False:
+        raw_error = unwrapped.get("error") or unwrapped.get("message") or "Local tool error"
+        if isinstance(raw_error, Mapping):
+            raw_message = raw_error.get("message")
+            message = raw_message if isinstance(raw_message, str) else "Local tool error"
+        else:
+            message = raw_error
+        raise CliError(
+            message=str(message),
+            detail=json.dumps(unwrapped, sort_keys=True),
+            exit_code=1,
+        )
+    return unwrapped
 
 
 def _unwrap_tool_result(result: Any) -> Any:

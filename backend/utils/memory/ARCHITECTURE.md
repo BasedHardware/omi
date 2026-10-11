@@ -28,7 +28,7 @@ Sorting, visibility, device, locked-memory, and lifecycle policy are applied by
 the service rather than selected by physical origin.
 
 No request chooses a memory system from a UID list, user enrollment document,
-header, or client claim. `MEMORY_MODE`, `MEMORY_V3_GET_ENABLED`, and the
+header, or client claim. `MEMORY_ENABLED` and the
 canonical maintenance/consolidation flags are deployment-wide safety controls.
 There is no runtime user inventory.
 
@@ -167,12 +167,56 @@ deliberately absent from vector projection and therefore cannot be recovered
 reliably as vector neighbors.
 
 `decision_path_telemetry.py` emits the stable
-`canonical_memory_decision_path.v1` event for persisted capture and applied or
-blocked promotion routes. Capture events carry conversation source, resolved
-subject attribution, a non-PII classification of model-authored `about`,
-disagreement, and distinct speaker-ID count. Promotion events carry the route,
-stage status, and structured reason fields. Neither event accepts memory or
-transcript text.
+`canonical_memory_decision_path.v1` event for persisted capture, applied or
+blocked promotion routes, and daily-sweep candidate-gate decisions. Capture
+events carry conversation source, resolved subject attribution, a non-PII
+classification of model-authored `about`, disagreement, distinct speaker-ID count,
+and `owner_trust`. Promotion events carry the route, stage status, and
+structured reason fields. Sweep events carry per-day counters
+(`dropped_subjectless`, `dropped_basis_proposed`, `demoted_owner_untrusted`,
+`skipped_duplicate_lookup`) with no memory or transcript text.
+
+## Owner attribution at capture and daily sweep
+
+`utils/conversations/owner_attribution.py` is the typed evidence for whether a
+source may mint an owner-attributed memory. Capture (`process_conversation.py`)
+and the daily sweep share that policy:
+
+- A unique owner speaker cluster is required before `about=user` (or an
+  owner alias: the profile name, "the user", "primary user") or
+  `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
+  demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
+  rewriting it as a third-party fact.
+- Capture only, behind `MEMORY_OWNER_JEV_FLIP_ENABLED` (default off): a
+  candidate resolved to a third party is asked the Jev owner question
+  (`utils/conversations/owner_jev.py`); at P(user) >= 0.9 it is stored as the
+  user's (`subject_entity_id=user`, `subject_scope=primary_user`, category
+  `system`) with `promotion.source_attribution.override` recording the
+  probability and the original subject. Nothing flips toward a third party.
+  The consolidation planner still reads only the three subject fields.
+- Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
+  and `uncertain` rows are omitted (`dropped_subjectless`). An omitted `about`
+  on the structured-output schema defaults to empty so one subjectless row
+  cannot fail the day's parse.
+- `basis` is `decided` only for a commitment or decision on tape by the owner,
+  `proposed` for suggestions or plans without a decision (those are dropped,
+  `dropped_basis_proposed`), and `observed` otherwise. Only `decided` may set a
+  standing-attribute slot.
+- A model mark `duplicate_of` citing a ledger lookup hit skips the candidate
+  instead of staging a sibling (`skipped_duplicate_lookup`). Lookup rows
+  prefix the canonical memory id so the model can cite it. A non-empty
+  marker that is not one of those ids is ignored and the candidate is treated
+  as new.
+- Staged daily-summary pages are `daily_memory_sweep_daily_summary_stage.v3`
+  because they now carry owner evidence and `about`. A reader that finds a
+  foreign-version stage attests it consumed (empty candidates) so the cursor
+  can advance without double-billing the model.
+
+Clusters are `(speaker_id_scope, speaker_id)`. A `TranscriptSegment` that only
+materialized `speaker_id` from the SPEAKER_00 default is not evidence; a
+synthesized `0` that has already been persisted still looks real after reload
+(stored provenance would need a schema field). L2 consolidation, the belief
+model, and user-facing summary rendering are out of scope for this gate.
 
 ## Search, graph, and derived providers
 
@@ -211,8 +255,7 @@ The supported controls and rollback floor are documented in
 
 - `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
   to off. `on` enables intake and list; it does not by itself enable ST→LT
-  maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
-  only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
+  maintenance.
 - `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
   switch. Do not derive it from `MEMORY_ENABLED=on`. Both env overlays pin it
   on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
@@ -220,9 +263,9 @@ The supported controls and rollback floor are documented in
   global cost/incident controls.
 - `GET /v3/memories` first page uses `read_page`, which raises
   `MemoryBackingStoreUnavailable` (503 `Memory cursor unavailable`) when
-  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence, not
-  `MEMORY_V3_GET_ENABLED` (unused on the route). First page falls back to
-  offset `read()` for that typed failure — not by matching detail strings.
+  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence. First page
+  falls back to offset `read()` for that typed failure — not by matching
+  detail strings.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader

@@ -55,10 +55,21 @@ void main() {
       final gate = SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
-          uploaded = geolocation;
-          return UploadFilesResult.queued('job-1');
-        },
+        uploader:
+            (
+              files, {
+              onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation,
+            }) async {
+              uploaded = geolocation;
+              return UploadFilesResult.queued('job-1');
+            },
       );
 
       await uploadNativeBatchRecording(recording, file: file, uploadGate: gate);
@@ -119,10 +130,7 @@ void main() {
     final generation = fence.beginSession();
     fence.invalidateSession();
 
-    await fence.writeIfCurrent(
-      generation,
-      Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)),
-    );
+    await fence.writeIfCurrent(generation, Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)));
 
     expect(writes, isEmpty);
   });

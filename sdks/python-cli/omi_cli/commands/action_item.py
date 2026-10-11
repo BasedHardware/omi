@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
@@ -59,7 +61,7 @@ def list_action_items(
     for it in items or []:
         rows.append(
             {
-                "id": shorten(it.get("id"), 14),
+                "id": it.get("id"),
                 "completed": it.get("completed"),
                 "description": shorten(it.get("description"), 60),
                 "due_at": it.get("due_at"),
@@ -77,18 +79,23 @@ def get_action_item(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # Like memories, the dev API has no single-resource GET for action items.
-        # Page through up to 5 pages of 200 to find it; beyond that the user
-        # probably wants `omi action-item list` directly.
-        for offset in range(0, 1000, 200):
-            page = client.get("/v1/dev/user/action-items", params={"limit": 200, "offset": offset})
+        # Search until the item is found or the API exhausts the result set.
+        # A fixed page cap would report existing older items as not found.
+        page_size = 200
+        offset = 0
+        # The API filters locked records after pagination, so a short page
+        # does not mean the result set is exhausted. Continue until empty
+        # or the documented 10k scan cap (checked before the next request).
+        max_offset = 10_000
+        while offset <= max_offset:
+            page = client.get("/v1/dev/user/action-items", params={"limit": page_size, "offset": offset})
             if not page:
                 break
             for item in page:
                 if item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
-            if len(page) < 200:
-                break
+            offset += page_size
     # Exit code 5 (NotFoundError) — same contract as a server-side 404,
     # whether or not the dev API exposed a direct GET for this noun.
     raise NotFoundError(message=f"Action item not found: {action_item_id}")
@@ -107,7 +114,7 @@ def create_action_item(
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Action item created: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -118,22 +125,28 @@ def update_action_item(
     description: Optional[str] = typer.Option(None, "--description"),
     completed: Optional[bool] = typer.Option(None, "--completed/--open"),
     due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS),
+    clear_due_at: bool = typer.Option(False, "--clear-due-at", help="Remove the due date."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if clear_due_at and due_at is not None:
+        raise UsageError(message="Conflicting options", detail="--due-at and --clear-due-at are mutually exclusive.")
     body: dict[str, object] = {}
     if description is not None:
         body["description"] = description
     if completed is not None:
         body["completed"] = completed
-    if due_at is not None:
+    if clear_due_at:
+        body["due_at"] = None
+    elif due_at is not None:
         body["due_at"] = due_at.isoformat()
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide --description, --completed/--open, or --due-at."
+            message="No fields to update",
+            detail="Provide --description, --completed/--open, or --due-at/--clear-due-at.",
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body=body)
-    ctx.renderer.success(f"Updated action item [bold]{action_item_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/action-items/{path_segment(action_item_id)}", json_body=body)
+    ctx.renderer.success(f"Updated action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -144,8 +157,10 @@ def complete_action_item(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body={"completed": True})
-    ctx.renderer.success(f"Completed action item [bold]{action_item_id}[/bold].")
+        result = client.patch(
+            f"/v1/dev/user/action-items/{path_segment(action_item_id)}", json_body={"completed": True}
+        )
+    ctx.renderer.success(f"Completed action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -159,7 +174,7 @@ def delete_action_item(
     if not confirm:
         typer.confirm(f"Delete action item {action_item_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
+        result = client.delete(f"/v1/dev/user/action-items/{path_segment(action_item_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Deleted action item [bold]{escape(action_item_id)}[/bold].")

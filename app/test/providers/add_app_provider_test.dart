@@ -6,19 +6,19 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 // Builds a free, private "conversation prompt template" style app.
 App _buildApp() => App.fromJson({
-      'id': 'app_123',
-      'name': 'My Template',
-      'author': 'Jane',
-      'description': 'A test template',
-      'image': 'https://img/logo.png',
-      'category': 'productivity-and-organization',
-      'capabilities': ['memories'],
-      'memory_prompt': 'Summarize the conversation',
-      'private': true,
-      'is_paid': false,
-      'price': 0.0,
-      'thumbnails': <String>[],
-    });
+  'id': 'app_123',
+  'name': 'My Template',
+  'author': 'Jane',
+  'description': 'A test template',
+  'image': 'https://img/logo.png',
+  'category': 'productivity-and-organization',
+  'capabilities': ['memories'],
+  'memory_prompt': 'Summarize the conversation',
+  'private': true,
+  'is_paid': false,
+  'price': 0.0,
+  'thumbnails': <String>[],
+});
 
 // Seeds the provider so its form state matches [app] exactly (mirrors prepareUpdate
 // without the network calls), so hasDataChanged should report no changes.
@@ -146,28 +146,28 @@ void main() {
     late AddAppProvider provider;
 
     App buildExtApp() => App.fromJson({
-          'id': 'ext_app',
-          'name': 'Hooky',
-          'author': 'Jane',
-          'description': 'integration app',
-          'image': 'https://img/logo.png',
-          'category': 'productivity-and-organization',
-          'capabilities': ['external_integration'],
-          'private': true,
-          'is_paid': false,
-          'price': 0.0,
-          'thumbnails': <String>[],
-          'external_integration': {
-            'triggers_on': 'memory_creation',
-            'webhook_url': 'https://hook',
-            'auth_steps': [
-              {'url': 'https://auth', 'name': 'Setup'},
-            ],
-            'actions': [
-              {'action': 'create_conversation'},
-            ],
-          },
-        });
+      'id': 'ext_app',
+      'name': 'Hooky',
+      'author': 'Jane',
+      'description': 'integration app',
+      'image': 'https://img/logo.png',
+      'category': 'productivity-and-organization',
+      'capabilities': ['external_integration'],
+      'private': true,
+      'is_paid': false,
+      'price': 0.0,
+      'thumbnails': <String>[],
+      'external_integration': {
+        'triggers_on': 'memory_creation',
+        'webhook_url': 'https://hook',
+        'auth_steps': [
+          {'url': 'https://auth', 'name': 'Setup'},
+        ],
+        'actions': [
+          {'action': 'create_conversation'},
+        ],
+      },
+    });
 
     setUp(() {
       app = buildExtApp();
@@ -198,6 +198,38 @@ void main() {
         {'action': 'read_conversations'},
       ];
       expect(provider.hasDataChanged(app, app.category), isTrue);
+    });
+  });
+
+  group('AddAppProvider.deleteApiKey', () {
+    test('throws and skips reload when the server rejects revocation', () async {
+      var listCalls = 0;
+      final provider = AddAppProvider(
+        deleteApiKeyServerFn: (appId, keyId) async => false,
+        listApiKeysServerFn: (appId) async {
+          listCalls++;
+          return <AppApiKey>[];
+        },
+      );
+
+      await expectLater(provider.deleteApiKey('app-1', 'key-1'), throwsA(isA<Exception>()));
+      expect(listCalls, 0);
+    });
+
+    test('reloads API keys after a confirmed revocation', () async {
+      var listCalls = 0;
+      final provider = AddAppProvider(
+        deleteApiKeyServerFn: (appId, keyId) async => true,
+        listApiKeysServerFn: (appId) async {
+          listCalls++;
+          return <AppApiKey>[];
+        },
+      );
+
+      await provider.deleteApiKey('app-1', 'key-1');
+
+      expect(listCalls, 1);
+      expect(provider.apiKeys, isEmpty);
     });
   });
 }

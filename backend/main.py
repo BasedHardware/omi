@@ -1,3 +1,4 @@
+# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -27,7 +28,13 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from routers import messaging
 from routers import (
+    dream_cohort,
+    dream_report,
+    dream_sweep,
+    review,
+    proactivity,
     chat,
     firmware,
     static_map,
@@ -36,8 +43,12 @@ from routers import (
     auto_model,
     notifications,
     speech_profile,
+    speaker_tag_prompts,
+    speaker_labels,
+    people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -46,6 +57,7 @@ from routers import (
     conversations,
     conversation_mutations,
     memories,
+    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -62,6 +74,7 @@ from routers import (
     x_connector,
     other,
     developer,
+    developer_key,
     updates,
     calendar_meetings,
     google_calendar,
@@ -70,6 +83,7 @@ from routers import (
     knowledge_graph,
     wrapped,
     folders,
+    search,
     goals,
     workstreams,
     announcements,
@@ -89,6 +103,7 @@ from routers import (
     desktop_core,
     desktop_prompts,
     desktop_proxy,
+    desktop_task_gate,
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
@@ -101,12 +116,15 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
     csat,
     jit_rollout,
     email_preferences,
+    mobile_feedback,
+    device_diagnostics,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -115,7 +133,9 @@ from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
+from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -124,10 +144,14 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.stt.streaming import validate_streaming_stt_env
+from utils.stt.soniox_runway import poll_forever
+from utils.stt.live_health import health as live_stt_health
+from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
-from services.conversation_finalization import reconcile_meeting_receipts
+from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
@@ -180,8 +204,24 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
+    expose_headers=[
+        'X-Next-Cursor',
+        'X-Scan-Truncated',
+        'X-Omi-Memory-As-Of',
+        'X-Omi-Memory-Belief-Enabled',
+        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
+        'X-Omi-Memory-Device-Scope-Supported',
+        'X-Omi-Memory-Next-Cursor',
+        'X-Omi-List-Truncated',
+    ],
 )
 
+app.include_router(messaging.router)
+app.include_router(proactivity.router)
+app.include_router(dream_cohort.router)
+app.include_router(dream_report.router)
+app.include_router(dream_sweep.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -205,18 +245,26 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
+app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
+app.include_router(speaker_tag_prompts.router)
+app.include_router(speaker_labels.router)
+app.include_router(people.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
+app.include_router(mobile_feedback.router)
+app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
+app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
@@ -239,9 +287,11 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
+app.include_router(developer_key.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(search.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(workstreams.router)
@@ -268,11 +318,13 @@ app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
+app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
 
@@ -289,6 +341,10 @@ methods_timeout = {
 # lock TTL (1800s) so a lock can never expire under a live run.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/dream-agent/canary": 90,
+    "/v1/dream/runs": 90,
+    "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
@@ -304,12 +360,24 @@ from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+
+app.add_middleware(FirestoreTierMiddleware)
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    from utils.messaging.adapters.runtime import start_adapters
+
+    app.state.messaging_runtime = start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
+    start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    batch_pressure.start_from_env()
+    if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
+        start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
-    asyncio.create_task(log_executor_health())
+    validate_streaming_stt_env()
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(
@@ -328,12 +396,12 @@ async def startup_event():
         name='startup_stale_processing_reconcile',
     )
     start_background_task(
-        run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
-        name='startup_byok_abandonment_reconcile',
+        run_blocking(db_executor, _drain_stale_in_progress_conversations),
+        name='startup_stale_in_progress_reconcile',
     )
     start_background_task(
-        run_blocking(db_executor, _drain_meeting_receipts),
-        name='startup_meeting_receipt_reconcile',
+        run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
+        name='startup_byok_abandonment_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
     start_background_task(
@@ -388,6 +456,16 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_stale_in_progress_conversations():
+    """Best-effort durable admission of content-bearing listen zombies."""
+    try:
+        result = reconcile_stale_in_progress_conversations()
+        if result.get('enqueued') or result.get('verified'):
+            logger.info(f"Startup stale-in-progress reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-in-progress reconciliation failed: {e}")
+
+
 def _drain_abandoned_byok_finalization_jobs():
     """Best-effort disposition of BYOK finalization jobs no live session can claim."""
     try:
@@ -396,16 +474,6 @@ def _drain_abandoned_byok_finalization_jobs():
             logger.info(f"Startup byok-abandonment reconciliation: {result}")
     except Exception as e:
         logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
-
-
-def _drain_meeting_receipts():
-    """Best-effort repair of missing meeting receipt intents and historical receipts."""
-    try:
-        result = reconcile_meeting_receipts()
-        if result.get('repaired') or result.get('backfilled'):
-            logger.info(f"Startup meeting-receipt reconciliation: {result}")
-    except Exception as e:
-        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
 
 
 def _listen_finalization_reconcile_interval_seconds() -> int:
@@ -436,17 +504,17 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
         try:
+            in_progress_result = await run_blocking(db_executor, reconcile_stale_in_progress_conversations)
+            if in_progress_result.get('enqueued') or in_progress_result.get('verified'):
+                logger.info(f"Periodic stale-in-progress reconciliation: {in_progress_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
+        try:
             byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
             if byok_result.get('abandoned'):
                 logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
         except Exception as e:
             logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
-        try:
-            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
-            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
-                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
-        except Exception as e:
-            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
         try:
             await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
         except Exception as e:
@@ -455,10 +523,22 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    runtime = getattr(app.state, 'messaging_runtime', None)
+    if runtime:
+        stop, task = runtime
+        stop.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()
+    await shutdown_sync_metrics()
     await close_all_clients()
     close_posthog_control_plane()
+    close_free_tier_control_plane()
     stop_metrics_sidecar_server()
 
 

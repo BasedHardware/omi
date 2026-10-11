@@ -151,15 +151,16 @@ def _desktop_conversation():
         finished_at=CONVERSATION_END,
         structured=Structured(),
         # Meeting-treatment eligibility (#11832) is the authority for desktop meeting-role
-        # conversations, so a realistic fixture must clear it: 29 minutes of wall clock and
-        # more than 60s of transcribed speech. A silent fixture is correctly skipped now.
+        # conversations, so a realistic fixture must clear it on the measurement the policy
+        # uses: a transcript span of at least 5 minutes. The 29-minute capture window alone
+        # is not a qualifying duration (#4056).
         transcript_segments=_qualifying_segments(),
         source=ConversationSource.desktop,
         external_data={'conversation_role': 'meeting'},
     )
 
 
-def _qualifying_segments(seconds: float = 120.0):
+def _qualifying_segments(seconds: float = 360.0):
     from models.transcript_segment import TranscriptSegment
 
     return [
@@ -242,6 +243,21 @@ class TestTimeOverlapReachesTheConversation:
         calls = _enrich(conversation, meetings=[_meeting_record()])
 
         assert calls == [], 'an ineligible conversation triggered a stored-meeting range query'
+        assert _stored_context(conversation) is None
+
+    def test_a_short_call_inside_a_long_socket_spends_no_provider_lookups(self):
+        """The capture-session window is not the call length (#4056).
+
+        `started_at` is the live-socket streaming origin, so a 90-second call that began 29
+        minutes into the socket cleared the wall-window gate and paid for a Google Calendar
+        read plus a screen-activity query that the final treatment verdict (transcript span)
+        then discards."""
+        conversation = _desktop_conversation()
+        conversation.transcript_segments = _qualifying_segments(90.0)
+
+        calls = _enrich(conversation, meetings=[_meeting_record()])
+
+        assert calls == [], 'a short call inside a long socket triggered provider lookups'
         assert _stored_context(conversation) is None
 
     def test_the_time_range_query_brackets_the_conversation_window(self):
@@ -331,7 +347,10 @@ class TestDegradation:
 class TestNeverMutatesTheUsersCalendar:
     def test_enrichment_does_not_write_back_to_google_calendar(self):
         conversation = _desktop_conversation()
-        with patch.object(pc, 'write_conversation_link_to_calendar_event', MagicMock()) as write_back:
+        # `process_conversation` no longer imports the write-back helper; spy on the
+        # stubbed provider module so any future re-wiring is caught instead.
+        calendar_linking = sys.modules['utils.conversations.calendar_linking']
+        with patch.object(calendar_linking, 'write_conversation_link_to_calendar_event', MagicMock()) as write_back:
             _enrich(
                 conversation,
                 meetings=[_meeting_record()],

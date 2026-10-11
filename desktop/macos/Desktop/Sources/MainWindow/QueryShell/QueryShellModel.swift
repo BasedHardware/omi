@@ -139,6 +139,45 @@ enum QueryShellMode: Equatable, Sendable {
   /// Omi; the spine/search surface stays one `esc` (or `‹ Results`) away rather than being the
   /// landing page.
   static let homeDefault: QueryShellMode = .answer
+
+  var stableName: String {
+    switch self {
+    case .results: return "results"
+    case .answer: return "answer"
+    }
+  }
+}
+
+/// The query-shell Home publishes its live mode here so `chat_composer_snapshot` can report
+/// placeholder and mode without mounting a second composer.
+@MainActor
+enum QueryShellComposerAutomation {
+  static var mode: QueryShellMode = .homeDefault
+
+  static func publish(_ mode: QueryShellMode) {
+    self.mode = mode
+  }
+
+  static var placeholder: String { QueryComposerPlaceholder.text(mode: mode) }
+}
+
+/// Shape `chat_composer_snapshot` returns. One function so the handler and the tests cannot disagree
+/// about placeholder/mode.
+enum ChatComposerAutomationSnapshot {
+  static func detail(
+    draft: String,
+    stagedAttachments: Int,
+    firstAttachment: String,
+    mode: QueryShellMode
+  ) -> [String: String] {
+    [
+      "main": draft,
+      "mainStagedAttachments": String(stagedAttachments),
+      "mainStagedFirstAttachment": firstAttachment,
+      "placeholder": QueryComposerPlaceholder.text(mode: mode),
+      "mode": mode.stableName,
+    ]
+  }
 }
 
 /// **What the empty composer says.**

@@ -73,7 +73,11 @@ final class AgentControlService {
 
   static func currentHarnessMode() -> String {
     let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-    return mode == "piMono" ? "piMono" : "acp"
+    // Delegate to AgentRuntimeRouting which knows all harness modes
+    // (piMono, acp, hermes, openclaw). Previously this hardcoded "acp" for
+    // anything that wasn't "piMono", which silently broke the Hermes and
+    // OpenClaw adapters even when selected in Settings.
+    return AgentRuntimeRouting.harnessMode(from: mode)?.rawValue ?? "piMono"
   }
 
   func logDetail(name: String, arguments: [String: Any]) -> String {

@@ -564,6 +564,7 @@ import XCTest
       recorder.noteInputRoute(class: .bluetooth, source: .override)
       recorder.terminate(
         disposition: .silentRejected,
+        turnKind: .unknown,
         source: "hub",
         peak: 0,
         rms: 0,
@@ -587,6 +588,8 @@ import XCTest
       XCTAssertEqual(snapshot["input_route_class"] as? String, "bluetooth")
       XCTAssertEqual(snapshot["input_route_source"] as? String, "override")
       XCTAssertEqual(snapshot["turn_disposition"] as? String, "silent_rejected")
+      // The funnel split key rides the same bounded snapshot.
+      XCTAssertEqual(snapshot["turn_kind"] as? String, "unknown")
       XCTAssertNotNil(snapshot["attempt_id"])
       // Privacy: no raw device identity, hardware id, or error string leaks.
       XCTAssertFalse(json.contains("engineStartFailed") || json.contains("OSStatus"))
@@ -702,13 +705,25 @@ import XCTest
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
       for area in [
         "screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow",
-        "auth_storage", "ptt_input_routing",
+        "auth_storage", "ptt_input_routing", "screen_task_gate", "screen_task_extraction",
       ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)
         try assertLatestHealthSnapshot(
           event: .fallbackTriggered, contains: ["area": area, "outcome": "degraded"])
+      }
+    }
+
+    func testScreenTaskFallbackReasonsRemainTyped() throws {
+      for reason in [
+        "ocr_unusable", "gate_invalid_response", "provider_5xx", "timeout", "offline", "dispatch_disabled",
+      ] {
+        DesktopDiagnosticsManager.shared.resetForTests()
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "screen_task_extraction", from: "gemini_3_8", to: "legacy", reason: reason, outcome: .degraded)
+        try assertLatestHealthSnapshot(
+          event: .fallbackTriggered, contains: ["area": "screen_task_extraction", "reason": reason])
       }
     }
 

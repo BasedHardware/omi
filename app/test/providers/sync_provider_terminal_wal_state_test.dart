@@ -73,9 +73,20 @@ Wal _wal({required int timerStart, required String? filePath}) {
 SyncUploadGate _offlineGate() {
   return SyncUploadGate(
     limiter: SyncRateLimiter.instance,
-    uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
-      throw StateError('unexpected upload in terminal WAL-state test');
-    },
+    uploader:
+        (
+          files, {
+          onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation,
+        }) async {
+          throw StateError('unexpected upload in terminal WAL-state test');
+        },
     fairUseStatusLoader: () async => {'stage': 'none'},
   );
 }

@@ -134,7 +134,7 @@ class PhotoDescribedEvent extends MessageEvent {
   final bool discarded;
 
   PhotoDescribedEvent({required this.photoId, required this.description, this.discarded = false})
-      : super(eventType: 'photo_described');
+    : super(eventType: 'photo_described');
 
   factory PhotoDescribedEvent.fromJson(Map<String, dynamic> json) {
     return PhotoDescribedEvent(
@@ -151,19 +151,40 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
   final String personName;
   final String segmentId;
 
+  /// With an empty [personId]: a pinned person this voice nearly matched. A question, never a label.
+  final String? suggestedPersonId;
+  final bool retracted;
+
   SpeakerLabelSuggestionEvent({
     required this.speakerId,
     required this.personId,
     required this.personName,
     required this.segmentId,
+    this.suggestedPersonId,
+    this.retracted = false,
   }) : super(eventType: 'speaker_label_suggestion');
 
   factory SpeakerLabelSuggestionEvent.fromJson(Map<String, dynamic> json) {
+    final retracted = json['retracted'] == true;
+    if (json['speaker_id'] is! int ||
+        (json['speaker_id'] as int) < 0 ||
+        json['person_id'] is! String ||
+        json['person_name'] is! String ||
+        (!retracted && (json['person_name'] as String).trim().isEmpty) ||
+        (retracted && (json['person_id'] != '' || json['person_name'] != '')) ||
+        json['segment_id'] is! String ||
+        (json['segment_id'] as String).isEmpty) {
+      return SpeakerLabelSuggestionEvent.empty();
+    }
     return SpeakerLabelSuggestionEvent(
+      retracted: retracted,
       speakerId: json['speaker_id'],
       personId: json['person_id'],
       personName: json['person_name'],
       segmentId: json['segment_id'],
+      suggestedPersonId: json['suggested_person_id'] is String && (json['suggested_person_id'] as String).isNotEmpty
+          ? json['suggested_person_id'] as String
+          : null,
     );
   }
 
@@ -178,7 +199,7 @@ class OnboardingQuestionEvent extends MessageEvent {
   final int totalQuestions;
 
   OnboardingQuestionEvent({required this.question, required this.questionIndex, required this.totalQuestions})
-      : super(eventType: 'onboarding_question');
+    : super(eventType: 'onboarding_question');
 
   factory OnboardingQuestionEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionEvent(
@@ -194,7 +215,7 @@ class OnboardingQuestionAnsweredEvent extends MessageEvent {
   final bool answered;
 
   OnboardingQuestionAnsweredEvent({required this.questionIndex, required this.answered})
-      : super(eventType: 'question_answered');
+    : super(eventType: 'question_answered');
 
   factory OnboardingQuestionAnsweredEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionAnsweredEvent(
@@ -210,7 +231,7 @@ class OnboardingCompleteEvent extends MessageEvent {
   final String? error;
 
   OnboardingCompleteEvent({this.conversationId, this.memoriesCreated = 0, this.error})
-      : super(eventType: 'onboarding_complete');
+    : super(eventType: 'onboarding_complete');
 
   factory OnboardingCompleteEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingCompleteEvent(
@@ -246,7 +267,7 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
   final FreemiumAction action;
 
   FreemiumThresholdReachedEvent({required this.remainingSeconds, required this.action})
-      : super(eventType: 'freemium_threshold_reached');
+    : super(eventType: 'freemium_threshold_reached');
 
   /// Whether user action is required
   bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;

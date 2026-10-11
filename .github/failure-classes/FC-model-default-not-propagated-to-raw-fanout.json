@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-model-default-not-propagated-to-raw-fanout",
+  "violated_contract": "When a pipeline fans one accepted payload out to typed persistence and raw background work, generated identity defaults must be materialized before the fanout. A model constructor that generates an ID only on its own copy leaves the raw branch without the identity required by downstream events, so valid processing fails during publication.",
+  "canonical_prevention": "Materialize missing identity once at the shared admission boundary, preserve provided identities, and reuse the same normalized payload for persistence, capture-window keys, background matching, and event emission. A real-path regression must exercise an ID-less provider payload through raw background work and the real event model, not a stubbed emitter.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_live_speaker_validation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/**"
+  ],
+  "status": "open"
+}

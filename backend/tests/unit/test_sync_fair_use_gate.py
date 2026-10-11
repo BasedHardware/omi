@@ -551,7 +551,7 @@ class TestSyncEndpointCodeStructure:
     def test_hard_restricted_gate_exists(self):
         """sync.py must check hard restriction status once."""
         source = self._read_sync_source()
-        assert 'get_hard_restriction_status(uid)' in source
+        assert 'run_blocking(critical_executor, get_hard_restriction_status, uid)' in source
 
     def test_hard_restricted_429_uses_retry_after_headers(self):
         """Hard-restricted sync responses share an explicit machine-readable contract."""

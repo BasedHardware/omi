@@ -1,7 +1,10 @@
 import asyncio
+from contextvars import copy_context
+from datetime import datetime, timezone
+import hashlib
 import json
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -9,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from routers import users as users_router
 from services.users import data_export
+from utils import byok, subscription as subscription_utils
 
 
 class _FakeRequest:
@@ -74,6 +78,10 @@ def test_location_context_consent_requires_disclosure_before_enabling():
 def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     calls = []
 
+    async def run_wipe(*args):
+        calls.append((users_router.run_deletion_wipe_with_lease, args))
+        return False
+
     async def run_blocking(_executor, fn, *args):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -82,13 +90,12 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 3)
 
     response = asyncio.run(
@@ -101,13 +108,17 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1', 0, False)),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token')),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
     background_args = []
+
+    async def run_wipe(*args):
+        background_args.append(args)
+        return False
 
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -116,14 +127,12 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            background_args.append(args)
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 2)
 
     response = asyncio.run(
@@ -134,7 +143,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
-    assert background_args == [('uid1', 1, True)]
+    assert background_args == [('uid1', 1, True, 'lock-token')]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
@@ -252,6 +261,11 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     assert reconcile() == {'requeued': 1, 'skipped': 0}
     assert state['enqueue_attempts'] == 2
 
+    async def run_wipe(*args):
+        state['wipe_runs'] += 1
+        state['status'] = 'completed'
+        return True
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             if state['status'] == 'completed':
@@ -261,15 +275,12 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            state['wipe_runs'] += 1
-            state['status'] = 'completed'
-            return True
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     first = asyncio.run(
         users_router.run_account_deletion_wipe(_FakeRequest({'job_id': 'job-1'}), task_authentication=_task_auth())
@@ -310,6 +321,9 @@ def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
 def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     released = []
 
+    async def run_wipe(*args):
+        raise asyncio.CancelledError()
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -317,14 +331,13 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            raise asyncio.CancelledError()
         if fn is users_router.release_job_run_lock:
             released.append(args)
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     try:
         asyncio.run(
@@ -346,7 +359,7 @@ def test_export_all_user_data_keeps_streaming_headers(monkeypatch):
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'
-    iter_export.assert_called_once_with('uid1')
+    iter_export.assert_called_once_with('uid1', read_context=ANY)
 
     async def _consume():
         parts = []
@@ -552,8 +565,122 @@ def test_usage_quota_endpoint_reads_customer_firestore_like_desktop_enforcement(
         users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='desktop')
 
     snapshot_mock.assert_called_once_with(
-        'uid1', platform='desktop', firestore_client=sentinel_customer_client, provision=False
+        'uid1',
+        platform='desktop',
+        firestore_client=sentinel_customer_client,
+        provision=False,
+        required_llm_provider='anthropic',
     )
+
+
+def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
+    customer_client = object()
+    monkeypatch.setattr(users_router, 'get_customer_firestore_client', lambda: customer_client)
+    monkeypatch.setattr(subscription_utils, 'get_customer_firestore_client', lambda: customer_client)
+
+    def is_byok_active(uid, *, firestore_client=None):
+        assert firestore_client is customer_client
+        return enrolled
+
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
+    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        subscription_utils.users_db,
+        'get_user_valid_subscription',
+        lambda *args, **kwargs: types.SimpleNamespace(plan=users_router.PlanType.basic),
+    )
+    monkeypatch.setattr(
+        subscription_utils.user_usage_db,
+        'get_monthly_chat_usage',
+        lambda *args, **kwargs: {'questions': questions, 'cost_usd': 0.0, 'reset_at': 1_790_812_800},
+    )
+
+
+@pytest.mark.parametrize(
+    'provider,enrolled,validated',
+    [
+        ('gemini', True, True),
+        ('openrouter', True, True),
+        ('openai', True, True),
+        ('deepgram', True, True),
+        ('anthropic', True, True),
+        (None, True, True),
+        ('anthropic', True, False),
+        ('anthropic', False, True),
+        (None, False, False),
+    ],
+)
+@pytest.mark.parametrize('questions', [29, 30])
+def test_desktop_usage_quota_matches_enforcement_for_enrolled_provider(
+    monkeypatch, provider, enrolled, validated, questions
+):
+    """#19331: an enrolled Gemini key cannot fund desktop's Anthropic chat."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=enrolled, questions=questions)
+
+    def exercise_request():
+        keys = {provider: 'fake-enrolled-key'} if provider else {}
+        if validated:
+            byok.set_validated_byok_keys(keys, uid='uid1')
+        else:
+            byok.set_byok_keys(keys)
+        quota = users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='macos')
+        if provider == 'anthropic' and enrolled and validated:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.limit is None
+            assert quota.plan == 'Free (BYOK)'
+        elif questions == 30:
+            with pytest.raises(HTTPException) as exc:
+                subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert exc.value.status_code == 402
+            assert quota.allowed is False
+            assert quota.used == exc.value.detail['used'] == 30
+            assert quota.limit == exc.value.detail['limit'] == 30
+            assert quota.reset_at == exc.value.detail['reset_at']
+            assert quota.plan_type == users_router.PlanType.basic.value
+        else:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.used == questions
+            assert quota.limit == 30
+            assert quota.plan_type == users_router.PlanType.basic.value
+
+    copy_context().run(exercise_request)
+
+
+@pytest.mark.parametrize('provider', ['gemini', 'anthropic', None])
+def test_usage_quota_http_uses_the_validated_request_provider(monkeypatch, provider):
+    """Exercise header validation and response serialization, not a mocked gate."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=True, questions=30)
+    key = 'fake-enrolled-key'
+    state = {
+        'active': True,
+        'last_seen_at': datetime.now(timezone.utc),
+        'fingerprints': {provider: hashlib.sha256(key.encode()).hexdigest()} if provider else {},
+    }
+    monkeypatch.setattr(byok, 'get_cached_byok_state', lambda uid: state)
+    monkeypatch.setattr(users_router.auth, 'verify_token', lambda token: 'uid1')
+
+    async def authenticated_uid():
+        return 'uid1'
+
+    app = FastAPI()
+    app.add_middleware(byok.BYOKMiddleware)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = authenticated_uid
+    app.add_api_route(
+        '/v1/users/me/usage-quota', users_router.get_user_chat_usage_quota, response_model=users_router.ChatUsageQuota
+    )
+    headers = {'Authorization': 'Bearer fake-session', 'X-App-Platform': 'macos'}
+    if provider:
+        headers[byok.BYOK_HEADERS[provider]] = key
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/usage-quota', headers=headers)
+
+    assert response.status_code == 200
+    quota = response.json()
+    assert quota['allowed'] is (provider == 'anthropic')
+    assert quota['limit'] == (None if provider == 'anthropic' else 30)
+    assert quota['used'] == (0 if provider == 'anthropic' else 30)
 
 
 @pytest.mark.parametrize(
@@ -818,3 +945,44 @@ def test_get_memory_summary_rating_without_score():
         result = users_router.get_memory_summary_rating(memory_id='mem-1')
 
     assert result == {'has_rating': False}
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'completed': True},
+        {'acquisition_source': 'Friend'},
+        {'device_onboarding_completed': True},
+        {'completed': False, 'acquisition_source': ''},
+        {},
+    ],
+)
+def test_onboarding_patch_writes_only_submitted_fields(payload):
+    with patch.object(users_router, 'get_user_onboarding_state') as read, patch.object(
+        users_router, 'set_user_onboarding_state'
+    ) as write:
+        result = users_router.update_onboarding_state(users_router.OnboardingStateUpdate(**payload), uid='owner')
+    assert result == {'status': 'ok'}
+    read.assert_not_called()
+    write.assert_called_once_with('owner', payload)
+
+
+def test_onboarding_patch_http_preserves_previous_completion(monkeypatch):
+    state = {'completed': False, 'acquisition_source': '', 'future_field': 'keep'}
+    monkeypatch.setattr(users_router, 'get_user_onboarding_state', lambda uid: dict(state))
+    monkeypatch.setattr(users_router, 'set_user_onboarding_state', lambda uid, updates: state.update(updates))
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'fixture-owner'
+    with TestClient(app) as client:
+        completed = client.patch('/v1/users/onboarding', json={'completed': True})
+        source = client.patch('/v1/users/onboarding', json={'acquisition_source': 'Friend'})
+        tutorial = client.patch('/v1/users/onboarding', json={'device_onboarding_completed': True})
+    assert completed.status_code == source.status_code == tutorial.status_code == 200
+    assert completed.json() == {'status': 'ok', 'message': None}
+    assert state == {
+        'completed': True,
+        'acquisition_source': 'Friend',
+        'device_onboarding_completed': True,
+        'future_field': 'keep',
+    }

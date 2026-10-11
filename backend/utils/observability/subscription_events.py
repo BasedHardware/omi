@@ -46,6 +46,71 @@ _PAYMENT_FAILED_STATUSES = frozenset({'past_due', 'unpaid'})
 _REASON_BEARING_EVENT = 'ended'
 
 
+def emit_billing_product_event(
+    *,
+    uid: str,
+    stripe_event_id: str | None,
+    stripe_event_created: int | float | None,
+    stripe_event_type: str,
+    subscription_obj: Mapping[str, Any] | None,
+    previous_paid_subscription_id: str | None,
+    resulting_paid_subscription_id: str | None,
+) -> None:
+    """Emit an owner-bound billing lifecycle event after webhook resolution.
+
+    Stripe remains authoritative. This is a bounded PostHog projection used by
+    product scorecards; scheduled cancellation is deliberately not churn, and
+    no amount, customer, card, email, or subscription identifier is emitted.
+    """
+    if not uid or not stripe_event_id or not isinstance(subscription_obj, Mapping):
+        return
+    obj = subscription_obj
+    plan = _resolve_plan(obj)
+    interval = _resolve_interval(obj)
+    event_name: str | None = None
+    reason = 'none'
+    # The caller supplies the durable entitlement after reconciliation. Raw
+    # webhook status cannot prove churn: another subscription may retain access.
+    # Trialing counts as paid-plan entitlement, matching the product authority;
+    # this signal is not a cash/revenue measurement.
+    if resulting_paid_subscription_id and not previous_paid_subscription_id:
+        event_name = 'Billing Subscription Started'
+    elif previous_paid_subscription_id and not resulting_paid_subscription_id:
+        if previous_paid_subscription_id != obj.get('id'):
+            return
+        event_name = 'Billing Subscription Churned'
+        reason = (
+            'payment_failure' if obj.get('status') in _PAYMENT_FAILED_STATUSES else _resolve_cancellation_reason(obj)
+        )
+    if event_name is None:
+        return
+    try:
+        occurred_at = None
+        if isinstance(stripe_event_created, (int, float)):
+            from datetime import datetime, timezone
+
+            occurred_at = (
+                datetime.fromtimestamp(float(stripe_event_created), tz=timezone.utc).isoformat().replace('+00:00', 'Z')
+            )
+        from utils.product_telemetry import emit_product_event
+
+        emit_product_event(
+            uid=uid,
+            event=event_name,
+            properties={
+                'billing_event_id': stripe_event_id[:128],
+                'occurred_at': occurred_at,
+                'billing_source': 'stripe_webhook_authoritative_owner',
+                'billing_measurement': 'paid_plan_entitlement_including_trial',
+                'plan': plan,
+                'interval': interval,
+                'reason': reason,
+            },
+        )
+    except Exception:
+        logger.warning('billing_product_event_emit_failed event=%s', event_name, exc_info=True)
+
+
 def _reachable_reasons(event: str) -> tuple[str, ...]:
     return tuple(sorted(_REASONS)) if event == _REASON_BEARING_EVENT else ('none',)
 

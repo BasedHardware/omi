@@ -106,8 +106,9 @@ class SyncReconciler {
     unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded));
   }
 
-  /// App backgrounded — stop the timer. State is persisted; a later
-  /// foreground/startup poke resumes. (No OS background execution by design.)
+  /// App backgrounded — stop the reconcile timer. An in-flight Android
+  /// transfer keeps its own FGS/wake lock until that pass completes or cancels
+  /// (#5221); this timer must not start a new drain from screen-off.
   void onBackground() {
     _foreground = false;
     _timer?.cancel();

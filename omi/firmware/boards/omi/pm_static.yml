@@ -1,4 +1,5 @@
 app:
+  # Starts after the MCUboot pad; keep address + size == end_address.
   address: 0x10200
   end_address: 0xf8000
   region: flash_primary

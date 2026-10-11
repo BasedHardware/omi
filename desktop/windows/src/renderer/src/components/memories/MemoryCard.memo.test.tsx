@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'react'
-import { render, cleanup, act } from '@testing-library/react'
-import type { Memory } from '../../hooks/useMemories'
+import { render, cleanup, act, fireEvent } from '@testing-library/react'
+import type { Memory, MemoryUseAction } from '../../hooks/useMemories'
 
 // Regression guard for the app-wide navigation-snappiness fix (perf/win-nav-snappy).
-//
 // The Memories page consumes useLocation (to gate the brain-map reveal), so it
 // re-renders on EVERY app navigation while it stays mounted-but-hidden. Its ~400
 // MemoryCards each mount a Radix Tooltip.Provider; before this fix they all
@@ -40,7 +39,13 @@ function makeMemory(id: string): Memory {
 const noopOpen = (): void => {}
 
 // A parent that re-renders on demand, holding a memory it can swap by reference.
-function Harness({ memory }: { memory: Memory }): React.JSX.Element {
+function Harness({
+  memory,
+  onUseAction
+}: {
+  memory: Memory
+  onUseAction?: (id: string, action: MemoryUseAction) => void
+}): React.JSX.Element {
   const [, setTick] = useState(0)
   return (
     <div>
@@ -48,7 +53,7 @@ function Harness({ memory }: { memory: Memory }): React.JSX.Element {
         bump
       </button>
       <ul>
-        <MemoryCard memory={memory} onOpen={noopOpen} />
+        <MemoryCard memory={memory} onOpen={noopOpen} onUseAction={onUseAction} />
       </ul>
     </div>
   )
@@ -92,5 +97,63 @@ describe('MemoryCard memoization (nav-snappiness regression)', () => {
     )
 
     expect(getByText('Conversation')).not.toBeNull()
+  })
+
+  it('hides use feedback controls for inactive ledger rows', () => {
+    const onUseAction = vi.fn()
+    const active = { ...makeMemory('active'), status: 'active' as const, valid_to: '2026-09-01' }
+    const inactive = {
+      ...makeMemory('inactive'),
+      status: 'active' as const,
+      invalid_at: '2026-09-02'
+    }
+    const { getByRole, queryByRole, rerender } = render(
+      <ul>
+        <MemoryCard memory={active} onOpen={noopOpen} onUseAction={onUseAction} />
+      </ul>
+    )
+
+    expect(getByRole('button', { name: 'Do not use this memory' })).not.toBeNull()
+    rerender(
+      <ul>
+        <MemoryCard memory={inactive} onOpen={noopOpen} onUseAction={onUseAction} />
+      </ul>
+    )
+    expect(queryByRole('button', { name: 'Do not use this memory' })).toBeNull()
+    expect(queryByRole('button', { name: 'Mark this memory useful' })).toBeNull()
+  })
+
+  it('does not re-render when the parent re-renders with a stable onUseAction ref', () => {
+    // The page passes a useCallback-stable adapter (latest-ref inside), so
+    // onUseAction must satisfy memo exactly like memory/onOpen do — a fresh
+    // closure per render would re-render every card on every navigation.
+    const memory = makeMemory('a')
+    const onUseAction = vi.fn()
+    const { getByTestId, rerender } = render(<Harness memory={memory} onUseAction={onUseAction} />)
+    expect(dateSpy).toHaveBeenCalledTimes(1)
+
+    act(() => getByTestId('bump').click())
+    rerender(<Harness memory={memory} onUseAction={onUseAction} />)
+    expect(dateSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('Enter on the use-feedback button performs feedback without opening the card', () => {
+    const onUseAction = vi.fn()
+    const onOpen = vi.fn()
+    const { getByRole } = render(
+      <ul>
+        <MemoryCard memory={makeMemory('a')} onOpen={onOpen} onUseAction={onUseAction} />
+      </ul>
+    )
+
+    const feedback = getByRole('button', { name: 'Do not use this memory' })
+    // Enter activates the button (the click below) but must not bubble to the
+    // li's onKeyDown, which opens the card on top of the feedback.
+    fireEvent.keyDown(feedback, { key: 'Enter' })
+    expect(onOpen).not.toHaveBeenCalled()
+
+    fireEvent.click(feedback)
+    expect(onUseAction).toHaveBeenCalledWith('a', 'suppress')
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })

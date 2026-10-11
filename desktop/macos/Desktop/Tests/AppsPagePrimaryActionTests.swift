@@ -28,4 +28,28 @@ final class AppsPagePrimaryActionTests: XCTestCase {
     XCTAssertEqual(
       AppDetailSheet.primaryAppAction(isEnabled: true, worksExternally: false), .hidden)
   }
+
+  func testEnabledChatAppOpensItsConversationWhenAHandlerExists() {
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(
+        isEnabled: true,
+        worksExternally: false,
+        worksWithChat: true,
+        hasChatAction: true
+      ),
+      .chat
+    )
+  }
+
+  func testChatAppStaysHiddenWithoutAConversationHandler() {
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(
+        isEnabled: true,
+        worksExternally: false,
+        worksWithChat: true,
+        hasChatAction: false
+      ),
+      .hidden
+    )
+  }
 }

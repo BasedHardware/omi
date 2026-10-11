@@ -441,7 +441,9 @@ def _evidence(source_id: str, now: datetime, *, source_type: str = "conversation
     }
 
 
-def test_api_create_without_attribution_is_primary_user(monkeypatch_trusted_account, monkeypatch):
+def test_automated_api_create_without_attribution_does_not_claim_user_ownership(
+    monkeypatch_trusted_account, monkeypatch
+):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
     uid = "uid-api-scope"
@@ -460,10 +462,10 @@ def test_api_create_without_attribution_is_primary_user(monkeypatch_trusted_acco
         db_client=db,
     )
     stored = db.docs[f"users/{uid}/memory_items/mem_api"]
-    assert stored["subject_scope"] == "primary_user"
+    assert stored["subject_scope"] == "third_party"
 
 
-def test_x_post_legacy_assumed_is_primary_user(monkeypatch_trusted_account, monkeypatch):
+def test_x_post_legacy_assumption_does_not_establish_user_ownership(monkeypatch_trusted_account, monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
     uid = "uid-x-scope"
@@ -483,7 +485,7 @@ def test_x_post_legacy_assumed_is_primary_user(monkeypatch_trusted_account, monk
         db_client=db,
     )
     stored = db.docs[f"users/{uid}/memory_items/mem_x"]
-    assert stored["subject_scope"] == "primary_user"
+    assert stored["subject_scope"] == "third_party"
 
 
 def test_conversation_about_user_name_is_primary_user(monkeypatch_trusted_account, monkeypatch):

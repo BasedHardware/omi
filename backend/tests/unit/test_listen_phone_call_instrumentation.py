@@ -285,7 +285,15 @@ def test_accepted_and_outcome_counters_use_bounded_labels():
     record_listen_session_accepted(source='definitely-not-a-source', platform=None)
     record_listen_unknown_channel_prefix(source=None, platform='not-a-platform')
 
-    assert _counter_value(OMI_LISTEN_ACCEPTED_TOTAL, transcription_source='unknown', client_platform='unknown') >= 1
+    assert (
+        _counter_value(
+            OMI_LISTEN_ACCEPTED_TOTAL,
+            transcription_source='unknown',
+            client_platform='unknown',
+            app_build='unknown',
+        )
+        >= 1
+    )
     assert (
         _counter_value(
             OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL, transcription_source='unknown', client_platform='unknown'

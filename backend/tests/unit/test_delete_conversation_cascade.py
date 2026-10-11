@@ -18,6 +18,11 @@ import pytest
 from database import conversations as conversations_db
 
 
+@pytest.fixture(scope="module", autouse=True)
+def warm_merge_cleanup():
+    from utils.conversations import merge_conversations
+
+
 class _FakeBatch:
     def __init__(self, store: "_FakeFirestore"):
         self._store = store
@@ -50,6 +55,7 @@ class _FakeDocumentReference:
         self.path = path
         self._store = store
         self.exists = True
+        self.data = {}
         self.subcollections: dict[str, _FakeCollectionReference] = {}
 
     # Snapshots streamed out of a query carry `.reference`; the fake document is
@@ -68,9 +74,24 @@ class _FakeDocumentReference:
         # Firestore only lists subcollections that still hold documents.
         return [sub for sub in self.subcollections.values() if any(d.exists for d in sub.documents.values())]
 
+    def get(self):
+        return self
+
+    def to_dict(self):
+        return self.data if self.exists else None
+
     def delete(self) -> None:
         self.exists = False
         self._store.deleted.append(self.path)
+
+    def create(self, data: dict) -> None:
+        # Real SDK semantics: succeed only when the document does not exist yet.
+        if self.exists:
+            from google.api_core.exceptions import AlreadyExists
+
+            raise AlreadyExists(f'{self.path} already exists')
+        self.data = data
+        self.exists = True
 
 
 class _FakeCollectionReference:
@@ -86,6 +107,13 @@ class _FakeCollectionReference:
 
     def limit(self, count: int) -> _FakeQuery:
         return _FakeQuery(self, count)
+
+    def where(self, *, filter):
+        assert filter.field_path == 'source_id' and filter.op_string == '=='
+        # This cascade fixture has no proactive items; the live query is covered
+        # by the proactivity emulator proof, including matching-item purges.
+        assert self.path.endswith('/proactivity_items') and not self.documents
+        return _FakeQuery(self)
 
     def stream(self):
         return _FakeQuery(self).stream()
@@ -157,3 +185,50 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
 
     assert not conversation.exists
     assert store.deleted == ['users/uid-1/conversations/conv-1']
+
+
+def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
+    from utils.conversations import merge_conversations
+
+    conversation = _seed_conversation(store)
+    conversation.data['sync_merged_from'] = ['donor-a', 'donor-b']
+    removed = []
+    # The donor intent write goes through its own module-level client; bind it
+    # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
+    monkeypatch.setattr(
+        merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: removed.append(cid)
+    )
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: conversation.data)
+    merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert removed == ['donor-a', 'donor-b']
+    assert not conversation.exists
+
+
+def test_database_hard_delete_does_not_read_or_orchestrate_ancestors(store):
+    conversation = _seed_conversation(store)
+
+    def unexpected_read():
+        raise AssertionError('DB hard delete must not inspect ancestor metadata')
+
+    conversation.get = unexpected_read
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert not conversation.exists
+
+
+def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
+    from utils.conversations import merge_conversations
+
+    conversation = _seed_conversation(store)
+    # The donor intent write goes through its own module-level client; bind it
+    # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a: {'sync_merged_from': ['donor']})
+
+    def fail(*a, **kw):
+        raise RuntimeError('retraction unavailable')
+
+    monkeypatch.setattr(merge_conversations, '_delete_conversation_and_related_data', fail)
+    with pytest.raises(RuntimeError, match='retraction unavailable'):
+        merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert conversation.exists

@@ -41,6 +41,23 @@ meaning; reading those as a finite zero would hand every Free user a zero allowa
 is bridged too — charts set `300`, so the zero branch is latent, but a deployed `0` there would make
 `has_transcription_credits` false for every Free user.
 
+**D2 (2026-09-09): no repository configuration declares a `BASIC_TIER_*` overlay any more, and no serving
+identity will carry one once the prod dispatch runs.** They were deleted from both backend-listen charts and
+both pusher charts, and the four Cloud Run services (`backend`, `backend-sync`, `backend-sync-backfill`,
+`backend-integration`) declare them as `forbidden_env` in `backend/deploy/runtime_env/_base.yaml`, which the
+runtime-env validator turns into a required `--remove-env-vars` entry in
+`.github/actions/deploy-backend-stack` / `sync-backfill-lifecycle` and an absence check against the live
+service. Scope of the claim, because it is easy to overstate: the nine serving identities are those eight plus
+Cloud Run `desktop-backend`, which is **not** in the `cloud_run.services` manifest (its manifest section has no
+`forbidden_env` support) and is therefore covered by evidence rather than by a gate — read live on
+2026-09-09, dev and prod, and it carries none of the four names, nor does any desktop router read a plan
+transcription limit. The six Cloud Run jobs are outside the manifest pin and have no reader.
+`backend/tests/unit/test_plan_quota_env_retirement.py` pins the rest, and is selected by an edit to any chart,
+either composite deploy action, or the runtime-env manifest (`backend/testing/workflow_contracts.json`). The `_legacy_overlay` bridge stays
+in code only until the prod dispatch has removed the deployed values (the live check proves it); delete the bridge
+with its tests in the follow-up, never before. Behaviour change on that dispatch: prod `GET /v1/users/me/subscription`
+stops advertising 600 free minutes and reports the catalog's 300, which the listen plane already enforced (P9 ruling).
+
 The **chat overlays** (`FREE/NEO/OPERATOR_CHAT_QUESTIONS_PER_MONTH`, `ARCHITECT_CHAT_COST_USD_PER_MONTH`) and
 the **Plus transcription overlay** are deliberately **not** bridged: no chart or deploy file sets any of them,
 so there is no deployed configuration to protect, and under David's ruling a finite `0` means zero. That is
@@ -54,9 +71,8 @@ The catalog's own values always use the typed representation. D2 deletes the ove
 The backend enum is the closest existing root, but even it has two shapes: six `PlanType` values and a four-value
 `Subscription.plan` schema (`backend/models/users.py`, origin/main lines 82-95 and 129-133). The backend then rebuilds
 paid, mobile, and desktop sets (`backend/utils/subscription.py`, lines 28-37), plan cards and price environment keys
-(lines 426-494), display names (lines 872-880), and limits (lines 1059-1118). Desktop proactivity is another
-independent table (`backend/routers/desktop_proactivity.py`, lines 41-54). This is not an ownership graph; it is a
-collection of peers.
+(lines 426-494), display names (lines 872-880), and limits (lines 1059-1118). Legacy desktop proactivity also had an independent quota table; it was retired on 2026-10-03.
+The v2 budget now projects the catalog through `backend/config/proactivity_v2.py`.
 
 Stripe cannot be selected as the intended-price authority merely because it is currently the only place an amount
 can be observed. The repository creates subscription Checkout sessions, but its only product/price creation helpers
@@ -336,7 +352,7 @@ dependencies land without changing a decision. “Judgment” means one owner mu
    - D3b transcription/fair use: `backend/utils/subscription.py`, `backend/utils/fair_use.py`, listen/sync admission,
      and their tests. Depends on D1 for B1. Acceptance: plan selection and defaults contain no manual plan table;
      operational anti-abuse switches remain feature-owned and cannot change a plan entitlement silently.
-   - D3c desktop/phone: `backend/routers/desktop_proactivity.py`, `backend/database/phone_call_config.py`, and
+   - D3c desktop/phone: `backend/config/proactivity_v2.py`, `backend/database/phone_call_config.py`, and
      `backend/utils/phone_calls.py`. Acceptance: Firestore overrides are surfaced as declared effective overlays with
      telemetry; defaults and plan membership are catalog-only.
 

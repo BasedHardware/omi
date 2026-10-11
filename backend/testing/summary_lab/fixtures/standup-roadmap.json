@@ -1,0 +1,41 @@
+{
+  "id": "standup-roadmap",
+  "kind": "meeting",
+  "started_at": "2026-09-08T09:30:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] Morning. Let's lock Friday for the notes v2 flag on backend-sync.\n[s2 1] Agreed. Calendar context stays off in prod.\n[s1 0] I'll send the rollout note after standup.\n[s2 1] Ash is reviewing the harness this afternoon.",
+  "expected_facts": ["Friday for the notes v2 flag", "Calendar context stays off"],
+  "must_not_contain": ["pause the song", "Speaker 1"],
+  "owner_threads": ["flag rollout", "prod calendar off"],
+  "token_estimate": {"input": 900, "output": 220},
+  "recorded": {
+    "notes_v2": {
+      "title": "Team Locks Friday Notes v2 Rollout",
+      "overview": "The team agreed to enable notes v2 on backend-sync on Friday and keep calendar context off in prod.",
+      "sections": [
+        {
+          "heading": "Rollout",
+          "body_markdown": "- Friday is the date for the notes v2 flag on backend-sync.\n- Calendar context stays off in prod.\n- A rollout note goes out after standup."
+        }
+      ],
+      "action_items": [
+        {"description": "Send the rollout note after standup"}
+      ]
+    },
+    "legacy": {
+      "title": "Standup",
+      "overview": "Discussed flags and a review.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Speaker 1 Morning Chat",
+      "overview": "Um, they like, yeah, talked about flags after pause the song.",
+      "sections": [
+        {"heading": "Noise", "body_markdown": "- Speaker 1 said um a lot.\n- Then skip this song and keep going."}
+      ],
+      "action_items": []
+    }
+  }
+}

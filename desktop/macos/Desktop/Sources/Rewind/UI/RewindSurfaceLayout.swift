@@ -77,17 +77,11 @@ enum RewindSurfaceLayout {
 
 /// The stage inside the player panel, and where a picture of a given shape lands on it.
 ///
-/// **This exists because the chrome was pinned to the wrong rectangle.** The timestamp pill, the
-/// zoom cluster and the two segment chevrons are an `.overlay` on the stage, so they pinned to the
-/// *stage's* edges. That is correct only while the photograph fills the stage. It does not: a screen
-/// capture is around 1.8 wide, and at the app's default 1450 pt window the stage is 2.55 — so the
-/// picture is height-bound and there are roughly 200 pt of empty glass down each side of it. The
-/// chevron then sits 200 pt away from the frame it steps through, floating on nothing, which is what
-/// "the controls are scattered" describes.
-///
-/// The fit is a value rather than arithmetic inside a `body` so the behaviour is a test rather than a
-/// screenshot: at any aspect ratio the picture keeps its shape, stays inside the stage, sits centred,
-/// and touches the edge that binds it.
+/// **The fit is a value rather than arithmetic inside a `body`** so the behaviour is a test rather
+/// than a screenshot: at any aspect ratio the picture keeps its shape, stays inside the stage, sits
+/// centred, and touches the edge that binds it. `RewindPage` asks it for the picture's display size;
+/// the controls that belong to the picture are not overlaid on it any more — they sit in
+/// `RewindStageControlBar` on the glass beneath it — so nothing else needs the picture's rect.
 enum RewindStageFit {
 
   /// The air between the player panel's edge and the photograph's stage. The picture is a picture,
@@ -95,25 +89,11 @@ enum RewindStageFit {
   static let horizontalInset: CGFloat = 18
   static let verticalInset: CGFloat = 12
 
-  /// The stage, inside an outer rect of `size`.
-  ///
-  /// The overlay that carries the chrome is applied *after* the stage's padding, so it spans the
-  /// outer rect while the picture is fitted into the inner one. Two coordinate spaces one inset
-  /// apart is exactly the kind of difference that is invisible in a `body`, so it is stated here
-  /// once and both callers ask for it.
-  static func stageRect(in size: CGSize) -> CGRect {
-    CGRect(
-      x: horizontalInset,
-      y: verticalInset,
-      width: max(0, size.width - horizontalInset * 2),
-      height: max(0, size.height - verticalInset * 2))
-  }
-
   /// Where a picture of `image` lands inside `container` — aspect-fit and centred.
   ///
-  /// Empty on any degenerate input, positioned at the container's centre rather than its origin: a
-  /// zero-size rect at the origin would fling the chrome into the top-left corner for the frame or
-  /// two before the first image decodes, and a control that jumps is worse than one that is absent.
+  /// Empty on any degenerate input, positioned at the container's centre rather than its origin, so
+  /// a caller that reads the rect before the first image decodes gets "nothing, in the middle"
+  /// rather than "nothing, in the top-left corner".
   static func pictureRect(image: CGSize, in container: CGSize) -> CGRect {
     guard image.width > 0, image.height > 0, container.width > 0, container.height > 0 else {
       return CGRect(x: container.width / 2, y: container.height / 2, width: 0, height: 0)
@@ -137,14 +117,6 @@ enum RewindStageFit {
       y: (container.height - height) / 2,
       width: width,
       height: height)
-  }
-
-  /// Where the picture lands in the **outer** stage's coordinates — the space the chrome overlay is
-  /// laid out in. The composition of the two above, so a caller cannot apply one and forget the
-  /// other.
-  static func pictureRectInStage(image: CGSize, stage size: CGSize) -> CGRect {
-    let stage = stageRect(in: size)
-    return pictureRect(image: image, in: stage.size).offsetBy(dx: stage.minX, dy: stage.minY)
   }
 }
 

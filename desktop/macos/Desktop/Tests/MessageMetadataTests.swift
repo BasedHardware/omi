@@ -57,7 +57,7 @@ final class MessageMetadataTests: XCTestCase {
     // Full System Prompt, XML prompt-count parsers, or untrusted token/cost usage. The Model row
     // returned in #12331-follow-up by Nik's direction, but ONLY bound to `modelsSummary` — the
     // response-OBSERVED served identities (chunk.model from the provider stream; verified live:
-    // the managed gateway lane serves and reports "gpt-5.6-luna") — never the request alias that
+    // the managed gateway lane serves and reports "gpt-6-luna") — never the request alias that
     // #11521 removed as dishonest.
     let popover = try String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
     XCTAssertFalse(popover.contains("Full System Prompt"))
@@ -169,18 +169,24 @@ final class MessageMetadataTests: XCTestCase {
 @MainActor
 final class MessageMetadataModelAttributionTests: XCTestCase {
   func testModelsSummaryJoinsObservedIdentities() {
-    XCTAssertEqual(MessageMetadata(modelsUsed: ["gpt-5.6-luna"]).modelsSummary, "gpt-5.6-luna")
+    XCTAssertEqual(MessageMetadata(modelsUsed: ["gpt-6-luna"]).modelsSummary, "gpt-6-luna")
     XCTAssertEqual(
-      MessageMetadata(modelsUsed: ["gpt-5.6-luna", "claude-sonnet-4-6"]).modelsSummary,
-      "gpt-5.6-luna, claude-sonnet-4-6")
+      MessageMetadata(modelsUsed: ["gpt-6-luna", "claude-sonnet-4-6"]).modelsSummary,
+      "gpt-6-luna, claude-sonnet-4-6")
     XCTAssertEqual(MessageMetadata().modelsSummary, "")
+    XCTAssertEqual(
+      MessageMetadata(providerTargets: ["openai-codex"]).providersSummary,
+      "openai-codex"
+    )
   }
 
   func testJournalWritePersistsModelsAndChatMessageRestoresThem() throws {
     var message = ChatMessage(
       id: "turn-a", clientTurnId: "ck-1", text: "answer", sender: .ai)
     message.metadata = MessageMetadata(
-      adapterId: "realtime", modelsUsed: ["gemini-3.1-flash-live-preview"])
+      adapterId: "realtime",
+      modelsUsed: ["gemini-3.1-flash-live-preview"],
+      providerTargets: ["google"])
     let write = message.journalWrite(
       origin: "realtime_voice", status: .completed,
       continuityKey: "ck-1", messageSource: "realtime_voice")
@@ -188,6 +194,7 @@ final class MessageMetadataModelAttributionTests: XCTestCase {
     let object =
       try JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any]
     XCTAssertEqual(object?["modelsUsed"] as? [String], ["gemini-3.1-flash-live-preview"])
+    XCTAssertEqual(object?["providerTargets"] as? [String], ["google"])
 
     let turn = try XCTUnwrap(
       KernelJournalTurn(
@@ -207,6 +214,7 @@ final class MessageMetadataModelAttributionTests: XCTestCase {
       ))
     let restored = turn.chatMessage()
     XCTAssertEqual(restored.metadata?.modelsUsed, ["gemini-3.1-flash-live-preview"])
+    XCTAssertEqual(restored.metadata?.providerTargets, ["google"])
     XCTAssertEqual(restored.metadata?.adapterId, "realtime")
   }
 

@@ -9,6 +9,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 import 'chat_block_chrome.dart';
 
@@ -40,9 +41,7 @@ Future<bool> openChatBlockConversation(
   }
 
   context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
-  await Navigator.of(context).push(
-    MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)),
-  );
+  await routeToPage(context, ConversationDetailPage(conversation: conversation));
   return true;
 }
 
@@ -164,10 +163,9 @@ class _ConversationLinkBlockState extends State<ConversationLinkBlock> {
               children: [
                 Text(
                   l10n.chatBlockRecommendedNextSteps,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 for (final item in items)
@@ -181,9 +179,7 @@ class _ConversationLinkBlockState extends State<ConversationLinkBlock> {
                         Expanded(
                           child: Text(
                             item.description,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                           ),
                         ),
                       ],

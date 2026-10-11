@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { revokeTvLink } from "@/lib/tv-links";
+import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function DELETE(
 
   const params = await props.params;
   const id = params?.id;
-  if (!id) {
+  if (!id || !isSafeDocumentId(id)) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 

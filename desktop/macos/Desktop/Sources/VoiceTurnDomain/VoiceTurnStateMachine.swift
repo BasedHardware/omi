@@ -491,15 +491,24 @@ package struct VoiceTurnTerminalRecord: Equatable, Sendable {
   package let turnID: VoiceTurnID
   package let reason: VoiceTurnTerminalReason
   package let route: VoiceTurnRoute
+  /// Whether the provider's full answer text had finished when the turn
+  /// terminalized. A turn cut mid-stream has complete playback semantics for
+  /// delivery, but its journaled content is a fragment; a turn terminalized
+  /// after the response finished produced complete text even when spoken
+  /// delivery was cut short. The journal surfaces this so later turns do not
+  /// re-deliver a finished answer out of context.
+  package let answerTextCompleted: Bool
 
   package init(
     turnID: VoiceTurnID,
     reason: VoiceTurnTerminalReason,
-    route: VoiceTurnRoute = .undecided
+    route: VoiceTurnRoute = .undecided,
+    answerTextCompleted: Bool = false
   ) {
     self.turnID = turnID
     self.reason = reason
     self.route = route
+    self.answerTextCompleted = answerTextCompleted
   }
 }
 
@@ -2396,7 +2405,11 @@ struct VoiceTurnReducer {
       model.duplicateTerminalCount += 1
       return
     }
-    let record = VoiceTurnTerminalRecord(turnID: turn.id, reason: reason, route: turn.route)
+    let record = VoiceTurnTerminalRecord(
+      turnID: turn.id,
+      reason: reason,
+      route: turn.route,
+      answerTextCompleted: turn.providerFinished)
     if turn.captureID != nil || turn.phase.isRecording || turn.phase == .finalizing {
       effects.append(.stopCapture(turnID: turn.id, captureID: turn.captureID))
     }

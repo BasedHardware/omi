@@ -21,6 +21,10 @@ class FakeDeviceTransport extends DeviceTransport {
     _controllerFor(characteristicUuid).add(data);
   }
 
+  void emitState(DeviceTransportState state) {
+    _stateController.add(state);
+  }
+
   @override
   String get deviceId => 'fake-limitless';
 
@@ -88,16 +92,16 @@ List<int> intField(int fieldNum, int value) => protoField(fieldNum, 0, varint(va
 List<int> bytesField(int fieldNum, List<int> data) => protoField(fieldNum, 2, [...varint(data.length), ...data]);
 
 List<int> bleWrapper(int index, int seq, int numFrags, List<int> payload) => [
-      ...intField(1, index),
-      ...intField(2, seq),
-      ...intField(3, numFrags),
-      ...bytesField(4, payload),
-    ];
+  ...intField(1, index),
+  ...intField(2, seq),
+  ...intField(3, numFrags),
+  ...bytesField(4, payload),
+];
 
 List<int> mirrorRequestData(int requestId) => bytesField(30, [
-      ...intField(1, requestId),
-      ...protoField(2, 0, [0x00]),
-    ]);
+  ...intField(1, requestId),
+  ...protoField(2, 0, [0x00]),
+]);
 
 List<int> mirrorSetCurrentTime(int messageIndex, int requestId, int timestampMs) =>
     bleWrapper(messageIndex, 0, 1, [...bytesField(6, intField(1, timestampMs)), ...mirrorRequestData(requestId)]);
@@ -273,16 +277,16 @@ List<int> audioWrapper(List<int> audioBlob, {int offset = 0}) =>
     bytesField(3, [...intField(1, offset), ...bytesField(2, audioBlob)]);
 
 List<int> flashPageBytes(int timestampMs, List<List<int>> wrappers) => [
-      ...intField(1, timestampMs),
-      for (final w in wrappers) ...w,
-    ];
+  ...intField(1, timestampMs),
+  for (final w in wrappers) ...w,
+];
 
 List<int> storageBufferBytes({required int session, required int seq, required int index, required List<int> page}) => [
-      ...intField(2, session),
-      ...intField(4, seq),
-      ...intField(5, index),
-      ...bytesField(6, page),
-    ];
+  ...intField(2, session),
+  ...intField(4, seq),
+  ...intField(5, index),
+  ...bytesField(6, page),
+];
 
 List<int> pendantMessage(List<int> storageBuffer) => bytesField(2, storageBuffer);
 
@@ -314,31 +318,31 @@ void checkGolden(Directory dir, String fileName, Map<String, dynamic> actual) {
   expect(
     normalizedActual,
     equals(expected),
-    reason: 'Golden fixture drift in $fileName: the Dart Limitless implementation no longer matches the pinned '
+    reason:
+        'Golden fixture drift in $fileName: the Dart Limitless implementation no longer matches the pinned '
         'behavior. If the protocol change is intentional, delete the fixture, re-run this test to regenerate it, '
         'and update the Kotlin port (LimitlessProtocol.kt) to match.',
   );
 }
 
 Map<String, dynamic> pageToJson(Map<String, dynamic> page) => {
-      'index': page['index'],
-      'session': page['session'],
-      'timestampMs': page['timestamp_ms'],
-      'frames': (page['opus_frames'] as List<List<int>>).map(toHex).toList(),
-    };
+  'index': page['index'],
+  'session': page['session'],
+  'timestampMs': page['timestamp_ms'],
+  'frames': (page['opus_frames'] as List<List<int>>).map(toHex).toList(),
+};
 
 Map<String, dynamic> caseFixture(
   String name,
   List<List<int>> packets,
   List<Map<String, dynamic>> pages,
   Map<String, int>? storageState,
-) =>
-    {
-      'name': name,
-      'packets': packets.map(toHex).toList(),
-      'expectedPages': pages.map(pageToJson).toList(),
-      'expectedStorageState': storageState,
-    };
+) => {
+  'name': name,
+  'packets': packets.map(toHex).toList(),
+  'expectedPages': pages.map(pageToJson).toList(),
+  'expectedStorageState': storageState,
+};
 
 Map<String, int>? mirrorStorageStateForPackets(List<List<int>> packets) {
   for (final packet in packets) {
@@ -357,7 +361,7 @@ void main() {
     final fixtures = fixtureDirectory();
     final transport = FakeDeviceTransport();
     final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
-    final connection = LimitlessDeviceConnection(device, transport);
+    final connection = LimitlessDeviceConnection(device, transport, streamHealthWindow: const Duration(minutes: 1));
     final emittedPages = <Map<String, dynamic>>[];
     final pageSubscription = connection.getFlashPageStream().listen(emittedPages.add);
 
@@ -792,7 +796,8 @@ void main() {
     }
 
     final encoderVectors = {
-      'note': 'Byte-exact TX vectors observed from a fresh LimitlessDeviceConnection driving connect(), '
+      'note':
+          'Byte-exact TX vectors observed from a fresh LimitlessDeviceConnection driving connect(), '
           'enableBatchMode(), acknowledgeProcessedData(12345), getStorageStatus(), disableBatchMode(), '
           'setRealtimeAudioSuppressed(true) in order. messageIndex starts at 0 and increments per write; '
           'requestId starts at 1 and increments per write. msg6 is pinned at a fixed timestamp after '
@@ -852,4 +857,70 @@ void main() {
     await pageSubscription.cancel();
     await connection.disconnect();
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('Limitless reconnect repeats time sync before realtime activation', () async {
+    final transport = FakeDeviceTransport();
+    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+    final connection = LimitlessDeviceConnection(device, transport, streamHealthWindow: const Duration(minutes: 1));
+
+    await connection.connect();
+    expect(transport.writes.length, 2);
+
+    transport.emitState(DeviceTransportState.connected);
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+
+    expect(transport.writes.length, 4, reason: 'a reconnect must repeat time sync before realtime activation');
+    expect(decodeWrapperCommand(transport.writes[2])['messageNumber'], 6);
+    expect(transport.writes[3], equals(mirrorDownloadFlashPages(3, 4, false, true)));
+
+    await connection.disconnect();
+  }, timeout: const Timeout(Duration(seconds: 10)));
+
+  test(
+    'silent Limitless realtime start probes status and retries activation only once',
+    () async {
+      final transport = FakeDeviceTransport();
+      final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+      final connection = LimitlessDeviceConnection(
+        device,
+        transport,
+        streamHealthWindow: const Duration(milliseconds: 10),
+        storageStatusTimeout: const Duration(milliseconds: 10),
+      );
+
+      await connection.connect();
+      await Future<void>.delayed(const Duration(milliseconds: 70));
+
+      final messageNumbers = transport.writes.map((write) => decodeWrapperCommand(write)['messageNumber']).toList();
+      expect(messageNumbers, [6, 8, 21, 8, 21]);
+      expect(
+        messageNumbers.where((messageNumber) => messageNumber == 8).length,
+        2,
+        reason: 'the health watchdog may reactivate realtime once but must not loop',
+      );
+
+      await connection.disconnect();
+    },
+    timeout: const Timeout(Duration(seconds: 10)),
+  );
+
+  test('concurrent Limitless status probes share one control write', () async {
+    final transport = FakeDeviceTransport();
+    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+    final connection = LimitlessDeviceConnection(
+      device,
+      transport,
+      streamHealthWindow: const Duration(minutes: 1),
+      storageStatusTimeout: const Duration(milliseconds: 10),
+    );
+
+    await connection.connect();
+    final results = await Future.wait([connection.getStorageStatus(), connection.getStorageStatus()]);
+
+    expect(results, [null, null]);
+    expect(transport.writes.length, 3);
+    expect(decodeWrapperCommand(transport.writes.last)['messageNumber'], 21);
+
+    await connection.disconnect();
+  }, timeout: const Timeout(Duration(seconds: 10)));
 }

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-journal-status-conflates-text-completion-with-delivery",
+  "violated_contract": "A journal row that downstream context reads as canonical history must distinguish 'this answer's text is a fragment' from 'this answer's text completed but its spoken delivery was cut'. Push-to-talk delivery gating (#12743/#12730) correctly journals both cases `.failed`, but a single status field makes them indistinguishable, and the context renderer's standing guidance then asserts a false premise — that every non-completed row 'was cut off … its content is a fragment' and must be re-answered in full on follow-up. Measured 2026-09-09: rapid PTT follow-ups barge in after the provider response finished but before playback drains, the complete replies journal `.failed` with no distinguishing signal, and a generic follow-up ('can you double check?') re-answers the stale thread out of context — the `answered_previous_or_other` voice failure class. The failure is invisible locally: pairing, context assembly, and backend sync are all correct; only the model's interpretation of its own history is lied to.",
+  "canonical_prevention": "The journal must carry the answer-text completion signal beside the status, on every write path that can terminalize a voice assistant row: the reducer's terminal record captures whether the provider response finished, the capture/funnel paths persist it as row metadata (`answerTextCompleted`) exactly when true, and the sealed-row revision sets it (a row sealed `.completed` at provider-response-finish by definition completed its text). The context renderer surfaces the flag per recent turn and splits its guidance: fragments keep the strict re-answer rule; delivery-cut completed answers must not be re-delivered from scratch on a later follow-up. Regression tests drive the production reducer through a barge-in after provider finish (flag true) and mid-stream (flag absent), pin the metadata on the streaming-finalize and sealed-revision write paths, and assert the rendered snapshot separates the two.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/VoiceTurnJournalDeliveryRevisionTests.swift",
+    "desktop/macos/Desktop/Tests/VoiceTurnJournalTruthfulnessTests.swift",
+    "desktop/macos/agent/tests/context-snapshot.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift",
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift",
+    "desktop/macos/agent/src/runtime/context-snapshot.ts"
+  ],
+  "status": "open"
+}

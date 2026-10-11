@@ -1,0 +1,7 @@
+{
+  "version": "0.12.361",
+  "date": "2026-09-17",
+  "changes": [
+    "Live notes no longer retry on every sentence when your plan doesn't include AI notes"
+  ]
+}

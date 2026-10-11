@@ -12,44 +12,47 @@ export default function SharedConversationInstallCta({
   openInOmiHref,
 }: SharedConversationInstallCtaProps) {
   return (
-    <div className="mt-12 text-center md:mt-16">
-      <a
-        href={openInOmiHref}
-        className="inline-block rounded-2xl bg-white px-10 py-4 text-lg font-semibold text-black transition-all duration-300 hover:translate-y-[-2px] hover:bg-gray-100"
-      >
-        Open in Omi
-      </a>
-
-      <div className="mt-6 flex items-center justify-center gap-4">
-        <a
-          href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-transform duration-300 hover:scale-105"
-        >
-          <Image
-            src="/app-store-badge.svg"
-            alt="Download on the App Store"
-            className="h-[40px]"
-            width={120}
-            height={40}
-          />
-        </a>
-        <a
-          href="https://play.google.com/store/apps/details?id=com.friend.ios"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="transition-transform duration-300 hover:scale-105"
-        >
-          <Image
-            src="/google-play-badge.png"
-            alt="Get it on Google Play"
-            className="h-[40px]"
-            width={135}
-            height={40}
-          />
-        </a>
+    <section className="sn-cta" aria-label="Get Omi">
+      <div>
+        <h2 className="sn-cta-title">Notes like this, from every conversation.</h2>
+        <p className="sn-cta-copy">
+          Omi listens, writes the notes, and remembers — on your phone, your Mac, or the
+          Omi wearable.
+        </p>
       </div>
-    </div>
+      <div className="sn-cta-actions">
+        <a href={openInOmiHref} className="sn-cta-button">
+          Open in Omi
+        </a>
+        <div className="sn-cta-badges">
+          <a
+            href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Image
+              src="/app-store-badge.svg"
+              alt="Download on the App Store"
+              className="h-[40px]"
+              width={120}
+              height={40}
+            />
+          </a>
+          <a
+            href="https://play.google.com/store/apps/details?id=com.friend.ios"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Image
+              src="/google-play-badge.png"
+              alt="Get it on Google Play"
+              className="h-[40px]"
+              width={135}
+              height={40}
+            />
+          </a>
+        </div>
+      </div>
+    </section>
   );
 }

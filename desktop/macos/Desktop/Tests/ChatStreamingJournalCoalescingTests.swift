@@ -163,6 +163,96 @@ final class ChatStreamingJournalCoalescingTests: XCTestCase {
     XCTAssertEqual(publishes, 1)
   }
 
+  func testAStreamingEchoNeverRegressesARowThatAlreadySettled() throws {
+    // The turn settled: the terminal answer replaced the streamed projection
+    // and `isStreaming` flipped, which is the frame the transcript folds its
+    // tool chips and commentary away on. A `.streaming` journal echo that was
+    // still on the wire is a snapshot from *before* that frame; taking it
+    // whole puts the shorter text and the tool chips back on screen, then the
+    // terminal replay flips them away again — the answer visibly starts over.
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let turnID = "assistant-turn-3"
+    let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let finalText = "Here is the complete answer after the tool ran."
+    let settledBlocks: [ChatContentBlock] = [
+      .text(id: "\(turnID):commentary", text: "Let me look that up."),
+      .toolCall(id: "\(turnID):tool", name: "get_conversations", status: .completed, toolUseId: "t1"),
+      .text(id: "\(turnID):answer", text: finalText),
+    ]
+    provider.messages = [
+      ChatMessage(id: "user-turn-3", text: "Question?", createdAt: createdAt.addingTimeInterval(-1), sender: .user),
+      ChatMessage(
+        id: turnID,
+        text: finalText,
+        createdAt: createdAt,
+        sender: .ai,
+        isStreaming: false,
+        contentBlocks: settledBlocks,
+        turnOwner: .mainChat,
+        journalStatus: .streaming),
+    ]
+    var publishes = 0
+    let subscription = provider.$messages.dropFirst().sink { _ in publishes += 1 }
+    defer { subscription.cancel() }
+
+    let echoText = "Here is the comp"
+    provider.projectJournalTurns([
+      try Self.makeTurn(
+        surface: surface,
+        turnID: turnID,
+        role: "assistant",
+        status: .streaming,
+        content: echoText,
+        contentBlocks: [
+          ["type": "text", "id": "\(turnID):commentary", "text": "Let me look that up."],
+          [
+            "type": "toolCall", "id": "\(turnID):tool", "name": "get_conversations", "status": "running",
+            "toolUseId": "t1",
+          ],
+          ["type": "text", "id": "\(turnID):answer", "text": echoText],
+        ],
+        turnSeq: 9)
+    ])
+
+    XCTAssertFalse(provider.messages[1].isStreaming, "a settled row never goes back to streaming on an echo")
+    XCTAssertEqual(provider.messages[1].text, finalText, "the settled answer outranks any streaming snapshot")
+    XCTAssertEqual(provider.messages[1].visibleAnswerText, finalText)
+    XCTAssertEqual(publishes, 0, "a stale streaming echo must not republish the transcript")
+  }
+
+  func testATerminalReplayStillLandsAfterAStreamingEchoWasIgnored() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let turnID = "assistant-turn-4"
+    provider.messages = [
+      ChatMessage(
+        id: turnID,
+        text: "Settled locally.",
+        sender: .ai,
+        isStreaming: false,
+        contentBlocks: [.text(id: "\(turnID):answer", text: "Settled locally.")],
+        journalStatus: .streaming)
+    ]
+    provider.projectJournalTurns([
+      try Self.makeTurn(
+        surface: surface, turnID: turnID, role: "assistant", status: .streaming,
+        content: "Settled", contentBlocks: [["type": "text", "id": "\(turnID):answer", "text": "Settled"]],
+        turnSeq: 10)
+    ])
+    XCTAssertEqual(provider.messages[0].text, "Settled locally.")
+    provider.projectJournalTurns([
+      try Self.makeTurn(
+        surface: surface, turnID: turnID, role: "assistant", status: .completed,
+        content: "Settled by the journal.",
+        contentBlocks: [["type": "text", "id": "\(turnID):terminal", "text": "Settled by the journal."]],
+        turnSeq: 11)
+    ])
+    XCTAssertEqual(
+      provider.messages[0].text, "Settled by the journal.", "the terminal row is still the durable authority")
+    XCTAssertFalse(provider.messages[0].isStreaming)
+  }
+
   // MARK: - Plumbing
 
   private static func makeTurn(

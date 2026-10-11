@@ -335,7 +335,7 @@ enum FloatingControlBarGeometry {
   /// banner — may only *grow* that surface, never replace it.
   ///
   /// The bug this exists to prevent: the card stays mounted while the user
-  /// holds the reply shortcut against it (Interject), so any resize that
+  /// uses the voice shortcut, so any resize that
   /// substitutes the bare voice-island size crushes a 508pt card into a
   /// ~270pt notch lobe and the copy re-wraps to three truncated words. Height
   /// is the card's own plus `additionalHeight` — whatever the transient state
@@ -410,14 +410,5 @@ enum FloatingControlBarGeometry {
   }
 
   /// Insight teasers collapse to one line unless the pointer is over the card
-  /// or Interject PTT is holding a reply against it.
-  static func interjectInsightTeaserLineLimit(
-    kindIsInsight: Bool,
-    isHovering: Bool,
-    interjectBarHovering: Bool,
-    interjectPTTHoldActive: Bool
-  ) -> Int {
-    guard kindIsInsight else { return 3 }
-    return (isHovering || interjectBarHovering || interjectPTTHoldActive) ? 6 : 1
-  }
+  /// or voice capture is active.
 }

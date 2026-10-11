@@ -15,6 +15,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import { deleteCloudConversation } from '../lib/conversations/mutations'
 import { isLocalConversationId, isPendingConversationId } from '../lib/conversationId'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
@@ -215,6 +216,9 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const isPending = isPendingConversationId(id)
 
   const [conv, setConv] = useState<ServerConversation | null>(null)
+  useEffect(() => {
+    if (conv?.id === id) window.omi?.proactivityTargetRendered?.({ kind: 'conversation', id })
+  }, [conv, id])
   const [local, setLocal] = useState<LocalDisplay | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Bumping this re-runs the initial-load effect (Try again after a failed load).
@@ -375,7 +379,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     setConfirmDelete(false)
     try {
       if (isLocal) await window.omi.deleteLocalConversation(id)
-      else await omiApi.delete(`/v1/conversations/${id}`)
+      else await deleteCloudConversation(id)
       // Cloud deletion has no local DB callback; remove any permanent JIT
       // evidence pin only after the server confirms the conversation is gone.
       await window.omi.deleteJitConversationKeyframe(id)

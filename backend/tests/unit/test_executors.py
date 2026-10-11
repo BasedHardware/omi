@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from utils import executors
 from utils.executors import (
     MonitoredThreadPoolExecutor,
     _background_tasks,
@@ -25,6 +26,26 @@ from utils.executors import (
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
+
+
+def test_shadow_pool_is_lazy_propagates_context_and_shuts_down_with_registered_pools(monkeypatch):
+    monkeypatch.setattr(executors, '_jev_shadow_executor', None)
+    monkeypatch.setattr(executors, '_ALL_EXECUTORS', [])
+    assert executors._ALL_EXECUTORS == []
+    pool = executors.get_jev_shadow_executor()
+    assert executors.get_jev_shadow_executor() is pool
+    assert pool._max_workers == 10 and executors._ALL_EXECUTORS == [pool]
+    token = _test_ctxvar.set('shadow-context')
+    try:
+        future = submit_with_context(pool, lambda: (_test_ctxvar.get(), threading.current_thread().name))
+        value, thread = future.result(timeout=2)
+        assert value == 'shadow-context' and thread.startswith('jev-shadow')
+    finally:
+        _test_ctxvar.reset(token)
+        executors.shutdown_executors()
+        pool.shutdown(wait=True)
+    with pytest.raises(RuntimeError, match='shutdown'):
+        pool.submit(lambda: None)
 
 
 @pytest.mark.asyncio
@@ -176,7 +197,18 @@ def test_get_executor_metrics_returns_all_pools():
     metrics = get_executor_metrics()
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
-    expected = {'critical', 'db', 'llm', 'stripe', 'sync', 'postprocess', 'cleanup', 'storage'}
+    expected = {
+        'critical',
+        'db',
+        'llm',
+        'stripe',
+        'sync',
+        'postprocess',
+        'cleanup',
+        'storage',
+        'speaker_tag_verify',
+        'cimd',
+    }
     assert names == expected
 
 
@@ -248,6 +280,37 @@ async def test_start_background_task_tracks_and_removes():
     await task
     await asyncio.sleep(0)  # let done callback fire
     assert task not in _background_tasks
+
+
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog):
+    """A live account gate refuses the write. That is not a background crash."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    def blocked():
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        future = submit_with_context(_test_executor, blocked)
+        with pytest.raises(DestructiveOperationInProgress):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any('deferred reason=destructive_operation' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+
+
+def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
+    def boom():
+        raise RuntimeError('bg-boom')
+
+    with caplog.at_level(logging.ERROR, logger='utils.executors'):
+        future = submit_with_context(_test_executor, boom)
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

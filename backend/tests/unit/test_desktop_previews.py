@@ -12,7 +12,9 @@ from database.desktop_previews import (
     get_preview_manifest,
     normalize_preview_manifest,
     preview_identity,
+    publish_preview,
 )
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 SLUG = "new-onboarding"
 SOURCE_SHA = "a" * 40
@@ -129,6 +131,27 @@ class TestPreviewPointers:
 
         assert result == {"slug": SLUG, "deleted": False, "generation": None}
         transaction.delete.assert_not_called()
+
+
+class TestPreviewPublish:
+    def test_first_publish_of_a_build_creates_its_manifest_and_advances_the_pointer(self):
+        client = StrictFirestore()
+
+        result = publish_preview(_manifest(), expected_generation=0, firestore_client=client)
+
+        assert result["pointer"]["generation"] == 1
+        assert client.rows[(PREVIEW_MANIFESTS_COLLECTION, f"{SLUG}:{SOURCE_SHA}")]["source_sha"] == SOURCE_SHA
+        assert client.rows[(PREVIEW_POINTERS_COLLECTION, SLUG)]["source_sha"] == SOURCE_SHA
+
+    def test_republishing_the_same_build_leaves_the_pointer_alone(self):
+        client = StrictFirestore()
+        publish_preview(_manifest(), firestore_client=client)
+
+        result = publish_preview(_manifest(), expected_generation=1, firestore_client=client)
+
+        assert result["pointer"]["generation"] == 1
+        assert client.transactions[-1].creates == []
+        assert client.transactions[-1].sets == []
 
 
 class TestPreviewLookup:

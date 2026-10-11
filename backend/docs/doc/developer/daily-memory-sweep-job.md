@@ -18,6 +18,13 @@ running lifecycle cleanup, invoking the scheduler/model, or committing page
 state. Inventory and lifecycle work are reachable only after the authority is
 explicitly open; the default remains closed.
 
+Belief automation has a separate deployment-wide incident stop,
+`MEMORY_BELIEF_AUTOMATION_PAUSED`. When true, evidence/synthesis/backfill
+admission must close while read paths and TTL/expiry cleanup remain available.
+This control is not a per-UID cohort. The production runtime keeps the belief
+model and daily sweep disabled; development enables processing with the pause
+control false.
+
 Per-account failures are durable retry documents under
 `daily_memory_sweep_control_retries/{uid}`. Retry state is written before a
 fair page cursor advances. A cursor write failure can duplicate a page, but
@@ -28,8 +35,8 @@ The legacy `memory-maintenance-job` and `memory-maintenance-hourly` resources
 remain covered by `legacy_memory_retirement_readiness.py`; that readiness check
 must not be used as evidence that the daily replacement is retired or absent.
 Manual deployment is main-only and requires an exact merged-main SHA with a
-successful same-repository Release Eligibility run. The admitted checkout
-builds the image and runs `provision_daily_memory_sweep_scheduler.py`, which
-creates or updates (and enables) the hourly trigger before the read-only
-contract validation. The trigger uses the retained scheduler service identity
-and the v2 Cloud Run Jobs execution URI.
+successful same-repository Release Eligibility run. After deploying the jobs,
+the admitted checkout reconciles both Scheduler triggers from
+`backend/deploy/scheduler/jobs.yaml` and checks the full environment manifest.
+The triggers use the retained scheduler service identity and the v2 Cloud Run
+Jobs execution URI.

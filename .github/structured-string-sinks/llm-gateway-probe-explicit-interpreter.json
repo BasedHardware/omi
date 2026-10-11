@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "llm-gateway-probe-explicit-interpreter",
+  "kind": "script-interpreter",
+  "failure_class": "FC-workflow-executable-assumption",
+  "evidence_prs": [9943, 9945],
+  "safe_encoding": "invoke the checked-in 100644 probe through bash instead of assuming executable mode",
+  "scope": {
+    "globs": [
+      ".github/actions/*/action.yml",
+      ".github/actions/*/action.yaml",
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml"
+    ]
+  },
+  "command": "probe-llm-gateway-from-cloud-run.sh",
+  "interpreters": ["bash"],
+  "fixtures": {
+    "passing": ".github/scripts/fixtures/structured_string_sinks/llm-gateway-probe-interpreter.pass.yml",
+    "failing": ".github/scripts/fixtures/structured_string_sinks/llm-gateway-probe-interpreter.fail.yml"
+  }
+}

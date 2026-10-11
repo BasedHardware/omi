@@ -1,0 +1,41 @@
+{
+  "id": "playback-commute",
+  "kind": "ambient",
+  "started_at": "2026-09-06T08:05:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] Pause the song.\n[s1 0] Skip this track.\n[s1 0] I need to call the dentist before noon about the crown.\n[s1 0] Volume down.\n[s1 0] Next song.",
+  "expected_facts": ["call the dentist before noon"],
+  "must_not_contain": ["Pause the song", "Skip this track", "Next song"],
+  "owner_threads": ["dentist"],
+  "token_estimate": {"input": 500, "output": 120},
+  "recorded": {
+    "notes_v2": {
+      "title": "Dentist Call Before Noon",
+      "overview": "The only useful thread is calling the dentist before noon about the crown.",
+      "sections": [
+        {
+          "heading": "Errand",
+          "body_markdown": "- Call the dentist before noon about the crown."
+        }
+      ],
+      "action_items": [
+        {"description": "Call the dentist before noon about the crown"}
+      ]
+    },
+    "legacy": {
+      "title": "Commute audio",
+      "overview": "Music and a phone reminder.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Playlist Session",
+      "overview": "Pause the song, skip this track, then next song, then maybe a dentist.",
+      "sections": [
+        {"heading": "Playback", "body_markdown": "- Pause the song.\n- Skip this track.\n- Next song."}
+      ],
+      "action_items": []
+    }
+  }
+}

@@ -13,6 +13,7 @@ from pydub import AudioSegment  # pydub is untyped
 from database import redis_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -223,7 +224,7 @@ def vad_is_empty(
                 segments = response.json()  # untyped external JSON response
         except Exception as e:
             _record_hosted_vad_fallback(e)
-            logger.warning(f'Hosted VAD unavailable, falling back to local ONNX VAD for {file_path}: {e}')
+            logger.warning('Hosted VAD unavailable, falling back to local ONNX VAD: %s', sanitize_provider_error(e))
 
     if segments is None:
         segments = _run_file_vad(file_path)
@@ -252,7 +253,7 @@ def _run_file_vad(
     except Exception as e:
         if raise_on_decode_error:
             raise VADAudioDecodeError('audio could not be decoded for VAD') from e
-        logger.error(f'Failed to read audio file {file_path}: {e}')
+        logger.error('Failed to read audio file: %s', sanitize_provider_error(e))
         return []
 
     # Convert to 16 kHz mono float32
@@ -382,7 +383,7 @@ async def async_vad_is_empty(
             segments = response.json()  # untyped external JSON response
         except Exception as e:
             _record_hosted_vad_fallback(e)
-            logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
+            logger.warning('Hosted VAD unavailable, falling back to local VAD: %s', sanitize_provider_error(e))
 
     if segments is None:
         segments = await run_blocking(sync_executor, _run_file_vad, file_path)

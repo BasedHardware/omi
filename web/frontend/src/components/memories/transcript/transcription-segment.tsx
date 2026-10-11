@@ -1,18 +1,22 @@
 'use client';
 
-import { predefinedColors } from '@/src/constants/colors';
-import { TranscriptSegment, Person } from '@/src/types/memory.types';
-import { UserCircle, UserStar } from 'iconoir-react';
+import { TranscriptSegment } from '@/src/types/memory.types';
+import {
+  avatarToneIndex,
+  participantInitials,
+  transcriptTimestamp,
+} from '@/src/lib/shared-note.mjs';
 import { useState } from 'react';
+
+const PREVIEW_CHARS = 600;
 
 export default function TranscriptionSegment({
   segment,
-  people,
+  displayName,
 }: {
   segment: TranscriptSegment;
-  people?: Person[];
+  displayName: string;
 }) {
-  const color = predefinedColors[segment.speaker_id % predefinedColors.length];
   const [showMore, setShowMore] = useState(false);
 
   const textFormatted =
@@ -21,38 +25,34 @@ export default function TranscriptionSegment({
 
   const isUser = segment.is_user;
 
-  // Get person name if available
-  const personName =
-    segment.person_id && people
-      ? people.find((p) => p.id === segment.person_id)?.name
-      : null;
-
-  const displayName = isUser ? 'Owner' : personName || `Speaker ${segment.speaker_id}`;
+  const isLong = textFormatted.length > PREVIEW_CHARS;
 
   return (
-    <li className="my-5 flex gap-2">
-      {isUser ? (
-        <div className="grid h-7 min-w-7 place-items-center rounded-full bg-zinc-800">
-          <UserStar className="text-xs" />
-        </div>
-      ) : (
-        <div className="grid h-7 min-w-7 place-items-center rounded-full">
-          <UserCircle className="min-w-min" color={color} />
-        </div>
-      )}
-      <div>
-        <p className="text-base font-semibold md:text-lg">{displayName}</p>
-        <p className="text-base font-extralight leading-7 md:text-lg md:leading-9">
-          {showMore
+    <li className="sn-seg">
+      <span
+        className={`sn-avatar ${
+          isUser ? 'sn-avatar-owner' : `sn-avatar-${avatarToneIndex(displayName)}`
+        }`}
+        aria-hidden="true"
+      >
+        {participantInitials(displayName)}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <p className="sn-seg-name">
+          {displayName}{' '}
+          <span className="sn-muted">[{transcriptTimestamp(segment.start)}]</span>
+        </p>
+        <p className="sn-seg-text">
+          {showMore || !isLong
             ? textFormatted
-            : textFormatted.slice(0, 600) +
-              (textFormatted.length > 600 ? '...' : '')}{' '}
-          {segment.text.length > 600 && (
+            : `${textFormatted.slice(0, PREVIEW_CHARS)}…`}{' '}
+          {isLong && (
             <button
+              type="button"
               onClick={() => setShowMore(!showMore)}
-              className="inline text-blue-500 hover:underline"
+              className="sn-link"
             >
-              {showMore ? ' Show less' : ' Show more'}
+              {showMore ? 'Show less' : 'Show more'}
             </button>
           )}
         </p>

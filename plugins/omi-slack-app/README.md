@@ -378,3 +378,25 @@ Built for the [OMI](https://omi.me) ecosystem.
 - 🔐 Secure Slack OAuth integration
 - ⚡ Real-time processing with Railway deployment
 
+
+### Search scope and offline regression checks
+
+An explicit channel name must resolve before message search proceeds. If channel
+listing fails or the name has no match, search returns
+`channel_not_found_or_unavailable` (the chat tool returns HTTP 400), instead of
+searching the whole workspace. The existing channel-list API returns an empty
+list on lookup errors, so this error intentionally does not distinguish an
+unavailable lookup from a missing channel. Direct channel IDs remain usable;
+omitting the channel still allows workspace-wide search. Recent-message history
+and its search fallback preserve the resolved channel scope.
+
+Run the hermetic client and chat-handler regression from the repository root:
+
+```sh
+python3 plugins/omi-slack-app/test_slack_search.py
+```
+
+The test executes the complete production modules with SDK, storage and framework
+boundary doubles; it needs no Slack credentials or third-party packages. It does
+not test HTTP transport or a live Slack workspace. The check is registered in
+`.github/checks-manifest.yaml` for both local preflight and CI.

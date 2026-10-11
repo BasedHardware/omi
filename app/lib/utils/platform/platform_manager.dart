@@ -1,8 +1,10 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -25,6 +27,8 @@ class PlatformManager {
   static PlatformManager get instance => _instance;
 
   // Service instances
+  String get appNamespace => _packageInfo.packageName;
+
   AnalyticsManager get analytics => AnalyticsManager();
   IntercomManager get intercom => IntercomManager.instance;
   CrashlyticsManager get crashReporter => CrashlyticsManager.instance;
@@ -34,6 +38,25 @@ class PlatformManager {
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
     unawaited(AnalyticsManager.init());
     await IntercomManager.instance.initIntercom();
+  }
+
+  /// Synchronous initialization for the local hermetic journey lane
+  /// (SCA-488): no platform plugins, no analytics, no Intercom — only the
+  /// fields request headers read. The full app boot still uses
+  /// [initializeServices]; this seam exists so production HTTP paths can run
+  /// inside a host test without plugin channels.
+  @visibleForTesting
+  static void initializeForLocalHarness({String deviceIdHash = 'journey-device-hash'}) {
+    assert(() {
+      _instance._packageInfo = PackageInfo(
+        appName: 'Omi Journey Harness',
+        packageName: 'dev.omi.journey',
+        version: '0.0.0+journey',
+        buildNumber: '0',
+      );
+      _instance._deviceIdHash = deviceIdHash;
+      return true;
+    }());
   }
 
   Future<String> _getDeviceIdHash() async {
@@ -73,5 +96,5 @@ class PlatformManager {
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
   bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;
-  bool get isFCMSupported => Platform.isAndroid || Platform.isIOS;
+  bool get isFCMSupported => !PhysicalQualification.enabled && (Platform.isAndroid || Platform.isIOS);
 }

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-per-call-bytes-in-cached-prompt-prefix",
+  "violated_contract": "A prompt-cache breakpoint must sit after a prefix that is byte-identical across calls that differ only in per-call inputs. Putting a timestamp, timezone, language, transcript, or other per-call value at or before that boundary means every call writes a unique prefix and no later call can read it.",
+  "canonical_prevention": "Hoist only static instruction text into the marked prefix; move dates, transcripts, and other per-call values after the breakpoint; pin the split with a regression test that two invocations with different per-call inputs produce byte-identical prefix bytes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_llm_feature_prompt_cache_prefix.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/conversation_processing.py",
+    "backend/utils/llm/working_observations.py",
+    "backend/utils/llm/memories.py",
+    "backend/utils/llm/prompt_cache.py"
+  ],
+  "status": "open"
+}

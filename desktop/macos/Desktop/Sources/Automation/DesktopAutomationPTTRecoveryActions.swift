@@ -4,8 +4,9 @@ extension DesktopAutomationActionRegistry {
   func registerPTTRecoveryActions() {
     register(
       name: "voice_typing_deliver_text",
+      effects: [.localState],
       summary: "Verify dictation insertion with a supplied transcript (bypasses microphone and ASR, no network)",
-      params: ["text"], category: "voice", surfaces: ["floating_bar"], safety: "local_ui_state"
+      params: ["text"], category: "voice", surfaces: ["floating_bar"]
     ) { params in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
       guard let text = params["text"], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -17,8 +18,9 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "voice_typing_undo",
+      effects: [.localState],
       summary: "Invoke the guarded Undo Last Dictation action on the unchanged focused editor",
-      category: "voice", surfaces: ["floating_bar"], safety: "local_ui_state"
+      category: "voice", surfaces: ["floating_bar"]
     ) { _ in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
       return ["undone": PushToTalkManager.shared.undoLastDictation() ? "true" : "false"]
@@ -26,8 +28,9 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "ptt_recovery_snapshot",
+      effects: [],
       summary: "Report offline-question and guarded dictation-undo availability without text",
-      category: "voice", surfaces: ["floating_bar"], safety: "read_only"
+      category: "voice", surfaces: ["floating_bar"]
     ) { _ in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
       return [
@@ -38,8 +41,9 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "ptt_recovery_fixture",
+      effects: [.localState],
       summary: "Stage a supplied offline question through the real recovery store; does not send or journal it",
-      params: ["text"], category: "voice", surfaces: ["floating_bar"], safety: "local_ui_state"
+      params: ["text"], category: "voice", surfaces: ["floating_bar"]
     ) { params in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
       guard let text = params["text"],
@@ -54,8 +58,9 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "ptt_recovery_review",
+      effects: [.localState],
       summary: "Review the recovered offline question in the main composer without sending it",
-      category: "voice", surfaces: ["main_chat"], safety: "local_ui_state"
+      category: "voice", surfaces: ["main_chat"]
     ) { _ in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
       OfflinePTTQuestionRecovery.shared.reviewInMainChat()

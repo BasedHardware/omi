@@ -426,6 +426,202 @@ final class CaptureArchiveTests: XCTestCase {
       ))
   }
 
+  func testSoleCachedPartWithKnownTimingResolvesAsAnExactSingleSpanArtifact() throws {
+    func response(fileCount: Int) -> CaptureAudioURLsResponse {
+      CaptureAudioURLsResponse(
+        audioFiles: (0..<fileCount).map { index in
+          CaptureAudioURLFile(
+            id: "part-\(index)", status: "cached", signedURL: URL(string: "https://example.test/part-\(index).mp3"),
+            contentType: "audio/mpeg", duration: 954)
+        },
+        conversationAudio: nil, pollAfterMs: nil)
+    }
+    // The device started uploading 33.3s after the conversation began, as
+    // observed on a real capture: media 0s is wall 33.3s.
+    let timing = CaptureSolePartTiming(fileID: "part-0", wallOffset: 33.3)
+
+    guard
+      case .readyAggregate(let artifact) = LiveCapturePlaybackProvider.resolution(
+        from: response(fileCount: 1), solePart: timing)
+    else { return XCTFail("The only cached part with known timing is an exact single-span artifact") }
+    XCTAssertEqual(artifact.spans.count, 1)
+    XCTAssertEqual(try XCTUnwrap(artifact.artifactOffset(forWallOffset: 151.86)), 118.56, accuracy: 0.001)
+    XCTAssertEqual(try XCTUnwrap(artifact.wallOffset(forArtifactOffset: 118.56)), 151.86, accuracy: 0.001)
+    XCTAssertNil(artifact.artifactOffset(forWallOffset: 10), "Speech before the part's first chunk has no audio")
+    XCTAssertNil(artifact.artifactOffset(forWallOffset: 33.3 + 954))
+    XCTAssertEqual(
+      try XCTUnwrap(CaptureTranscriptFollowPolicy.wallDuration(resolution: .readyAggregate(artifact))), 987.3,
+      accuracy: 0.001, "The transport counts to the capture's end on the capture's clock")
+
+    guard case .fileFallback = LiveCapturePlaybackProvider.resolution(from: response(fileCount: 1), solePart: nil)
+    else { return XCTFail("Without timing the part stays play-only") }
+    guard case .fileFallback = LiveCapturePlaybackProvider.resolution(from: response(fileCount: 2), solePart: timing)
+    else { return XCTFail("One part among several stays play-only") }
+    guard
+      case .fileFallback = LiveCapturePlaybackProvider.resolution(
+        from: response(fileCount: 1), solePart: CaptureSolePartTiming(fileID: "other", wallOffset: 33.3))
+    else { return XCTFail("Timing for a different part must not be applied") }
+  }
+
+  func testSolePartTimingComesFromTheFirstChunkRelativeToConversationStart() {
+    let startedAt = Date(timeIntervalSince1970: 1_788_580_677.5)
+    let stamped = CaptureAudioFile(id: "part-a", duration: 954, firstChunkTimestamp: 1_788_580_710.8)
+    let unstamped = CaptureAudioFile(id: "part-b", duration: 10, firstChunkTimestamp: nil)
+
+    let timing = CaptureSolePartTiming.from(
+      capture: archiveCapture(id: "omi-1", startedAt: startedAt, audioFiles: [stamped]))
+    XCTAssertEqual(timing?.fileID, "part-a")
+    XCTAssertEqual(try XCTUnwrap(timing?.wallOffset), 33.3, accuracy: 0.001)
+
+    XCTAssertNil(
+      CaptureSolePartTiming.from(capture: archiveCapture(id: "omi-2", startedAt: startedAt, audioFiles: [unstamped])))
+    XCTAssertNil(
+      CaptureSolePartTiming.from(
+        capture: archiveCapture(id: "omi-3", startedAt: startedAt, audioFiles: [stamped, stamped])))
+    XCTAssertNil(
+      CaptureSolePartTiming.from(capture: archiveCapture(id: "omi-4", startedAt: .some(nil), audioFiles: [stamped])))
+  }
+
+  func testScrubPolicyMapsTrackGeometryToClampedMediaTime() {
+    XCTAssertEqual(
+      CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 200, duration: 40), 10, accuracy: 0.001)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: -30, width: 200, duration: 40), 0)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 500, width: 200, duration: 40), 40)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 0, duration: 40), 0)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 200, duration: 0), 0)
+
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 10, duration: 40), 0.25, accuracy: 0.001)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 90, duration: 40), 1)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 5, duration: 0), 0)
+  }
+
+  func testScrubbingPublishesThePointerPositionAndSeeksOnceOnRelease() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [
+        .fileFallback(CapturePlaybackFile(id: "local", signedURL: audioURL, duration: 3))
+      ]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-scrub"))
+
+    controller.scrub(toPlaybackOffset: 1.5)
+    XCTAssertTrue(controller.isScrubbing)
+    XCTAssertEqual(controller.currentTime, 1.5, accuracy: 0.001)
+
+    // A drag past the end clamps to the clip instead of publishing an impossible position.
+    controller.scrub(toPlaybackOffset: 12)
+    XCTAssertEqual(controller.currentTime, 3, accuracy: 0.001)
+
+    let finished = await controller.endScrubbing(atPlaybackOffset: 2)
+    XCTAssertTrue(finished)
+    XCTAssertFalse(controller.isScrubbing)
+    XCTAssertEqual(controller.currentTime, 2, accuracy: 0.001)
+    XCTAssertFalse(controller.isPlaybackRequested, "Scrubbing repositions; it does not start playback")
+
+    // Resuming after a scrub continues from the scrubbed position rather than restarting at zero.
+    let resumedPastScrub = expectation(description: "playback resumes from the scrubbed position")
+    let observation = controller.$currentTime
+      .filter { $0 > 2.05 }
+      .prefix(1)
+      .sink { _ in resumedPastScrub.fulfill() }
+    XCTAssertTrue(controller.playOrPause())
+    await fulfillment(of: [resumedPastScrub], timeout: 3)
+    XCTAssertGreaterThan(controller.currentTime, 2.05)
+    withExtendedLifetime(observation) {}
+    controller.clear()
+    XCTAssertFalse(controller.isScrubbing)
+  }
+
+  func testBubbleTapSeeksTheAggregateMomentAndStartsPlayback() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    // Wall clock 10s...13s maps onto media 0s...3s.
+    let artifact = CapturePlaybackArtifact(
+      signedURL: audioURL, duration: 3,
+      spans: [CaptureAudioURLSpan(fileID: "local", wallOffset: 10, artifactOffset: 0, length: 3)]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-bubble"))
+
+    // A bubble outside every captured span is not playable, so it must not start audio.
+    let gapAccepted = await controller.playFromMoment(wallOffset: 20)
+    XCTAssertFalse(gapAccepted)
+    XCTAssertFalse(controller.isPlaybackRequested)
+    XCTAssertEqual(controller.currentTime, 0)
+
+    let accepted = await controller.playFromMoment(wallOffset: 11)
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(controller.isPlaybackRequested)
+    XCTAssertGreaterThanOrEqual(controller.currentTime, 1 - 0.001)
+    XCTAssertLessThan(controller.currentTime, 1.5)
+
+    // Tapping another bubble while playing jumps without pausing.
+    let jumped = await controller.playFromMoment(wallOffset: 12)
+    XCTAssertTrue(jumped)
+    XCTAssertTrue(controller.isPlaybackRequested)
+    XCTAssertGreaterThanOrEqual(controller.currentTime, 2 - 0.001)
+    controller.clear()
+  }
+
+  /// Two seeks in flight at once: AVFoundation abandons the earlier one with
+  /// `finished == false`. Only the latest seek owns the published position, so
+  /// the abandoned one must not take the transport back to where it started.
+  func testAnAbandonedSeekDoesNotUndoTheOneThatReplacedIt() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    let artifact = CapturePlaybackArtifact(
+      signedURL: audioURL, duration: 3,
+      spans: [CaptureAudioURLSpan(fileID: "local", wallOffset: 0, artifactOffset: 0, length: 3)]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-two-seeks"))
+
+    // The parent issues its seek first and suspends; the child then issues the
+    // later one, which is the position the transport must end on.
+    async let later = controller.seek(toPlaybackOffset: 1)
+    _ = await controller.seek(toPlaybackOffset: 2)
+    _ = await later
+    XCTAssertEqual(controller.currentTime, 1, accuracy: 0.001, "the latest seek's target is the one that stands")
+    controller.clear()
+  }
+
+  /// The server's spans stay available while the transcript is on the media
+  /// clock, so the alignment can be redone against them without re-resolving,
+  /// and the clock can be swapped without touching the player.
+  func testPlaybackKeepsTheServerClockArtifactBesideTheMediaClockOne() async throws {
+    let artifact = CapturePlaybackArtifact(
+      signedURL: try XCTUnwrap(URL(string: "https://example.test/aggregate.m4a")), duration: 30,
+      spans: [
+        CaptureAudioURLSpan(fileID: "part-1", wallOffset: 5, artifactOffset: 0, length: 10),
+        CaptureAudioURLSpan(fileID: "part-2", wallOffset: 40, artifactOffset: 10, length: 20),
+      ]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    let resolution = await controller.prepare(for: archiveCapture(id: "omi-clocks"), transcriptOnMediaClock: true)
+
+    XCTAssertEqual(resolution, .readyAggregate(artifact.onMediaClock))
+    XCTAssertEqual(controller.serverClockArtifact, artifact)
+
+    controller.setTranscriptOnMediaClock(false)
+    XCTAssertEqual(controller.resolution, .readyAggregate(artifact))
+    controller.setTranscriptOnMediaClock(true)
+    XCTAssertEqual(controller.resolution, .readyAggregate(artifact.onMediaClock))
+
+    controller.clear()
+    XCTAssertNil(controller.serverClockArtifact)
+  }
+
+}
+
+private func temporaryAudioFile(durationSeconds: Int) throws -> URL {
+  let audioURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("capture-playback-\(UUID().uuidString)")
+    .appendingPathExtension("wav")
+  try silentWaveData(durationSeconds: durationSeconds).write(to: audioURL)
+  return audioURL
 }
 
 private func silentWaveData(durationSeconds: Int) -> Data {
@@ -521,13 +717,15 @@ private func archiveCapture(
   source: ConversationSource = .omi,
   status: ConversationStatus = .completed,
   createdAt: Date = Date(timeIntervalSince1970: 100),
+  startedAt: Date?? = nil,
+  audioFiles: [CaptureAudioFile] = [],
   title: String? = nil
 ) -> ServerConversation {
   ServerConversation(
     id: id,
     createdAt: createdAt,
     updatedAt: createdAt,
-    startedAt: createdAt,
+    startedAt: startedAt ?? createdAt,
     finishedAt: createdAt.addingTimeInterval(60),
     structured: Structured(
       title: title ?? "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
@@ -538,6 +736,7 @@ private func archiveCapture(
     appsResults: [],
     source: source,
     language: "en",
+    audioFiles: audioFiles,
     status: status,
     discarded: false,
     deleted: false,

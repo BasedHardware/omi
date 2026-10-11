@@ -20,7 +20,6 @@ from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
-from llm_gateway.gateway.request_context import jit_budget_forward_headers
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -30,6 +29,7 @@ from utils.llm.desktop_llm_stub import (
     stub_chat_completions_json,
     stub_chat_completions_stream,
 )
+from utils.llm.prompt_cache import apply_cache_write_opt_out
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
     CHAT_STRUCTURED_AUTO_LANE_ID,
@@ -50,6 +50,7 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.other import endpoints as auth
 from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
@@ -268,7 +269,7 @@ _MANAGED_STRUCTURED_ALIASES = {
 }
 # The realtime voice `think_deeper` escalation: a single-shot, no-tools Luna
 # completion with an explicit reasoning effort. OpenAI rejects function tools
-# combined with a non-none reasoning_effort on gpt-5.6-luna (/v1/chat/completions),
+# combined with a non-none reasoning_effort on gpt-x-luna (/v1/chat/completions),
 # so this alias deliberately carries no client tools and the effort travels as a
 # per-request parameter instead of the tooled chat-agent lane's pinned `none`.
 THINKING_MODEL_ALIAS = 'omi-luna-think'
@@ -692,6 +693,29 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
+_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'jit_requires_gateway', 'circuit_open'})
+
+
+def _log_desktop_chat_unavailable(*, reason: str, request_id: str) -> None:
+    """Record why this router returned HTTP 503.
+
+    The 2026-09-09 desktop-chat outage returned 503 in ~105ms with no traceback
+    and no coded reason, so operators could not tell metering, JIT, and circuit
+    open apart. Log one warning with a closed reason plus request_id. Never log
+    request/response bodies, UIDs, or prompts.
+    """
+    if reason not in _DESKTOP_CHAT_UNAVAILABLE_REASONS:
+        reason = 'unknown'
+    event = {
+        'event': 'desktop_chat_unavailable',
+        'message': 'desktop_chat_unavailable',
+        'reason': reason,
+        'request_id': request_id,
+        'severity': 'WARNING',
+    }
+    sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
+
+
 def _thinking_escalation_effort(body: Mapping[str, object]) -> str:
     """Validated Luna reasoning effort for a thinking escalation.
 
@@ -733,13 +757,19 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
     if _is_thinking_escalation(body):
         # Single-shot Luna reasoning: OpenAI rejects function tools combined
-        # with a non-none reasoning_effort on gpt-5.6-luna, so the escalation
+        # with a non-none reasoning_effort on gpt-x-luna, so the escalation
         # never carries client tools. The validated effort is server-authored
         # here, not a verbatim client passthrough.
         result.pop('tools', None)
         result.pop('tool_choice', None)
         result.pop('reasoning_effort', None)
         result['reasoning_effort'] = _thinking_escalation_effort(body)
+    if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID:
+        # Single-shot planner/local-agent prompts, unique from the first token: the
+        # ledger billed 2.6M of 3.0M prompt tok/day as cache writes against 0.01M reads.
+        # Scan the CLIENT's messages for a breakpoint, not the translated copy:
+        # _gateway_user_content rebuilds user blocks as {type, text} and drops it.
+        apply_cache_write_opt_out(result, marked_messages=messages)
     return result
 
 
@@ -774,22 +804,26 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
     ]
 
 
+class _RequestValidationError(ValueError):
+    pass
+
+
 def _request(
     body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
 ) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
-        raise ValueError('request body must be an object')
+        raise _RequestValidationError('request body must be an object')
     model = body.get('model')
     messages = body.get('messages')
     if not isinstance(model, str) or model not in _MODEL_ROUTES:
-        raise ValueError('unsupported model')
+        raise _RequestValidationError('unsupported model')
     if not isinstance(messages, list):
-        raise ValueError('messages must be an array')
+        raise _RequestValidationError('messages must be an array')
     system: str | None = None
     translated: list[dict[str, object]] = []
     for message in messages:
         if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
-            raise ValueError('messages must contain role objects')
+            raise _RequestValidationError('messages must contain role objects')
         role = message['role']
         if role in {'system', 'developer'}:
             system = _text(message.get('content'))
@@ -804,11 +838,11 @@ def _request(
             if isinstance(tool_calls, list):
                 for call in tool_calls:
                     if not isinstance(call, Mapping) or not isinstance(call.get('function'), Mapping):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     function = call['function']
                     name, arguments, call_id = function.get('name'), function.get('arguments'), call.get('id')
                     if not all(isinstance(value, str) for value in (name, arguments, call_id)):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     try:
                         input_value = json.loads(arguments)
                     except ValueError:
@@ -818,7 +852,7 @@ def _request(
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
-                raise ValueError('tool message missing tool_call_id')
+                raise _RequestValidationError('tool message missing tool_call_id')
             translated.append(
                 {
                     'role': 'user',
@@ -828,10 +862,10 @@ def _request(
                 }
             )
         else:
-            raise ValueError(f'unsupported message role: {role}')
+            raise _RequestValidationError(f'unsupported message role: {role}')
     maximum = body.get('max_completion_tokens', body.get('max_tokens', 8192))
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
-        raise ValueError('max_tokens must be a positive integer')
+        raise _RequestValidationError('max_tokens must be a positive integer')
     result: dict[str, object] = {
         'model': _MODEL_ROUTES[model],
         'max_tokens': min(maximum, _MAX_TOKENS),
@@ -1402,31 +1436,10 @@ def _gateway_request_headers(
     request_id: str,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
     platform: str | None = None,
-    jit_headers: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
-    if jit_headers:
-        headers.update(jit_headers)
     return headers
-
-
-def _jit_headers_for_forward(
-    contract_version: str | None,
-    run_id: str | None,
-    max_attempts: str | None,
-    max_output_tokens: str | None,
-    max_input_tokens: str | None,
-    max_spend_micro_usd: str | None,
-) -> dict[str, str]:
-    return jit_budget_forward_headers(
-        contract_version,
-        run_id,
-        max_attempts,
-        max_output_tokens,
-        max_input_tokens,
-        max_spend_micro_usd,
-    )
 
 
 def _record_gateway_result(
@@ -1462,7 +1475,6 @@ async def _stream_gateway(
     request_id: str = 'unknown',
     platform: str | None = None,
     lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
-    jit_headers: Mapping[str, str] | None = None,
 ) -> AsyncIterator[bytes]:
     usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
@@ -1479,7 +1491,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id, platform, jit_headers),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1551,7 +1563,7 @@ def _sse(value: dict[str, object]) -> str:
     return f'data: {json.dumps(value, separators=(",", ":"))}\n\n'
 
 
-async def _meter_server_request(uid: str) -> None:
+async def _meter_server_request(uid: str, *, request_id: str = 'unknown') -> None:
     if get_byok_key('anthropic'):
         return
     try:
@@ -1559,6 +1571,7 @@ async def _meter_server_request(uid: str) -> None:
             critical_executor, redis_db.check_rate_limit, uid, 'desktop_chat', _RATE_LIMIT_PER_MINUTE, 60
         )
     except Exception as exc:
+        _log_desktop_chat_unavailable(reason='metering_unavailable', request_id=request_id)
         raise HTTPException(status_code=503, detail='Chat metering is temporarily unavailable') from exc
     if not allowed:
         raise HTTPException(
@@ -1708,12 +1721,8 @@ async def _chat_completions_unobserved(
             x_omi_jit_max_spend_micro_usd,
         )
     )
-    try:
-        jit_headers = _jit_headers_for_forward(
-            *jit_header_values,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if any(value is not None for value in jit_header_values):
+        raise HTTPException(status_code=410, detail={'error': 'feature_retired'})
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1722,7 +1731,7 @@ async def _chat_completions_unobserved(
     }
     # Hermetic offline profile: short-circuit before quota / Anthropic, matching
     # the retired Rust llm_stub intercept so T2 chat flows stay deterministic.
-    if llm_stub_enabled() and not jit_headers:
+    if llm_stub_enabled():
         if body.get('stream') is True:
             return StreamingResponse(
                 stub_chat_completions_stream(body),
@@ -1733,12 +1742,10 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
-        if jit_headers and not gateway_mode:
-            raise RuntimeError('JIT qualification requires the managed gateway')
         # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
         # thinking escalations stay on the gateway instead of falling back to
         # direct Anthropic (which would 400 on the Luna alias).
-        if gateway_mode and not jit_headers and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
+        if gateway_mode and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
                 from_mode='managed_gateway',
@@ -1773,18 +1780,21 @@ async def _chat_completions_unobserved(
                 web_search_authorization = await _web_search_authorized(uid)
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_desktop_chat_quota(uid, platform=x_app_platform)
-        await _meter_server_request(uid)
+        await run_blocking(db_executor, enforce_desktop_chat_quota, uid, platform=x_app_platform)
+        await _meter_server_request(uid, request_id=request_id)
     except HTTPException:
         raise
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(str(exc) if isinstance(exc, _RequestValidationError) else "Invalid request parameters."),
+        ) from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model, jit_headers),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1817,11 +1827,12 @@ async def _chat_completions_unobserved(
                     lane_id=public_model, outcome='error', reason='circuit_open', request_id=request_id
                 )
                 result_recorded = True
+                _log_desktop_chat_unavailable(reason='circuit_open', request_id=request_id)
                 raise HTTPException(status_code=503, detail='Upstream provider unavailable')
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model, x_app_platform, jit_headers),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1838,8 +1849,6 @@ async def _chat_completions_unobserved(
                 'X-Omi-Chat-Contract-Version': '1',
                 'X-Request-Id': request_id,
             }
-            if jit_headers and response.headers.get('x-omi-jit-gateway-receipt'):
-                response_headers['X-Omi-Jit-Gateway-Receipt'] = response.headers['x-omi-jit-gateway-receipt']
             return JSONResponse(
                 response_body,
                 headers=response_headers,
@@ -1892,6 +1901,7 @@ async def chat_completions(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
     x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
@@ -1906,6 +1916,15 @@ async def chat_completions(
         'desktop_chat',
         _desktop_chat_client_kind(x_app_platform, user_agent),
     )
+
+    def _record_desktop_chat_product() -> None:
+        record_product_event(
+            'desktop_chat_completion',
+            client_kind=attempt.client_kind,
+            outcome=attempt.outcome or 'unknown',
+            app_build=extract_app_build({'x-app-version': x_app_version or ''}),
+        )
+
     try:
         response = await _chat_completions_unobserved(
             body,
@@ -1922,9 +1941,11 @@ async def chat_completions(
         )
     except asyncio.CancelledError:
         attempt.cancel()
+        _record_desktop_chat_product()
         raise
     except Exception as exc:
         attempt.fail(_desktop_chat_issue_class(exc))
+        _record_desktop_chat_product()
         raise
 
     if isinstance(response, StreamingResponse):
@@ -1949,4 +1970,5 @@ async def chat_completions(
             attempt.succeed()
         else:
             attempt.fail('empty_answer')
+    _record_desktop_chat_product()
     return response

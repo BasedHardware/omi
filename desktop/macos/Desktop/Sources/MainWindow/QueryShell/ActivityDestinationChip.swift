@@ -129,15 +129,25 @@ struct BrainSectionPageLayout<Search: View, Content: View>: View {
   let onSelect: (MemoryHubDestination) -> Void
   let search: Search
   let content: Content
+  /// False while a detail replaces the page's list: the list's search would otherwise sit above a
+  /// single conversation, and typing in it used to close that conversation as a side effect.
+  var showsSearch: Bool
+  /// Clicking the chip you are already on returns that page to its root (closes a detail, clears a
+  /// search) — the tab-bar convention on every platform.
+  var onReselect: (() -> Void)?
 
   init(
     selected: MemoryHubDestination,
     onSelect: @escaping (MemoryHubDestination) -> Void,
+    showsSearch: Bool = true,
+    onReselect: (() -> Void)? = nil,
     @ViewBuilder search: () -> Search,
     @ViewBuilder content: () -> Content
   ) {
     self.selected = selected
     self.onSelect = onSelect
+    self.showsSearch = showsSearch
+    self.onReselect = onReselect
     self.search = search()
     self.content = content()
   }
@@ -147,13 +157,21 @@ struct BrainSectionPageLayout<Search: View, Content: View>: View {
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
 
       VStack(spacing: QueryShellLayout.panelGap) {
-        search
+        if showsSearch {
+          search
+        }
 
         VStack(alignment: .leading, spacing: 0) {
-          BrainSectionNavigation(selected: selected, onSelect: onSelect)
-            .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
-            .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
-            .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
+          BrainSectionNavigation(selected: selected) { destination in
+            if destination == selected {
+              onReselect?()
+            } else {
+              onSelect(destination)
+            }
+          }
+          .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+          .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
+          .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
 
           content
             .frame(maxWidth: .infinity, maxHeight: .infinity)

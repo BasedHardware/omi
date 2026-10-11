@@ -51,57 +51,98 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
     actionItems = try c.decodeIfPresent([LocalActionItemDraft].self, forKey: .actionItems) ?? []
   }
 
-  static let jsonSchema = LocalInferenceJSONSchema(
-    name: "client_processing_draft",
-    json: Data(
-      """
-      {
-        "type": "object",
-        "properties": {
-          "title": {"type": "string"},
-          "overview": {"type": "string"},
-          "emoji": {"type": "string"},
-          "category": {"type": "string"},
-          "sections": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "heading": {"type": "string"},
-                "body_markdown": {"type": "string"}
-              },
-              "required": ["heading", "body_markdown"]
+  /// Guided generation honors `required` more tightly than the prompt.
+  /// Map/reduce prompts ask for title, overview, sections, and action items;
+  /// those four are required so AFM cannot omit them. `emoji`, `category`, and
+  /// `events` stay optional.
+  ///
+  /// **The arrays are bounded, and that is load-bearing.** A
+  /// `LanguageModelSession`'s transcript is prompt *plus* completion against one
+  /// context window, so an unbounded array lets the model spend the window on its
+  /// own output and overflow. Measured 2026-09-18 on live AFM: a map pass emitted
+  /// 7 sections and 26 action items and the session threw
+  /// `"The session's transcript exceeded the model's context size."` — while a
+  /// *larger* prompt that happened to generate less succeeded. That is why the
+  /// failure looked non-deterministic and unrelated to prompt size.
+  ///
+  /// The caps sit at or below `ClientProcessingContract`'s own limits (12 sections,
+  /// 25 action items, 12 events), which truncate after assembly anyway. Generating
+  /// items that are about to be discarded costs context we cannot spare.
+  static let jsonSchema = schema(
+    name: "client_processing_draft", maxSections: 8, maxEvents: 6, maxActionItems: 15)
+
+  /// Tighter caps for a **map** pass, which summarizes one slice, not the meeting.
+  ///
+  /// The caps are the only bound on a completion: guided generation has no string
+  /// length limit, so an 8-section / 15-item draft of one slice measured anywhere
+  /// from 3 KB to 10 KB for the same prompt (2026-09-21, live AFM). The 10 KB draws
+  /// overflowed the 8192-token prompt+completion window and the whole conversation
+  /// fell back to the deterministic minimum after minutes of work. A slice does
+  /// not have eight topics; the full caps apply where the whole meeting is in view
+  /// (single pass and reduce). Smaller partials also keep the reduce prompt small.
+  static let mapJSONSchema = schema(
+    name: "client_processing_map_draft", maxSections: 5, maxEvents: 4, maxActionItems: 10)
+
+  /// One authored property order for every profile: property order is generation
+  /// order under both AFM guided generation and a llama.cpp grammar.
+  private static func schema(
+    name: String, maxSections: Int, maxEvents: Int, maxActionItems: Int
+  ) -> LocalInferenceJSONSchema {
+    LocalInferenceJSONSchema(
+      name: name,
+      json: Data(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "title": {"type": "string"},
+            "overview": {"type": "string"},
+            "emoji": {"type": "string"},
+            "category": {"type": "string"},
+            "sections": {
+              "type": "array",
+              "maxItems": \(maxSections),
+              "items": {
+                "type": "object",
+                "properties": {
+                  "heading": {"type": "string"},
+                  "body_markdown": {"type": "string"}
+                },
+                "required": ["heading", "body_markdown"]
+              }
+            },
+            "events": {
+              "type": "array",
+              "maxItems": \(maxEvents),
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {"type": "string"},
+                  "description": {"type": "string"},
+                  "start": {"type": "string"},
+                  "duration": {"type": "integer"}
+                },
+                "required": ["title", "start", "duration"]
+              }
+            },
+            "action_items": {
+              "type": "array",
+              "maxItems": \(maxActionItems),
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": {"type": "string"},
+                  "completed": {"type": "boolean"}
+                },
+                "required": ["description"]
+              }
             }
           },
-          "events": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "title": {"type": "string"},
-                "description": {"type": "string"},
-                "start": {"type": "string"},
-                "duration": {"type": "integer"}
-              },
-              "required": ["title", "start", "duration"]
-            }
-          },
-          "action_items": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "description": {"type": "string"},
-                "completed": {"type": "boolean"}
-              },
-              "required": ["description"]
-            }
-          }
-        },
-        "required": ["title"]
-      }
-      """.utf8)
-  )
+          "required": ["title", "overview", "sections", "action_items"]
+        }
+        """.utf8)
+    )
+  }
 }
 
 struct LocalSectionDraft: Codable, Sendable, Equatable {

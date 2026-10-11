@@ -1,5 +1,10 @@
 import Foundation
 
+struct MainChatAutoSendRequest {
+  let question: String
+  let authorization: RuntimeOwnerAuthorizationSnapshot
+}
+
 /// One-shot "open the main chat" request raised by surfaces outside the main
 /// window (the floating bar's "Continue in Omi" affordances). Revealing the
 /// window alone is not enough: the main window may be resting on any tab, so
@@ -16,6 +21,7 @@ final class MainChatNavigationRequestStore {
   enum DraftDisposition { case replace, append }
   private var draftDisposition = DraftDisposition.replace
   private var draftAuthorization: RuntimeOwnerAuthorizationSnapshot?
+  private var autoSendAuthorization: RuntimeOwnerAuthorizationSnapshot?
   private let isAuthorized: (RuntimeOwnerAuthorizationSnapshot) -> Bool
 
   init(
@@ -35,6 +41,10 @@ final class MainChatNavigationRequestStore {
   /// rule as the draft: every request replaces the slot, and exactly one
   /// composer takes what it finds.
   private(set) var pendingAttachment: ChatAttachment?
+  /// A Siri question is consumed by the mounted canonical composer and sent
+  /// once through its existing ChatProvider. It never becomes an editable
+  /// draft unless the provider rejects the send.
+  private(set) var pendingAutoSendQuestion: String?
   /// Monotonic request generation. A requester that must suspend before it
   /// can commit (the card's frame decode) reserves a generation up front; if
   /// any other request lands in the meantime, the reservation goes stale and
@@ -55,8 +65,28 @@ final class MainChatNavigationRequestStore {
     let trimmed = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     pendingDraft = trimmed.isEmpty ? nil : draft
     pendingAttachment = attachment
+    pendingAutoSendQuestion = nil
     draftDisposition = disposition
     draftAuthorization = authorization
+    autoSendAuthorization = nil
+    NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
+  }
+
+  /// Opens the canonical chat and asks its composer to send this Siri-origin
+  /// question exactly once, after rechecking the captured owner.
+  func requestAutoSend(
+    question: String,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    requestGeneration &+= 1
+    isPending = true
+    pendingDraft = nil
+    pendingAttachment = nil
+    draftDisposition = .replace
+    draftAuthorization = nil
+    let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    pendingAutoSendQuestion = trimmed.isEmpty ? nil : trimmed
+    autoSendAuthorization = authorization
     NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
   }
 
@@ -104,6 +134,20 @@ final class MainChatNavigationRequestStore {
     return pendingDraft
   }
 
+  /// Takes a Siri-origin question exactly once after rechecking its owner.
+  func consumeAutoSendRequest() -> MainChatAutoSendRequest? {
+    defer {
+      pendingAutoSendQuestion = nil
+      autoSendAuthorization = nil
+    }
+    guard let pendingAutoSendQuestion, let autoSendAuthorization,
+      isAuthorized(autoSendAuthorization)
+    else { return nil }
+    return MainChatAutoSendRequest(
+      question: pendingAutoSendQuestion,
+      authorization: autoSendAuthorization)
+  }
+
   /// Returns the pending attachment, and clears it. Taken together with the
   /// draft: a request is one unit, and the composer that takes the text is
   /// the one that stages the image.
@@ -115,4 +159,16 @@ final class MainChatNavigationRequestStore {
 
 extension Notification.Name {
   static let openMainChatRequested = Notification.Name("openMainChatRequested")
+}
+
+extension AppDelegate {
+  /// A Siri-origin question is owner-bound and sent once by the canonical
+  /// composer after the main window mounts.
+  @MainActor func openMainAppChat(
+    siriQuestion question: String, authorization: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    MainChatNavigationRequestStore.shared.requestAutoSend(
+      question: question, authorization: authorization)
+    openMainAppWindow()
+  }
 }

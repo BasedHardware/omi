@@ -1,63 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  useMap,
-  ZoomControl,
-} from 'react-leaflet';
-import L from 'leaflet';
-import { MessageSquare, Play, Pause, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Pause, RotateCcw } from 'lucide-react';
 import type { LocationPin } from '@/types/recap';
 import { getConversation } from '@/lib/api';
+import { StaticMapPreview } from '@/components/ui/StaticMapPreview';
 
 // Conversation info cache type
 interface ConversationInfo {
   title: string;
   emoji: string;
-}
-
-// Create numbered marker for journey sequence
-function createNumberedIcon(
-  num: number,
-  isActive: boolean = false,
-  isVisible: boolean = true,
-) {
-  const size = isActive ? 32 : 24;
-  const fontSize = isActive ? 13 : 11;
-  const opacity = isVisible ? 1 : 0.3;
-  const glow = isActive
-    ? 'box-shadow: 0 0 12px 4px rgba(139, 92, 246, 0.5);'
-    : 'box-shadow: 0 2px 4px rgba(0,0,0,0.3);';
-
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="
-      width: ${size}px;
-      height: ${size}px;
-      background: #8B5CF6;
-      border: 2px solid white;
-      border-radius: 50%;
-      ${glow}
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: ${fontSize}px;
-      font-weight: 600;
-      color: white;
-      font-family: system-ui, -apple-system, sans-serif;
-      opacity: ${opacity};
-      transition: all 0.3s ease;
-    ">${num}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-  });
 }
 
 interface LocationMapProps {
@@ -70,96 +23,6 @@ interface LocationMapProps {
   onIndexChange?: (index: number) => void;
   controlledPlaying?: boolean;
   onPlayingChange?: (playing: boolean) => void;
-}
-
-// Component to fit bounds when locations change
-function FitBounds({ locations }: { locations: LocationPin[] }) {
-  const map = useMap();
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    if (locations.length === 0) return;
-
-    // Stop any ongoing animations
-    map.stop();
-
-    const fitMapBounds = () => {
-      if (!isMountedRef.current) return;
-
-      const bounds = L.latLngBounds(
-        locations.map((loc) => [loc.latitude, loc.longitude]),
-      );
-
-      // More padding at bottom to leave room for playback controls
-      map.fitBounds(bounds, {
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [50, 100], // Extra bottom padding for controls
-        maxZoom: 14,
-        animate: false, // Disable animation to prevent unmount errors
-      });
-    };
-
-    // Small delay to ensure container is properly sized (especially in tab layouts)
-    const timeout = setTimeout(fitMapBounds, 100);
-
-    // Also re-fit when map container is resized
-    map.invalidateSize();
-
-    return () => {
-      isMountedRef.current = false;
-      clearTimeout(timeout);
-      // Wrap in try-catch as map may be in invalid state during unmount
-      try {
-        map.stop();
-      } catch {
-        // Ignore - map already disposed
-      }
-    };
-  }, [map, locations]);
-
-  return null;
-}
-
-// Component to pan to current location during playback
-function PanToLocation({
-  location,
-  enabled,
-}: {
-  location: LocationPin | null;
-  enabled: boolean;
-}) {
-  const map = useMap();
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    if (!enabled || !location) return;
-
-    // Use requestAnimationFrame to ensure we're in a valid state
-    const frameId = requestAnimationFrame(() => {
-      if (isMountedRef.current) {
-        map.panTo([location.latitude, location.longitude], {
-          animate: true,
-          duration: 0.5,
-        });
-      }
-    });
-
-    return () => {
-      isMountedRef.current = false;
-      cancelAnimationFrame(frameId);
-      try {
-        map.stop();
-      } catch {
-        // Ignore - map already disposed
-      }
-    };
-  }, [map, location, enabled]);
-
-  return null;
 }
 
 export default function LocationMap({
@@ -187,7 +50,7 @@ export default function LocationMap({
   const playbackRef = useRef<NodeJS.Timeout | null>(null);
 
   // Use controlled or internal state
-  const isPlaying = isControlled ? (controlledPlaying ?? false) : internalPlaying;
+  const isPlaying = isControlled ? controlledPlaying ?? false : internalPlaying;
   const currentIndex = isControlled ? controlledIndex : internalIndex;
 
   // Refs to track latest values for closure safety
@@ -251,7 +114,7 @@ export default function LocationMap({
     return 0;
   };
 
-  // Sort locations by time for the route line
+  // Sort locations by time for playback order
   const sortedLocations = useMemo(() => {
     return [...locations].sort((a, b) => parseTimeValue(a.time) - parseTimeValue(b.time));
   }, [locations]);
@@ -325,26 +188,6 @@ export default function LocationMap({
       if (playbackRef.current) clearTimeout(playbackRef.current);
     };
   }, [isPlaying, currentIndex, sortedLocations.length, playbackSpeed]);
-
-  // Create polyline coordinates (progressive or full)
-  const polylinePositions = useMemo(() => {
-    if (currentIndex === -1) {
-      return sortedLocations.map(
-        (loc) => [loc.latitude, loc.longitude] as [number, number],
-      );
-    }
-    return sortedLocations
-      .slice(0, currentIndex + 1)
-      .map((loc) => [loc.latitude, loc.longitude] as [number, number]);
-  }, [sortedLocations, currentIndex]);
-
-  // Calculate center
-  const center = useMemo(() => {
-    if (locations.length === 0) return { lat: 0, lng: 0 };
-    const lat = locations.reduce((sum, loc) => sum + loc.latitude, 0) / locations.length;
-    const lng = locations.reduce((sum, loc) => sum + loc.longitude, 0) / locations.length;
-    return { lat, lng };
-  }, [locations]);
 
   // Format time with fallback for invalid dates
   const formatTime = (timeString: string) => {
@@ -428,10 +271,16 @@ export default function LocationMap({
 
   const currentLocation = currentIndex >= 0 ? sortedLocations[currentIndex] : null;
   const currentDisplay = currentLocation ? getLocationDisplay(currentLocation) : null;
-  const isInPlaybackMode = currentIndex >= 0;
 
   // Show controls when hovering, playing, or in playback mode
   const showControls = isHovering || isPlaying || currentIndex >= 0;
+
+  // A single stop has no playback or title card, so the map itself opens its conversation.
+  const singleStopConversationId =
+    sortedLocations.length === 1 ? sortedLocations[0]?.conversation_id : undefined;
+  const mapAlt = `Map of ${sortedLocations.length} recap ${
+    sortedLocations.length === 1 ? 'location' : 'locations'
+  }`;
 
   return (
     <div
@@ -440,68 +289,18 @@ export default function LocationMap({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <MapContainer
-        center={[center.lat, center.lng]}
-        zoom={13}
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={false}
-        zoomControl={false}
-        className="z-0 [&_.leaflet-control-zoom]:!border-none [&_.leaflet-control-zoom]:!rounded-lg [&_.leaflet-control-zoom]:!bg-bg-tertiary/80 [&_.leaflet-control-zoom]:!backdrop-blur-sm [&_.leaflet-control-zoom-in]:!text-text-secondary [&_.leaflet-control-zoom-in]:!bg-transparent [&_.leaflet-control-zoom-in]:!border-none [&_.leaflet-control-zoom-in]:!w-8 [&_.leaflet-control-zoom-in]:!h-8 [&_.leaflet-control-zoom-in]:!leading-8 [&_.leaflet-control-zoom-out]:!text-text-secondary [&_.leaflet-control-zoom-out]:!bg-transparent [&_.leaflet-control-zoom-out]:!border-none [&_.leaflet-control-zoom-out]:!w-8 [&_.leaflet-control-zoom-out]:!h-8 [&_.leaflet-control-zoom-out]:!leading-8 hover:[&_.leaflet-control-zoom-in]:!text-text-primary hover:[&_.leaflet-control-zoom-out]:!text-text-primary"
-      >
-        <ZoomControl position="bottomright" />
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
-
-        <FitBounds locations={locations} />
-        <PanToLocation location={currentLocation} enabled={isPlaying} />
-
-        {/* Route line - progressive during playback */}
-        {polylinePositions.length > 1 && (
-          <Polyline
-            positions={polylinePositions}
-            pathOptions={{
-              color: '#8B5CF6',
-              weight: 3,
-              opacity: 0.7,
-              dashArray: isInPlaybackMode ? undefined : '5, 10',
-            }}
-          />
-        )}
-
-        {/* Location markers with journey numbers */}
-        {sortedLocations.map((loc, idx) => {
-          const isVisible = currentIndex === -1 || idx <= currentIndex;
-          const isActive = idx === currentIndex;
-
-          if (!isVisible && currentIndex !== -1) return null;
-
-          return (
-            <Marker
-              key={idx}
-              position={[loc.latitude, loc.longitude]}
-              icon={createNumberedIcon(idx + 1, isActive, isVisible)}
-            >
-              <Popup className="dark-popup">
-                <div className="text-sm">
-                  <p className="font-medium text-gray-900">{loc.address}</p>
-                  <p className="text-gray-600 text-xs mt-1">{formatTime(loc.time)}</p>
-                  {loc.conversation_id && onConversationClick && (
-                    <button
-                      onClick={() => onConversationClick(loc.conversation_id!)}
-                      className="mt-2 flex items-center gap-1 text-xs text-text-primary hover:text-text-primary transition-colors"
-                    >
-                      <MessageSquare className="w-3 h-3" />
-                      <span>View conversation</span>
-                    </button>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MapContainer>
+      {singleStopConversationId && onConversationClick ? (
+        <button
+          type="button"
+          onClick={() => onConversationClick(singleStopConversationId)}
+          aria-label="View conversation for this location"
+          className="block h-full w-full"
+        >
+          <StaticMapPreview pins={sortedLocations} alt="" />
+        </button>
+      ) : (
+        <StaticMapPreview pins={sortedLocations} alt={mapAlt} />
+      )}
 
       {/* Title card overlay */}
       <AnimatePresence>
@@ -510,9 +309,18 @@ export default function LocationMap({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
+            className="absolute left-1/2 top-4 z-10 -translate-x-1/2"
           >
-            <div className="bg-bg-secondary/95 backdrop-blur-sm rounded-xl px-4 py-3 shadow-lg border border-white/[0.08]">
+            <button
+              type="button"
+              disabled={!currentLocation.conversation_id || !onConversationClick}
+              onClick={() => {
+                if (currentLocation.conversation_id) {
+                  onConversationClick?.(currentLocation.conversation_id);
+                }
+              }}
+              className="rounded-xl border border-white/[0.08] bg-bg-secondary/95 px-4 py-3 text-left shadow-lg backdrop-blur-sm transition-colors enabled:hover:bg-bg-tertiary disabled:cursor-default"
+            >
               <div className="flex items-center gap-2">
                 <span className="text-lg">{currentDisplay.emoji}</span>
                 <div>
@@ -524,7 +332,7 @@ export default function LocationMap({
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -539,31 +347,31 @@ export default function LocationMap({
             transition={{ duration: 0.2 }}
             className="absolute bottom-3 left-3 right-3 z-10"
           >
-            <div className="bg-bg-secondary/90 backdrop-blur-sm rounded-xl p-3 border border-white/[0.08]">
+            <div className="rounded-xl border border-white/[0.08] bg-bg-secondary/90 p-3 backdrop-blur-sm">
               <div className="flex items-center gap-3">
                 {/* Play/Pause button */}
                 <button
                   onClick={isPlaying ? handlePause : handlePlay}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-text-primary hover:bg-text-primary/90 text-bg-primary transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-text-primary text-bg-primary transition-colors hover:bg-text-primary/90"
                 >
                   {isPlaying ? (
-                    <Pause className="w-4 h-4" />
+                    <Pause className="h-4 w-4" />
                   ) : (
-                    <Play className="w-4 h-4 ml-0.5" />
+                    <Play className="ml-0.5 h-4 w-4" />
                   )}
                 </button>
 
                 {/* Timeline slider */}
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-2">
                   <input
                     type="range"
                     min="-1"
                     max={sortedLocations.length - 1}
                     value={currentIndex}
                     onChange={handleSliderChange}
-                    className="flex-1 h-1 bg-bg-tertiary rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-text-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                    className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-bg-tertiary [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-text-primary"
                   />
-                  <span className="text-xs text-text-tertiary w-12 text-right">
+                  <span className="w-12 text-right text-xs text-text-tertiary">
                     {currentIndex >= 0
                       ? `${currentIndex + 1}/${sortedLocations.length}`
                       : 'All'}
@@ -573,7 +381,7 @@ export default function LocationMap({
                 {/* Speed button */}
                 <button
                   onClick={cycleSpeed}
-                  className="px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-tertiary rounded-md transition-colors"
+                  className="rounded-md bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                 >
                   {playbackSpeed}x
                 </button>
@@ -581,17 +389,17 @@ export default function LocationMap({
                 {/* Reset button */}
                 <button
                   onClick={handleReset}
-                  className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+                  className="p-1.5 text-text-tertiary transition-colors hover:text-text-primary"
                   title="Reset"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="h-4 w-4" />
                 </button>
               </div>
 
               {/* Current time display */}
               {currentLocation && (
                 <div className="mt-2 text-center">
-                  <span className="text-xs text-text-primary font-medium">
+                  <span className="text-xs font-medium text-text-primary">
                     {formatTime(currentLocation.time)}
                   </span>
                 </div>

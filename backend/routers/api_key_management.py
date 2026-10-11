@@ -13,6 +13,7 @@ from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 from utils.dev_cache import invalidate_developer_cache
 from utils.observability.api_keys import record_api_key_repairs, record_api_key_revocation_exhausted
+from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,15 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
+    if key_data.scopes is not None and any(scope not in MCP_SUPPORTED_SCOPES for scope in key_data.scopes):
+        raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {MCP_SUPPORTED_SCOPES}")
+
     try:
-        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
+        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(
+            uid,
+            key_data.name.strip(),
+            scopes=key_data.scopes,
+        )
     except ApiKeyValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)

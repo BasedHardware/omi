@@ -3,11 +3,7 @@ import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/message.dart';
 
 void main() {
-  Map<String, dynamic> messageJson({
-    required String text,
-    Object? contentBlocks,
-    String? metadata,
-  }) {
+  Map<String, dynamic> messageJson({required String text, Object? contentBlocks, String? metadata}) {
     return {
       'id': 'message-1',
       'created_at': '2026-08-18T12:00:00Z',
@@ -19,26 +15,61 @@ void main() {
     };
   }
 
-  test(
-    'uses first-class conversation block fallback instead of a blank bubble',
-    () {
-      final message = ServerMessage.fromJson(
-        messageJson(
-          text: '',
-          contentBlocks: [
-            {
-              'type': 'conversationLink',
-              'conversationId': 'conversation-1',
-              'summary': 'Founders explore AI memory',
-            },
-          ],
-        ),
+  test('automatic provenance survives cache roundtrip while reply blocks stay visible', () {
+    final blocks = [
+      {'type': 'taskCard', 'id': 'task-block', 'taskId': 'task'},
+      {'type': 'goalLink', 'id': 'goal-block', 'goalId': 'goal', 'summary': 'Goal'},
+      {'type': 'conversationLink', 'id': 'notes-block', 'conversationId': 'meeting', 'summary': 'Notes'},
+    ];
+    final reply = ServerMessage.fromJson(messageJson(text: '', contentBlocks: blocks));
+    expect(reply.isAutomaticChatEntry, isFalse);
+    expect(reply.typedContentBlocks.length, 3);
+    for (final source in [
+      'daily_opener',
+      'cold_start_rich',
+      'cold_start_sparse',
+      'capture_arrival',
+      'agent_judgment',
+      'deferral_reraise',
+    ]) {
+      final automatic = ServerMessage.fromJson(
+        messageJson(text: '', contentBlocks: blocks, metadata: '{"chatFirstIntentSource":"$source"}'),
       );
+      expect(automatic.isAutomaticChatEntry, isTrue);
+      expect(ServerMessage.fromJson(automatic.toJson()).isAutomaticChatEntry, isTrue);
+    }
+    expect(ServerMessage.fromJson({...messageJson(text: 'Old task'), 'type': 'task'}).isAutomaticChatEntry, isTrue);
+    expect(ServerMessage.fromJson(messageJson(text: 'Answer', metadata: 'broken')).isAutomaticChatEntry, isFalse);
+  });
 
-      expect(message.text, 'Meeting notes ready - Founders explore AI memory');
-      expect(message.contentBlocks.single['conversationId'], 'conversation-1');
-    },
-  );
+  test('notification continuity and cold-start answer metadata keep user messages visible', () {
+    for (final metadata in [
+      '{"continuityKey":"notification:old"}',
+      '{"coldStartSequence":{"id":"old-sequence","step":1}}',
+    ]) {
+      final user = ServerMessage.fromJson({...messageJson(text: 'My answer', metadata: metadata), 'sender': 'human'});
+      expect(user.isAutomaticChatEntry, isFalse);
+      expect(ServerMessage.fromJson(user.toJson()).isAutomaticChatEntry, isFalse);
+    }
+    final automatic = ServerMessage.fromJson(
+      messageJson(text: 'Notice', metadata: '{"continuityKey":"notification:old"}'),
+    );
+    expect(automatic.isAutomaticChatEntry, isTrue);
+  });
+
+  test('uses first-class conversation block fallback instead of a blank bubble', () {
+    final message = ServerMessage.fromJson(
+      messageJson(
+        text: '',
+        contentBlocks: [
+          {'type': 'conversationLink', 'conversationId': 'conversation-1', 'summary': 'Founders explore AI memory'},
+        ],
+      ),
+    );
+
+    expect(message.text, 'Meeting notes ready - Founders explore AI memory');
+    expect(message.contentBlocks.single['conversationId'], 'conversation-1');
+  });
 
   test('keeps legacy metadata blocks readable during wire migration', () {
     final message = ServerMessage.fromJson(
@@ -50,61 +81,44 @@ void main() {
     );
 
     expect(message.text, 'Meeting notes ready - Legacy weekly planning');
-    expect(
-      message.contentBlocks.single['conversationId'],
-      'conversation-legacy',
-    );
+    expect(message.contentBlocks.single['conversationId'], 'conversation-legacy');
   });
 
-  test(
-    'preserves canonical backend fallback text when the client knows the block',
-    () {
-      final message = ServerMessage.fromJson(
-        messageJson(
-          text: 'Meeting notes ready - Canonical title',
-          contentBlocks: [
-            {
-              'type': 'conversationLink',
-              'summary': 'Different local rendering',
-            },
-          ],
-        ),
-      );
+  test('preserves canonical backend fallback text when the client knows the block', () {
+    final message = ServerMessage.fromJson(
+      messageJson(
+        text: 'Meeting notes ready - Canonical title',
+        contentBlocks: [
+          {'type': 'conversationLink', 'summary': 'Different local rendering'},
+        ],
+      ),
+    );
 
-      expect(message.text, 'Meeting notes ready - Canonical title');
-      expect(message.textIsStructuredFallback, isFalse);
-    },
-  );
+    expect(message.text, 'Meeting notes ready - Canonical title');
+    expect(message.textIsStructuredFallback, isFalse);
+  });
 
-  test(
-    'keeps desktop goal and task chrome on the mobile timeline',
-    () {
-      final message = ServerMessage.fromJson(
-        messageJson(
-          text: '',
-          contentBlocks: [
-            {
-              'type': 'goalLink',
-              'id': 'block-goal',
-              'goalId': 'goal-1',
-              'summary': 'Make Omi Great Again',
-            },
-            {'type': 'taskCard', 'id': 'block-task-1', 'taskId': 'task-1'},
-            {'type': 'taskCard', 'id': 'block-task-2', 'taskId': 'task-2'},
-            {'type': 'taskCard', 'id': 'block-task-3', 'taskId': 'task-3'},
-          ],
-        ),
-      );
+  test('keeps desktop goal and task chrome on the mobile timeline', () {
+    final message = ServerMessage.fromJson(
+      messageJson(
+        text: '',
+        contentBlocks: [
+          {'type': 'goalLink', 'id': 'block-goal', 'goalId': 'goal-1', 'summary': 'Make Omi Great Again'},
+          {'type': 'taskCard', 'id': 'block-task-1', 'taskId': 'task-1'},
+          {'type': 'taskCard', 'id': 'block-task-2', 'taskId': 'task-2'},
+          {'type': 'taskCard', 'id': 'block-task-3', 'taskId': 'task-3'},
+        ],
+      ),
+    );
 
-      expect(message.text, 'Goal - Make Omi Great Again\nTask\nTask\nTask');
-      // The body is nothing but the synthesized fallback, so the interactive
-      // components replace it instead of repeating it.
-      expect(message.textIsStructuredFallback, isTrue);
-      expect(message.typedContentBlocks, hasLength(4));
-      expect(message.typedContentBlocks.first, isA<GoalLinkContentBlock>());
-      expect(message.typedContentBlocks.last, isA<TaskCardContentBlock>());
-    },
-  );
+    expect(message.text, 'Goal - Make Omi Great Again\nTask\nTask\nTask');
+    // The body is nothing but the synthesized fallback, so the interactive
+    // components replace it instead of repeating it.
+    expect(message.textIsStructuredFallback, isTrue);
+    expect(message.typedContentBlocks, hasLength(4));
+    expect(message.typedContentBlocks.first, isA<GoalLinkContentBlock>());
+    expect(message.typedContentBlocks.last, isA<TaskCardContentBlock>());
+  });
 
   test('keeps stored one-line goal/task fallback dumps renderable', () {
     final message = ServerMessage.fromJson(
@@ -196,12 +210,7 @@ void main() {
           'conversation_id': 'conversation-1',
           'title': 'Weekly summary',
         },
-        {
-          'id': 'frame-1',
-          'kind': 'keyframe',
-          'state': 'pruned',
-          'frame_id': 'frame-1',
-        },
+        {'id': 'frame-1', 'kind': 'keyframe', 'state': 'pruned', 'frame_id': 'frame-1'},
       ],
     };
 
@@ -214,34 +223,26 @@ void main() {
     expect(message.toJson()['evidence'], isA<Map<String, dynamic>>());
   });
 
-  test(
-    'keeps text readable for loading and offline frame requests',
-    () {
-      for (final state in ['loading', 'offline']) {
-        final json = messageJson(text: 'The answer remains available.');
-        json['evidence'] = {
-          'schema_version': 1,
-          'request_id': 'request-$state',
-          'references': [
-            {
-              'id': 'request-$state',
-              'kind': 'request',
-              'state': state,
-              'request_id': 'request-$state',
-            },
-          ],
-        };
+  test('keeps text readable for loading and offline frame requests', () {
+    for (final state in ['loading', 'offline']) {
+      final json = messageJson(text: 'The answer remains available.');
+      json['evidence'] = {
+        'schema_version': 1,
+        'request_id': 'request-$state',
+        'references': [
+          {'id': 'request-$state', 'kind': 'request', 'state': state, 'request_id': 'request-$state'},
+        ],
+      };
 
-        expect(() => ServerMessage.fromJson(json), returnsNormally);
-        final message = ServerMessage.fromJson(json);
+      expect(() => ServerMessage.fromJson(json), returnsNormally);
+      final message = ServerMessage.fromJson(json);
 
-        expect(message.text, 'The answer remains available.');
-        expect(message.evidenceEnvelope?.references.single.kind.wireValue, 'request');
-        expect(message.evidenceEnvelope?.references.single.state.wireValue, state);
-        expect(message.evidenceEnvelope?.references.single.canOpen, isFalse);
-      }
-    },
-  );
+      expect(message.text, 'The answer remains available.');
+      expect(message.evidenceEnvelope?.references.single.kind.wireValue, 'request');
+      expect(message.evidenceEnvelope?.references.single.state.wireValue, state);
+      expect(message.evidenceEnvelope?.references.single.canOpen, isFalse);
+    }
+  });
 
   test('ignores malformed or future evidence while preserving legacy text', () {
     final malformed = messageJson(text: 'Legacy answer');
@@ -250,12 +251,7 @@ void main() {
     future['evidence'] = {
       'schema_version': 99,
       'references': [
-        {
-          'id': 'future-1',
-          'kind': 'conversation_summary',
-          'state': 'available',
-          'conversation_id': 'conversation-1',
-        },
+        {'id': 'future-1', 'kind': 'conversation_summary', 'state': 'available', 'conversation_id': 'conversation-1'},
       ],
     };
 

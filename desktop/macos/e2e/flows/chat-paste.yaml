@@ -10,6 +10,8 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/PasteboardAttachmentStaging.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
 steps:
   - id: CP1
     name: ⌘V with a screenshot on the clipboard stages an image attachment
@@ -28,5 +30,7 @@ steps:
       name: chat_composer_snapshot
     expect:
       ok: true
+      result.detail.placeholder: "Ask Omi"
+      result.detail.mode: "answer"
       result.detail.mainStagedAttachments:
         min: 1

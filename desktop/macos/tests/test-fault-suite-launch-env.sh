@@ -50,8 +50,27 @@ exercise_fault_suite_launch_command() {
   mkdir -p "$fixture/scripts" "$fixture/e2e/flows"
   ln -s "$CORE_HARNESS" "$fixture/scripts/desktop-core-harness.sh"
   ln -s "$MACOS_DIR/scripts/app-config.sh" "$fixture/scripts/app-config.sh"
+  ln -s "$MACOS_DIR/scripts/desktop-build-identity.sh" "$fixture/scripts/desktop-build-identity.sh"
+  ln -s "$MACOS_DIR/scripts/desktop-health-check.py" "$fixture/scripts/desktop-health-check.py"
   make_pkill_stub "$bin_dir"
   : >"$fixture/e2e/flows/chat-fault-5xx.yaml"
+
+  cat >"$bin_dir/git" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" && "${4:-}" == "--show-toplevel" ]]; then
+  printf '%s\n' "${OMI_FAULT_TEST_REPO_ROOT:?}"
+  exit 0
+fi
+if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" && "${4:-}" == "--verify" ]]; then
+  printf '%s\n' 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+  exit 0
+fi
+if [[ "${1:-}" == "-C" && "${3:-}" == "status" ]]; then
+  exit 0
+fi
+exec /usr/bin/git "$@"
+SH
 
   cat >"$bin_dir/python3" <<'SH'
 #!/usr/bin/env bash
@@ -67,7 +86,7 @@ if [[ "${1:-}" == "-" ]]; then
 fi
 exec /usr/bin/python3 "$@"
 SH
-  chmod +x "$bin_dir/python3"
+  chmod +x "$bin_dir/git" "$bin_dir/python3"
 
 
   cat >"$fixture/scripts/omi-fault-inject.sh" <<'SH'
@@ -115,7 +134,7 @@ bundle_id="com.omi.${OMI_APP_NAME}"
 server='import http.server,json,sys; port=int(sys.argv[1]); bundle=sys.argv[2];
 class H(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
-  body=json.dumps({"ok":True,"bundleIdentifier":bundle}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
+  body=json.dumps({"ok":True,"bundleIdentifier":bundle,"sourceIdentity":{"revision":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","schemaVersion":1,"workingTreeState":"clean"}}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
  def log_message(self,*args): pass
 http.server.ThreadingHTTPServer(("127.0.0.1",port),H).serve_forever()'
 python3 -c "$server" "$OMI_AUTOMATION_PORT" "$bundle_id" "$executable_path" "--omi-launch-token=${OMI_DESKTOP_LAUNCH_TOKEN}" &
@@ -129,7 +148,7 @@ printf '%s\n' "$!" >"$OMI_FAULT_APP_PID_FILE"
   printf 'launch_transport=open\n'
 } >"$OMI_DESKTOP_LAUNCH_SIGNAL_FILE"
 chmod 600 "$OMI_DESKTOP_LAUNCH_SIGNAL_FILE"
-env | sort >"$OMI_FAULT_ENV_CAPTURE"
+env -0 >"$OMI_FAULT_ENV_CAPTURE"
 SH
   chmod +x "$fixture/run.sh"
 
@@ -140,6 +159,8 @@ SH
   chmod +x "$fixture/scripts/omi-harness"
 
   PATH="$bin_dir:$PATH" \
+    OMI_FAULT_MULTILINE_FIXTURE=$'first\nsecond' \
+    OMI_FAULT_TEST_REPO_ROOT="$fixture" \
     OMI_FAULT_RUN_TOKEN="$fault_run_token" \
     OMI_FAULT_STATE_DIR="$qualification_fault_state" \
     OMI_FAULT_APP_PID_FILE="$fixture/fault-app.pid" \
@@ -160,9 +181,13 @@ from pathlib import Path
 import sys
 
 captured = {}
-for line in open(sys.argv[1], encoding="utf-8"):
-    key, value = line.rstrip("\n").split("=", 1)
-    captured[key] = value
+for entry in Path(sys.argv[1]).read_bytes().split(b"\0"):
+    if not entry:
+        continue
+    key, separator, value = entry.partition(b"=")
+    assert separator, entry
+    captured[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+assert captured.get("OMI_FAULT_MULTILINE_FIXTURE") == "first\nsecond"
 
 fault_url = f"http://127.0.0.1:{sys.argv[4]}"
 fault_bundle = f"omi-fault-{sys.argv[5]}"
@@ -216,6 +241,7 @@ PY
 
   set +e
   PATH="$bin_dir:$PATH" \
+    OMI_FAULT_TEST_REPO_ROOT="$fixture" \
     OMI_FAULT_RUN_TOKEN="$fault_run_token" \
     OMI_FAULT_STATE_DIR="$qualification_fault_state" \
     OMI_FAULT_APP_PID_FILE="$fixture/fault-app.pid" \

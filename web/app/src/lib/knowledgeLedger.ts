@@ -105,6 +105,14 @@ function copyString(target: JsonRecord, raw: JsonRecord, key: string): void {
   if (value !== undefined) target[key] = value;
 }
 
+function copyNullableString(target: JsonRecord, raw: JsonRecord, key: string): void {
+  if (raw[key] === null) {
+    target[key] = null;
+    return;
+  }
+  copyString(target, raw, key);
+}
+
 function copyBoolean(target: JsonRecord, raw: JsonRecord, key: string): void {
   if (typeof raw[key] === 'boolean') target[key] = raw[key];
 }
@@ -112,6 +120,14 @@ function copyBoolean(target: JsonRecord, raw: JsonRecord, key: string): void {
 function copyNumber(target: JsonRecord, raw: JsonRecord, key: string): void {
   const value = finiteNumber(raw[key]);
   if (value !== undefined) target[key] = value;
+}
+
+function copyNullableNumber(target: JsonRecord, raw: JsonRecord, key: string): void {
+  if (raw[key] === null) {
+    target[key] = null;
+    return;
+  }
+  copyNumber(target, raw, key);
 }
 
 function copyInteger(target: JsonRecord, raw: JsonRecord, key: string): void {
@@ -174,6 +190,9 @@ export function normalizeKnowledgeLedgerMemory(value: unknown): Memory | null {
   ]) {
     copyString(normalized, raw, key);
   }
+  for (const key of ['belief_class', 'currency_band', 'as_of', 'belief_computed_at']) {
+    copyNullableString(normalized, raw, key);
+  }
   for (const key of ['tags', 'capture_device_ids']) copyStringArray(normalized, raw, key);
   for (const key of [
     'manually_added',
@@ -192,6 +211,12 @@ export function normalizeKnowledgeLedgerMemory(value: unknown): Memory | null {
   }
   if (raw.capture_confidence === null) normalized.capture_confidence = null;
   else copyNumber(normalized, raw, 'capture_confidence');
+
+  // Belief fields are a read-only view. Keep unknown classification explicit:
+  // a row without a class/band is still readable, but it must not acquire a
+  // client-computed currentness value or a default classification here.
+  copyNullableNumber(normalized, raw, 'currency');
+  copyNullableNumber(normalized, raw, 'half_life_days');
 
   const ledgerSchemaVersion = boundedString(
     raw.ledger_schema_version ?? raw.ledgerSchemaVersion,

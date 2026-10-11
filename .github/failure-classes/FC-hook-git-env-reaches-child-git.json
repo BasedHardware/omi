@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-hook-git-env-reaches-child-git",
+  "violated_contract": "Git exports GIT_DIR to the hooks it runs, and from a linked worktree it is the absolute path of .git/worktrees/<name>. A hook-launched child that runs git against any other directory inherits that location and silently operates on the hook's repository instead: `git init <fixture>` reinitializes it and writes core.bare=true into the config every worktree shares, while fixture commits, ls-files, and ancestry probes read the wrong index and refs.",
+  "canonical_prevention": "Clear the exported location once at the top of the hook entry script, after it has changed to the work tree root, so every child discovers its repository from its own working directory instead of each caller scrubbing its own environment. Prove it by running the real hook script from a disposable linked worktree with the hook-shaped GIT_DIR exported, having its first child run `git init` on a fixture, and asserting the shared config is unchanged and the fixture became its own repository.",
+  "canonical_prevention_artifact": [
+    "scripts/pre-push",
+    "scripts/test-pre-push-git-env.sh"
+  ],
+  "evidence_prs": [11413, 11709, 11795, 12564],
+  "scope_hints": [
+    "scripts/pre-push",
+    "scripts/pre-push-singleflight",
+    ".github/scripts/check_*.py",
+    ".github/scripts/test_*.py"
+  ],
+  "status": "open"
+}

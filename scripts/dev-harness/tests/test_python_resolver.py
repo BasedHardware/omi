@@ -94,9 +94,25 @@ def _git_init(repo: Path) -> None:
     subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)
 
 
+# Completeness probes invoke `$python -c 'import dotenv, yaml'`. Fixture
+# interpreters must pass that check without logging it as a harness call.
+_LOGGED_PYTHON = """#!/usr/bin/env bash
+if [ "${1:-}" = "-c" ]; then
+  exit 0
+fi
+printf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"
+"""
+
+
 def _make_executable(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _write_logged_python(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_LOGGED_PYTHON, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
@@ -136,6 +152,33 @@ def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
 
     legacy.unlink()
     assert _resolve_python(repo, monkeypatch) == "python3"
+
+
+def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A .venv directory is not proof the cheap pre-push gates can import."""
+
+    if shutil.which("uv") is None:
+        pytest.skip("uv is required to mint an incomplete 3.11 venv")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    venv_dir = repo / "backend" / ".venv"
+    created = subprocess.run(
+        ["uv", "venv", "--python", "3.11", str(venv_dir)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if created.returncode != 0:
+        pytest.skip(created.stderr[-500:] or "uv venv failed")
+    python = venv_dir / "bin" / "python"
+    assert python.is_file()
+    probe = subprocess.run([str(python), "-c", "import dotenv, yaml"], capture_output=True, check=False)
+    assert probe.returncode != 0
+    resolved = _resolve_python(repo, monkeypatch)
+    assert resolved == "python3"
 
 
 def test_resolver_finds_windows_virtualenv_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -348,9 +391,7 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and
 
     calls = tmp_path / "python calls.log"
     python = repo / "backend/.venv/bin/python"
-    python.parent.mkdir(parents=True, exist_ok=True)
-    python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
-    python.chmod(python.stat().st_mode | stat.S_IXUSR)
+    _write_logged_python(python)
 
     # Exercise the resolver's backend/.venv fallback, so clear any inherited
     # PYTHON (e.g. `make preflight` exports it) exactly like the sibling tests.
@@ -517,9 +558,7 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
 
     calls = repo / "python calls.log"
     python = repo / "backend/.venv/bin/python"
-    python.parent.mkdir(parents=True, exist_ok=True)
-    python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
-    python.chmod(python.stat().st_mode | stat.S_IXUSR)
+    _write_logged_python(python)
 
     env = _shell_env()
     env.pop("PYTHON", None)
@@ -559,9 +598,7 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
 
     calls = repo / "python calls.log"
     python = repo / "backend/.venv/bin/python"
-    python.parent.mkdir(parents=True, exist_ok=True)
-    python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
-    python.chmod(python.stat().st_mode | stat.S_IXUSR)
+    _write_logged_python(python)
 
     env = _shell_env()
     env.pop("PYTHON", None)

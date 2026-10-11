@@ -32,7 +32,7 @@ private actor OwnerBoundaryExternalRunProbe {
     entered = true
     let waiters = enteredWaiters
     enteredWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters { waiter.resume() }
     if !released {
       await withCheckedContinuation { continuation in
         releaseWaiters.append(continuation)
@@ -59,7 +59,7 @@ private actor OwnerBoundaryExternalRunProbe {
     released = true
     let waiters = releaseWaiters
     releaseWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters { waiter.resume() }
   }
 
   func snapshot() -> (
@@ -120,7 +120,11 @@ final class PushToTalkStateMachineTests: XCTestCase {
     UserDefaults.standard.set("ptt-headless-owner", forKey: .authUserId)
     UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
     defer {
+      #if DEBUG
+        manager.testingTurnScreenEvidenceCapture = nil
+      #endif
       manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
       if let previousAuthOwner {
         UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
       } else {
@@ -133,9 +137,27 @@ final class PushToTalkStateMachineTests: XCTestCase {
       }
     }
 
+    #if DEBUG
+      var compositorInvocations = 0
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+    #endif
+
     let started = manager.beginPushToTalkForAutomation()
     XCTAssertEqual(started["listening"], "true")
+    XCTAssertEqual(started["screen_evidence"], "skipped")
+    XCTAssertEqual(started["hub_ready"], RealtimeHubController.shared.isTransportReady ? "true" : "false")
+    XCTAssertTrue(
+      started["ptt_admission"] == "immediate" || started["ptt_admission"] == "capture_and_buffer")
     XCTAssertEqual(VoiceTurnCoordinator.shared.activeTurn?.phase, .recording)
+    XCTAssertEqual(
+      RealtimeHubController.shared.screenEvidence?.descriptor.captureFailure,
+      .automationBypass)
+    #if DEBUG
+      XCTAssertEqual(compositorInvocations, 0, "bypass must not invoke compositor capture")
+    #endif
 
     let stopped = manager.endPushToTalkForAutomation()
     XCTAssertEqual(stopped["finalized"], "true")
@@ -144,6 +166,180 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertEqual(VoiceTurnCoordinator.shared.model.staleEventCount, 0)
     XCTAssertEqual(VoiceTurnCoordinator.shared.model.invalidTransitionCount, 0)
   }
+
+  #if DEBUG
+    @MainActor
+    func testBypassStartDoesNotCaptureSynchronouslyAndDropsLateEvidence() {
+      let manager = PushToTalkManager.shared
+      let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+      let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+      manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
+      UserDefaults.standard.set("ptt-headless-owner", forKey: .authUserId)
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      var compositorInvocations = 0
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+      defer {
+        manager.testingTurnScreenEvidenceCapture = nil
+        manager.cleanup()
+        RealtimeHubController.shared.clearScreenGrounding()
+        if let previousAuthOwner {
+          UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+          UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+      }
+
+      let first = manager.beginPushToTalkForAutomation()
+      XCTAssertEqual(first["listening"], "true")
+      XCTAssertEqual(first["screen_evidence"], "skipped")
+      XCTAssertEqual(compositorInvocations, 0)
+      guard let firstTurnID = VoiceTurnCoordinator.shared.activeTurnID else {
+        return XCTFail("bypass start must mint a turn")
+      }
+      let lateEvidence = RealtimeScreenEvidence(
+        descriptor: RealtimeScreenEvidenceDescriptor(
+          evidenceID: "late-first-turn",
+          turnID: firstTurnID,
+          capturedAt: Date(),
+          target: .frontmostDisplay,
+          frontmostApp: "TestApp",
+          frontmostBundleID: "com.test.app",
+          windowID: 1,
+          displayID: 1,
+          imageByteCount: 128,
+          imageDigest: "late-digest"),
+        preOverlayImage: nil,
+        jpeg: Data([1, 2, 3]),
+        encodingFinished: true)
+
+      XCTAssertEqual(manager.endPushToTalkForAutomation()["finalized"], "true")
+
+      let second = manager.beginPushToTalkForAutomation()
+      XCTAssertEqual(second["listening"], "true")
+      XCTAssertEqual(second["screen_evidence"], "skipped")
+      guard let secondTurnID = VoiceTurnCoordinator.shared.activeTurnID else {
+        return XCTFail("second bypass start must mint a turn")
+      }
+      XCTAssertNotEqual(firstTurnID, secondTurnID)
+      RealtimeHubController.shared.installScreenEvidence(lateEvidence)
+      XCTAssertEqual(
+        RealtimeHubController.shared.screenEvidence?.descriptor.turnID,
+        secondTurnID,
+        "a deferred capture for an ended turn must not attach to a later turn")
+      XCTAssertEqual(
+        RealtimeHubController.shared.screenEvidence?.descriptor.captureFailure,
+        .automationBypass)
+      XCTAssertEqual(compositorInvocations, 0)
+    }
+
+    @MainActor
+    func testPhysicalPathCapturesSynchronouslyBeforeCaptureStarted() {
+      let manager = PushToTalkManager.shared
+      let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+      let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+      manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
+      UserDefaults.standard.set("ptt-physical-owner", forKey: .authUserId)
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      let previousMute = ShortcutSettings.shared.pttMuteSystemAudio
+      let previousSounds = ShortcutSettings.shared.pttSoundsEnabled
+      ShortcutSettings.shared.pttMuteSystemAudio = false
+      ShortcutSettings.shared.pttSoundsEnabled = false
+      var compositorInvocations = 0
+      var captureIDDuringCapture: VoiceCaptureID?
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        captureIDDuringCapture = VoiceTurnCoordinator.shared.model.turn?.captureID
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+      defer {
+        manager.testingTurnScreenEvidenceCapture = nil
+        ShortcutSettings.shared.pttMuteSystemAudio = previousMute
+        ShortcutSettings.shared.pttSoundsEnabled = previousSounds
+        manager.cleanup()
+        RealtimeHubController.shared.clearScreenGrounding()
+        if let previousAuthOwner {
+          UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+          UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+      }
+
+      manager.startListeningForPhysicalScreenEvidenceTest()
+      XCTAssertEqual(compositorInvocations, 1)
+      XCTAssertNil(
+        captureIDDuringCapture,
+        "physical pre-overlay capture must run before captureStarted is published")
+    }
+
+    @MainActor
+    func testRealtimeAutomationPathCapturesSynchronouslyBeforeCaptureStarted() {
+      let manager = PushToTalkManager.shared
+      let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+      let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+      manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
+      UserDefaults.standard.set("ptt-realtime-owner", forKey: .authUserId)
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      let previousMute = ShortcutSettings.shared.pttMuteSystemAudio
+      let previousSounds = ShortcutSettings.shared.pttSoundsEnabled
+      ShortcutSettings.shared.pttMuteSystemAudio = false
+      ShortcutSettings.shared.pttSoundsEnabled = false
+      var compositorInvocations = 0
+      var captureIDDuringCapture: VoiceCaptureID?
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        captureIDDuringCapture = VoiceTurnCoordinator.shared.model.turn?.captureID
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+      defer {
+        manager.testingTurnScreenEvidenceCapture = nil
+        ShortcutSettings.shared.pttMuteSystemAudio = previousMute
+        ShortcutSettings.shared.pttSoundsEnabled = previousSounds
+        manager.cleanup()
+        RealtimeHubController.shared.clearScreenGrounding()
+        if let previousAuthOwner {
+          UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+          UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+      }
+
+      let started = manager.beginRealtimePushToTalkForAutomation()
+      XCTAssertEqual(started["listening"], "true")
+      XCTAssertEqual(started["screen_evidence"], "unavailable")
+      XCTAssertNotEqual(started["screen_evidence"], "skipped")
+      XCTAssertEqual(compositorInvocations, 1)
+      XCTAssertNil(
+        captureIDDuringCapture,
+        "realtime automation must capture before captureStarted is published")
+      XCTAssertNotEqual(
+        RealtimeHubController.shared.screenEvidence?.descriptor.captureFailure,
+        .automationBypass)
+      XCTAssertEqual(
+        RealtimeHubController.shared.automationScreenEvidenceAdmissionLabel(),
+        "unavailable")
+    }
+  #endif
 
   // The owner-boundary suite drives DEBUG-only seams (ownerBoundarySnapshot,
   // RealtimeHubOwnerBoundarySnapshot); the release-mode CI test compile must skip it.
@@ -363,10 +559,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
         plannedNextOwner: { _, _ in ownerID },
         retargetLocalStorage: { _, _ in },
         prepareLocalStorageTransition: { _, _ in },
-        ownerDidChange: {}
-      ) { defaults in
-        defaults.set(ownerID, forKey: .authUserId)
-      }
+        ownerDidChange: {},
+        { defaults in
+          defaults.set(ownerID, forKey: .authUserId)
+        })
     }
 
     private func ownerBoundaryDefaults(_ suffix: String) -> UserDefaults {

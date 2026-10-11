@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
+from urllib.parse import quote
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 
@@ -29,7 +31,9 @@ async def root(uid: str = Query(None)):
     """Root endpoint with setup instructions."""
     # If uid provided, show personalized setup page
     if uid:
-        auth_url = f"/auth?uid={uid}"
+        # uid is client-controlled; percent-encode it for the query and escape
+        # the result for the attribute so it cannot break out of the href.
+        auth_url = "/auth?uid=" + html.escape(quote(uid, safe=""), quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -222,9 +226,11 @@ async def auth_callback(
         refresh_token = token_data.get('refresh_token')
         expires_in = token_data.get('expires_in', 7200)
         
+        access_status = 'received' if access_token else 'missing'
+        refresh_status = 'received' if refresh_token else 'missing'
         print(f"🔑 Token data received:", flush=True)
-        print(f"   Access token: {access_token[:20]}..." if access_token else "   Access token: None", flush=True)
-        print(f"   Refresh token: {refresh_token[:20]}..." if refresh_token else "   Refresh token: None", flush=True)
+        print(f"   Access token: {access_status}", flush=True)
+        print(f"   Refresh token: {refresh_status}", flush=True)
         print(f"   Expires in: {expires_in}s ({expires_in/3600:.1f}h)", flush=True)
         
         SimpleUserStorage.save_user(
@@ -521,14 +527,18 @@ async def auth_callback(
         )
     
     except Exception as e:
+        # `state` comes straight from the query string, so it is attacker-controlled.
+        # Percent-encode it for the URL query and HTML-escape the result for the
+        # attribute so a quote or angle bracket cannot break out of the href.
         error_uid = state if state else "unknown"
+        error_uid_attr = html.escape(quote(error_uid, safe=""), quote=True)
         return HTMLResponse(
             content=f"""
             <html>
                 <body style="font-family: Arial; padding: 40px; text-align: center;">
                     <h2>❌ Authentication Error</h2>
-                    <p>Failed to complete authentication: {str(e)}</p>
-                    <p><a href="/auth?uid={error_uid}">Try again</a></p>
+                    <p>Failed to complete authentication.</p>
+                    <p><a href="/auth?uid={error_uid_attr}">Try again</a></p>
                 </body>
             </html>
             """,
@@ -640,10 +650,6 @@ async def webhook(
     
     # Log what we received for debugging
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):  # Show first 3
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         # Silent response for empty/invalid data
@@ -666,7 +672,7 @@ async def webhook(
     # Only send notifications for final tweet post (success or failure)
     # Silent responses during collection so user doesn't get spammed
     if response_message and ("✅ Tweet posted:" in response_message or "❌ Failed:" in response_message):
-        print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
+        print("✉️  USER NOTIFICATION sent (tweet result)", flush=True)
         return {
             "message": response_message,
             "session_id": session_id,
@@ -674,7 +680,8 @@ async def webhook(
         }
     
     # Silent response for everything else (listening, collecting, etc.)
-    print(f"🔇 Silent response: {response_message}", flush=True)
+    response_len = len(response_message or "")
+    print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 
@@ -697,21 +704,19 @@ async def process_segments(
     
     session_id = session["session_id"]
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['tweet_mode']}, Count: {session.get('segments_count', 0)}/3", flush=True)
-    
+
     # Check for trigger phrase
     if tweet_detector.detect_trigger(full_text):
         tweet_content = tweet_detector.extract_tweet_content(full_text)
-        
+
         print(f"🎤 TRIGGER! Starting 3-segment collection...", flush=True)
-        print(f"   Segment 1 content: '{tweet_content}'", flush=True)
         
         # Start collecting - ALWAYS wait for 2 more segments
         SimpleSessionStorage.update_session(
             session_id,
             tweet_mode="recording",
-            accumulated_text=tweet_content,
+            accumulated_text=tweet_content or "",
             segments_count=1
         )
         
@@ -720,15 +725,14 @@ async def process_segments(
     
     # If in recording mode, collect more segments
     elif session["tweet_mode"] == "recording":
-        accumulated = session.get("accumulated_text", "")
+        accumulated = session.get("accumulated_text") or ""
         segments_count = session.get("segments_count", 0)
         
         # Add this segment
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/3: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/3 received", flush=True)
         
         # Always collect 3 segments
         if segments_count >= 3:
@@ -736,8 +740,9 @@ async def process_segments(
             
             # AI extracts the actual tweet from all 3 segments
             cleaned_content = await tweet_detector.ai_extract_tweet_from_segments(accumulated)
-            
-            print(f"✨ AI extracted tweet: '{cleaned_content}'", flush=True)
+            tweet_len = len(cleaned_content or "")
+
+            print(f"✨ AI extracted tweet (len={tweet_len})", flush=True)
             
             if len(cleaned_content.strip()) > 3:
                 print(f"📤 Posting to Twitter...", flush=True)

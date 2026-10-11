@@ -193,10 +193,10 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 # Master switch for the desktop trial paywall. Default OFF: basic/Neo desktop users are
 # never locked out (no 402) AND the client never sees `trial_expired=True`, so the
 # "you've hit your monthly limit" upgrade popup does not fire just from account age — only
-# the actual chat-question quota (30/mo) gates them. Set TRIAL_PAYWALL_ENABLED=true to
-# restore the 3-day trial lockout. NOTE: this changes ONLY the trial paywall — plan limits
-# (Neo questions, data-intake caps) are untouched.
-TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
+# the actual chat-question quota (30/mo) gates them. The paywall is permanently off; the
+# paywalled branches below are retained pending removal. NOTE: this gate covers ONLY the
+# trial paywall — plan limits (Neo questions, data-intake caps) are untouched.
+TRIAL_PAYWALL_ENABLED = False
 
 # X-App-Platform header values that identify a desktop client. macOS and Windows
 # are the two desktop OSes; both get the desktop plan catalog, the desktop trial
@@ -204,6 +204,10 @@ TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == '
 # for "is this a desktop platform" — every desktop-vs-mobile gate below reads
 # from here so a new desktop OS is wired in one place.
 DESKTOP_PLATFORMS = {'macos', 'windows'}
+
+# Desktop typed chat consumes Anthropic BYOK, not an arbitrary enrolled LLM
+# key. Reporting and enforcement must project the same provider capability.
+DESKTOP_CHAT_BYOK_PROVIDER = 'anthropic'
 
 # Platform identifiers that count as desktop for paywall purposes. The desktop
 # clients send X-App-Platform: macos / windows and the listen WS uses
@@ -234,7 +238,8 @@ def request_has_llm_byok_key() -> bool:
 _request_has_llm_byok_key = request_has_llm_byok_key
 
 
-def _request_has_byok_provider(provider: str) -> bool:
+def request_has_byok_provider(provider: str) -> bool:
+    """Whether the request carries a validated key for this exact provider."""
     return has_validated_byok_keys() and bool(get_byok_key(provider))
 
 
@@ -244,26 +249,28 @@ def _is_trial_expired_uncached(
     firestore_client: Any | None = None,
     provision: bool = True,
     required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
     strict: bool = False,
 ) -> bool:
     """Is this user past their 3-day desktop trial?
 
     The trial applies only to the Free Desktop tier. Neo may use that tier for
     non-premium capabilities, but is paid and must never be reduced to zero
-    access. BYOK users are also bypassed. Returns False on any lookup error so
-    a Firebase blip never paywalls a paying user — unless ``strict``, the mode
-    for a caller that must fail closed (a billed socket): there, a lookup error
-    or an unreadable account record propagates, and a BYOK exemption needs a
-    validated key on this request, never a stored fingerprint alone.
+    access. BYOK users are also bypassed unless ``byok_exempt`` is false for a
+    managed-credential surface. Returns False on any lookup error so a Firebase
+    blip never paywalls a paying user — unless ``strict``, the mode for a caller
+    that must fail closed (a billed socket): there, a lookup error or an
+    unreadable account record propagates, and a BYOK exemption needs a validated
+    key on this request, never a stored fingerprint alone.
     """
     try:
-        if required_byok_provider and _request_has_byok_provider(required_byok_provider):
+        if byok_exempt and required_byok_provider and request_has_byok_provider(required_byok_provider):
             return False
         subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
         plan = subscription.plan if subscription else PlanType.basic
         if not desktop_trial_paywall_eligible(plan, subscription):
             return False
-        if users_db.is_byok_active(uid, firestore_client=firestore_client):
+        if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client):
             if not required_byok_provider:
                 return False
             # A stored fingerprint exempts ordinary callers; the strict caller
@@ -293,6 +300,7 @@ def _is_trial_expired_cached(
     firestore_client: Any | None = None,
     provision: bool = True,
     required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
     strict: bool = False,
 ) -> bool:
     # Request-level escape hatch: a request carrying an enrolled LLM BYOK
@@ -300,11 +308,12 @@ def _is_trial_expired_cached(
     # The cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
     # so even a perfectly-configured BYOK user can transiently look stale to
     # Firestore. Trust the live request.
-    if required_byok_provider:
-        if _request_has_byok_provider(required_byok_provider):
+    if byok_exempt:
+        if required_byok_provider:
+            if request_has_byok_provider(required_byok_provider):
+                return False
+        elif _request_has_llm_byok_key():
             return False
-    elif _request_has_llm_byok_key():
-        return False
 
     cache_key = (
         f"trial_paywall:expired:{uid}:{required_byok_provider}"
@@ -316,6 +325,10 @@ def _is_trial_expired_cached(
         # exemption, unreadable record is an error) and must never consume a
         # False that an ordinary caller cached under the lenient ones.
         cache_key = f"{cache_key}:strict"
+    if not byok_exempt:
+        # A managed-credential surface must not consume a permissive answer
+        # cached by a BYOK-funded surface for the same user.
+        cache_key = f"{cache_key}:managed"
     cached = redis_db.get_generic_cache(cache_key)
     if cached is not None:
         # A cache entry may have been written before an entitlement correction
@@ -360,6 +373,7 @@ def _is_trial_expired_cached(
         firestore_client=firestore_client,
         provision=provision,
         required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
         strict=strict,
     )
     try:
@@ -376,10 +390,11 @@ def is_trial_paywalled(
     firestore_client: Any | None = None,
     provision: bool = True,
     required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
     strict: bool = False,
 ) -> bool:
     """True iff the request is from a desktop client AND the user has used
-    their full 3-day free trial without subscribing or activating BYOK.
+    their full 3-day free trial without subscribing or an allowed BYOK exemption.
 
     `platform` is the X-App-Platform header for HTTP requests or the
     `source` query param for the listen WebSocket. Mobile (ios/android),
@@ -389,6 +404,8 @@ def is_trial_paywalled(
     a paying user) unless ``strict``, where it propagates to the caller, an
     unreadable account record counts as a failure, and a BYOK exemption needs
     a validated key on this request rather than a stored fingerprint.
+    ``byok_exempt=False`` makes BYOK irrelevant for surfaces that consume an Omi
+    managed credential.
     """
     if not TRIAL_PAYWALL_ENABLED:
         return False  # trial paywall disabled — never block on account age
@@ -399,6 +416,7 @@ def is_trial_paywalled(
         firestore_client=firestore_client,
         provision=provision,
         required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
         strict=strict,
     )
 
@@ -408,8 +426,11 @@ def clear_trial_paywall_cache(uid: str) -> None:
     # (the transcription allowance's key) and that allowance's strict variant.
     for provider in ("openrouter", "openai", "anthropic", "gemini", "deepgram"):
         redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}")
+        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}:managed")
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict:managed")
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:managed")
 
 
 def get_trial_metadata(uid: str) -> TrialMetadata:
@@ -1205,7 +1226,7 @@ def enforce_chat_quota(
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
     has_exempt_llm = (
-        _request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
+        request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
     )
     if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
@@ -1257,12 +1278,18 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok
         platform,
         firestore_client=get_customer_firestore_client(),
         provision=False,
-        required_llm_provider='anthropic',
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
         byok_exempt=byok_exempt,
     )
 
 
-def is_desktop_trial_paywalled(uid: str, platform: Optional[str], *, required_byok_provider: str | None = None) -> bool:
+def is_desktop_trial_paywalled(
+    uid: str,
+    platform: Optional[str],
+    *,
+    required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
+) -> bool:
     """Desktop trial gate against the customer Firestore, never a compute-project shadow.
 
     The decisions that need no Firestore run first: resolving the customer client
@@ -1279,6 +1306,7 @@ def is_desktop_trial_paywalled(uid: str, platform: Optional[str], *, required_by
         firestore_client=get_customer_firestore_client(),
         provision=False,
         required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
     )
 
 
@@ -1637,6 +1665,14 @@ def _closed(reason: str) -> TranscriptionAllowance:
     return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
 
 
+# resolve_transcription_allowance() reasons meaning "this lookup could not be
+# trusted", as opposed to "the plan's minutes are actually exhausted". Failing
+# closed on these is right for a live listen socket (refusing one costs
+# nothing) but wrong for a decision written durably to storage, since nothing
+# routinely re-checks it later (#15232 — see should_lock in routers/sync.py).
+TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset({'allowance_unavailable', 'usage_invalid'})
+
+
 def transcription_allowance_seconds(plan: PlanType) -> Optional[int]:
     """The plan's managed transcription allowance, from the catalog alone.
 
@@ -1662,9 +1698,7 @@ def _usage_seconds(usage: Any) -> Optional[int]:
     return value
 
 
-def is_marketplace_reviewer(uid: str) -> bool:
-    """The app-store reviewer identities the subscription snapshot already treats as unlimited."""
-    return uid in os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
+from utils.marketplace_reviewers import is_marketplace_reviewer
 
 
 def resolve_transcription_allowance(
@@ -1745,6 +1779,151 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     :func:`resolve_transcription_allowance`).
     """
     return resolve_transcription_allowance(uid, source).managed
+
+
+CONVERSATION_PROCESSING_MODE_ALLOWED = 'allowed'
+CONVERSATION_PROCESSING_MODE_SKIPPED = 'skipped'
+
+
+@dataclass(frozen=True)
+class ConversationProcessingAllowance:
+    """The one answer to "may Omi run paid structuring/summary/memory right now?".
+
+    Independent of managed-STT credits. Custom-STT users skip
+    :func:`has_transcription_credits` at listen connect; they still hit this
+    gate before Omi-paid post-processing (#7690). ``remaining_seconds`` is
+    ``None`` when the processing budget is unlimited (unlimited plans, LLM
+    BYOK, reviewers).
+    """
+
+    mode: str
+    remaining_seconds: Optional[int]
+    reason: str
+
+    @property
+    def allowed(self) -> bool:
+        return self.mode == CONVERSATION_PROCESSING_MODE_ALLOWED
+
+
+def _processing_closed(reason: str) -> ConversationProcessingAllowance:
+    return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
+
+
+def _usage_speech_seconds(usage: Any) -> Optional[int]:
+    """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
+
+    Custom-STT sessions record ``speech_seconds`` without ``transcription_seconds``
+    so the LLM processing budget can move independently of STT billing.
+    """
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get('speech_seconds', 0)
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def resolve_conversation_processing_allowance(
+    uid: str,
+    source: Optional[str] = None,
+    *,
+    subscription: Any = _UNRESOLVED,
+    usage: Any = _UNRESOLVED,
+    byok_active: Any = _UNRESOLVED,
+) -> ConversationProcessingAllowance:
+    """Resolve the Omi-paid conversation-processing budget for one uid. Never raises.
+
+    Uses the catalog's monthly listening allowance as the processing budget and
+    meters it from ``speech_seconds`` (not ``transcription_seconds``). Lookup
+    failures fail open so a Firestore blip cannot strip summaries from fair
+    paid use (#12663).
+    """
+    try:
+        _ = source  # plan-wide budget; signature matches the transcription resolver
+        if is_marketplace_reviewer(uid):
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
+        if byok_active is _UNRESOLVED:
+            byok_active = users_db.is_byok_active(uid)
+        if byok_active and _request_has_llm_byok_key():
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
+        if subscription is _UNRESOLVED:
+            subscription = users_db.get_user_valid_subscription(uid)
+        if not subscription:
+            return _processing_closed('subscription_inactive')
+        allowance = transcription_allowance_seconds(subscription.plan)
+        if allowance is None:
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'plan_unlimited')
+        if usage is _UNRESOLVED:
+            usage = get_monthly_usage_for_subscription(uid)
+        used = _usage_speech_seconds(usage)
+        if used is None:
+            logger.warning('conversation processing allowance: untrusted usage record for uid=%s', uid)
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='processing_gate',
+                to_mode='fail_open',
+                reason='malformed_doc',
+                outcome='degraded',
+                log=logger,
+            )
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_invalid')
+        remaining = max(0, allowance - used)
+        if remaining > 0:
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        return _processing_closed('plan_allowance_exhausted')
+    except Exception as exc:
+        logger.warning('conversation processing allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'allowance_unavailable')
+
+
+def has_conversation_processing_credits(uid: str, source: Optional[str] = None) -> bool:
+    """Whether Omi may run paid structuring/summary/memory for this user right now.
+
+    Custom-STT does not skip this check. See :func:`resolve_conversation_processing_allowance`.
+    """
+    return resolve_conversation_processing_allowance(uid, source).allowed
+
+
+def should_skip_omi_paid_postprocessing(
+    uid: str,
+    *,
+    uses_custom_stt: bool,
+    source: Optional[str] = None,
+) -> bool:
+    """Skip Omi-paid structuring/summary/memory for an exhausted custom-STT session.
+
+    Regular conversations stay bounded by transcription credits at listen
+    time and are never skipped here. Custom-STT skips those credits, so this
+    is the remaining cap. Fail-open on errors so a lookup blip cannot strip
+    summaries (#12663).
+    """
+    if not uses_custom_stt:
+        return False
+    try:
+        return not has_conversation_processing_credits(uid, source)
+    except Exception as exc:
+        logger.warning('custom-STT LLM gate unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) -> int | None:

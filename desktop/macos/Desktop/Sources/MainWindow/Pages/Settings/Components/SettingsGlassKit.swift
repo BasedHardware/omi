@@ -15,8 +15,9 @@
 //  glass (see its doc comment — it is arithmetic, not taste). Every secondary run here is
 //  `Ink.secondary`, including the ones a three-rung ladder would have set fainter.
 //
-//  Brand: system semantics and neutrals only (INV-UI-1). The single accent is `Ink.accent`, and it is
-//  spent on selection state — never on a filled button, which inverts the label ladder instead.
+//  Brand: system semantics and neutrals only (INV-UI-1). Selection and on-state are neutral ink
+//  (`SettingsSelection`); the single accent, `Ink.accent`, is reserved for the one actionable link on
+//  a surface — never selection, and never a filled button, which inverts the label ladder instead.
 //
 
 import AppKit

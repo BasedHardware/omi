@@ -79,7 +79,7 @@ struct ActivityHubTab: View {
     QuerySearchBar(
       text: $searchText,
       accessibilityID: "activity-search-field",
-      placeholder: "Search activity…",
+      placeholder: "Search activity",
       focus: nil,
       searchSurface: .activity
     )

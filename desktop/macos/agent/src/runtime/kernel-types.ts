@@ -118,6 +118,8 @@ export interface BeginExternalSurfaceRunInput {
 export interface BeginExternalSurfaceRunResult {
   ownerId: string;
   sessionId: string;
+  /** Persisted session surface; Swift uses this only to project lifecycle wakeups. */
+  surfaceKind: string;
   turnId: string;
   runId: string;
   attemptId: string;
@@ -200,6 +202,7 @@ export interface CancelRunResult {
 
 export interface ListSessionsInput {
   ownerId?: string;
+  sessionId?: string;
   status?: AgentSession["status"];
   surfaceKind?: string;
   executionRole?: AgentExecutionRole;

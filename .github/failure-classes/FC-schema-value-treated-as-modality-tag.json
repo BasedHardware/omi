@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-schema-value-treated-as-modality-tag",
+  "violated_contract": "A JSON request admission scanner must distinguish scalar modality tags from object- or list-valued JSON Schema definitions; valid function tool schemas must not fail before provider admission.",
+  "canonical_prevention": "Check that a type value is a string before modality-tag set membership, retain recursive inspection, and exercise legitimate nested and union schema types through HTTP admission with a fake provider and budget reservation and settlement.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_llm_gateway_openai_compatible.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/llm_gateway/routers/openai_compatible.py"
+  ],
+  "status": "open"
+}

@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "చేసిన పనులు",
+    "actionItemsTab": "పనులు",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "ఇది సంబంధిత జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది. ఈ చర్య రద్దు చేయబడదు.",
+    "deleteConversationMessage": "ఇది సంబంధిత జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "లోడ్ చేస్తోంది...",
+    "loading": "లోడ్ చేస్తోంది…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "సమయ వ్యవధిని లోడ్ చేస్తోంది...",
+    "loadingDuration": "సమయ వ్యవధిని లోడ్ చేస్తోంది…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "ఉపన్యాస ప్రొఫైల్",
+    "speechProfile": "వాయిస్ ప్రొఫైల్",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "తొలగిస్తోంది...",
+    "deleting": "తొలగిస్తోంది…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "శోధిస్తోంది...",
+    "searching": "శోధిస్తోంది",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "సంభాషణలను శోధించండి...",
+    "searchConversations": "సంభాషణలను శోధించండి",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "Omiના జ్ఞాపకం నుండి మీ సందేశాలను తొలగిస్తోంది...",
+    "deletingMessages": "Omiના జ్ఞాపకం నుండి మీ సందేశాలను తొలగిస్తోంది…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "మీరు ఈ సందేశాన్ని నివేదించాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా?",
+    "reportMessageConfirm": "ఈ సందేశాన్ని నివేదించాలా?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "మీరు చ్యాట్‌ను సరిచేయాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా? ఈ చర్య రద్దు చేయబడదు.",
+    "clearChatConfirm": "ఈ చాట్‌లోని అన్ని సందేశాలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -410,11 +410,7 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "మీ ఆచిన అనువర్తనాన్ని నిర్మించండి మరియు భాగస్వామ్యం చేయండి",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
-    "searchApps": "అనువర్తనాలను శోధించండి...",
+    "searchApps": "అనువర్తనాలను శోధించండి",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -450,10 +446,6 @@
     "@joinCommunity": {
         "description": "Discord community link"
     },
-    "membersAndCounting": "8000+ సభ్యులు మరియు లెక్కలు.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
-    },
     "deleteAccountTitle": "ఖాతాను తొలగించు",
     "@deleteAccountTitle": {
         "description": "Delete account page title"
@@ -466,11 +458,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "మీ అన్ని జ్ఞాపకాలు మరియు సంభాషణలు శాశ్వతంగా తొలగించబడుతుంది.",
+    "allDataErased": "మీ జ్ఞాపకాలు మరియు సంభాషణలు తొలగించబడతాయి.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "మీ అనువర్తనాలు మరియు ఇంటిగ్రేషన్‌లు వెంటనే డిస్‌కనెక్ట్ చేయబడుతుంది.",
+    "appsDisconnected": "మీ యాప్‌లు మరియు ఇంటిగ్రేషన్‌లు డిస్‌కనెక్ట్ అవుతాయి.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -557,6 +549,7 @@
     "offlineSync": "ఆఫ్‌లైన్ సమకాలీకరణ",
     "autoSync": "ఆటో సింక్",
     "autoSyncDescription": "మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి",
+    "omiButtonActions": "Omi బటన్ చర్యలు",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -604,21 +597,13 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Omiలో, మేము మీ గోప్యతను రక్షించడానికి ప్రతిబద్ధులు. ఈ పేజీ మీ డేటా ఎలా నిల్వ చేయబడుతుందో మరియు ఎలా ఉపయోగించబడుతుందో నియంత్రించడానికి మిమ్మల్ని అనుమతిస్తుంది.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
-    "learnMore": "మరింత తెలుసుకోండి...",
+    "learnMore": "మరింత తెలుసుకోండి…",
     "@learnMore": {
         "description": "Learn more link"
     },
     "dataProtectionLevel": "డేటా సంరక్షణ స్థాయి",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "మీ డేటా బలమైన ఎన్‌క్రిప్షన్‌తో డిఫాల్ట్‌గా సురక్షితంగా ఉంది. క్రింద మీ సెట్టింగ్‌లు మరియు భవిష్యత్ గోప్యతా ఎంపికలను సమీక్షించండి.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "అనువర్తన ప్రాప్తి",
     "@appAccess": {
@@ -832,7 +817,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "సేవ్ చేస్తోంది...",
+    "saving": "సేవ్ చేస్తోంది…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -844,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "STT ప్రదాతను కాన్ఫిగర్ చేయండి",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "సంభాషణ సమయం అక్కా",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "సంభాషణలు ఎప్పుడు స్వయంచాలకంగా ముగుస్తాయో సెట్ చేయండి",
+    "conversationTimeoutConfig": "సంభాషణ ముగియడానికి ముందు Omi నిశ్శబ్దంలో ఎంతసేపు వేచి ఉంటుంది",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "డేటాను దిగుమతి చేయండి",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "ఇతర వనరుల నుండి డేటాను దిగుమతి చేయండి",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "డీబగ్ & నిర్ధారణలు",
     "@debugDiagnostics": {
@@ -928,25 +905,17 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "మీ సంభాషణల నుండి అర్థం చేసిన పదాలు.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "అందించటం",
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "చర్య అంశాలు మరియు స్వయంచాలకంగా సంగ్రహించిన నోట్‌లు.",
+    "providingSubtitle": "పనులు మరియు నోట్‌లు, స్వయంచాలకంగా సంగ్రహించబడతాయి.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
     "remembering": "గుర్తుంచుకోవడం",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "మీ కోసం గుర్తుంచుకున్న వాస్తవాలు మరియు వివరాలు.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "అపరిమిత ప్లాన్",
     "@unlimitedPlan": {
@@ -1006,19 +975,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "ఈ రోజు, omi చేసింది:",
+    "sharePeriodToday": "ఈ రోజు, Omi చేసింది:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "ఈ నెల, omi చేసింది:",
+    "sharePeriodMonth": "ఈ నెల, Omi చేసింది:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "ఈ సంవత్సరం, omi చేసింది:",
+    "sharePeriodYear": "ఈ సంవత్సరం, Omi చేసింది:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "ఇప్పటి వరకు, omi చేసింది:",
+    "sharePeriodAllTime": "ఇప్పటి వరకు, Omi చేసింది:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1064,20 +1033,18 @@
     },
     "debugLogs": "డీబగ్ లాగ్‌లు",
     "debugLogsAutoDelete": "3 రోజుల తర్వాత స్వయంచాలకంగా తొలగించబడుతుంది.",
-    "debugLogsDesc": "సమస్యల నిర్ధారణకు సహాయం చేస్తుంది",
     "noLogFilesFound": "లాగ్ ఫైల్‌లు కనుగొనబడలేదు.",
     "omiDebugLog": "Omi డీబగ్ లాగ్",
     "logShared": "లాగ్ భాగస్వామ్యం చేయబడింది",
     "selectLogFile": "లాగ్ ఫైల్‌ను ఎంచుకోండి",
     "shareLogs": "లాగ్‌లను భాగస్వామ్యం చేయండి",
     "debugLogCleared": "డీబగ్ లాగ్ సరిచేయబడింది",
-    "exportStarted": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు...",
+    "exportStarted": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు…",
     "exportAllData": "అన్ని డేటాను ఎగుమతి చేయండి",
     "exportDataDesc": "సంభాషణలను JSON ఫైల్‌కు ఎగుమతి చేయండి",
     "exportedConversations": "Omiలో నిర్గమం చేసిన సంభాషణలు",
     "exportShared": "ఎగుమతి భాగస్వామ్యం చేయబడింది",
     "deleteKnowledgeGraphTitle": "జ్ఞాన గ్రాఫ్‌ను తొలగించాలా?",
-    "deleteKnowledgeGraphMessage": "ఇది అన్ని ఉత్పన్న జ్ఞాన గ్రాఫ్ డేటా (నోడ్‌లు మరియు కనెక్షన్‌లు) తొలగిస్తుంది. మీ అసలు జ్ఞాపకాలు సురక్షితంగా ఉంటాయి. గ్రాఫ్ కాలక్రమేణ లేదా తర్వాత అభ్యర్థనపై పునర్నిర్మించబడుతుంది.",
     "knowledgeGraphDeleted": "జ్ఞాన గ్రాఫ్ తొలగించబడింది",
     "deleteGraphFailed": "గ్రాఫ్‌ను తొలగించడంలో విఫలమైంది: {error}",
     "@deleteGraphFailed": {
@@ -1089,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "జ్ఞాన గ్రాఫ్‌ను తొలగించు",
-    "deleteKnowledgeGraphDesc": "అన్ని నోడ్‌లు మరియు కనెక్షన్‌లను క్లియర్ చేయండి",
     "mcp": "MCP",
     "mcpServer": "MCP సర్వర్",
     "mcpServerDesc": "AI సహాయకులను మీ డేటాకు కనెక్ట్ చేయండి",
@@ -1113,7 +1079,6 @@
     "daySummary": "రోజు సారాంశం",
     "summaryGenerated": "సారాంశం రూపొందించబడింది",
     "claudeDesktop": "Claude డెస్క్‌టాప్",
-    "addToClaudeConfig": "claude_desktop_config.json కు జోడించండి",
     "copyConfig": "కాన్ఫిగ్ కాపీ చేయండి",
     "configCopied": "కాన్ఫిగ్ క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "listeningMins": "వినుట (నిమిషాలు)",
@@ -1195,7 +1160,7 @@
             }
         }
     },
-    "disconnectAppMessage": "{appName} నుండి డిస్‌కనెక్ట్ చేయాలనుకుంటున్నారని మీరు ఖచ్చితమైనారా? మీరు ఎప్పుడైనా తిరిగి కనెక్ట్ చేయవచ్చు.",
+    "disconnectAppMessage": "మీరు ఎప్పుడైనా {appName}‌ను మళ్లీ కనెక్ట్ చేయవచ్చు.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "స్నేహితుల మరియు కుటుంబ సభ్యుల ప్రొఫైల్‌లను శిక్షణ ఇవ్వండి",
     "trainFamilyProfilesDesc": "మీ రికార్డింగ్‌లు మీ స్నేహితులు మరియు కుటుంబ సభ్యులను గుర్తించడానికి మరియు ప్రొఫైల్‌లను సృష్టించడానికి సహాయ చేస్తాయి.",
     "enhanceTranscriptAccuracy": "ట్రాన్‌స్క్రిప్ట్ ఖచ్చితత్వాన్ని మెరుగుపరచండి",
-    "enhanceTranscriptAccuracyDesc": "మా నమూనా మెరుగుపడుతున్నందున, మేము మీ రికార్డింగ్‌ల కోసం మెరుగైన ట్రాన్‌స్క్రిప్షన్ ఫలితాలను అందించవచ్చు.",
     "legalNotice": "చట్టపరమైన నోటీస్: వాయిస్ డేటాను రికార్డింగ్ మరియు నిల్వ చేయడం యొక్క చట్టబద్ధత మీ స్థానం మరియు ఎలా ఈ లక్షణాన్ని ఉపయోగిస్తున్నారో బట్టి భిన్నంగా ఉండవచ్చు. స్థానిక చట్టాలు మరియు నియమాలకు అనుగుణంగా ఉండటం మీ బాధ్యత.",
     "alreadyAuthorized": "ఇప్పటికే అధికరించబడింది",
     "authorize": "అధికారం ఇవ్వండి",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "మీ ప్రాధమిక భాషను మాకు చెప్పండి",
-    "languageForTranscription": "మరింత ఖచ్చితమైన ట్రాన్‌స్క్రిప్షన్‌లు మరియు ব్యక్తిగతకృత అనుభవం కోసం మీ భాష సెట్ చేయండి.",
+    "languageForTranscription": "ట్రాన్స్‌క్రిప్షన్‌లు, సారాంశాలు మరియు జ్ఞాపకాల కోసం Omi ఈ భాషను ఉపయోగిస్తుంది.",
     "singleLanguageModeInfo": "ఏకీ భాష మోడ్ ప్రారంభించబడింది. అధిక ఖచ్చితత్వం కోసం అనువాదం నిలిపివేయబడింది.",
     "searchLanguageHint": "పేరు లేదా కోడ్‌ద్వారా భాష చేరండి",
     "noLanguagesFound": "భాషలు కనుగొనబడలేదు",
@@ -1358,7 +1322,7 @@
         }
     },
     "account": "ఖాతా",
-    "actionItemsSyncedTo": "మీ చర్య పరిమాణాలు {appName} ఖాతాకు సింక్ చేయబడతాయి",
+    "actionItemsSyncedTo": "మీ పనులు మీ {appName} ఖాతాకు సింక్ చేయబడతాయి",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "{appName} సహ ఏకీకరణ త్వరలో వస్తుంది! మీకు ఎక్కువ టాస్క్ నిర్వహణ ఎంపికలను తీసుకురావడానికి మేము కठిన పని చేస్తున్నాము.",
+    "integrationComingSoon": "{appName} ఇంకా మద్దతు ఇవ్వబడదు.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "ఆకృతిని దిగుమతి చేయండి",
     "exportConfiguration": "ఆకృతిని ఎగుమతి చేయండి",
     "bringYourOwn": "మీ స్వంతమైనవాటిని తీసుకువెళ్లండి",
-    "payYourSttProvider": "Omi ను స్వేచ్ఛగా ఉపయోగించండి. మీరు మీ STT ప్రదాతకు నేరుగా చెల్లించండి.",
+    "payYourSttProvider": "Omiలో ఉచితం. మీరు మీ ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌కు నేరుగా చెల్లిస్తారు.",
     "freeMinutesMonth": "300 ఉచిత నిమిషాలు/నెల చేర్చబడ్డాయి. అসীమితమైన ",
     "omiUnlimited": "Omi అసీమితం",
     "hostRequired": "హోస్ట్ అవసరం",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "మీ లైవ్ STT WebSocket ఎండ్‌పాయింట్‌ను నమోదు చేయండి",
     "apiKey": "API కీ",
     "enterApiKey": "మీ API కీని నమోదు చేయండి",
-    "storedLocallyNeverShared": "స్థానికంగా నిల్వ చేయబడిన, ఎప్పుడూ పంచుకోలేదు",
+    "storedLocallyNeverShared": "ఈ ఫోన్‌లో సేవ్ చేయబడింది. మీ ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌కు మాత్రమే పంపబడుతుంది.",
     "host": "హోస్ట్",
     "port": "పోర్ట్",
     "advanced": "అధునాతన",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "అభ్యర్థన ఆకృతిని డిఫాల్ట్‌కు రీసెట్ చేయండి",
     "logs": "లాగ్‌లు",
     "logsCopied": "లాగ్‌లు కాపీ చేయబడ్డాయి",
-    "noLogsYet": "ఇంకా లాగ్‌లు లేవు. కస్టమ్ STT కార్యకలాపాన్ని చూడటానికి రికార్డింగ్ ప్రారంభించండి.",
-    "deviceUsesCodec": "{device} {reason} ఉపయోగిస్తుంది. Omi ఉపయోగించబడుతుంది.",
+    "noLogsYet": "ఇంకా లాగ్‌లు లేవు. ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌కు అభ్యర్థనలను చూడటానికి ఏదైనా రికార్డ్ చేయండి.",
+    "deviceUsesCodec": "{device} ఈ ప్రొవైడర్ చదవలేని ఫార్మాట్‌లో రికార్డ్ చేస్తుంది ({reason}), కాబట్టి బదులుగా Omi ట్రాన్స్‌క్రిప్షన్ ఉపయోగించబడుతుంది.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,17 +1509,13 @@
         }
     },
     "omiTranscription": "Omi ట్రాన్‌స్క్రిప్షన్",
-    "bestInClassTranscription": "సున్నా సెట‌అప్‌తో సేల్యులర-గ్రేడ్ ట్రాన్‌స్క్రిప్షన్",
     "instantSpeakerLabels": "తక్షణ స్పీకర్ లేబుల్‌లు",
     "languageTranslation": "100+ భాష అనువాదం",
-    "optimizedForConversation": "సంభాషణ కోసం ఆప్టిమైజ్ చేయబడింది",
     "autoLanguageDetection": "స్వయంచాలక భాష గుర్తింపు",
-    "highAccuracy": "అధిక ఖచ్చితత్వం",
-    "privacyFirst": "ప్రైవేసీ మొదట",
     "saveChanges": "మార్పులను సేవ చేయండి",
     "resetToDefault": "డిఫాల్ట్‌కు రీసెట్ చేయండి",
     "viewTemplate": "టెంప్లేట్‌ను చూసుకోండి",
-    "trySomethingLike": "ఇలాంటివి ప్రయత్నించండి...",
+    "trySomethingLike": "ఇలాంటివి ప్రయత్నించండి…",
     "tryIt": "దీన్ని ప్రయత్నించండి",
     "creatingPlan": "ప్లాన్‌ను సృష్టిస్తుంది",
     "developingLogic": "లాజిక్‌ను అభివృద్ధి చేస్తుంది",
@@ -1564,8 +1524,8 @@
     "finalTouches": "చివరి స్పర్శ",
     "processing": "ప్రాసెస్ అవుతోంది",
     "features": "లక్షణాలు",
-    "creatingYourApp": "మీ అనువర్తనాన్ని సృష్టిస్తుంది...",
-    "generatingIcon": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది...",
+    "creatingYourApp": "మీ అనువర్తనాన్ని సృష్టిస్తుంది…",
+    "generatingIcon": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది…",
     "whatShouldWeMake": "మేము ఏమి తయారు చేయాలి?",
     "appName": "అనువర్తన పేరు",
     "description": "వివరణ",
@@ -1582,7 +1542,7 @@
     "usersPayToUse": "ఉపయోగకర్తలు మీ అనువర్తనాన్ని ఉపయోగించడానికి చెల్లిస్తారు",
     "freeForEveryone": "ప్రతిఒక్కరి కోసం ఉచితం",
     "perMonthLabel": "/ నెల",
-    "creating": "సృష్టిస్తుంది...",
+    "creating": "సృష్టిస్తుంది…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1593,7 +1553,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "పరికరాల కోసం చేరుస్తుంది...",
+    "searchingForDevices": "పరికరాల కోసం చేరుస్తుంది",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1646,7 +1606,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Omi ను మెరుగైన స్థిరత్వ కోసం నేపథ్యంలో నడవనివ్వండి",
+    "backgroundActivityDesc": "స్క్రీన్ ఆఫ్‌లో ఉన్నా లేదా యాప్ మార్చినా Omi రికార్డింగ్ కొనసాగించడానికి.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1654,7 +1614,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "పూర్ణ అనుభవం కోసం నేపథ్య స్థానాన్ని ప్రారంభించండి",
+    "locationAccessDesc": "మీ సంభాషణలు ఎక్కడ జరిగాయో Omi నమోదు చేయడానికి.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1662,7 +1622,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "సమాచారం పొందడానికి నోటిఫికేషన్‌లను ప్రారంభించండి",
+    "notificationsDesc": "Omi మీకు సంభాషణ సారాంశాలు, టాస్క్ రిమైండర్‌లు మరియు మీ యాప్‌ల ప్రత్యుత్తరాలను పంపడానికి.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1673,7 +1633,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "స్థానం సేవ నిలిపివేయబడింది. దయచేసి సెట్టింగ్‌లు > గోప్యతా & నిరాపత్త > స్థానం సేవలకు వెళ్లి దీన్ని ప్రారంభించండి",
+    "locationServiceDisabledDesc": "ఈ పరికరంలో లొకేషన్ సేవలు ఆఫ్‌లో ఉన్నాయి. సెట్టింగ్‌లలో ఆన్ చేయండి.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1704,10 +1664,6 @@
     "allDone": "అంతా చేయబడింది!",
     "@allDone": {
         "description": "Success message after completing a task"
-    },
-    "keepGoing": "కొనసాగండి, మీరు గొప్పగా చేస్తున్నారు",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
     },
     "skipThisQuestion": "ఈ ప్రశ్నను దాటవేయండి",
     "@skipThisQuestion": {
@@ -1781,10 +1737,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "మీ పేరు ఏమిటి?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
@@ -1816,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "ప్రతి క్షణాన్ని చేపట్టండి. AI ఆధారిత\nసారాంశాలను పొందండి. ఎప్పుడూ నోట్‌లు తీసుకోవద్దు.",
+    "captureEveryMoment": "Omi మీ సంభాషణలను రికార్డ్ చేసి, మీ కోసం\nసారాంశం మరియు చేయవలసిన పనులను రాస్తుంది.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1885,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "మరింత ఖచ్చితమైన ట్రాన్‌స్క్రిప్షన్‌లు మరియు ఎంపిక చేసిన అనుభవం కోసం మీ భాష సెట్ చేయండి",
+    "languageBenefits": "ట్రాన్స్‌క్రిప్షన్‌లు, సారాంశాలు మరియు జ్ఞాపకాల కోసం Omi ఈ భాషను ఉపయోగిస్తుంది.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1903,11 +1855,7 @@
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
     },
-    "personalGrowthJourney": "AI తో మీ ఏకస్వ వృద్ధి ఉపయోగం ఇది మీ ప్రతిదాన్ని విని నిర్ణయిస్తుంది.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
-    },
-    "actionItemsTitle": "చేయవలసిన పనులు",
+    "actionItemsTitle": "పనులు",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1927,7 +1875,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 పూర్తి సమీకరణ!\nఎటువంటి ఆగిపోయిన చర్య సరిపోలేదు",
+    "emptyTodoMessage": "🎉 అన్నీ పూర్తయ్యాయి!\nపెండింగ్ పనులు ఏవీ లేవు",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1943,19 +1891,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "చర్య చర్య అసంపూర్ణంగా గుర్తించబడింది",
+    "actionItemMarkedIncomplete": "పని అసంపూర్ణంగా గుర్తించబడింది",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "చర్య సంపూర్ణమైంది",
+    "actionItemCompleted": "పని పూర్తయింది",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "చర్య చర్యను తొలగించండి",
+    "deleteActionItemTitle": "పనిని తొలగించండి",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "మీరు ఈ చర్య చర్యను తొలగించాలని నిర్ణయం చేసారా?",
+    "deleteActionItemMessage": "ఈ పనిని తొలగించాలా?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1963,7 +1911,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "మీరు {count} ఎంచుకున్న చర్య చర్య{s}ను తొలగించాలని నిర్ణయం చేసారా?",
+    "deleteSelectedItemsMessage": "{count} ఎంచుకున్న పని{s}ని తొలగించాలా?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1976,7 +1924,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "చర్య చర్య \"{description}\" తొలగించబడింది",
+    "actionItemDeletedResult": "పని \"{description}\" తొలగించబడింది",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1985,7 +1933,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} చర్య చర్య{s} తొలగించబడ్డాయి",
+    "itemsDeletedResult": "{count} పని{s} తొలగించబడ్డాయి",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1997,7 +1945,7 @@
             }
         }
     },
-    "failedToDeleteItem": "చర్య చర్యను తొలగించడానికి విఫలమైంది",
+    "failedToDeleteItem": "పనిని తొలగించడం విఫలమైంది",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2009,11 +1957,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "చర్య చర్యల కోసం సిద్ధమైంది",
+    "welcomeActionItemsTitle": "పనుల కోసం సిద్ధం",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "మీ AI స్వయంచాలకంగా మీ సంభాషణల నుండి పనులను మరియు చేయవలసిన పనులను సంగ్రహిస్తుంది. సృష్టించినప్పుడు వారు ఇక్కడ కనిపిస్తారు.",
+    "welcomeActionItemsDescription": "మీ AI మీ సంభాషణల నుండి పనులను స్వయంచాలకంగా సంగ్రహిస్తుంది. సృష్టించినప్పుడు అవి ఇక్కడ కనిపిస్తాయి.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2042,11 +1990,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "జ్ఞాపకాలను చేరండి...",
+    "searchMemories": "జ్ఞాపకాలను చేరండి",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "జ్ఞాపకం తొలగించబడింది.",
+    "memoryDeleted": "జ్ఞాపకం తొలగించబడింది",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2054,7 +2002,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 ఇంకా జ్ఞాపకాలు లేవు",
+    "noMemoriesYet": "ఇంకా జ్ఞాపకాలు లేవు",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2070,7 +2018,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 జ్ఞాపకాలు కనుగొనబడలేదు",
+    "noMemoriesFound": "జ్ఞాపకాలు కనుగొనబడలేదు",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2082,7 +2030,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "మీరు Omi యొక్క జ్ఞాపకాన్ని సరిచేయాలని నిర్ణయం చేసారా? ఈ చర్య చేయబడదు.",
+    "clearMemoryMessage": "మీ జ్ఞాపకాలన్నీ తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2102,7 +2050,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "కొత్త చర్య చర్యను సృష్టించండి",
+    "createActionItemTooltip": "కొత్త పనిని సృష్టించండి",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2159,7 +2107,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "నేను ice cream తినడానికి ఇష్టపడతాను...",
+    "memoryContentHint": "నేను ఉదయం సమావేశాలను ఇష్టపడతాను.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -2175,11 +2123,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "చర్య చర్యను సృష్టించండి",
+    "createActionItem": "పనిని సృష్టించండి",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "చర్య చర్య సవరించండి",
+    "editActionItem": "పనిని సవరించండి",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2187,23 +2135,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "చర్య చర్య వివరణ ఖాళీగా ఉండకూడదు.",
+    "actionItemDescriptionEmpty": "పని వివరణ ఖాళీగా ఉండకూడదు.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "చర్య చర్య నవీకరించబడింది",
+    "actionItemUpdated": "పని నవీకరించబడింది",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "చర్య చర్యను నవీకరించడానికి విఫలమైంది",
+    "failedToUpdateActionItem": "పనిని నవీకరించడం విఫలమైంది",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "చర్య చర్య సృష్టించబడింది",
+    "actionItemCreated": "పని సృష్టించబడింది",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "చర్య చర్యను సృష్టించడానికి విఫలమైంది",
+    "failedToCreateActionItem": "పనిని సృష్టించడం విఫలమైంది",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2251,19 +2199,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "చర్య చర్య తొలగించబడింది",
+    "actionItemDeleted": "పని తొలగించబడింది",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "చర్య చర్యను తొలగించడానికి విఫలమైంది",
+    "failedToDeleteActionItem": "పనిని తొలగించడం విఫలమైంది",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "చర్య చర్యను తొలగించండి",
+    "deleteActionItemConfirmTitle": "పనిని తొలగించండి",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "మీరు ఈ చర్య చర్యను తొలగించాలని నిర్ణయం చేసారా?",
+    "deleteActionItemConfirmMessage": "ఈ పనిని తొలగించాలా?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2279,7 +2227,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "ఆ విషయానికి సంబంధించిన భాష మెనూలు మరియు బటన్‌లను మార్చుతుంది. ఉచ్చారణ భాష మీ రికార్డింగ్‌లను ఎలా ట్రాన్‌స్క్రిప్ట్ చేయాలో ప్రభావితం చేస్తుంది.",
+    "languageSettingsHelperText": "యాప్ భాష మెనూలు మరియు బటన్‌లను మారుస్తుంది. ప్రధాన భాష మీ రికార్డింగ్‌లు ఎలా ట్రాన్‌స్క్రైబ్ అవుతాయో ప్రభావితం చేస్తుంది.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2299,7 +2247,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "విపరీతమైనది గురించి మాకు మరిన్ని చెప్పండి...",
+    "tellUsMoreWhatWentWrong": "విపరీతమైనది గురించి మాకు మరిన్ని చెప్పండి…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2380,7 +2328,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "కార్యాచరణ అంశాలు క్లిప్‌బోర్డ్‌కు కాపీ చేయబడ్డాయి",
+    "actionItemsCopiedToClipboard": "పనులు క్లిప్‌బోర్డ్‌కు కాపీ చేయబడ్డాయి",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2400,7 +2348,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "ఈ చర్యను రద్దు చేయలేము.",
+    "thisActionCannotBeUndone": "ఇది రిసెట్ చేయబడదు.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -2557,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "STT ప్రదాతను కాన్ఫిగర్ చేయండి",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "సంభాషణలు స్వయంచాలకంగా ఎప్పుడు ముగియాలో సెట్ చేయండి",
+    "setWhenConversationsAutoEnd": "సంభాషణ ముగియడానికి ముందు Omi నిశ్శబ్దంలో ఎంతసేపు వేచి ఉంటుంది",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2596,7 +2540,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు...",
+    "exportStartedMessage": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2609,9 +2553,6 @@
     },
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
-    },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
     },
     "knowledgeGraphDeletedSuccess": "నాలెడ్జ్ గ్రాఫ్ విజయవంతంగా తొలగించబడింది",
     "@knowledgeGraphDeletedSuccess": {
@@ -2629,19 +2570,11 @@
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
     },
-    "clearAllNodesAndConnections": "సమస్త నోడ్‌లు మరియు కనెక్షన్‌లను క్లియర్ చేయండి",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
-    },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
     },
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
-    },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json కు జోడించండి",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
     },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
@@ -2676,10 +2609,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "మీ MCP API కీని ఉపయోగించండి",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2724,14 +2653,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "స్పీకర్‌లను స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "పేరు కనుగొనబడినప్పుడు స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "అనుసరణ ప్రశ్నలు",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -2748,7 +2669,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "కార్యాచరణ అంశం వివరణ ఖాళీగా ఉండకూడదు",
+    "actionItemDescriptionCannotBeEmpty": "పని వివరణ ఖాళీగా ఉండకూడదు",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2842,10 +2763,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Omi కు స్వాగతం! మీ AI సঙ్గి సంభాషణలు, పనులు మరియు మరిన్నింటితో మీకు సహాయ చేయడానికి సిద్ధంగా ఉంది.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Omi ఉపయోగం ప్రారంభించండి",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2865,7 +2782,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "కీలను నొక్కండి...",
+    "pressKeys": "కీలను నొక్కండి…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2885,7 +2802,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "శోధించండి...",
+    "searchPlaceholder": "శోధించండి",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2955,21 +2872,9 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "మీ Omi డివైస్‌తో సంభాషణలను సంపాదించడం ప్రారంభించండి వాటిని ఇక్కడ చూడటానికి.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "ఆడియో సంపాదించడానికి మీ మొబైల్ అ్యాప్ ఉపయోగించండి",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
-    },
-    "conversationsProcessedAutomatically": "సంభాషణలు స్వయంచాలకంగా ప్రక్రియ చేయబడతాయి",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "తక్షణమే అంతర్దృష్టులు మరియు సారాంశాలను పొందండి",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
     },
     "showAll": "అందరూ చూపించు",
     "@showAll": {
@@ -2983,15 +2888,11 @@
     "@dailyScore": {
         "description": "Header for daily score widget"
     },
-    "dailyScoreDescription": "నిర్వాహణపై మీకు ভালోভాবে\nఫోకస్ చేయడానికి స్కోర్.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
-    },
     "searchResults": "శోధన ఫలితాలు",
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "కార్యాచరణ అంశాలు",
+    "actionItems": "పనులు",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3011,7 +2912,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "పనులు లోడ్ చేస్తున్నాయి...",
+    "loadingTasks": "పనులు లోడ్ చేస్తున్నాయి…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3091,30 +2992,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "కార్యాచరణ అంశం విజయవంతంగా అపડేట్ చేయబడింది",
+    "actionItemUpdatedSuccessfully": "పని విజయవంతంగా అప్‌డేట్ చేయబడింది",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "కార్యాచరణ అంశం విజయవంతంగా సృష్టించబడింది",
+    "actionItemCreatedSuccessfully": "పని విజయవంతంగా సృష్టించబడింది",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "కార్యాచరణ అంశం విజయవంతంగా తొలగించబడింది",
+    "actionItemDeletedSuccessfully": "పని విజయవంతంగా తొలగించబడింది",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "కార్యాచరణ అంశం తొలగించండి",
+    "deleteActionItem": "పనిని తొలగించండి",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "ఈ కార్యాచరణ అంశాన్ని తొలగించాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము.",
+    "deleteActionItemConfirmation": "ఈ పనిని తొలగించాలా? ఇది రిసెట్ చేయబడదు.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "కార్యాచరణ అంశం వివరణ ప్రవేశించండి...",
+    "enterActionItemDescription": "పని వివరణను నమోదు చేయండి",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3126,11 +3027,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "అ్యాప్‌లు తిరిగి లోడ్ చేస్తున్నాయి...",
+    "reloadingApps": "అ్యాప్‌లు తిరిగి లోడ్ చేస్తున్నాయి…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "అ్యాప్‌లు లోడ్ చేస్తున్నాయి...",
+    "loadingApps": "అ్యాప్‌లు లోడ్ చేస్తున్నాయి…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3178,11 +3079,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "మీ అ్యాప్‌ను సమర్పిస్తున్నాయి...",
+    "submittingYourApp": "మీ అ్యాప్‌ను సమర్పిస్తున్నాయి…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "మీ కోసం ఫారమ్‌ను సిద్ధం చేస్తున్నాయి...",
+    "preparingFormForYou": "మీ కోసం ఫారమ్‌ను సిద్ధం చేస్తున్నాయి…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3210,7 +3111,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "మీరు అద్భుత అ్యాప్‌ ఉన్నారు, మీ ఉద్యోగం వినియోగదారు ప్రశ్నలకు ప్రతిస్పందించడం మరియు వారిని మంచిదనిపిస్తూ చేయడం...",
+    "chatPromptPlaceholder": "మీరు అద్భుత అ్యాప్‌ ఉన్నారు, మీ ఉద్యోగం వినియోగదారు ప్రశ్నలకు ప్రతిస్పందించడం మరియు వారిని మంచిదనిపిస్తూ చేయడం…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3218,7 +3119,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "మీరు అద్భుత అ్యాప్‌ ఉన్నారు, మీకు సంభాషణ ట్రాన్‌స్క్రిప్ట్ మరియు సారాంశం ఇవ్వబడుతుంది...",
+    "conversationPromptPlaceholder": "మీరు అద్భుత అ్యాప్‌ ఉన్నారు, మీకు సంభాషణ ట్రాన్‌స్క్రిప్ట్ మరియు సారాంశం ఇవ్వబడుతుంది…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3423,7 +3324,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "సామర్థ్యాలు లోడ్ చేస్తున్నాయి...",
+    "loadingCapabilities": "సామర్థ్యాలు లోడ్ చేస్తున్నాయి…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3500,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "సంభాషణ ప్రారంభించండి మరియు మ్యాజిక్ ప్రారంభ చేయండి",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "దయచేసి మీ ఇంటర్నెట్ కనెక్షన్‌ను చెక్ చేయండి",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3556,7 +3453,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "ఈ సందేశాన్ని నివేదించాలని మీరు నిశ్చితమైనారా?",
+    "confirmReportMessage": "ఈ సందేశాన్ని నివేదించాలా?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3576,7 +3473,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "చాట్ క్లియర్ చేయాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము.",
+    "confirmClearChat": "ఈ చాట్‌ను క్లియర్ చేయాలా? ఇది రిసెట్ చేయబడదు.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3613,13 +3510,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "ట్రాన్‌స్క్రిప్ట్ చేస్తున్నాయి...",
+    "transcribing": "ట్రాన్‌స్క్రిప్ట్ చేస్తున్నాయి…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "ట్రాన్‌స్క్రిప్షన్ విఫలమైంది",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "విస్మరించిన సంభాషణ",
     "@discardedConversation": {
@@ -3633,7 +3526,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "కాపీ చేయబడింది!",
+    "copied": "కాపీ చేయబడింది",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3686,7 +3579,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "సంభాషణలు తిరిగి లోడ్ చేస్తున్నాయి...",
+    "reloadingConversations": "సంభాషణలు తిరిగి లోడ్ చేస్తున్నాయి…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3766,11 +3659,7 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "ధరించదగిన AI సఙ్గి",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
-    "loadingMemories": "స్మృతులు లోడ్ చేస్తున్నాయి...",
+    "loadingMemories": "స్మృతులు లోడ్ చేస్తున్నాయి…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3789,7 +3678,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "మీ స్మృతులు లోడ్ చేస్తున్నాయి...",
+    "loadingYourMemories": "మీ స్మృతులు లోడ్ చేస్తున్నాయి…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3830,7 +3719,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "ఈ స్మృతిని తొలగించాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము.",
+    "deleteMemoryConfirmation": "ఈ జ్ఞాపకాన్ని తొలగించాలా? ఇది రిసెట్ చేయబడదు.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3841,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "మీ స్మృతులను సంఘటించండి మరియు నియంత్రించండి",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "మొత్తం",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3853,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "సమస్త స్మృతులను ఖాగితి దృశ్యమానతకు సెట్ చేయండి",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "సమస్త స్మృతులను సార్వజనిక చేయండి",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "సమస్త స్మృతులను సార్వజనిక దృశ్యమానతకు సెట్ చేయండి",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Omi నుండి సమస్త స్మృతులను శాశ్వతంగా తీసివేయండి",
     "@permanentlyRemoveAllMemories": {
@@ -3881,7 +3758,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Omi స్మృతిని క్లియర్ చేయాలని మీరు నిశ్చితమైనారా? ఈ చర్యను రద్దు చేయలేము మరియు {count} స్మృతులన్నింటిని శాశ్వతంగా తొలగిస్తుంది.",
+    "clearMemoryConfirmation": "మొత్తం {count} జ్ఞాపకాలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -3948,8 +3825,7 @@
     },
     "pleaseSelectYourPrimaryLanguage": "దయచేసి మీ ప్రాథమిక భాషను ఎంచుకోండి",
     "chooseYourLanguage": "మీ భాషను ఎంచుకోండి",
-    "selectPreferredLanguageForBestExperience": "ఉత్తమ Omi అనుభవం కోసం మీ ఇష్ట భాషను ఎంచుకోండి",
-    "searchLanguages": "భాషలను శోధించండి...",
+    "searchLanguages": "భాషలను శోధించండి",
     "selectALanguage": "భాషను ఎంచుకోండి",
     "tryDifferentSearchTerm": "వేరే శోధన పదాన్ని ప్రయత్నించండి",
     "pleaseEnterYourName": "దయచేసి మీ పేరు నమోదు చేయండి",
@@ -3963,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "మీ పరికరంలో ఉత్తమ Omi అనుభవం కోసం ఫీచర్‌లను ప్రారంభించండి.",
     "microphoneAccess": "మైక్రోఫోన్ యాక్సెస్",
     "recordAudioConversations": "ఆడియో సంభాషణలను రికార్డ్ చేయండి",
     "microphoneAccessDescription": "మీ సంభాషణలను రికార్డ్ చేయడానికి మరియు ట్రాన్‌స్‌క్రిప్షన్‌లను అందించడానికి Omi కు మైక్రోఫోన్ యాక్సెస్ అవసరం.",
@@ -3973,9 +3848,9 @@
     "accessibility": "యాక్సెసిబిలిటీ",
     "detectBrowserBasedMeetings": "బ్రౌజర్-ఆధారిత సమావేశాలను గుర్తించండి",
     "accessibilityDescription": "మీ బ్రౌజర్‌లో Zoom, Meet లేదా Teams సమావేశాలకు చేరిక చేసినప్పుడు గుర్తించడానికి Omi కు యాక్సెసిబిలిటీ అనుమతి అవసరం.",
-    "pleaseWait": "దయచేసి ఆగండి...",
+    "pleaseWait": "దయచేసి ఆగండి…",
     "joinTheCommunity": "కమ్యూనిటీకి చేరండి!",
-    "loadingProfile": "ప్రొఫైల్ లోడ్ చేయబడుతోంది...",
+    "loadingProfile": "ప్రొఫైల్ లోడ్ చేయబడుతోంది…",
     "profileSettings": "ప్రొఫైల్ సెట్టింగ్‌లు",
     "noEmailSet": "ఈమెయిల్ సెట్ చేయబడలేదు",
     "userIdCopiedToClipboard": "ఉపయోగకర్త ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
@@ -4023,7 +3898,7 @@
     "pilotFeaturesDescription": "ఈ ఫీచర్‌లు పరీక్షలు మరియు సపోర్టు కguaranteed లేదు.",
     "suggestFollowUpQuestion": "ఫాలో-అప్ ప్రశ్న సూచించండి",
     "saveSettings": "సెట్టింగ్‌లను సేవ చేయండి",
-    "syncingDeveloperSettings": "డెవలపర్ సెట్టింగ్‌లను సమకాలీకరిస్తోంది...",
+    "syncingDeveloperSettings": "డెవలపర్ సెట్టింగ్‌లను సమకాలీకరిస్తోంది…",
     "summary": "సారాంశం",
     "auto": "స్వయంచాలక",
     "noSummaryForApp": "ఈ అ్యాప్‌కు సారాంశం లేనిది. మెరుగైన ఫలితాల కోసం మరొక అ్యాప్ ప్రయత్నించండి.",
@@ -4051,20 +3926,20 @@
         }
     },
     "letOmiChooseAutomatically": "Omi ఉత్తమ అ్యాప్‌ను స్వయంచాలకంగా ఎంచుకోనివ్వండి",
-    "deleteConversationConfirmation": "ఈ సంభాషణను తొలగించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.",
+    "deleteConversationConfirmation": "ఈ సంభాషణను తొలగించాలా? ఇది రిసెట్ చేయబడదు.",
     "conversationDeleted": "సంభాషణ తొలగించబడింది",
-    "generatingLink": "లింక్ జనరేట్ చేయబడుతోంది...",
+    "generatingLink": "లింక్ జనరేట్ చేయబడుతోంది…",
     "editConversation": "సంభాషణను సవరించండి",
     "conversationLinkCopiedToClipboard": "సంభాషణ లింక్ క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "conversationTranscriptCopiedToClipboard": "సంభాషణ ట్రాన్‌స్‌క్రిప్ట్ క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "editConversationDialogTitle": "సంభాషణను సవరించండి",
     "changeTheConversationTitle": "సంభాషణ శీర్షికను మార్చండి",
     "conversationTitle": "సంభాషణ శీర్షిక",
-    "enterConversationTitle": "సంభాషణ శీర్షిక నమోదు చేయండి...",
+    "enterConversationTitle": "సంభాషణ శీర్షిక నమోదు చేయండి…",
     "conversationTitleUpdatedSuccessfully": "సంభాషణ శీర్షిక విజయవంతంగా నవీకరించబడింది",
     "failedToUpdateConversationTitle": "సంభాషణ శీర్షిక నవీకరణ విఫలమైంది",
     "errorUpdatingConversationTitle": "సంభాషణ శీర్షిక నవీకరణలో ఎర్రర్",
-    "settingUp": "సెట్ అప్ చేయబడుతోంది...",
+    "settingUp": "సెట్ అప్ చేయబడుతోంది…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4076,11 +3951,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "లైవ్ ట్రాన్‌స్‌క్రిప్ట్‌లు, AI అంతర్దృష్టులు మరియు స్వయంచాలక సేవ కోసం ఆడియోను సంగ్రహించడానికి బటన్‌ను క్లిక్ చేయండి.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "తిరిగి కనెక్ట్ చేయబడుతోంది...",
+    "reconnecting": "తిరిగి కనెక్ట్ చేయబడుతోంది…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4096,7 +3967,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "{countdown}లో స్థిరమైనది...",
+    "resumingInCountdown": "{countdown}లో స్థిరమైనది…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4109,7 +3980,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "ఆడియోను వింటోంది...",
+    "listeningForAudio": "ఆడియోను వింటోంది…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4147,15 +4018,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "లైవ్ ట్రాన్‌స్‌క్రిప్ట్ చూడటానికి రికార్డింగ్ ప్రారంభించండి",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "నిలిపివేయబడింది",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "ప్రారంభించబడుతోంది...",
+    "initializing": "ప్రారంభించబడుతోంది…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4180,10 +4047,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "ఆడియోను సంగ్రహిస్తోంది మరియు ట్రాన్‌స్‌క్రిప్ట్ జనరేట్ చేస్తోంది",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "సిస్టమ్ ఆడియో రికార్డింగ్ ప్రారంభించడానికి క్లిక్ చేయండి",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4201,7 +4064,7 @@
             }
         }
     },
-    "translatedByOmi": "omi ద్వారా అనువదించబడింది",
+    "translatedByOmi": "Omi ద్వారా అనువదించబడింది",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4239,7 +4102,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "పరికరాలను లోడ్ చేయబడుతోంది...",
+    "loadingDevices": "పరికరాలను లోడ్ చేయబడుతోంది…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4309,7 +4172,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "సైన్ అవుట్ చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా?",
+    "signOutConfirmation": "మీ సంభాషణలను చూడటానికి మళ్లీ సైన్ ఇన్ చేయాలి. జత చేసిన పరికరం మరియు యాప్ ప్రాధాన్యతలు ఈ ఫోన్‌లోనే ఉంటాయి.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4341,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "మీ దైనిక సారాంశం పొందటానికి ఎప్పుడు",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "సభ్యత",
     "@subscription": {
         "description": "Subscription section title"
@@ -4370,14 +4229,10 @@
     "checkingNext7Days": "తరువాత 7 రోజులను పరిశీలిస్తోంది",
     "shortcuts": "షార్టকట్‌లు",
     "shortcutChangeInstruction": "షార్టకట్‌ను మార్చడానికి దానిపై క్లిక్ చేయండి. రద్దు చేయడానికి Escape నొక్కండి.",
-    "configureSTTProvider": "STT ప్రొవైడర్ కాన్ఫిగర్ చేయండి",
-    "setConversationEndDescription": "సంభాషణలు స్వయంచాలకంగా ఎప్పుడు ముగియాలో సెట్ చేయండి",
     "importDataDescription": "ఇతర వనరుల నుండి డేటాను దిగుమతి చేయండి",
     "exportConversationsDescription": "సంభాషణలను JSONకు ఎగుమతి చేయండి",
-    "exportingConversations": "సంభాషణలను ఎగుమతి చేస్తోంది...",
-    "clearNodesDescription": "అన్ని నోడ్‌లు మరియు కనెక్షన్‌లను క్లియర్ చేయండి",
+    "exportingConversations": "సంభాషణలను ఎగుమతి చేస్తోంది…",
     "deleteKnowledgeGraphQuestion": "జ్ఞానం గ్రాఫ్ తొలగించాలా?",
-    "deleteKnowledgeGraphWarning": "ఇది అన్ని ఉత్పత్తి కంపిల్ జ్ఞానం గ్రాఫ్ డేటాను తొలగిస్తుంది. మీ అసలు జ్ఞాపనలు సురక్షితమైనవిగా ఉంటాయి.",
     "connectOmiWithAI": "Omi ను AI సహాయకులతో కనెక్ట్ చేయండి",
     "noAPIKeys": "API కీలు లేనివి. ప్రారంభించడానికి ఒకటి సృష్టించండి.",
     "autoCreateWhenDetected": "పేరు గుర్తించినప్పుడు స్వయంచాలకంగా సృష్టించండి",
@@ -4423,7 +4278,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "మీ అ్యాప్‌ను నవీకరించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? మార్పులు మా టీమ్ ద్వారా సమీక్ష చేసిన తర్వాత ప్రతిబింబిస్తాయి.",
+    "updateAppConfirmation": "మా టీమ్ సమీక్షించిన తర్వాత మార్పులు ప్రచురించబడతాయి.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4461,10 +4316,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "కొత్త సంస్కరణ లభ్యమైంది 🎉",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "లేదు",
     "@no": {
@@ -4518,7 +4369,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "సభ్యత రద్దు చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? మీ ప్రస్తుత బిలింగ్ కాలం చివర వరకు మీరు యాక్సెస్‌ను కలిగి ఉంటారు.",
+    "cancelSubscriptionConfirmation": "మీ ప్రస్తుత బిలింగ్ కాలం చివర వరకు మీరు యాక్సెస్‌ను కలిగి ఉంటారు.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4526,7 +4377,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "రద్దు చేయబడుతోంది...",
+    "cancelling": "రద్దు చేయబడుతోంది…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4685,7 +4536,7 @@
             }
         }
     },
-    "addingToService": "{serviceName}కు జోడిస్తోంది...",
+    "addingToService": "{serviceName}కు జోడిస్తోంది…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4746,7 +4597,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "API కీలు మీ అ్యాప్ OMI సర్వర్‌తో సంభాషణ చేసినప్పుడు ప్రామాణీకరణ కోసం ఉపయోగించబడతాయి. అవి మీ అ్యాప్‌కు జ్ఞాపనలను సృష్టించడానికి మరియు ఇతర OMI సేవలను సురక్షితంగా యాక్సెస్ చేయడానికి అనుమతిస్తాయి.",
+    "apiKeysDescription": "API కీలు మీ అ్యాప్ Omi సర్వర్‌తో సంభాషణ చేసినప్పుడు ప్రామాణీకరణ కోసం ఉపయోగించబడతాయి. అవి మీ అ్యాప్‌కు జ్ఞాపనలను సృష్టించడానికి మరియు ఇతర Omi సేవలను సురక్షితంగా యాక్సెస్ చేయడానికి అనుమతిస్తాయి.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -4778,7 +4629,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము. ఈ కీని ఉపయోగించే ఏదైనా అ్యాప్లికేషన్‌లు API కు యాక్సెస్ చేయలేరు.",
+    "revokeApiKeyWarning": "ఈ కీని ఉపయోగించే యాప్‌లు API యాక్సెస్‌ను కోల్పోతాయి. ఇది రిసెట్ చేయబడదు.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4793,10 +4644,6 @@
     "createAnApp": "ఒక అ్యాప్ సృష్టించండి",
     "@createAnApp": {
         "description": "Option to create an app"
-    },
-    "createAndShareYourApp": "మీ అ్యాప్‌ను సృష్టించండి మరియు భాగస్వామ్యం చేయండి",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
     },
     "itemApp": "అ్యాప్",
     "@itemApp": {
@@ -4869,7 +4716,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "ఈ {item} ను తొలగించాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.",
+    "deleteItemConfirmation": "ఈ {item}ను తొలగిస్తే రద్దు చేయలేరు.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4882,7 +4729,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "కీ \"{keyName}\" ను రిభోక్ చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా? ఈ చర్య చేసి విషయాన్ని తిరిగి సరిచేయలేము.",
+    "revokeKeyConfirmation": "\"{keyName}\"ను ఉపయోగించే ప్రతిదీ యాక్సెస్‌ను కోల్పోతుంది. ఇది రిసెట్ చేయబడదు.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -4944,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "చివర నుండి చివర ఎన్‌క్రిప్షన్ గోప్యతకు పేద ప్రమాణం. ఈనాబిల్ చేసినప్పుడు, మీ డేటా మీ పరికరంపై ఎన్‌క్రిప్ట్ చేయబడుతుంది అది మా సర్వర్‌లకు పంపబడుముందు. అంటే, ఎవరూ కాదు, Omi కూడా మీ విషయవస్తువను యాక్సెస్ చేయలేరు.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "ముఖ్యమైన నష్టాలు:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -5000,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "మీ డేటా Google క్లౌడ్‌లో హోస్ట్ చేయబడిన మీ సర్వర్‌లలో మీకు సంబంధించిన కీ ద్వారా ఎన్‌క్రిప్ట్ చేయబడుతుంది. అంటే, మీ ముడి విషయవస్తువు డేటాబేస్ నుండి ఎవరికీ సమర్థించలేమని, Omi సిబ్బందికీ లేదా Google కీ.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "చివర నుండి చివర ఎన్‌క్రిప్షన్",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "కేవలం మీరు మీ డేటాను యాక్సెస్ చేయగలిగే గరిష్ట సురక్ష కోసం ఈనాబిల్ చేయండి. మరిన్ని తెలుసుకోవటానికి నొక్కండి.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "స్థాయితో సంబంధం లేకుండా, మీ డేటా ఎల్లప్పుడు విశ్రాంతి సమయంలో మరియు రవాణా సమయంలో ఎన్‌క్రిప్ట్ చేయబడుతుంది.",
     "@dataAlwaysEncrypted": {
@@ -5109,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• మీ డేటా AI నమూనాలను మెరుగుపరచడానికి సహాయపడుతుంది\n• కేవలం సున్నితమైన డేటా మాత్రమే భాగస్వామ్యం చేయబడుతుంది\n• పూర్తిగా పారదర్శక ప్రక్రియ",
+    "trainingDataBullets": "• మీ డేటా AI మోడల్‌లను మెరుగుపరచడానికి సహాయపడుతుంది\n• సున్నితం కాని డేటా మాత్రమే షేర్ చేయబడుతుంది",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5129,7 +4964,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "మీ ప్లాన్ {date} వరకు సక్రియంగా ఉంటుంది. దీని తర్వాత, మీ అనీమిత ఫీచర్‌లకు యాక్సెస్ కోల్పోతారు. మీరు చేసిన చేసిన నిశ్చితమైనారా?",
+    "planRemainsActiveUntil": "మీ ప్లాన్ {date} వరకు సక్రియంగా ఉంటుంది. దీని తర్వాత, మీ అనీమిత ఫీచర్‌లకు యాక్సెస్ కోల్పోతారు.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5219,10 +5054,6 @@
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
     },
-    "yourOmiUnleashed": "మీ Omi, విడుదల చేయబడింది. అన్‌లిమిటెడ్‌కు వెళ్లండి అంతులేని సম్ভావ్యతల కోసం.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
-    },
     "planEndedOn": "మీ ప్లాన్ {date} న ముగిసింది.\nఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - కొత్త బిల్లింగ్ వ్యవధి కోసం ఛార్జ్ చేయబడుతారు.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
@@ -5265,7 +5096,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi యొక్క అనంత జ్ఞాపకం అన్‌లాక్ చేయండి",
+    "unlockOmiInfiniteMemory": "అపరిమిత జ్ఞాపకాలు",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5281,7 +5112,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి",
+    "checkConnectionTryAgain": "మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5339,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Omi లో, మేము మీ గోప్యతను చాలా జరుపుకుంటాము. మేము మీ కోసం ఉత్పన్నమైన డేటా గురించి పారదర్శకంగా ఉండాలనుకుంటాము మరియు దానిని ఎలా ఉపయోగిస్తున్నాము. మీరు తెలుసుకోవలసిన విషయం ఇది:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "మేము ఏమి ట్రాక్ చేస్తాము",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5358,14 +5185,6 @@
     "ourCommitment": "మా ప్రతిశ్రుతి",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "మేము సేకరించిన డేటాను Omi ను మీ కోసం మెరుగైన ఉత్పన్నం చేయడానికి మాత్రమే ఉపయోగించాలని ప్రతిశ్రుతిబద్ధులు. మీ గోప్యత మరియు నమ్మకం మాకు అత్యంత ముఖ్యమైనవి.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Omi యొక్క విలువైన వినియోగదారుగా ఉన్నందుకు ధన్యవాదాలు. మీకు ఏవైనా ప్రశ్నలు లేదా ఆందోళనలు ఉంటే, team@basedhardware.com కు సంప్రదించడానికి సంకోచించకండి.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "పాస్‌వర్డ్",
     "@password": {
@@ -5425,15 +5244,11 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు...",
+    "exportStartedMayTakeFewSeconds": "ఎగుమతి ప్రారంభమైంది. ఇది కొన్ని సెకన్లు పట్టవచ్చు…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
-    "knowledgeGraphDeleteDescription": "ఇది అన్ని ఉత్పన్నమైన జ్ఞానం గ్రాఫ్ డేటా (నోడ్‌లు మరియు కనెక్షన్‌లు) తొలగిస్తుంది. మీ అసలు జ్ఞాపకాలు సురక్షితంగా ఉంటాయి. గ్రాఫ్ కాలక్రమేణా లేదా తరువాతి అభ్యర్థన యొక్క నిమిషాల్లో పునర్నిర్మించబడుతుంది.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
-    },
-    "configureDailySummaryDigest": "మీ నిత్య చర్య సమితులను సంగ్రహం చేయండి",
+    "configureDailySummaryDigest": "మీ రోజువారీ పనుల సారాంశాన్ని కాన్ఫిగర్ చేయండి",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5537,7 +5352,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "ఇది Limitless నుండి దిగుమతి చేసిన అన్ని సంభాషణలను శాశ్వతంగా తొలగిస్తుంది. ఈ చర్యను తిరిగి చేయలేము.",
+    "deleteAllLimitlessWarning": "Limitless నుండి దిగుమతి చేసిన అన్ని సంభాషణలు తొలగించబడతాయి. ఇది రిసెట్ చేయబడదు.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5595,7 +5410,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "{name} యొక్క నమూనాను తొలగించాలని మీరు చెప్పుకుంటున్నారా?",
+    "deleteSampleConfirmation": "{name} వాయిస్ నమూనా తొలగించబడుతుంది. ఇది రిసెట్ చేయబడదు.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5608,7 +5423,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "{name} ను తొలగించాలని మీరు చెప్పుకుంటున్నారా? ఇది సంబంధిత అన్ని ప్రసంగ నమూనాలను కూడా తీసివేస్తుంది.",
+    "deletePersonConfirmation": "ఇది {name} వాయిస్ నమూనాలను తొలగిస్తుంది, దీన్ని రద్దు చేయలేరు. గత సంభాషణలలో వారి మాటలు పేరు లేని వక్తలుగా మారతాయి.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5620,10 +5435,6 @@
     "howItWorksTitle": "ఇది ఎలా పనిచేస్తుంది?",
     "@howItWorksTitle": {
         "description": "Help dialog title"
-    },
-    "howPeopleWorks": "ఒక వ్యక్తి సృష్టించిన తర్వాత, మీరు సంభాషణ ట్రాన్‌స్క్రిప్ట్‌కు వెళ్లవచ్చు మరియు వారిని తమ సంబంధిత సెగ్మెంట్‌లకు కేటాయించవచ్చు, ఈ విధంగా Omi వారి ప్రసంగాన్ని కూడా గుర్తించగలుగుతుంది!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
     },
     "tapToDelete": "తొలగించడానికి ట్యాప్ చేయండి",
     "@tapToDelete": {
@@ -5703,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "మీ రియల్-టైమ్ రికార్డింగ్‌లను ఖాతగత క్లౌడ్ నిల్వలో నిల్వ చేయండి మీరు మాట్లాడేటప్పుడు. ఆడియో రియల్-టైమ్‌లో సురక్షితంగా సంగ్రహించబడి సేవ చేయబడుతుంది.",
+    "storeAudioCloudDescription": "మీరు మాట్లాడుతున్నప్పుడు మీ రికార్డింగ్‌లను అప్‌లోడ్ చేస్తుంది, తర్వాత వాటిని ప్లే చేసుకోవచ్చు.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -5759,7 +5570,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "ఫర్మ్‌వేర్ సంస్కరణను తనిఖీ చేస్తోంది...",
+    "checkingFirmwareVersion": "ఫర్మ్‌వేర్ సంస్కరణను తనిఖీ చేస్తోంది…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5970,7 +5781,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.",
+    "tasksEmptyStateMessage": "పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -5994,7 +5805,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "మీ రికార్డింగ్‌ను లోడ్ చేస్తోంది...",
+    "loadingYourRecording": "మీ రికార్డింగ్‌ను లోడ్ చేస్తోంది…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -6002,7 +5813,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "విశ్లేషించిస్తోంది...",
+    "analyzing": "విశ్లేషించిస్తోంది…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6010,7 +5821,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Apple Watch ని తనిఖీ చేస్తోంది...",
+    "checkingAppleWatch": "Apple Watch ని తనిఖీ చేస్తోంది…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6072,7 +5883,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "రికార్డింగ్‌ను ఆపివేసి సంభాషణను ఇప్పుడే సారాంశం చేయాలని మీరు చెప్పుకుంటున్నారా?",
+    "stopRecordingConfirmation": "రికార్డింగ్ ఆపి ఇప్పుడే సంభాషణను సారాంశం చేయాలా?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -6098,7 +5909,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "ట్రాన్‌స్క్రిప్ట్ లేదా ఫోటోల కోసం ఎదురుచూస్తోంది...",
+    "waitingForTranscriptOrPhotos": "ట్రాన్‌స్క్రిప్ట్ లేదా ఫోటోల కోసం ఎదురుచూస్తోంది…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6260,7 +6071,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "చర్య అంశాలు",
+    "wrappedActionItems": "పనులు",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6385,11 +6196,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "ప్రక్రియ చేయడం...",
+    "wrappedProcessingDefault": "ప్రక్రియ చేయడం…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "మీ\n2025 కథను సృష్టిస్తోంది...",
+    "wrappedCreatingYourStory": "మీ\n2025 కథను సృష్టిస్తోంది…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6429,7 +6240,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "ప్రారంభం...",
+    "wrappedStarting": "ప్రారంభం…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6701,15 +6512,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "మీ వాయిస్ ప్రొఫైల్ అప్‌లోడ్ చేస్తున్నాను....",
+    "uploadingVoiceProfile": "మీ వాయిస్ ప్రొఫైల్ అప్‌లోడ్ చేస్తున్నాను….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "మీ వాయిస్ను గుర్తుంచుకుంటున్నాను...",
+    "memorizingYourVoice": "మీ వాయిస్ను గుర్తుంచుకుంటున్నాను…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "మీ అనుభవాన్ని వ్యక్తిగతీకరిస్తున్నాను...",
+    "personalizingExperience": "మీ అనుభవాన్ని వ్యక్తిగతీకరిస్తున్నాను…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6816,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "మీ కస్టమ్ అ్యాప్‌ను నిర్మించండి మరియు షేర్ చేయండి",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "1500+ ఆప్‌ల కోసం శోధించండి",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6856,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "కేవలం క్లిష్ట రిమైండర్‌లు",
+    "frequencyDescMinimal": "అత్యవసరమైనవి మాత్రమే, రోజుకు సుమారు 1–3",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "ముఖ్యమైన నవీకరణలు మాత్రమే",
+    "frequencyDescLow": "ముఖ్యమైనవి మాత్రమే, రోజుకు సుమారు 3–5",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "సాధారణ సహాయకర నట్టలు",
+    "frequencyDescBalanced": "ఉపయోగకరమైన సూచనలు, రోజుకు సుమారు 5–8",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "తరచుగా చेకిన్‌లు",
+    "frequencyDescHigh": "మరిన్ని సూచనలు, రోజుకు సుమారు 6–9",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "నిరంతరం నిమగ్న ఉండండి",
+    "frequencyDescMaximum": "ప్రతి ఉపయోగకరమైన కనెక్షన్, రోజుకు 9 వరకు",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -6880,7 +6687,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "సర్వర్ తో సందేశాలను సమన్వయం చేస్తున్నాను...",
+    "syncingMessages": "సర్వర్ తో సందేశాలను సమన్వయం చేస్తున్నాను…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7116,11 +6923,11 @@
             }
         }
     },
-    "summarizingConversation": "సంభాషణను సంక్షిప్తీకరిస్తున్నాను...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు",
+    "summarizingConversation": "సంభాషణను సంక్షిప్తీకరిస్తున్నాను…\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "సంభాషణను తిరిగి సంక్షిప్తీకరిస్తున్నాను...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు",
+    "resummarizingConversation": "సంభాషణను తిరిగి సంక్షిప్తీకరిస్తున్నాను…\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7255,7 +7062,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
+    "premiumMinutesInfo": "నెలకు 300 ప్రీమియం నిమిషాలు. అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ కోసం \"పరికరంపై\" ఎంచుకోండి.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7299,7 +7106,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "డౌన్‌లోడ్ చేస్తున్నాను...",
+    "downloading": "డౌన్‌లోడ్ చేస్తున్నాను…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7366,7 +7173,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
+    "premiumMinutesMonth": "నెలకు 300 ప్రీమియం నిమిషాలు. అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ కోసం \"పరికరంపై\" ఎంచుకోండి. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7418,7 +7225,7 @@
             }
         }
     },
-    "preparingModel": "{model} ను సిద్ధం చేస్తున్నాను...",
+    "preparingModel": "{model} ను సిద్ధం చేస్తున్నాను…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7454,7 +7261,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi యొక్క అంతర్నిర్మిత లైవ్ ట్రాన్‌స్క్రిప్షన్ స్వయంచాలక స్పీకర్ గుర్తింపు మరియు డయారిజేషన్‌తో రియల్-టైమ్ సంభాషణల కోసం ఆప్టిమైజ్ చేయబడింది.",
+    "omiTranscriptionOptimized": "Omi లైవ్ ట్రాన్‌స్క్రిప్షన్ రియల్-టైమ్ సంభాషణల కోసం రూపొందించబడింది మరియు ఎవరు ఏమి చెప్పారో గుర్తిస్తుంది.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -7466,7 +7273,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "ప్రదాత టెంప్లేట్ ఎంచుకోండి...",
+    "selectProviderTemplate": "ప్రదాత టెంప్లేట్ ఎంచుకోండి…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7740,7 +7547,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "జ్ఞాన గ్రాఫ్ లోడ్ చేస్తున్నాను...",
+    "loadingKnowledgeGraph": "జ్ఞాన గ్రాఫ్ లోడ్ చేస్తున్నాను…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7748,7 +7555,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "జ్ఞాపకాల నుండి మీ జ్ఞాన గ్రాఫ్ నిర్మిస్తున్నాను...",
+    "buildingKnowledgeGraphFromMemories": "జ్ఞాపకాల నుండి మీ జ్ఞాన గ్రాఫ్ నిర్మిస్తున్నాను…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7768,7 +7575,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "{appName} ఆపరు చేస్తున్నాను...",
+    "openingApp": "{appName} ఆపరు చేస్తున్నాను…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7818,7 +7625,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "మీ సమాధానం రాయండి...",
+    "writeYourReply": "మీ సమాధానం రాయండి…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7957,7 +7764,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "సంప్రదాయాలను శోధించండి...",
+    "searchContactsHint": "సంప్రదాయాలను శోధించండి",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8096,7 +7903,7 @@
             }
         }
     },
-    "transferring": "బదిలీ చేస్తున్నాను...",
+    "transferring": "బదిలీ చేస్తున్నాను…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8120,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "మీ పరికరంపై ప్రైవేట్ మరియు సురక్షితమైన",
+    "privateAndSecureOnDevice": "ఈ ఫోన్‌లో సేవ్ చేయబడింది",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8128,7 +7935,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "బదిలీ జరుస్తోంది...",
+    "transferInProgress": "బదిలీ జరుస్తోంది…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8136,7 +7943,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "మీరు ఈ రికార్డింగ్‌ను శాశ్వతంగా తొలగించాలనుకుంటున్నారా? ఇది చేయలేము.",
+    "deleteRecordingConfirmation": "ఇది రిసెట్ చేయబడదు.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8286,7 +8093,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "లెక్కిస్తోంది...",
+    "calculatingETA": "లెక్కిస్తోంది…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8303,19 +8110,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "దాదాపు పూర్తియైంది...",
+    "almostDone": "దాదాపు పూర్తియైంది…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "omi చెప్పింది",
+    "omiSays": "Omi చెప్పింది",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "మీ డేటాను విశ్లేషించుచున్నారు...",
+    "analyzingYourData": "మీ డేటాను విశ్లేషించుచున్నారు…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "{level} సంరక్షణకు మార్పిస్తోంది...",
+    "migratingToProtection": "{level} సంరక్షణకు మార్పిస్తోంది…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8324,11 +8131,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "మార్పించడానికి డేటా లేదు. చివరకు...",
+    "noDataToMigrateFinalizing": "మార్పించడానికి డేటా లేదు. చివరకు…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "{itemType} మార్పిస్తోంది... {percentage}%",
+    "migratingItemsProgress": "{itemType} మార్పిస్తోంది… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8340,7 +8147,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "అన్ని వస్తువులు మార్చబడ్డాయి. చివరకు...",
+    "allObjectsMigratedFinalizing": "అన్ని వస్తువులు మార్చబడ్డాయి. చివరకు…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8389,7 +8196,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "ఉదా., మీటింగ్ యాక్షన్ ఐటమ్‌ల ఎక్సట్రాక్టర్",
+    "templateNameHint": "ఉదా., మీటింగ్ పనుల ఎక్స్‌ట్రాక్టర్",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8397,7 +8204,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "ఉదా., సంభాషణ నుండి చర్య చేసిన ఐటమ్‌లు, నిర్ణయాలు మరియు కీ టేక్‌అవేలను సంగ్రహించండి.",
+    "conversationPromptHint": "ఉదా., అందించిన సంభాషణ నుండి పనులు, తీసుకున్న నిర్ణయాలు మరియు ముఖ్యాంశాలను సంగ్రహించండి.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8417,15 +8224,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "వర్ణనను జన్మిస్తోంది...",
+    "generatingDescription": "వర్ణనను జన్మిస్తోంది…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "యాప్ చిహ్నాన్ని సృష్టిస్తోంది...",
+    "creatingAppIcon": "యాప్ చిహ్నాన్ని సృష్టిస్తోంది…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "యాప్‌ను ఇన్‌స్టాల్ చేస్తోంది...",
+    "installingApp": "యాప్‌ను ఇన్‌స్టాల్ చేస్తోంది…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8604,7 +8411,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "యాప్ చిహ్నాన్ని సృష్టిస్తోంది...",
+    "aiGenCreatingAppIcon": "యాప్ చిహ్నాన్ని సృష్టిస్తోంది…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8650,7 +8457,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "మీరు మీ Unlimited ప్రణాళికను {title} కు మారుస్తున్నారు. మీరు కొనసాగించాలనుకుంటున్నారా?",
+    "planSwitchingDescriptionWithTitle": "మీరు మీ Unlimited ప్రణాళికను {title} కు మారుస్తున్నారు.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -8683,7 +8490,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "మీ JSON కాన్ఫిగరేషన్‌ను ఇక్కడ సంచిక చేయండి...",
+    "transcriptionJsonPlaceholder": "మీ JSON కాన్ఫిగరేషన్‌ను ఇక్కడ సంచిక చేయండి…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8781,19 +8588,11 @@
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
     },
-    "onboardingChooseYourPreference": "మీ ప్రాధాన్యతను ఎంచుకోండి",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "అవసరమైన ప్రాప్తిని మంజూరు చేయండి",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
-    },
     "onboardingYoureAllSet": "మీరు అన్నీ సెట్ చేసారు",
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "ట్రాన్‌స్క్రిప్ట్ లేదా సారాంశం చేయండి...",
+    "searchTranscriptOrSummary": "ట్రాన్‌స్క్రిప్ట్ లేదా సారాంశం చేయండి",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9131,11 +8930,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "మీ జ్ఞాపకాలను చదువుతోంది...",
+    "msgReadingMemories": "మీ జ్ఞాపకాలను చదువుతోంది…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "మీ జ్ఞాపకాల నుండి నేర్చుకుంటోంది...",
+    "msgLearningMemories": "మీ జ్ఞాపకాల నుండి నేర్చుకుంటోంది…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9205,7 +9004,7 @@
             }
         }
     },
-    "conversationNewIndicator": "కొత్త 🚀",
+    "conversationNewIndicator": "కొత్త",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9218,7 +9017,7 @@
             }
         }
     },
-    "mergingStatus": "విలీనం చేస్తోంది...",
+    "mergingStatus": "విలీనం చేస్తోంది…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9391,11 +9190,11 @@
     },
     "newFolder": "కొత్త ఫోల్డర్",
     "color": "రంగు",
-    "waitingForDevice": "పరికరం కోసం ఎదురుచూస్తోంది...",
+    "waitingForDevice": "పరికరం కోసం ఎదురుచూస్తోంది…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "ఏదైనా చెప్పండి...",
+    "saySomething": "ఏదైనా చెప్పండి…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9447,15 +9246,15 @@
     "downloadAudio": "ఆడియోను డౌన్‌లోడ్ చేయండి",
     "audioDownloadSuccess": "ఆడియో విజయవంతంగా డౌన్‌లోడ్ చేయబడింది",
     "audioDownloadFailed": "ఆడియోను డౌన్‌లోడ్ చేయడానికి విఫలమైంది",
-    "downloadingAudio": "ఆడియోను డౌన్‌లోడ్ చేస్తోంది...",
+    "downloadingAudio": "ఆడియోను డౌన్‌లోడ్ చేస్తోంది…",
     "shareAudio": "ఆడియోను భాగస్వామ్యం చేయండి",
     "preparingAudio": "ఆడియోను సిద్ధం చేస్తోంది",
-    "gettingAudioFiles": "ఆడియో ఫైల్‌లను పొందుతోంది...",
+    "gettingAudioFiles": "ఆడియో ఫైల్‌లను పొందుతోంది…",
     "downloadingAudioProgress": "ఆడియోను డౌన్‌లోడ్ చేస్తోంది",
     "processingAudio": "ఆడియోను ప్రక్రియ చేస్తోంది",
-    "combiningAudioFiles": "ఆడియో ఫైల్‌లను జత చేస్తోంది...",
+    "combiningAudioFiles": "ఆడియో ఫైల్‌లను జత చేస్తోంది…",
     "audioReady": "ఆడియో సిద్ధం",
-    "openingShareSheet": "భాగస్వామ్య పత్రాన్ని తెరుస్తోంది...",
+    "openingShareSheet": "భాగస్వామ్య పత్రాన్ని తెరుస్తోంది…",
     "audioShareFailed": "భాగస్వామ్య విఫలమైంది",
     "dailyRecaps": "రోజువారీ రీక్యాప్‌లు",
     "removeFilter": "ఫిల్టర్‌ను తీసివేయండి",
@@ -9532,7 +9331,7 @@
         }
     },
     "mcpConnectionFailed": "MCP సర్వర్‌కు కనెక్ట్ చేయడం విఫలమైంది",
-    "authorizingMcpServer": "అధికారం ఇస్తోంది...",
+    "authorizingMcpServer": "అధికారం ఇస్తోంది…",
     "whereDidYouHearAboutOmi": "మీరు amin గురించి ఎలా తెలుసుకున్నారు?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9635,7 +9434,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "పరికరం నుండి డౌన్‌లోడ్ చేస్తోంది",
-    "reconnectingToInternet": "ఇంటర్నెట్‌కు మరోసారి కనెక్ట్ చేస్తోంది...",
+    "reconnectingToInternet": "ఇంటర్నెట్‌కు మరోసారి కనెక్ట్ చేస్తోంది…",
     "uploadingToCloud": "{current} నుండి {total} ను అప్‌లోడ్ చేస్తోంది",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9647,8 +9446,8 @@
             }
         }
     },
-    "processingOnServer": "సర్వర్‌లో ప్రక్రియ చేస్తోంది...",
-    "processingOnServerProgress": "ప్రక్రియ చేస్తోంది... {current}/{total} విభాగాలు",
+    "processingOnServer": "సర్వర్‌లో ప్రక్రియ చేస్తోంది…",
+    "processingOnServerProgress": "ప్రక్రియ చేస్తోంది… {current}/{total} విభాగాలు",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9724,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "ఏ బ్యాకెండ్‌కు కనెక్ట్ చేయాలో ఎంచుకోండి",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "ఉత్పత్తి",
     "@production": {
         "description": "Label for production API environment"
@@ -9793,7 +9588,7 @@
     "answerTheCallFrom": "నుండి కాల్‌కు సమాధానం ఇవ్వండి",
     "onTheCallEnterThisCode": "కాల్‌లో, ఈ కోడ్‌ను నమోదు చేయండి",
     "followTheVoiceInstructions": "వాయిస్ సూచనలను అనుసరించండి",
-    "statusCalling": "కాల్ చేస్తోంది...",
+    "statusCalling": "కాల్ చేస్తోంది…",
     "statusCallInProgress": "కాల్ పురోగతిలో ఉంది",
     "statusVerifiedLabel": "ధృవీకరించబడింది",
     "statusCallMissed": "కాల్ తప్పిపోయింది",
@@ -9808,11 +9603,11 @@
     "phoneNoContactsFound": "సంప్రదాయాలు కనుగొనబడలేదు",
     "phoneEnterNumber": "నంబర్‌ను నమోదు చేయండి",
     "failedToStartCall": "కాల్ ప్రారంభించడం విఫలమైంది",
-    "callStateConnecting": "కనెక్ట్ చేస్తోంది...",
-    "callStateRinging": "రింగ్ చేస్తోంది...",
+    "callStateConnecting": "కనెక్ట్ చేస్తోంది…",
+    "callStateRinging": "రింగ్ చేస్తోంది…",
     "callStateEnded": "కాల్ ముగిసింది",
     "callStateFailed": "కాల్ విఫలమైంది",
-    "transcriptPlaceholder": "ట్రాన్‌స్క్రిప్ట్ ఇక్కడ కనిపిస్తుంది...",
+    "transcriptPlaceholder": "ట్రాన్‌స్క్రిప్ట్ ఇక్కడ కనిపిస్తుంది…",
     "phoneUnmute": "మ్యూట్ చేయవద్దు",
     "phoneMute": "మ్యూట్ చేయండి",
     "phoneSpeaker": "స్పీకర్",
@@ -9891,17 +9686,13 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "స్వయంచాలక కాల్ సారాంశాలు మరియు కార్య అంశాలు",
+    "phoneCallsUpsellFeature2": "స్వయంచాలక కాల్ సారాంశాలు మరియు పనులు",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
     "phoneCallsUpsellFeature3": "గ్రహీతలు మీ నిజమైన నంబర్‌ను చూస్తారు, యాదృచ్ఛిక సంఖ్య కాదు",
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
-    },
-    "phoneCallsUpsellFeature4": "మీ కాల్‌లు ఖాజా మరియు సురక్షితమైనవి",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
     },
     "phoneCallsUpgradeButton": "అన్‌లిమిటెడ్‌కు అప్‌గ్రేడ్ చేయండి",
     "@phoneCallsUpgradeButton": {
@@ -10004,7 +9795,7 @@
     "fairUse3Day": "3-రోజు రోలింగ్",
     "fairUseWeekly": "వారానికి రోలింగ్",
     "fairUseAboutTitle": "న్యాయమైన ఉపయోగం గురించి",
-    "fairUseAboutBody": "Omi వ్యక్తిగత సంభాషణలు, సమావేశాలు మరియు జీవంత పరిస్థితుల కోసం డిజైన్ చేయబడింది. ఉపయోగం కనెక్షన్ సమయం కాకుండా కనుగొనబడిన నిజమైన స్పీచ్ సమయం ద్వారా కొలుస్తారు. ఉపయోగం నిజమైన కాని నిజమైన కాని విషయవస్తువుల కోసం సాధారణ నమూనాలను గణనీయంగా మించిపోయినట్లయితే, సమన్వయాలు వర్తించవచ్చు.",
+    "fairUseAboutBody": "Omi వ్యక్తిగత సంభాషణలు, సమావేశాలు మరియు ప్రత్యక్ష పరస్పర చర్యల కోసం రూపొందించబడింది. వినియోగం కనెక్ట్ అయిన సమయం కాకుండా మీరు మాట్లాడిన సమయం ఆధారంగా కొలవబడుతుంది. మీ వినియోగం సాధారణ వ్యక్తిగత వినియోగం కంటే చాలా ఎక్కువగా ఉంటే, ముందుగా మీకు హెచ్చరిక అందుతుంది. నిరంతర భారీ వినియోగం ట్రాన్స్‌క్రిప్షన్‌ను నెమ్మదింపజేయవచ్చు లేదా పరిమితం చేయవచ్చు.",
     "fairUseCaseRefCopied": "{caseRef} కాపీ చేయబడింది",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10036,7 +9827,7 @@
         }
     },
     "transcriptionPaused": "రికార్డింగ్, మరోసారి కనెక్ట్ చేస్తోంది",
-    "transcriptionPausedReconnecting": "ఇంకా రికార్డింగ్ చేస్తోంది — ట్రాన్‌స్క్రిప్షన్‌కు మరోసారి కనెక్ట్ చేస్తోంది...",
+    "transcriptionPausedReconnecting": "ఇంకా రికార్డింగ్ చేస్తోంది — ట్రాన్‌స్క్రిప్షన్‌కు మరోసారి కనెక్ట్ చేస్తోంది…",
     "fairUseBannerStatus": "న్యాయమైన ఉపయోగం: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10109,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "మీ Omi మీ ఫోన్‌కు కనెక్ట్ చేయనప్పుడు, ఇది నిర్మిత మెమరీపై స్థానికంగా ఆడియోను నిల్వ చేస్తుంది. మీరు ఎప్పటికీ రికార్డింగ్‌ను కోల్పోరు.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Omi మరోసారి కనెక్ట్ చేసినప్పుడు, రికార్డింగ్‌లు స్వయంచాలకంగా మీ ఫోన్‌కు అప్‌లోడ్ చేయడానికి ముందు తాత్కాలిక హోల్డింగ్ ఆ రూపంగా బదిలీ చేయబడతాయి.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10149,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "ఈ అనుమతులు Omi ఎలా పని చేస్తుంది అనేటువంటి ప్రధానమైనవి. అవి నోటిఫికేషన్‌లు, స్థానం-ఆధారిత అనుభవాలు మరియు ఆడియో సంగ్రహణ వంటి ముఖ్య లక్షణాలను ఎనేబుల్ చేస్తాయి.",
+    "permissionsPageDescription": "Omi మీ పరికరానికి కనెక్ట్ కావడానికి, ఆడియో రికార్డ్ చేయడానికి, బ్యాక్‌గ్రౌండ్‌లో పని చేయడానికి, రిమైండర్‌లు పంపడానికి మరియు సంభాషణలు ఎక్కడ జరిగాయో గమనించడానికి వీటిని ఉపయోగిస్తుంది.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10160,10 +9947,6 @@
     "permissionsSetupTitle": "ఉత్తమ అనుభవం పొందండి",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "Omi తన మేజిక్ పని చేయడానికి కొన్ని అనుమతులను ప్రారంభించండి.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "మీరు ఈ అనుమతులను ఎప్పటికీ సెట్టింగ్‌లు > అనుమతులలో మార్చవచ్చు",
     "@permissionsChangeAnytime": {
@@ -10217,7 +10000,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "మేము ఎటువంటి ప్రతిస్పందనకు ప్రశంసిస్తున్నాము...",
+    "cancelReasonDetailHint": "మేము ఎటువంటి ప్రతిస్పందనకు ప్రశంసిస్తున్నాము…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10325,10 +10108,10 @@
     "disconnectHistory": "డిస్‌కనెక్ట్ చరిత్ర",
     "noDisconnectsRecorded": "ఎటువంటి డిస్‌కనెక్ట్‌లు రికార్డ్ చేయబడలేదు",
     "diagnostics": "రోగనిర్ధారణ",
-    "waitingForData": "డేటా కోసం ఎదురుచూస్తోంది...",
+    "waitingForData": "డేటా కోసం ఎదురుచూస్తోంది…",
     "liveRssiOverTime": "సమయం తర్వాత లైవ్ RSSI",
     "noRssiDataYet": "ఇంకా RSSI డేటా లేదు",
-    "collectingData": "డేటా సేకరిస్తోంది...",
+    "collectingData": "డేటా సేకరిస్తోంది…",
     "cleanDisconnect": "శుభ్ర డిస్‌కనెక్ట్",
     "connectionTimeout": "కనెక్షన్ సమయం ముగిసింది",
     "remoteDeviceTerminated": "రిమోట్ పరికరం ముగిసింది",
@@ -10380,7 +10163,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "సరికొత్త స్థిర ఫర్మ్‌వేర్‌ను పొందుస్తోంది...",
+    "fetchingStableFirmware": "సరికొత్త స్థిర ఫర్మ్‌వేర్‌ను పొందుస్తోంది…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10408,11 +10191,11 @@
     "enableLocationTitle": "స్థానం ప్రారంభించండి",
     "enableLocationDescription": "సమీపవర్తీ బ్లూటూత్ పరికరాలను కనుగొనటానికి స్థానం అనుమతి అవసరం.",
     "voiceRecordingFound": "రికార్డింగ్ కనుగొనబడింది",
-    "transcriptionConnecting": "ట్రాన్‌స్క్రిప్షన్ కనెక్ట్ చేస్తోంది...",
+    "transcriptionConnecting": "ట్రాన్‌స్క్రిప్షన్ కనెక్ట్ చేస్తోంది…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "ట్రాన్‌స్క్రిప్షన్ మరోసారి కనెక్ట్ చేస్తోంది...",
+    "transcriptionReconnecting": "ట్రాన్‌స్క్రిప్షన్ మరోసారి కనెక్ట్ చేస్తోంది…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10455,8 +10238,8 @@
     "deleteFlowFeedbackTitle": "మరింత చెప్పండి",
     "deleteFlowFeedbackSubtitle": "Omi మీకు ఎలా పని చేసేది?",
     "deleteFlowFeedbackHint": "ఐచ్ఛికం — మీ ఆలోచనలు మెరుగైన ఉత్పత్తిని తయారు చేయడంలో మాకు సహాయపడతాయి.",
-    "deleteFlowConfirmTitle": "ఇది శాశ్వతం",
-    "deleteFlowConfirmSubtitle": "మీరు ఖాతాను తొలగించిన తర్వాత, దాన్ని పునరుద్ధరించే మార్గం లేదు.",
+    "deleteFlowConfirmTitle": "మీ ఖాతాను తొలగించాలా?",
+    "deleteFlowConfirmSubtitle": "దీన్ని రద్దు చేయలేరు, సపోర్ట్ కూడా చేయలేదు.",
     "deleteConsequenceSubscription": "ఏదైనా క్రియాశీల సబ్‌స్క్రిప్షన్ రద్దు చేయబడుతుంది.",
     "deleteConsequenceNoRecovery": "మీ ఖాతాను పునరుద్ధరించలేరు — సపోర్ట్ కూడా చేయలేదు.",
     "deleteTypeToConfirm": "నిర్ధారించడానికి DELETE టైప్ చేయండి",
@@ -10467,10 +10250,6 @@
     "planUpdate": "ప్లాన్ అప్‌డేట్",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు $49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "మీ ప్లాన్‌ను అప్‌గ్రేడ్ చేయండి",
     "@upgradeYourPlan": {
@@ -10500,7 +10279,6 @@
     "currentPlan": "ప్రస్తుత",
     "neoSubtitle": "నెలకు {count} ప్రశ్నలు",
     "operatorSubtitle": "నెలకు {count} ప్రశ్నలు",
-    "architectSubtitle": "పవర్-యూజర్ AI — వేల చాట్‌లు + ఏజెంటిక్ ఆటోమేషన్",
     "chatUsageCost": "చాట్: ${used} / ${limit} ఈ నెల ఉపయోగించబడింది",
     "chatUsageCostNoLimit": "చాట్: ${used} ఈ నెల ఉపయోగించబడింది",
     "chatUsageMessages": "చాట్: {used} / {limit} సందేశాలు ఈ నెల",
@@ -10527,7 +10305,7 @@
     "record": "రికార్డ్",
     "stop": "ఆపు",
     "recordWithPhoneMic": "ఫోన్ మైక్‌తో రికార్డ్ చేయండి",
-    "recordWithPhoneMicSubtitle": "మీ చుట్టూ ఉన్న ఆడియోను క్యాప్చర్ చేయండి",
+    "recordWithPhoneMicSubtitle": "ఈ ఫోన్ మైక్రోఫోన్‌తో రికార్డ్ చేసి ట్రాన్స్‌క్రైబ్ చేయండి",
     "phoneCall": "ఫోన్ కాల్",
     "phoneCallSubtitle": "లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి",
     "bulkExportInProgress": "ఎగుమతి చేస్తోంది…",
@@ -10538,7 +10316,7 @@
     "connectTaskAppToExport": "ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి",
     "deselectAllTasksMenu": "అన్ని ఎంపికలు తొలగించు",
     "hideCompletedTasks": "పూర్తయినవి దాచు",
-    "searchActionItems": "చర్య అంశాలను వెతకండి",
+    "searchActionItems": "పనులను వెతకండి",
     "selectActionItems": "బహుళ ఎంపిక",
     "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
     "showCompletedTasks": "పూర్తయినవి చూపించు",
@@ -10598,7 +10376,6 @@
     "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్.",
     "backgroundModeTitle": "నేపథ్య మోడ్",
     "backgroundModeDescription": "యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.",
-    "backgroundModeNote": "ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.",
     "regenerateRecap": "సారాంశాన్ని పునరుత్పత్తి చేయండి",
     "recapRegeneratedSnackbar": "సారాంశం పునరుత్పత్తి అయింది",
     "recapRegenerateFailed": "సారాంశాన్ని పునరుత్పత్తి చేయలేకపోయాము. తర్వాత మళ్లీ ప్రయత్నించండి.",
@@ -10607,7 +10384,7 @@
     "syncCustomSttWarningTitle": "సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది",
     "syncCustomSttWarningMessage": "మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.",
     "transcribeLaterTitle": "తర్వాత ట్రాన్‌స్క్రైబ్ చేయండి",
-    "transcribeLaterDescription": "లైవ్‌గా కాకుండా ఆడియోను ఇప్పుడు రికార్డ్ చేసి, మీకు కావలసినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. రికార్డింగ్‌లు మీ ఫోన్‌లోనే సేవ్ చేయబడతాయి, తర్వాత వాటిని అప్‌లోడ్ చేయడం ద్వారా సంభాషణలను రూపొందించవచ్చు.",
+    "transcribeLaterDescription": "ఇప్పుడు రికార్డ్ చేయండి, మీకు కావాలనుకున్నప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. అప్పటివరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
     "transcribeLaterNote": "ఫోన్ మైక్రోఫోన్, Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
     "transcribeLaterStorageFull": "మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, ఆ తర్వాత అది దానంతటదే మళ్లీ ప్రారంభమవుతుంది.",
     "unmute": "అన్‌మ్యూట్ చేయి",
@@ -10628,11 +10405,11 @@
     "deviceOnboardingTranscriptionTitle": "మీ Omiతో మాట్లాడండి",
     "deviceOnboardingTranscriptionSubtitle": "కొన్ని మాటలు చెప్పి, అవి తక్షణమే కనిపించడం చూడండి",
     "deviceOnboardingGoodJob": "శభాష్!",
-    "deviceOnboardingStartSpeaking": "మాట్లాడటం ప్రారంభించండి...",
+    "deviceOnboardingStartSpeaking": "మాట్లాడటం ప్రారంభించండి…",
     "deviceOnboardingAskQuestionTitle": "Omiని ఒక ప్రశ్న అడగండి",
     "deviceOnboardingAskQuestionSubtitle": "బటన్‌ను ఒకసారి నొక్కి, మీ ప్రశ్న అడిగి, పూర్తయ్యాక మళ్లీ నొక్కండి",
-    "deviceOnboardingProcessingQuestion": "మీ ప్రశ్నను ప్రాసెస్ చేస్తోంది...",
-    "deviceOnboardingListening": "వింటోంది...",
+    "deviceOnboardingProcessingQuestion": "మీ ప్రశ్నను ప్రాసెస్ చేస్తోంది…",
+    "deviceOnboardingListening": "వింటోంది…",
     "deviceOnboardingTurnOffTitle": "ఆఫ్ చేయండి",
     "deviceOnboardingTurnOnTitle": "ఆన్ చేయండి",
     "deviceOnboardingTurnOffSubtitle": "బటన్‌ను 3 సెకన్ల పాటు నొక్కి ఉంచండి",
@@ -10641,7 +10418,7 @@
     "deviceOnboardingStatusConnected": "కనెక్ట్ అయింది",
     "deviceOnboardingStatusConnectedDone": "కనెక్ట్ అయింది!",
     "deviceOnboardingStatusDisconnected": "డిస్‌కనెక్ట్ అయింది",
-    "deviceOnboardingStatusTurningOff": "ఆఫ్ అవుతోంది...",
+    "deviceOnboardingStatusTurningOff": "ఆఫ్ అవుతోంది…",
     "deviceOnboardingDoubleTapTitle": "డబుల్ ట్యాప్‌ను అనుకూలీకరించండి",
     "deviceOnboardingEndConversation": "సంభాషణ ముగించు",
     "deviceOnboardingEndConversationDesc": "ప్రస్తుత సంభాషణను సేవ్ చేసి ముగించండి",
@@ -10654,7 +10431,7 @@
     "deviceOnboardingContinue": "కొనసాగించండి",
     "deviceOnboardingFinish": "ముగించు",
     "deviceOnboardingIntroTitle": "మీ Omiని తెలుసుకోండి",
-    "deviceOnboardingIntroSubtitle": "మీ Omi చేయగలిగే ప్రతిదాని గురించి త్వరిత, ప్రత్యక్ష పరిచయం.",
+    "deviceOnboardingIntroSubtitle": "లైవ్ ట్రాన్స్‌క్రిప్షన్, ప్రశ్న అడగడం మరియు డబుల్-ట్యాప్ షార్ట్‌కట్‌ను ప్రయత్నించండి.",
     "deviceOnboardingIntroDuration": "సుమారు 1 నిమిషం",
     "jumpToLatestMessage": "తాజా సందేశానికి వెళ్ళు",
     "latest": "తాజా",
@@ -10712,7 +10489,7 @@
     "cloudTranscription": "క్లౌడ్ ట్రాన్‌స్క్రిప్షన్",
     "copyMessage": "సందేశాన్ని కాపీ చేయండి",
     "deleteOnDeviceModel": "మోడల్‌ను తొలగించు",
-    "deleteOnDeviceModelConfirm": "ఈ మోడల్‌ను తొలగించాలని మీరు ఖచ్చితంగా అనుకుంటున్నారా?",
+    "deleteOnDeviceModelConfirm": "ఈ మోడల్‌ను తొలగించాలా?",
     "downgradeAnyway": "అయినా డౌన్‌గ్రేడ్ చేయండి",
     "downgradeLimitBattery": "7 రెట్లు ఎక్కువ బ్యాటరీ వినియోగం",
     "downgradeLimitDelay": "5-7 సెకన్ల ఆలస్యం",
@@ -10734,7 +10511,7 @@
     "onDeviceModelSize": "మోడల్ పరిమాణం",
     "onDeviceTranscription": "పరికరంలో ట్రాన్‌స్క్రిప్షన్",
     "onDeviceTranscriptionDesc": "ట్రాన్‌స్క్రిప్షన్ మీ పరికరంలోనే స్థానికంగా ప్రాసెస్ చేయబడుతుంది",
-    "searchSettings": "సెట్టింగ్‌లలో శోధించండి…",
+    "searchSettings": "సెట్టింగ్‌లలో శోధించండి",
     "speechToTextProvider": "స్పీచ్-టు-టెక్స్ట్ ప్రదాత",
     "speechToTextProviderDesc": "ట్రాన్‌స్క్రిప్షన్ కోసం ఉపయోగించే సేవను ఎంచుకోండి",
     "sttFilterAuto": "స్వయంచాలకం",
@@ -10758,7 +10535,7 @@
     "whisperModelSizeMedium": "మధ్యస్థం",
     "whisperModelSizeSmall": "చిన్నది",
     "whisperModelSizeTiny": "అతి చిన్నది",
-    "planSheetChooseYourPlan": "అపరిమిత Omi అన్‌లాక్ చేయడానికి మీ ప్లాన్‌ను ఎంచుకోండి.",
+    "planSheetChooseYourPlan": "మీకు సరిపోయే ప్లాన్‌ను ఎంచుకోండి.",
     "availableOnMacMobileWeb": "Mac, మొబైల్ మరియు వెబ్‌లో అందుబాటులో ఉంది",
     "popularBadge": "ప్రసిద్ధం",
     "worksOnDesktop": "డెస్క్‌టాప్‌లో పనిచేస్తుంది",
@@ -10774,7 +10551,6 @@
     "pinAsBaseline": "ఆధారంగా పిన్ చేయండి",
     "unpinAsBaseline": "ఆధారం నుండి అన్‌పిన్ చేయండి",
     "baselineMemory": "ఆధార మెమరీ",
-    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో",
     "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
     "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
@@ -10799,7 +10575,6 @@
     "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది",
     "pendantRecordingSyncBlocked": "Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
     "pendantFullSyncBlocked": "Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
-    "conversationsNotCapturedCount": "రికార్డ్ కాలేదు ({count})",
     "transcriptionNoAudio": "ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు",
     "chatBlockTask": "పని",
     "chatBlockGoal": "లక్ష్యం",
@@ -10822,5 +10597,844 @@
     "speechProfileTopicGoal": "మీ దీర్ఘకాలిక లక్ష్యం ఏమిటి?",
     "speechToTextUnavailableDesc": "ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.",
     "memoryHistoryPartial": "జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.",
-    "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి"
+    "memoryHistory": "చరిత్ర",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి రికార్డ్ బటన్ నొక్కండి",
+    "processingTakingLonger": "ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.",
+    "speechProfileEnrollmentPrompt": "Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.",
+    "home": "హోమ్",
+    "failedToUpdateBaselineStatus": "ఈ జ్ఞాపకాన్ని అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "memoryAllowUse": "ఉపయోగాన్ని అనుమతించు",
+    "memoryDontUse": "ఉపయోగించవద్దు",
+    "unstarConversation": "సంభాషణ నక్షత్రాన్ని తీసివేయండి",
+    "moreOptions": "మరిన్ని ఎంపికలు",
+    "filterByDate": "తేదీ ప్రకారం ఫిల్టర్ చేయండి",
+    "memoryGraph": "జ్ఞాపకాల గ్రాఫ్",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceRecognitionStatus": "{status, select, ready{స్వరాన్ని గుర్తించడానికి సిద్ధంగా ఉంది} saved_sample_awaiting_embedding{నమూనా సేవ్ అయింది; స్వర ప్రాసెసింగ్ ఇంకా అవసరం} not_learned{స్వరాన్ని నేర్చుకోలేదు} other{స్వరం స్థితి తెలియదు}}",
+    "tagSpeakerIncludingLaterSpeech": "ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి",
+    "updateSummaryWithNewNames": "కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి",
+    "syncStatusUnsupportedAudio": "ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు",
+    "chatStarterPrompt": "{kind, select, capabilities{నువ్వు నా కోసం ఏమి చేయగలవు?} goal{లక్ష్యాన్ని నిర్దేశించుకోవడంలో నాకు సహాయం చేయి} activity{నా ఇటీవలి కార్యకలాపాలను సంక్షిప్తంగా చెప్పు} improve{నేను ఎలా మెరుగుపడగలను?} other{}}",
+    "nextWeek": "వచ్చే వారం",
+    "clearSearch": "శోధనను క్లియర్ చేయండి",
+    "audioUploadFailedKeptLocal": "అప్‌లోడ్ విఫలమైంది — {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది.",
+    "audioUploadFailedTapRetry": "అప్‌లోడ్ విఫలమైంది — {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది. మళ్లీ ప్రయత్నించడానికి నొక్కండి.",
+    "audioUploadRetrying": "అప్‌లోడ్ మళ్లీ ప్రయత్నిస్తోంది… {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది",
+    "capturing": "క్యాప్చర్ అవుతోంది",
+    "capturingPhotos": "ఫోటోలు క్యాప్చర్ అవుతున్నాయి",
+    "listeningTranscriptWillAppear": "వింటోంది… ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తుంది.",
+    "recordingOfflineTranscriptWillCatchUp": "ఆఫ్‌లైన్‌లో రికార్డ్ అవుతోంది — మీరు మళ్లీ ఆన్‌లైన్‌కి వచ్చినప్పుడు ట్రాన్స్‌క్రిప్ట్ అప్‌డేట్ అవుతుంది.",
+    "transcriptionUnavailableRecordingSaved": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు — రికార్డింగ్ కొనసాగుతుంది, మీ ఆడియో సేవ్ అవుతోంది.",
+    "uploadingAudioForTranscription": "ట్రాన్స్‌క్రిప్షన్ కోసం {duration} ఆడియో అప్‌లోడ్ అవుతోంది…",
+    "filterBySpeaker": "మాట్లాడినవారి ఆధారంగా ఫిల్టర్ చేయండి",
+    "notNow": "ఇప్పుడు కాదు",
+    "discard": "విస్మరించు",
+    "keepEditing": "సవరణ కొనసాగించు",
+    "discardChangesTitle": "మార్పులను విస్మరించాలా?",
+    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.",
+    "pause": "పాజ్",
+    "deleteConversationsTitle": "{count, plural, =1{1 సంభాషణను తొలగించాలా?} other{{count} సంభాషణలను తొలగించాలా?}}",
+    "deleteConversationsMessage": "ఇది వాటి జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది.",
+    "conversationsDeletedCount": "{count, plural, =1{1 సంభాషణ తొలగించబడింది} other{{count} సంభాషణలు తొలగించబడ్డాయి}}",
+    "conversationsMovedCount": "{count, plural, =1{1 సంభాషణ తరలించబడింది} other{{count} సంభాషణలు తరలించబడ్డాయి}}",
+    "failedToMoveConversations": "సంభాషణలను తరలించలేకపోయాము",
+    "discardedConversationTitle": "విస్మరించబడింది · {duration}",
+    "noConversationsHeroMessage": "మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో రికార్డ్ బటన్ నొక్కండి.",
+    "conversationMap": "సంభాషణల మ్యాప్",
+    "conversationCount": "{count, plural, =1{1 సంభాషణ} other{{count} సంభాషణలు}}",
+    "taskCount": "{count, plural, =1{1 పని} other{{count} పనులు}}",
+    "skipBack10Seconds": "10 సెకన్లు వెనక్కి",
+    "skipForward10Seconds": "10 సెకన్లు ముందుకు",
+    "failedToShareRecap": "సారాంశాన్ని షేర్ చేయలేకపోయాము",
+    "captureOfflineBuffering": "ఆఫ్‌లైన్, బఫర్ చేస్తోంది",
+    "captureOfflineBufferingFor": "ఆఫ్‌లైన్, బఫర్ చేస్తోంది · {minutes} ని",
+    "memoryDetailsTitle": "జ్ఞాపకం",
+    "editMemoryTitle": "జ్ఞాపకాన్ని సవరించు",
+    "newMemoryTitle": "కొత్త జ్ఞాపకం",
+    "memoryReadOnlyHint": "ఈ జ్ఞాపకం చరిత్రగా ఉంచబడింది, దీన్ని సవరించలేరు.",
+    "openConversation": "సంభాషణను తెరవండి",
+    "memoryGraphTitle": "జ్ఞాపకాల గ్రాఫ్",
+    "memoryReviewTitle": "ఈరోజు నేను నేర్చుకున్నవి",
+    "memoryReviewRight": "సరైనది",
+    "memoryReviewWrong": "తప్పు",
+    "memoryReviewFix": "సరిచేయి",
+    "memoryReviewConfirmed": "నిర్ధారించబడింది.",
+    "memoryReviewDropped": "మీ జ్ఞాపకాల నుండి తీసివేయబడింది.",
+    "memoryReviewUpdated": "నవీకరించబడింది.",
+    "memoryReviewSaveFailed": "సేవ్ చేయలేకపోయాం, మళ్లీ ప్రయత్నించండి",
+    "indentTask": "ఇండెంట్ చేయి",
+    "outdentTask": "అవుట్‌డెంట్ చేయి",
+    "goalDeleted": "లక్ష్యం తొలగించబడింది",
+    "sharedTasksAcceptFailed": "ఈ పనులను అంగీకరించలేకపోయాం. మీరు ఇప్పటికే ఈ షేర్‌ను అంగీకరించి ఉండవచ్చు.",
+    "pausePlayback": "పాజ్",
+    "deleteSample": "నమూనాను తొలగించు",
+    "deletePersonTitle": "వ్యక్తిని తొలగించాలా?",
+    "deletePersonLabel": "వ్యక్తిని తొలగించు",
+    "noPeopleYet": "ఇంకా వ్యక్తులు లేరు",
+    "deleteTasksTitle": "{count, plural, =1{1 పనిని తొలగించాలా?} other{{count} పనులను తొలగించాలా?}}",
+    "tasksCountLabel": "{count, plural, =1{1 పని} other{{count} పనులు}}",
+    "sharedTasksAdded": "{count, plural, =1{మీ జాబితాకు 1 పని జోడించబడింది} other{మీ జాబితాకు {count} పనులు జోడించబడ్డాయి}}",
+    "sharedTasksAddButton": "{count, plural, =1{1 పనిని జోడించు} other{{count} పనులను జోడించు}}",
+    "sharedTasksTitle": "{name} {count, plural, =1{1 పనిని షేర్ చేశారు} other{{count} పనులను షేర్ చేశారు}}",
+    "exportedToPlatform": "{platform}కు ఎగుమతి చేయబడింది",
+    "taskDueDate": "గడువు {date}",
+    "linkEvent": "ఈవెంట్‌ను లింక్ చేయండి",
+    "noCalendarEventsNearby": "ఈ సమయానికి సమీపంలో క్యాలెండర్ ఈవెంట్‌లు ఏవీ కనుగొనబడలేదు.",
+    "suggestedEvent": "సూచించబడింది",
+    "openInGoogleCalendar": "Google Calendarలో తెరవండి",
+    "shareWithAttendees": "పాల్గొనేవారితో షేర్ చేయండి",
+    "unlinkCalendarEvent": "క్యాలెండర్ ఈవెంట్ లింక్ తీసివేయండి",
+    "meetingNotesSubject": "నోట్స్: {title}",
+    "previousResult": "మునుపటి ఫలితం",
+    "nextResult": "తదుపరి ఫలితం",
+    "playFromHere": "ఇక్కడి నుండి ప్లే చేయండి",
+    "shareConversationQuestion": "సంభాషణను షేర్ చేయాలా?",
+    "conversationTasksEmptyMessage": "ఈ సంభాషణ నుండి టాస్క్‌లు ఇక్కడ కనిపిస్తాయి.",
+    "noPendingTasks": "పెండింగ్ టాస్క్‌లు లేవు",
+    "nCompleted": "{count} పూర్తయ్యాయి",
+    "identifySpeaker": "మాట్లాడేవారిని గుర్తించండి",
+    "couldNotLoadCheckout": "చెక్అవుట్ పేజీని లోడ్ చేయలేకపోయాము. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "phoneFreeCallLimitReached": "నెలవారీ ఉచిత కాల్ పరిమితి చేరుకుంది. వచ్చే నెల రీసెట్ అవుతుంది.",
+    "couldNotLoadImportHistory": "దిగుమతి చరిత్రను లోడ్ చేయలేకపోయాం",
+    "phoneCallButton": "కాల్ చేయండి",
+    "searchContacts": "పరిచయాలను శోధించండి",
+    "phoneContactsAccessTitle": "పరిచయాలకు ప్రాప్యతను అనుమతించండి",
+    "phoneSelectCountryTitle": "దేశాన్ని ఎంచుకోండి",
+    "phoneNoVerifiedNumbersTitle": "ధృవీకరించిన నంబర్లు లేవు",
+    "phoneNoVerifiedNumbersMessage": "Omi ద్వారా కాల్ చేయడానికి మీ నంబర్‌ను ధృవీకరించండి.",
+    "phoneDeleteNumberFailed": "ఈ నంబర్‌ను తొలగించలేకపోయాము",
+    "forgetDeviceConfirmTitle": "పరికరాన్ని మర్చిపోవాలా?",
+    "forgetDeviceConfirmMessage": "Omi ఈ పరికరానికి కనెక్ట్ అవ్వడం ఆపివేస్తుంది.",
+    "deviceForgottenMessage": "పరికరం మర్చిపోబడింది",
+    "unpairDeviceConfirmTitle": "పరికరాన్ని అన్‌పెయిర్ చేయాలా?",
+    "rollBack": "రోల్ బ్యాక్",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi పరికరం రోగనిర్ధారణ",
+    "diagnosticsFailBadge": "విఫలమైంది",
+    "diagnosticsReconnectedIn": "{duration}లో మళ్లీ కనెక్ట్ అయింది",
+    "timeCompactDays": "{count}రో",
+    "durationAgo": "{duration} క్రితం",
+    "sttLanguageFollowsPrimary": "మీ ప్రధాన భాషను అనుసరిస్తుంది",
+    "creatorPayouts": "సృష్టికర్తల చెల్లింపులు",
+    "sttLanguageOverride": "మార్చు",
+    "sttUsePrimaryLanguage": "ప్రధాన భాషను ఉపయోగించు",
+    "sttPrimaryLanguageUnsupported": "ఈ ప్రొవైడర్ {language}కు మద్దతు ఇవ్వదు, కాబట్టి {fallback}ను ఉపయోగిస్తుంది.",
+    "deviceRamBelowMinimum": "గుర్తించిన RAM: {ram} GB. సిఫార్సు చేసిన కనిష్ఠం: 4 GB.",
+    "olderIphoneModelDetected": "గుర్తించిన మోడల్: {model} (iPhone XS కంటే పాతది). పరికరంలో గుర్తింపు నెమ్మదిగా ఉండవచ్చు.",
+    "copyLogs": "లాగ్‌లను కాపీ చేయి",
+    "openProviderDocs": "డాక్యుమెంటేషన్ తెరువు",
+    "getApiKey": "API కీ పొందండి",
+    "showApiKey": "API కీని చూపు",
+    "hideApiKey": "API కీని దాచు",
+    "removeVocabularyWord": "{word}ని తీసివేయి",
+    "vocabularyWordCount": "{count, plural, =1{1 పదం} other{{count} పదాలు}}",
+    "phoneFreeCallsRemaining": "ఈ నెలలో {remaining} ఉచిత కాల్‌లు మిగిలి ఉన్నాయి ({limit} లో)",
+    "phoneFreeCallsRemainingWithMax": "ఈ నెలలో {remaining} ఉచిత కాల్‌లు మిగిలి ఉన్నాయి ({limit} లో) · ఒక్కోటి {minutes} నిమిషాల వరకు",
+    "appCreators": "యాప్ సృష్టికర్తలు",
+    "homeScreen": "హోమ్ స్క్రీన్",
+    "phoneCalls": "ఫోన్ కాల్స్",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "ఖర్చు తగ్గించడానికి ట్రాన్స్‌క్రిప్షన్‌కు ముందు నిశ్శబ్ద ఆడియోను దాటవేస్తుంది.",
+    "flashCustomFirmware": "కస్టమ్ ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి",
+    "flashCustomFirmwareDescription": "కస్టమ్ ఫర్మ్‌వేర్ బిల్డ్‌లను ఫ్లాష్ చేయండి",
+    "selectFirmwareZip": "ఫర్మ్‌వేర్ ZIP ఫైల్‌ను ఎంచుకోండి",
+    "customFirmwareWarning": "కస్టమ్ ఫర్మ్‌వేర్ మీ పరికరాన్ని పనికిరాకుండా చేయవచ్చు. ఇది చెల్లుబాటు అయ్యే Omi ఫర్మ్‌వేర్ బిల్డ్ అని నిర్ధారించుకోండి, అప్‌డేట్ సమయంలో కనెక్షన్ తెంచవద్దు.",
+    "firmwareFlashed": "ఫర్మ్‌వేర్ ఫ్లాష్ అయింది",
+    "deviceWillRestart": "మీ పరికరం పునఃప్రారంభమవుతుంది.",
+    "exportFailedTryAgain": "ఎగుమతి విఫలమైంది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "firmwareFlashTarget": "పరికరం: {deviceName}",
+    "keepSubscription": "సబ్‌స్క్రిప్షన్ ఉంచండి",
+    "couldNotLoadPage": "ఈ పేజీని లోడ్ చేయలేకపోయాం. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "leaveFlowStepOf": "దశ {current} / {total}",
+    "sharedTasksLinkExpired": "ఈ షేర్ చేసిన పనులు కనుగొనబడలేదు, లేదా లింక్ గడువు ముగిసింది.",
+    "sharedTasksUnknownSender": "ఎవరో",
+    "allow": "అనుమతించు",
+    "permissionAllowed": "అనుమతించబడింది",
+    "permissionBlockedHint": "సెట్టింగ్‌లలో ఆఫ్ చేయబడింది. దీన్ని ఉపయోగించడానికి అక్కడ అనుమతించండి.",
+    "useDifferentAccount": "వేరే ఖాతాను ఉపయోగించండి",
+    "onboardingStepOf": "దశ {current} / {total}",
+    "onboardingCompleteMessage": "Omiని కొన్ని రోజులు నడుస్తూ ఉంచండి. మీ సంభాషణలు, జ్ఞాపకాలు మరియు చేయవలసిన పనులు నిండటం ప్రారంభమవుతాయి.",
+    "cantFindDeviceHint": "మీ పరికరం కనిపించడం లేదా? అది ఆన్‌లో ఉందని, ఫోన్ దగ్గర ఉందని నిర్ధారించుకుని మళ్లీ స్కాన్ చేయండి.",
+    "scanAgain": "మళ్లీ స్కాన్ చేయండి",
+    "howToPair": "జత చేయడం ఎలా",
+    "contactSupportAction": "సపోర్ట్‌ను సంప్రదించండి",
+    "deviceOfflineWakeHint": "{deviceName} ఆఫ్‌లైన్‌లో ఉంది. మేల్కొలపడానికి దాని బటన్ నొక్కి మళ్లీ ప్రయత్నించండి.",
+    "batteryLevelSemantics": "బ్యాటరీ {level}%",
+    "updateOmiGlassFirmware": "OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి",
+    "deviceConnecting": "కనెక్ట్ అవుతోంది…",
+    "recordOptionsTip": "చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.",
+    "firmwareUpdateFailedTitle": "అప్‌డేట్ విఫలమైంది",
+    "firmwareUpdateFailedMessage": "అప్‌డేట్ పూర్తి కాలేదు. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది, ఉపయోగించడం సురక్షితం. ఛార్జ్ చేసి ఫోన్ దగ్గర ఉంచి మళ్లీ ప్రయత్నించండి.",
+    "firmwareDownloadFailedMessage": "అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "firmwareBatteryTooLow": "బ్యాటరీ {level}% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 15% ఛార్జ్ చేయండి.",
+    "startUpdate": "అప్‌డేట్ ప్రారంభించండి",
+    "otaNotSupported": "ఈ ఫర్మ్‌వేర్‌ను Wi-Fi ద్వారా అప్‌డేట్ చేయలేము.",
+    "otaConnectFailed": "{deviceName}కి కనెక్ట్ కాలేకపోయాం. దాన్ని ఆన్‌లో, దగ్గరగా ఉంచి మళ్లీ ప్రయత్నించండి.",
+    "otaUpdateUnavailable": "ఈ అప్‌డేట్ ఇప్పుడు అందుబాటులో లేదు. తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "otaStarting": "అప్‌డేట్ ప్రారంభమవుతోంది…",
+    "otaStartFailed": "అప్‌డేట్ ప్రారంభించలేకపోయాం. Wi-Fi పేరు, పాస్‌వర్డ్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "otaRebooting": "కొత్త ఫర్మ్‌వేర్‌తో {deviceName} రీస్టార్ట్ అవుతోంది.",
+    "otaUpdateCancelled": "అప్‌డేట్ రద్దు చేయబడింది",
+    "cancelUpdate": "అప్‌డేట్ రద్దు చేయండి",
+    "otaKeepNearby": "అప్‌డేట్ సమయంలో పరికరాన్ని ఆన్‌లో, దగ్గరగా ఉంచండి; యాప్‌ను మూసివేయవద్దు.",
+    "otaWifiConnecting": "Wi-Fiకి కనెక్ట్ అవుతోంది…",
+    "otaWifiConnected": "Wi-Fiకి కనెక్ట్ అయింది",
+    "otaWifiFailed": "Wi-Fiలో చేరలేకపోయాం. నెట్‌వర్క్ పేరు, పాస్‌వర్డ్ తనిఖీ చేయండి.",
+    "otaDownloadFailed": "ఫర్మ్‌వేర్ డౌన్‌లోడ్ విఫలమైంది. Wi-Fi కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "otaInstallFailed": "ఇన్‌స్టాలేషన్ విఫలమైంది. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది.",
+    "otaUpdatedMessage": "{deviceName} అప్‌డేట్ అయింది, అదే రీస్టార్ట్ అవుతుంది.",
+    "showPassword": "పాస్‌వర్డ్ చూపించు",
+    "hidePassword": "పాస్‌వర్డ్ దాచు",
+    "appNotFoundOrRemoved": "ఈ యాప్ ఇకపై అందుబాటులో లేదు",
+    "startupFailedTitle": "Omi ప్రారంభం కాలేదు",
+    "startupFailedMessage": "Omi ప్రారంభమవుతున్నప్పుడు ఏదో తప్పు జరిగింది. మీ కనెక్షన్‌ను తనిఖీ చేసి, ఆపై మళ్లీ ప్రయత్నించండి.",
+    "startupFailedConfigMessage": "Omi యొక్క ఈ బిల్డ్‌లో కాన్ఫిగరేషన్ సమస్య ఉంది. ఇది మీ పరికరం సమస్య కాదు. సపోర్ట్‌ను సంప్రదించి, దిగువ వివరాలను చేర్చండి.",
+    "discardRecordingTitle": "రికార్డింగ్‌ను విస్మరించాలా?",
+    "discardRecordingMessage": "మీ వాయిస్ నమూనా ఇంకా సేవ్ కాలేదు. మీరు ఇప్పుడు వెళితే, అది విస్మరించబడుతుంది.",
+    "keepRecording": "రికార్డింగ్ కొనసాగించు",
+    "view": "చూడండి",
+    "appDataAccessTitle": "{appName}కి యాక్సెస్ ఇవ్వాలా?",
+    "appDataAccessMessage": "{appName} మీ సంభాషణలు, జ్ఞాపకాలు మరియు రికార్డింగ్‌లను దాని డెవలపర్ సర్వర్‌లో అందుకుంటుంది. అక్కడ ఆ డేటాను ఎలా ఉపయోగిస్తారనే దానికి Omi బాధ్యత వహించదు.",
+    "appDisabledNamed": "{appName} నిలిపివేయబడింది",
+    "appRatingCount": "{count, plural, =1{1 రేటింగ్} other{{count} రేటింగ్‌లు}}",
+    "previewImageLabel": "స్క్రీన్‌షాట్ {index} / {total}",
+    "chatWithApp": "{appName}తో చాట్",
+    "appSettingsLabel": "{appName} సెట్టింగ్‌లు",
+    "appOptions": "యాప్ ఎంపికలు",
+    "cancelSubscriptionKeepAccessMessage": "ప్రస్తుత బిల్లింగ్ వ్యవధి ముగిసే వరకు మీ యాక్సెస్ కొనసాగుతుంది.",
+    "chatSendMessage": "సందేశం పంపండి",
+    "chatAddAttachment": "అటాచ్‌మెంట్ జోడించండి",
+    "removeAttachment": "అటాచ్‌మెంట్ తీసివేయండి",
+    "chatRemoveSelectedText": "కోట్ చేసిన టెక్స్ట్ తీసివేయండి",
+    "chatOfflineHint": "మీరు ఆఫ్‌లైన్‌లో ఉన్నారు. సందేశాలు పంపడానికి మళ్లీ కనెక్ట్ అవ్వండి.",
+    "chatReplyFailed": "Omi సమాధానం ఇవ్వలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "disableAppNamed": "{appName}ని నిలిపివేయండి",
+    "whatWentWrong": "ఏమి తప్పు జరిగింది?",
+    "selectAReason": "ఒక కారణాన్ని ఎంచుకోండి",
+    "submit": "సమర్పించండి",
+    "feedbackReasonTooVerbose": "చాలా పొడవుగా ఉంది",
+    "feedbackReasonIncorrect": "తప్పు లేదా కల్పితం",
+    "feedbackReasonNotHelpful": "ఉపయోగకరంగా లేదు లేదా సంబంధం లేదు",
+    "feedbackReasonIgnoredInstructions": "సూచనలను పాటించలేదు",
+    "additionalFeedbackOptional": "అదనపు అభిప్రాయం (ఐచ్ఛికం)",
+    "helpful": "ఉపయోగకరం",
+    "daySummaryForDate": "రోజు సారాంశం · {date}",
+    "chatStarterYesterday": "నిన్న నేను ఏమి చేశాను?",
+    "chatStarterDoDifferently": "ఈరోజు నేను ఏమి భిన్నంగా చేయగలను?",
+    "chatStarterTeachMe": "నాకు ఏదైనా కొత్తది నేర్పగలవా?",
+    "thinking": "ఆలోచిస్తోంది",
+    "couldNotLoadWhatsNew": "కొత్తవి లోడ్ కాలేదు",
+    "githubRepositoryUrl": "GitHub రిపోజిటరీ URL",
+    "githubRepositoryUrlHint": "మీ యాప్ సోర్స్ కోడ్ రిపోజిటరీ లింక్",
+    "triggerEvents": "ట్రిగర్ ఈవెంట్‌లు",
+    "noAppsInCategoryYet": "ఈ వర్గంలో ఇంకా యాప్‌లు లేవు",
+    "scopes": "స్కోప్‌లు",
+    "aiAppGeneratorBannerTitle": "ఒక్క ట్యాప్‌తో AI ద్వారా యాప్ తయారు చేయండి",
+    "refreshManifest": "మానిఫెస్ట్ రిఫ్రెష్ చేయండి",
+    "versionLabel": "వెర్షన్ {version}",
+    "appUsersCount": "{count}+ వినియోగదారులు",
+    "discovery": "ఆవిష్కరణ",
+    "chatBlockShowMore": "మరిన్ని చూపించు",
+    "chatBlockShowLess": "తక్కువ చూపించు",
+    "triggerEvent": "ట్రిగ్గర్ ఈవెంట్",
+    "webhookUrl": "వెబ్‌హుక్ URL",
+    "appHomeUrl": "యాప్ హోమ్ URL",
+    "authUrl": "ప్రమాణీకరణ URL",
+    "setupCompletedUrl": "సెటప్ పూర్తి URL",
+    "chatToolsManifestUrl": "చాట్ టూల్స్ మానిఫెస్ట్ URL",
+    "invalidWebhookUrlError": "దయచేసి చెల్లుబాటు అయ్యే వెబ్‌హుక్ URL నమోదు చేయండి",
+    "githubRepositoryUrlRequired": "GitHub రిపోజిటరీ URL అవసరం",
+    "removeScreenshot": "స్క్రీన్‌షాట్‌ను తీసివేయండి",
+    "addScreenshot": "స్క్రీన్‌షాట్‌ను జోడించండి",
+    "aiGenRegenerateIcon": "ఐకాన్‌ను మళ్లీ రూపొందించండి",
+    "categoryAppCount": "{count, plural, =1{1 యాప్} other{{count} యాప్‌లు}}",
+    "generateDescription": "వివరణను రూపొందించండి",
+    "selectImageFileTitle": "చిత్రం ఫైల్‌ను ఎంచుకోండి",
+    "selectThumbnailImageTitle": "థంబ్‌నెయిల్ చిత్రాన్ని ఎంచుకోండి",
+    "appIdNotFoundError": "అ్యాప్ ID కనుగొనబడలేదు",
+    "manifestRefreshedSuccess": "మానిఫెస్ట్ విజయవంతంగా రిఫ్రెష్ చేయబడింది",
+    "manifestRefreshFailed": "మానిఫెస్ట్‌ను రిఫ్రెష్ చేయడంలో విఫలమైంది",
+    "captureRecordingsSheetTitle": "ఈ సంభాషణ రికార్డింగ్‌లు",
+    "captureRecordingSeparate": "వేరు చేయి…",
+    "captureRecordingSeparateTitle": "ఈ రికార్డింగ్‌ను వేరు చేయాలా?",
+    "captureRecordingSeparateMessage": "{recording} ప్రత్యేక సంభాషణగా కనిపిస్తుంది, ఈ ఈవెంట్‌తో మళ్లీ సమూహం చేయబడదు.",
+    "captureRecordingSeparateConfirm": "వేరు చేయి",
+    "captureRecordingSeparateFailed": "వేరు చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "captureRecordingOpenFailed": "ఈ రికార్డింగ్‌ను తెరవలేకపోయాం.",
+    "captureRecordingViewing": "మీరు ఈ రికార్డింగ్‌ను చూస్తున్నారు",
+    "captureRecordedBy": "{devices} రికార్డ్ చేసింది",
+    "captureSourceDesktop": "డెస్క్‌టాప్",
+    "renameConversation": "పేరు మార్చు",
+    "captureRecordingsCount": "{count, plural, =1{1 రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
+    "captureSourcePendant": "పెండెంట్",
+    "conversationDeveloperTools": "సంభాషణల్లో డెవలపర్ సాధనాలు",
+    "conversationDeveloperToolsDescription": "సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు",
+    "participantsSummary": "{name} + {count, plural, =1{1 ఇతరులు} few{{count} ఇతరులు} many{{count} ఇతరులు} other{{count} ఇతరులు}}",
+    "recordingAndTranscription": "రికార్డింగ్ & ట్రాన్‌స్క్రిప్షన్",
+    "notificationsAndDisplay": "నోటిఫికేషన్‌లు & ప్రదర్శన",
+    "helpAndAbout": "సహాయం & గురించి",
+    "speakerTagPromptTitle": "గొంతులను గుర్తించడంలో Omi కి సహాయం చేయండి",
+    "speakerTagPromptIsThisYou": "ఇది మీరేనా?",
+    "speakerTagPromptIsThisPerson": "ఇది {name} నా?",
+    "speakerTagPromptWhoIsThis": "ఇది ఎవరు?",
+    "speakerTagPromptThatsMe": "ఇది నేనే",
+    "speakerTagPromptNotMe": "నేను కాదు",
+    "speakerTagPromptSomeoneNew": "కొత్త వ్యక్తి",
+    "speakerTagPromptDontKnow": "నాకు తెలియని వ్యక్తి",
+    "speakerTagPromptNotSure": "ఖచ్చితంగా తెలియదు",
+    "speakerTagPromptPlayClip": "క్లిప్ ప్లే చేయండి",
+    "speakerTagPromptProgress": "{current}/{total}",
+    "speakerTagPromptSaveVoicesTitle": "మీరు పేరు పెట్టిన వ్యక్తుల గొంతులను గుర్తుంచుకోండి",
+    "speakerTagPromptSaveVoicesBody": "తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది. మీరు దీన్ని ఎప్పుడైనా సెట్టింగ్‌లలో మార్చవచ్చు.",
+    "speakerTagPromptThanks": "ధన్యవాదాలు! Omi గొంతులను మరింత బాగా గుర్తిస్తుంది.",
+    "speakerTagPromptNameHint": "వారి పేరు",
+    "speakerTagPromptClipUnavailable": "ఈ క్లిప్‌ను ప్లే చేయలేకపోయాం",
+    "speakerTagPromptAnswerFailed": "సేవ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "voiceSettingsAskToTag": "గొంతులను ట్యాగ్ చేయమని నన్ను అడగండి",
+    "voiceSettingsAskToTagSubtitle": "అప్పుడప్పుడు, మీ ఇటీవలి సంభాషణల్లో ఎవరు మాట్లాడారో Omi అడుగుతుంది",
+    "voiceSettingsSaveOthersSubtitle": "మీరు ఎవరికైనా పేరు పెట్టినప్పుడు, తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది",
+    "leaveBlank": "ఖాళీగా ఉంచండి",
+    "mcpOAuthSetup": "claude.ai లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json కు జోడించండి",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
+    "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
+    "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",
+    "captureSourceCall": "కాల్",
+    "captureSourcePhoneMic": "ఫోన్ మైక్",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "కొనసాగించు",
+    "finish": "ముగించు",
+    "pendantPausedResumesWhenYouFinish": "పెండెంట్ పాజ్‌లో ఉంది · మీరు ముగించాక కొనసాగుతుంది",
+    "pendantIsListeningTitle": "మీ పెండెంట్ వింటోంది",
+    "oneSourceAtATime": "Omi ఒకేసారి ఒక మూలం నుండి మాత్రమే రికార్డ్ చేస్తుంది.",
+    "recordWithPhoneInstead": "బదులుగా ఫోన్‌తో రికార్డ్ చేయండి",
+    "pendantPausesUntilYouFinish": "మీరు ముగించే వరకు పెండెంట్ పాజ్‌లో ఉంటుంది",
+    "pendantPausesDuringCall": "కాల్ సమయంలో పెండెంట్ పాజ్‌లో ఉంటుంది",
+    "keepUsingPendant": "పెండెంట్‌నే ఉపయోగించండి",
+    "recordWith": "రికార్డ్ చేసే విధానం",
+    "moreWaysToRecord": "రికార్డ్ చేయడానికి మరిన్ని మార్గాలు",
+    "openCall": "కాల్‌ను తెరవండి",
+    "captureRecoveryBanner": "Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి",
+    "phoneRecordingBlockedByPendantBatch": "మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.",
+    "captureNotTranscribing": "ట్రాన్స్‌క్రిప్షన్ లేదు",
+    "captureAudioSavedTranscribesLater": "ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది",
+    "captureStillRecording": "ఇంకా రికార్డ్ అవుతోంది",
+    "captureMicInUseElsewhere": "మైక్‌ను వేరే యాప్ ఉపయోగిస్తోంది",
+    "captureMicInterruptedDetail": "ఒక కాల్ లేదా వేరే యాప్ మైక్రోఫోన్‌ను తీసుకుంది, కాబట్టి Omi ఇప్పుడు వినలేదు. మైక్రోఫోన్ ఖాళీ అయినప్పుడు Omi తనంతట తానే కొనసాగుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "captureCustomSttUnreachableDetail": "మీ కస్టమ్ స్పీచ్-టు-టెక్స్ట్ సేవను చేరుకోలేకపోతున్నాం. Omi ఆడియోను ఈ ఫోన్‌లో ఉంచి, సేవ తిరిగి వచ్చినప్పుడు పంపుతుంది. ఏదీ కోల్పోదు.",
+    "captureStarting": "ప్రారంభమవుతోంది…",
+    "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
+    "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
+    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
+    "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
+    "deviceOnboardingAllSetTitle": "అన్నీ సిద్ధంగా ఉన్నాయి",
+    "deviceOnboardingAllSetSubtitle": "సమీక్షించడానికి లేదా మార్చడానికి వరుసను నొక్కండి.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "మీరు బటన్‌తో అడిగినప్పుడు, Omi దాని సమాధానాన్ని బిగ్గరగా చదవగలదు.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "మీ చివరి సమాధానం వినండి",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "మీ చివరి సమాధానాన్ని ప్లే చేస్తోంది...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} ద్వారా",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "ఫోన్ స్పీకర్ ద్వారా",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "ప్రస్తుత ఆడియో అవుట్‌పుట్ ద్వారా",
+    "deviceOnboardingVoiceReplyOffDescription": "సమాధానాలు తెరపైనే ఉంటాయి. ఏమీ మాట్లాడలేదు.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "ప్రైవేట్. AirPods, Bluetooth లేదా వైర్డు హెడ్‌ఫోన్‌ల ద్వారా మాత్రమే మాట్లాడుతుంది.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "హెడ్‌ఫోన్‌లు కనెక్ట్ కానప్పుడు ఫోన్ స్పీకర్‌ని ఉపయోగిస్తుంది.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi మౌనంగా ఉంటుంది. సమాధానాలు ఇప్పటికీ యాప్‌లో కనిపిస్తాయి.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} కనెక్ట్ చేయబడింది. Omi ఇక్కడ మాట్లాడతారు.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "హెడ్‌ఫోన్‌లు కనెక్ట్ కాలేదు. మీరు కొన్నింటిని కనెక్ట్ చేసే వరకు Omi నిశ్శబ్దంగా ఉంటుంది.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} ద్వారా ఆడుతుంది.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ఫోన్ స్పీకర్ ద్వారా బిగ్గరగా ప్లే చేస్తుంది.",
+    "deviceOnboardingVoiceReplySettingsHint": "మీరు దీన్ని ఎప్పుడైనా {settings} › {voiceResponse}లో మార్చవచ్చు",
+    "deviceOnboardingAllSetReplayHint": "ఈ పర్యటనను ఎప్పుడైనా {settings} › {deviceSettings} › {deviceTutorial}లో మళ్లీ ప్లే చేయండి",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "నిమిషాలు",
+    "usageWords": "Words",
+    "usageTasks": "పనులు",
+    "usageMonth": "ఈ నెల",
+    "usageYear": "ఈ సంవత్సరం",
+    "usageAll": "అన్ని సమయం",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "రూపం",
+    "appearanceSystem": "సిస్టమ్",
+    "appearanceLight": "లైట్",
+    "appearanceDark": "డార్క్",
+    "chatDiscardRecording": "విస్మరించు",
+    "voiceQuestionNoSpeech": "వినిపించలేదు — మళ్లీ ప్రయత్నించండి",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "Give feedback",
+    "feedbackAllGood": "All good",
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "feedbackReasonSummaryOther": "Something else",
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "వ్యక్తులను వెతకండి",
+    "addQueryAsNewPerson": "\"{query}\" ను కొత్త వ్యక్తిగా జోడించండి",
+    "showAllPeople": "అన్ని ({count}) మందిని చూపించు",
+    "chatGreeting": "హాయ్ {name}, ఏదైనా అడగండి",
+    "activity": "కార్యకలాపం",
+    "places": "స్థలాలు",
+    "recaps": "సారాంశాలు",
+    "recent": "ఇటీవలివి",
+    "searchPartialFailure": "కొన్ని ఫలితాలను లోడ్ చేయలేకపోయాం",
+    "peopleSearchPlaceholder": "వ్యక్తులను వెతకండి",
+    "peopleNotHeardYet": "ఇంకా వినలేదు",
+    "peopleRecent": "ఇటీవలివి",
+    "deletePeopleMessage": "ఇది వారి వాయిస్ నమూనాలను తొలగిస్తుంది, దీన్ని రద్దు చేయలేరు. గత సంభాషణలలో వారి మాటలు పేరు లేని వక్తలుగా మారతాయి.",
+    "personTalkTime": "మాట్లాడిన సమయం",
+    "personLastHeard": "చివరిగా విన్నది",
+    "deletePeopleTitle": "{count, plural, =1{1 వ్యక్తిని తొలగించాలా?} other{{count} మంది వ్యక్తులను తొలగించాలా?}}",
+    "peopleFilterNeedsVoice": "వాయిస్ అవసరం",
+    "peopleCount": "{count, plural, =1{1 వ్యక్తి} other{{count} మంది}}",
+    "noMatchingPeople": "సరిపోలే వ్యక్తులు లేరు",
+    "deselectAll": "అన్నింటి ఎంపిక తీసివేయి",
+    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు",
+    "greetingMorning": "శుభోదయం",
+    "greetingAfternoon": "శుభ మధ్యాహ్నం",
+    "greetingEvening": "శుభ సాయంత్రం",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "మీరు ఏమి తెలుసుకోవాలనుకుంటున్నారు?",
+    "askSuggestDecide": "ఈరోజు నేను ఏమి నిర్ణయించాను?",
+    "askSuggestOwe": "ఇంకా ప్రజలకు నేను ఏమి చేయాలి?",
+    "askSuggestNotice": "Omi ఏమి గమనించింది?",
+    "pastChats": "గత చాట్‌లు",
+    "newChat": "కొత్త చాట్",
+    "startFresh": "కొత్తగా మొదలుపెట్టండి",
+    "noPastChats": "Omi తో మీ చాట్‌లు ఇక్కడ కనిపిస్తాయి.",
+    "deleteChatQuestion": "ఈ చాట్‌ను తొలగించాలా?",
+    "deleteChatMessage": "ఇది గత చాట్‌ల నుండి శాశ్వతంగా పోతుంది.",
+    "deleteChat": "చాట్ తొలగించండి",
+    "appsAskWith": "వీటితో Omi ని అడగండి",
+    "conversationsTodayCount": "{count, plural, =0{ఈరోజు సంభాషణలు లేవు.} =1{ఈరోజు 1 సంభాషణ.} other{ఈరోజు {count} సంభాషణలు.}}",
+    "meetingScreenshotsTitle": "స్క్రీన్‌పై ఏముంది",
+    "meetingScreenshotFallbackCaption": "ఈ సమావేశం నుండి స్క్రీన్‌షాట్",
+    "deleteMeetingScreenshotTitle": "స్క్రీన్‌షాట్‌ను తొలగించాలా?",
+    "deleteMeetingScreenshotMessage": "ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.",
+    "conversationSummaryFailed": "సారాంశం విఫలమైంది",
+    "reconnectionsRecent": "తిరిగి కనెక్షన్లు (గత 7 రోజులు)",
+    "failedConnections": "విఫలమైన కనెక్షన్లు",
+    "failedConnectionsRecent": "విఫలమైన కనెక్షన్లు (గత 7 రోజులు)",
+    "diagnosticsCountSincePairing": "జతచేసినప్పటినుండి {count}",
+    "peopleFilterLowConfidence": "తక్కువ నమ్మకం",
+    "peopleFilterPinned": "పిన్ చేసినవి",
+    "peoplePinnedCount": "{count, plural, =1{1 పిన్ చేసినది} other{{count} పిన్ చేసినవి}}",
+    "confidenceConfirmed": "నిర్ధారించబడింది",
+    "confidenceLikely": "బహుశా",
+    "confidenceUnverified": "ధృవీకరించబడలేదు",
+    "confidenceMeterLabel": "నమ్మకం: {level}",
+    "confidenceReasonLabeled": "{count, plural, =1{మీరు ఒకసారి లేబుల్ చేశారు} other{మీరు {count} సార్లు లేబుల్ చేశారు}}",
+    "confidenceReasonPicked": "{count, plural, =1{1 సూచనలో ఎంచుకున్నారు} other{{count} సూచనలలో ఎంచుకున్నారు}}",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{మీరు 1 ఆటోమేటిక్ లేబుల్‌ను నిర్ధారించారు} other{మీరు {count} ఆటోమేటిక్ లేబుల్‌లను నిర్ధారించారు}}",
+    "confidenceReasonAutoOnly": "ఆటోమేటిక్‌గా లేబుల్ చేయబడింది, ఇంకా నిర్ధారించలేదు",
+    "confidenceReasonNeverConfirmed": "ఎప్పుడూ నిర్ధారించలేదు",
+    "confidenceReasonCorrected": "మీరు దాని మ్యాచ్‌ను సరిచేశారు",
+    "confidenceReasonVoiceReady": "వాయిస్ సేవ్ చేయబడింది",
+    "confidenceReasonNeedsVoice": "ఇంకా వాయిస్ నమూనా లేదు",
+    "confidenceReasonNotHeard": "ఇంకా వినలేదు",
+    "confidenceSheetTitle": "నమ్మకం",
+    "confidenceSummaryConfirmed": "{name} వాయిస్‌ను Omi గుర్తిస్తుంది, మీరు దాన్ని నిర్ధారించారు.",
+    "confidenceSummaryLikely": "{name} వాయిస్‌ను Omi సాధారణంగా గుర్తిస్తుంది, కానీ మీరు కొన్నిసార్లు మాత్రమే నిర్ధారించారు.",
+    "confidenceSummaryUnverified": "మీరు ఇంకా {name}ని లేబుల్ చేయలేదు లేదా నిర్ధారించలేదు, కాబట్టి వారి వాయిస్ Omiకి తెలుసో లేదో ఖచ్చితంగా తెలియదు.",
+    "confidenceEvidenceHeader": "ఆధారాలు",
+    "evidenceManualLabels": "{count, plural, =1{1 సంభాషణలో మీరు లేబుల్ చేశారు} other{{count} సంభాషణలలో మీరు లేబుల్ చేశారు}}",
+    "evidenceCardConfirms": "{count, plural, =1{1 సూచనలో అవును} other{{count} సూచనలలో అవును}}",
+    "evidenceCardPicks": "{count, plural, =1{1 సూచనలో ఎంచుకున్నారు} other{{count} సూచనలలో ఎంచుకున్నారు}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{మీరు 1 ఆటోమేటిక్ లేబుల్‌ను నిర్ధారించారు} other{మీరు {count} ఆటోమేటిక్ లేబుల్‌లను నిర్ధారించారు}}",
+    "evidenceAutoCorrected": "{count, plural, =1{మీరు 1 ఆటోమేటిక్ లేబుల్‌ను వేరొకరికి మార్చారు} other{మీరు {count} ఆటోమేటిక్ లేబుల్‌లను వేరొకరికి మార్చారు}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{ఇంకా నిర్ధారించని 1 ఆటోమేటిక్ లేబుల్} other{ఇంకా నిర్ధారించని {count} ఆటోమేటిక్ లేబుల్‌లు}}",
+    "evidenceVoiceReady": "వాయిస్ నమూనా సిద్ధం",
+    "evidenceNoVoice": "ఇంకా వాయిస్ నమూనా లేదు",
+    "evidenceNotHeard": "ఇంకా ఏ సంభాషణలోనూ వినలేదు",
+    "evidenceNothing": "మీరు ఇంకా లేబుల్ చేయలేదు లేదా నిర్ధారించలేదు",
+    "effectCountsALot": "చాలా సహాయపడుతుంది",
+    "effectCounts": "సహాయపడుతుంది",
+    "effectCountsALittle": "కొంచెం సహాయపడుతుంది",
+    "effectBarelyCounts": "దాదాపు సహాయపడదు",
+    "effectCountsAgainst": "హాని చేస్తుంది",
+    "effectNeeded": "నిర్ధారించబడింది స్థాయికి అవసరం",
+    "confidenceToReachConfirmed": "నిర్ధారించబడింది స్థాయికి చేరడానికి",
+    "confidenceNextVoice": "{name} వాయిస్ నమూనా కూడా Omiకి కావాలి. ‘వాయిస్‌లను గుర్తుంచుకో’ ఆన్‌లో ఉండగా వారిని లేబుల్ చేయండి.",
+    "confidenceIsConfirmed": "{name} నిర్ధారించబడింది. మీరు ఇంకేమీ చేయాల్సిన అవసరం లేదు.",
+    "confidenceFootnote": "మీ లేబుల్‌లు మరియు నిర్ధారణలకే ఎక్కువ విలువ ఉంటుంది. ఆటోమేటిక్ లేబుల్‌లు మీరు నిర్ధారించే వరకు తక్కువ విలువ కలిగి ఉంటాయి.",
+    "personWhyConfidence": "ఎందుకు?",
+    "pinPersonTitle": "{name}ను పిన్ చేయి",
+    "pinAction": "పిన్ చేయి",
+    "unpinAction": "అన్‌పిన్ చేయి",
+    "personPinnedToast": "{name} పిన్ చేయబడింది",
+    "personUnpinnedToast": "{name} అన్‌పిన్ చేయబడింది",
+    "whyConfidenceMenu": "ఎందుకు {level}?",
+    "deletePersonNamedTitle": "{name}ను తొలగించాలా?",
+    "deletePinnedPersonMessage": "{name} పిన్ చేయబడ్డారు. వారి వాయిస్ నమూనాలు తీసివేయబడతాయి, Omi వారిని ఇక గుర్తించదు, గత ట్రాన్స్‌క్రిప్ట్‌లలో వారు పేరు లేని స్పీకర్‌గా కనిపిస్తారు. దీన్ని రద్దు చేయలేరు.",
+    "deleteNamedPerson": "{name}ను తొలగించు",
+    "selectPeople": "వ్యక్తులను ఎంచుకోండి",
+    "cleanUpEllipsis": "శుభ్రం చేయి…",
+    "cleanUpUnsureCount": "{count, plural, =1{Omiకి ఖచ్చితంగా తెలియని 1 వ్యక్తి} other{Omiకి ఖచ్చితంగా తెలియని {count} మంది వ్యక్తులు}}",
+    "cleanUpBannerBody": "ఎక్కువగా తప్పుగా విన్న పేర్లు. వాటిని సమీక్షించి, నిజం కానివాటిని తొలగించండి.",
+    "reviewAction": "సమీక్షించు",
+    "cleanUpTitle": "శుభ్రం చేయి",
+    "cleanUpLead": "{count, plural, =1{ఈ వ్యక్తి గురించి Omiకి ఖచ్చితంగా తెలియదు. ఉంచుకోవాలంటే టిక్ తీసివేయండి.} other{ఈ {count} మంది వ్యక్తుల గురించి Omiకి ఖచ్చితంగా తెలియదు. చాలావరకు ట్రాన్స్‌క్రిప్ట్‌లలో తప్పుగా విన్న పేర్లు. ఉంచుకోవాలనుకున్నవారికి టిక్ తీసివేయండి.}}",
+    "cleanUpPinnedNote": "పిన్ చేసిన వ్యక్తులు శుభ్రపరచడంలో ఎప్పుడూ చేరరు.",
+    "deletePeopleCountAction": "{count, plural, =1{1 వ్యక్తిని తొలగించు} other{{count} మంది వ్యక్తులను తొలగించు}}",
+    "peopleDeletedToast": "{count, plural, =1{1 వ్యక్తి తొలగించబడ్డారు} other{{count} మంది వ్యక్తులు తొలగించబడ్డారు}}",
+    "cleanUpNothingTitle": "శుభ్రం చేయడానికి ఏమీ లేదు",
+    "cleanUpNothingMessage": "ప్రస్తుతం ఎవరి గురించీ Omiకి సందేహం లేదు.",
+    "selectAllSkipsPinned": "అన్నీ ఎంచుకోండి పిన్ చేసిన వ్యక్తులను దాటవేస్తుంది. వారి పేజీ నుండి ఒక్కొక్కరిని తొలగించండి.",
+    "pinnedNotSelectable": "పిన్ చేయబడింది, ఎంచుకోలేరు",
+    "ignoredVoicesTitle": "విస్మరించిన వాయిస్‌లు",
+    "ignoredVoicesSubtitle": "టీవీ, పాడ్‌క్యాస్ట్‌లు మరియు మీరు వ్యక్తి కాదు అని గుర్తించిన ఇతర వాయిస్‌లు",
+    "ignoredVoicesEmpty": "విస్మరించిన వాయిస్‌లు లేవు",
+    "restoreAction": "పునరుద్ధరించు",
+    "voiceRestoredToast": "ఈ వాయిస్ గురించి Omi మళ్లీ అడగవచ్చు",
+    "speakerTagPromptSomeoneElse": "మరొకరు…",
+    "speakerTagPromptNotAPerson": "వ్యక్తి కాదు",
+    "speakerTagPromptNotSureAction": "తెలియదు",
+    "speakerTagPromptThatsMeAction": "అది నేనే",
+    "speakerTagPromptClosestVoices": "అత్యంత దగ్గరి వాయిస్‌లు",
+    "speakerTagPromptRecentPeople": "మీరు ఇటీవల మాట్లాడిన వ్యక్తులు",
+    "voiceMatchClose": "దగ్గరి మ్యాచ్",
+    "voiceMatchPossible": "సాధ్యమైన మ్యాచ్",
+    "voiceMatchWeak": "బలహీన మ్యాచ్",
+    "voiceMatchMeterLabel": "వాయిస్ మ్యాచ్: {level}",
+    "speakerTagPromptHintIdentify": "మీ సమాధానం Omi ఈ వాయిస్‌ను తదుపరిసారి గుర్తించడంలో సహాయపడుతుంది.",
+    "speakerTagPromptHintOwner": "మీ సమాధానం ప్లే చేసిన భాగాన్ని మాత్రమే గుర్తిస్తుంది.",
+    "speakerTagPromptSavedAs": "{name}గా సేవ్ చేయబడింది",
+    "speakerTagPromptSavedAsYou": "మీరుగా సేవ్ చేయబడింది",
+    "speakerTagPromptIgnoredNote": "ఈ వాయిస్ గురించి Omi మళ్లీ అడగదు",
+    "speakerTagPromptLabeledToast": "{name}గా లేబుల్ చేయబడింది",
+    "speakerTagPromptLabeledYouToast": "మీరుగా లేబుల్ చేయబడింది",
+    "speakerTagPromptNotAPersonToast": "వ్యక్తి కాదు అని గుర్తించబడింది",
+    "speakerTagPromptRejectedToast": "లేబుల్ తీసివేయబడింది",
+    "whoIsItTitle": "ఎవరు?",
+    "newPersonEllipsis": "కొత్త వ్యక్తి…",
+    "addNamedPersonAction": "“{name}”ను జోడించు",
+    "everyoneHeader": "అందరూ",
+    "speakerSuggestionChip": "{name}?",
+    "speakerSuggestionAppliesToSpeaker": "ఈ స్పీకర్ చెప్పిన ప్రతి పంక్తికి వర్తిస్తుంది",
+    "collapseAction": "కుదించు",
+    "speakerTagPromptNotMeAction": "నేను కాదు",
+    "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
+    "siriShortcutsSetupHint": "షార్ట్‌కట్స్ → Siri లో Omi ని ఆన్ చేయండి. “{askPhrase}” లేదా “{questionPhrase}” అని చెప్పి, ఆపై మీ ప్రశ్న అడగండి.",
+    "siriShortcutsSearchHint": " మీరు “{searchPhrase} for what I did today” అని కూడా చెప్పవచ్చు.",
+    "updateAvailableTitle": "అప్‌డేట్ అందుబాటులో ఉంది",
+    "updateAvailableMessage": "Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.",
+    "updateRequiredTitle": "అప్‌డేట్ అవసరం",
+    "updateRequiredMessage": "Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి.",
+    "exportingAllData": "మీ డేటా ఎగుమతి అవుతోంది… Omi ను తెరిచే ఉంచండి; పెద్ద ఖాతాలకు కొన్ని నిమిషాలు పట్టవచ్చు.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 వక్త} other{{count} వక్తలు}}",
+    "autoRemoveSyncedCopiesTitle": "సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు",
+    "autoRemoveSyncedCopiesDays": "సింక్ చేసిన కాపీలు {days} రోజుల తర్వాత తొలగించబడతాయి",
+    "autoRemoveSyncedCopiesDescription": "సింక్ అయిన {days} రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.",
+    "localCopiesSection": "స్థానిక కాపీలు",
+    "speakerLabelLinesLabeled": "{count, plural, =1{1 లైన్‌కు లేబుల్ వేయబడింది} other{{count} లైన్లకు లేబుల్ వేయబడింది}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{వాయిస్ నేర్చుకుంది} pending{వాయిస్‌ను నేర్చుకుంటోంది…} disabled{వాయిస్ సేవింగ్ ఆఫ్‌లో ఉంది} other{వాయిస్ ఇంకా నేర్చుకోలేదు}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{మునుపటి 1 సంభాషణలో కనిపించింది} other{మునుపటి {count} సంభాషణల్లో కనిపించింది}}",
+    "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
+    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
+    "findDeviceNoneTitle": "Omi ఏదీ కనుగొనబడలేదు",
+    "findDeviceNoneMessage": "దాన్ని ఆన్ చేసి, మీ ఫోన్ దగ్గర పట్టుకోండి.",
+    "startupFailedDetails": "వివరాలు",
+    "couldNotLoadApiKeys": "API కీలను లోడ్ చేయడం సాధ్యం కాలేదు.",
+    "speakerTagPromptNoAction": "లేదు…",
+    "diagnosticsRightNow": "ప్రస్తుతం",
+    "diagnosticsLast7Days": "గత 7 రోజులు",
+    "diagnosticsConnectedFor": "కనెక్ట్ అయిన సమయం",
+    "diagnosticsVerdictReconnects": "తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
+    "diagnosticsVerdictReconnectsDetail": "చిన్న అంతరాయాలు, ప్రతిసారీ సుమారు {duration}లో తిరిగి వస్తుంది",
+    "diagnosticsVerdictNoDrops": "ఈ వారం అంతరాయాలు లేవు",
+    "diagnosticsVerdictTrouble": "కనెక్ట్ అవ్వడంలో సమస్య",
+    "diagnosticsVerdictTroubleDetail": "గత 24 గంటల్లో విఫలమైన కనెక్షన్లు: {count}",
+    "diagnosticsDrops": "అంతరాయాలు",
+    "diagnosticsDropsPerHour": "గంటకు సుమారు {count}",
+    "diagnosticsLongestGap": "అతి పొడవైన విరామం",
+    "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
+    "diagnosticsLastDuration": "గత {duration}",
+    "chatReplyOffline": "కనెక్ట్ చేయలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyServerError": "మా వైపు ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyTimeout": "సమాధానం చాలా సమయం పట్టింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "chatReplyNotSignedIn": "మీరు సైన్ ఇన్ చేయలేదు. సైన్ ఇన్ చేసి మళ్లీ ప్రయత్నించండి.",
+    "chatAppsLoadFailed": "చాట్ యాప్‌లను లోడ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "assistantVoiceSettingsTitle": "వాయిస్",
+    "assistantVoice": "అసిస్టెంట్ వాయిస్",
+    "voiceSharedAcrossDevices": "మీ వాయిస్ ఎంపిక మొబైల్ మరియు డెస్క్‌టాప్‌లో షేర్ చేయబడుతుంది.",
+    "readChatRepliesAloud": "చాట్ సమాధానాలను గట్టిగా చదవండి",
+    "readChatRepliesAloudDescription": "\"వాయిస్ రెస్పాన్స్\" అనుమతించినప్పుడు మాత్రమే మాట్లాడుతుంది.",
+    "voicePreviewSample": "హాయ్, నేను Omiని. ఇది నా వాయిస్.",
+    "peopleStatsIncomplete": "లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.",
+    "previousDay": "మునుపటి రోజు",
+    "nextDay": "తదుపరి రోజు",
+    "noTasksOnDate": "{date} నాటికి పనులు లేవు",
+    "reprocessingConversationProgress": "సంభాషణను మళ్లీ ప్రాసెస్ చేస్తోంది…",
+    "conversationReprocessed": "సంభాషణ నవీకరించబడింది",
+    "loadingTranscript": "ట్రాన్స్‌క్రిప్ట్ లోడ్ అవుతోంది…",
+    "transcriptLoadFailed": "ట్రాన్స్‌క్రిప్ట్‌ను లోడ్ చేయలేకపోయాం.",
+    "processingConversationProgress": "సంభాషణను ప్రాసెస్ చేస్తోంది…",
+    "conversationProcessingFailedMessage": "ఈ సంభాషణను ప్రాసెస్ చేయలేకపోయాం.",
+    "waitForReprocessing": "మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి.",
+    "unnamedSpeakerLabel": "స్పీకర్",
+    "unresolvedSpeakersNotice": "ఈ సంభాషణలోని రికార్డింగ్‌ల మధ్య స్పీకర్ లేబుల్‌లు సరిపోలకపోవచ్చు.",
+    "unresolvedSpeakersTitle": "స్పీకర్ లేబుల్స్ గురించి",
+    "unresolvedSpeakersMessage": "రికార్డింగ్‌లలో ఇతర స్వరాలను Omi వేరుచేయలేకపోయింది. ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి స్పీకర్ లేబుల్‌ను నొక్కండి.",
+    "nameSpeakerTitle": "స్పీకర్‌కు పేరు పెట్టండి",
+    "playbackPreparingAudio": "ఆడియో సిద్ధమవుతోంది…",
+    "playbackBackToCurrent": "ప్రస్తుతానికి తిరిగి వెళ్లండి",
+    "playbackAudioUnavailable": "ఆడియో అందుబాటులో లేదు",
+    "playbackAudioLoadFailed": "ఆడియో లోడ్ చేయలేకపోయింది",
+    "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
+    "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
+    "forYou": "మీ కోసం",
+    "stopThese": "వీటిని ఆపండి",
+    "dismiss": "దాచు",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
+    "accountDeletionInProgressSignInAgain": "ఈ ఖాతా తొలగించబడుతోంది. మరో ఖాతాతో సైన్ ఇన్ చేయండి, లేదా కొన్ని నిమిషాలు వేచి ఉండి మళ్లీ ప్రయత్నించండి.",
+    "onboardingSetupTitle": "మీ Omi సెటప్ అవుతోంది",
+    "onboardingSetupSubtitle": "వ్యక్తిగతీకరించడానికి Omi కి కొంచెం సమయం ఇవ్వండి",
+    "onboardingSetupStepWorkspace": "మీ వర్క్‌స్పేస్ సిద్ధమవుతోంది",
+    "onboardingSetupStepLanguage": "మీ భాషకు అనుగుణంగా ట్రాన్స్‌క్రిప్షన్ ట్యూన్ అవుతోంది",
+    "onboardingSetupStepMemory": "మీ మెమరీ సెటప్ అవుతోంది",
+    "onboardingSetupStepDevices": "మీ పరికరాలు కనెక్ట్ అవుతున్నాయి",
+    "onboardingSetupStepPersonalize": "మీ అనుభవం వ్యక్తిగతీకరించబడుతోంది",
+    "onboardingRatingPromptTitle": "మీకు Omi నచ్చుతోందా?",
+    "onboardingRatingPromptYes": "అవును",
+    "onboardingRatingPromptNo": "కాదు",
+    "partialRecording": "పాక్షిక రికార్డింగ్",
+    "importTranscriptFiles": "ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు",
+    "importTranscriptFilesDescription": "SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి",
+    "importTooManyAttempts": "ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "importFileTooLarge": "ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.",
+    "importUnsupportedFileType": "ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.",
+    "reviewTitle": "సమీక్ష",
+    "reviewEntryTitle": "మీ కోసం ప్రశ్నలు",
+    "reviewRemaining": "{count} మిగిలాయి",
+    "reviewQuestionSpeaker": "ఇది ఎవరు చెప్పారు?",
+    "reviewQuestionSamePerson": "“{name}” అనే వ్యక్తి ఇతనేనా?",
+    "reviewQuestionSpelling": "ఇది ఎలా రాస్తారు?",
+    "reviewPlayClip": "క్లిప్ ప్లే చేయండి",
+    "reviewStopClip": "క్లిప్ ఆపండి",
+    "reviewOpenDetailsHint": "వివరాలను తెరుస్తుంది",
+    "reviewAnswerMe": "నేను",
+    "reviewAnswerOther": "ఇతర",
+    "reviewAddTask": "టాస్క్ జోడించండి",
+    "reviewAnswerFailed": "మీ సమాధానాన్ని సేవ్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "reviewAnswersConversations": "ఈ సమాధానం {count} సంభాషణలకు లేబుల్ ఇస్తుంది",
+    "reviewUnknownSpeaker": "తెలియని మాట్లాడేవారు",
+    "reviewNewPersonName": "వారి పేరు",
+    "reviewSomeoneElse": "వేరే వ్యక్తి…",
+    "reviewConfirm": "నిర్ధారించండి",
+    "reviewConfirmPerson": "{name} ను నిర్ధారించండి",
+    "reviewNotSure": "ఖచ్చితంగా తెలియదు",
+    "reviewOpenConversation": "సంభాషణ",
+    "reviewTaskField": "టాస్క్",
+    "reviewDue": "గడువు",
+    "reviewNoDate": "ఏదీ లేదు",
+    "reviewProject": "ప్రాజెక్ట్",
+    "reviewReasonAlreadyDone": "ఇప్పటికే పూర్తయింది",
+    "reviewReasonNotMine": "నాది కాదు",
+    "reviewReasonNotUseful": "ఉపయోగకరం కాదు",
+    "reviewYesMerge": "అవును, విలీనం చేయండి",
+    "reviewConversationCount": "సంభాషణలు: {count}",
+    "reviewSpellingCustom": "టైప్ చేయండి",
+    "reviewLoadFailed": "మీ ప్రశ్నలను లోడ్ చేయలేకపోయాం.",
+    "reviewCaughtUpTitle": "సమాధానం ఇవ్వడానికి ఏమీ లేదు",
+    "reviewCaughtUpBody": "Omi కి మీ అవసరం ఉన్నప్పుడే ఇక్కడ అడుగుతుంది.",
+    "reviewRecentChanges": "ఇటీవలి మార్పులు",
+    "reviewChangesIntro": "గత 30 రోజుల్లో Omi స్వయంగా మార్చినవి. తప్పుగా కనిపించిన వాటిని రద్దు చేయండి.",
+    "reviewChangeUndone": "రద్దు చేయబడింది. Omi దీన్ని స్వయంగా మళ్లీ చేయదు.",
+    "reviewChangeFailed": "ఈ మార్పును అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "reviewChangesLoadFailed": "ఇటీవలి మార్పులను లోడ్ చేయలేకపోయాం.",
+    "reviewNoChangesTitle": "ఇంకా మార్పులు లేవు",
+    "reviewNoChangesBody": "Omi మీ నోట్స్‌ను చక్కబెట్టినప్పుడు, మార్పులు ఇక్కడ కనిపిస్తాయి.",
+    "reviewShowMore": "మరిన్ని చూపండి",
+    "entityKeptCurrent": "Omi ద్వారా తాజాగా ఉంచబడింది",
+    "entityNotRight": "సరిగా లేదా?",
+    "entityCorrectionTitle": "ఏది సరిగా లేదు?",
+    "entityCorrectionHint": "ఏమి సరిచేయాలో Omi కి చెప్పండి",
+    "entityCorrectionSaved": "ధన్యవాదాలు. Omi దీన్ని సరిచేస్తుంది.",
+    "entityCorrectionFailed": "మీ సవరణను పంపలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "entityLoadFailed": "ఈ పేజీని లోడ్ చేయలేకపోయాం.",
+    "entityProject": "ప్రాజెక్ట్",
+    "entityProjects": "ప్రాజెక్ట్‌లు",
+    "entityDecisions": "నిర్ణయాలు",
+    "entityOpenTasks": "తెరిచి ఉన్న టాస్క్‌లు",
+    "entityOpenThreads": "తెరిచి ఉన్న అంశాలు",
+    "entityWaitingOn": "{name} కోసం వేచి ఉంది",
+    "entityDue": "గడువు {date}",
+    "entityWhatOmiKnows": "Omi కి తెలిసినవి",
+    "entityRecentConversations": "ఇటీవలి సంభాషణలు",
+    "tasksNoProject": "ప్రాజెక్ట్ లేదు",
+    "tasksGroupByProject": "ప్రాజెక్ట్ ప్రకారం సమూహపరచండి",
+    "tasksGroupByDate": "తేదీ ప్రకారం సమూహపరచండి",
+    "dreamReportTitle": "Dream నివేదిక",
+    "dreamReportShadowBanner": "ప్రివ్యూ మోడ్: Dream ఏమి మారుస్తుందో చూపిస్తుంది, కానీ మీ ఖాతాలో ఇంకా ఏమీ మారదు.",
+    "dreamReportLiveBanner": "Dream ఈ మార్పులను స్వయంగా వర్తింపజేస్తుంది. ఏదైనా మార్పును ఇటీవలి మార్పులు లో రద్దు చేయవచ్చు.",
+    "dreamReportRunNow": "ఇప్పుడే రన్ చేయండి",
+    "dreamReportRunLimit": "ఈరోజు మాన్యువల్ రన్‌లు మిగలలేదు",
+    "dreamReportRunInProgress": "ఒక పాస్ ఇప్పటికే నడుస్తోంది. ఒక నిమిషం తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "dreamReportRunFailed": "Dream రన్ చేయడం సాధ్యం కాలేదు. మళ్లీ ప్రయత్నించండి.",
+    "dreamReportIdle": "చూడడానికి ఇంకా కొత్తవి ఏమీ లేవు.",
+    "dreamReportLoadFailed": "Dream నివేదికను లోడ్ చేయడం సాధ్యం కాలేదు.",
+    "dreamReportEmptyTitle": "ఇంకా పాస్‌లు లేవు",
+    "dreamReportEmptyBody": "మీ ఖాతాలో ఏమి మారిందో Dream సుమారు గంటకు ఒకసారి చూస్తుంది.",
+    "dreamReportScheduled": "షెడ్యూల్ చేసినది",
+    "dreamReportManual": "మాన్యువల్",
+    "dreamReportFailed": "విఫలమైంది ({error})",
+    "dreamReportTimedOut": "సమయ పరిమితి వద్ద ఆగింది",
+    "dreamReportNothingFound": "సరిచేయడానికి ఏమీ లేదు",
+    "dreamReportStats": "{records} అంశాలు చదివింది · {tokens} టోకెన్లు",
+    "dreamReportWouldFix": "సరిచేసేది",
+    "dreamReportFixed": "సరిచేసింది",
+    "dreamReportWouldAsk": "మిమ్మల్ని అడిగేది",
+    "dreamReportWouldSuggestTasks": "పనులను సూచించేది",
+    "dreamReportLearnedWords": "నేర్చుకున్న పదాలు",
+    "dreamReportFeedback": "Omi బృందానికి నివేదించింది",
+    "dreamReportDeletedItem": "తొలగించిన అంశం",
+    "dreamReportPasses": "ఈరోజు {count}/{limit} పాస్‌లు",
+    "dreamReportQueued": "{count, plural, =0{వేచి ఉన్న మార్పులు లేవు} =1{1 మార్పు వేచి ఉంది} other{{count} మార్పులు వేచి ఉన్నాయి}}",
+    "dreamReportRunsLeft": "{count, plural, =1{ఈరోజు ఇంకా 1 మాన్యువల్ రన్ మిగిలింది} other{ఈరోజు ఇంకా {count} మాన్యువల్ రన్‌లు మిగిలాయి}}",
+    "dreamReportFound": "{fixes, plural, =1{1 సవరణ} other{{fixes} సవరణలు}} · {asks, plural, =1{1 సూచన} other{{asks} సూచనలు}}",
+    "dreamReportDropped": "{count, plural, =1{1 పాత మార్పు దాటవేయబడింది} other{{count} పాత మార్పులు దాటవేయబడ్డాయి}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది} other{గోప్యత కోసం {count} నివేదికలు ఆపివేయబడ్డాయి}}",
+    "speakerTagPromptExcerptSaved": "ఈ భాగానికి సమాధానం సేవ్ చేయబడింది.",
+    "pinPersonDescription": "పిన్ చేసిన వ్యక్తులు మీ వ్యక్తుల జాబితా పైభాగంలోనే ఉంటారు మరియు శుభ్రం చేయి ద్వారా తీసివేయబడరు.",
+    "chatAppsProblemFailed": "ఏదో తప్పు జరిగింది. మళ్లీ ప్రయత్నించండి.",
+    "chatAppsIsConnected": "{app} కనెక్ట్ అయింది",
+    "chatAppsRefreshFailed": "రిఫ్రెష్ చేయలేకపోయాం. చివరిగా చూసినదాన్ని చూపిస్తున్నాం.",
+    "chatAppsReadOnlyBanner": "చదవడానికి-మాత్రమే. Omiకి {app}లో సమాధానమివ్వండి.",
+    "chatAppsWaitlistConfirmed": "ధన్యవాదాలు. WhatsApp సిద్ధమైనప్పుడు ఇక్కడ కనిపిస్తుంది.",
+    "chatAppsUseTelegramForNow": "ప్రస్తుతానికి Telegram వాడండి",
+    "chatAppsCouldNotOpen": "{app} తెరవలేకపోయాం. అది ఇన్‌స్టాల్ అయిందో లేదో చూసి, మళ్లీ ప్రయత్నించండి.",
+    "chatAppsTryPromise": "నిన్న సామ్‌కు నేను ఏం మాట ఇచ్చాను?",
+    "chatAppsDoesSave": "జ్ఞాపకాలను సేవ్ చేసి, మీ టాస్క్‌లను నిర్వహిస్తుంది",
+    "chatAppsOnTheList": "జాబితాలో ఉన్నారు",
+    "chatAppsNoChatsTitle": "ఇంకా చాట్‌లు లేవు",
+    "chatAppsInChannel": "{app}లో",
+    "chatAppsConnectTelegramMessage": "Omi మీకు మాత్రమే ఉద్దేశించిన ప్రైవేట్ లింక్‌తో Telegram తెరుస్తుంది.",
+    "chatAppsOpenMessages": "సందేశాలు తెరవండి",
+    "chatAppsDisconnectTitle": "{app} డిస్‌కనెక్ట్ చేయాలా?",
+    "chatAppsPrivateMemoriesSubtitle": "ఆరోగ్యం, డబ్బు, మీరు ప్రైవేట్‌గా గుర్తించినవన్నీ చాట్ యాప్‌లకు దూరంగా ఉంటాయి.",
+    "chatAppsConnectIMessageMessage": "మీరు వాడాలనుకునే నంబర్ నుండి Omiకి ఒక మెసేజ్ పంపండి. అందులోని కోడ్ ఆ నంబర్‌ను మీ ఖాతాకు లింక్ చేస్తుంది.",
+    "chatAppsWhatsAppMessage": "Omiని WhatsAppకు తీసుకురావడానికి కృషి చేస్తున్నాం. సిద్ధమైనప్పుడు ఇక్కడ కనిపిస్తుంది.",
+    "chatAppsNoChatsMessage": "{app}లో Omiతో మీరు చేసే చాట్‌లు ఇక్కడ కనిపిస్తాయి.",
+    "chatAppsViewChats": "చాట్‌లు చూడండి",
+    "chatAppsDisconnectMessage": "Omi {app}లో సమాధానమివ్వడం ఆపి, దాని కోసం ఉంచిన చాట్ చరిత్రను తొలగిస్తుంది. {app}లో ఇప్పటికే ఉన్న మెసేజ్‌లు అక్కడే ఉంటాయి.",
+    "chatAppsReadOnlyFooter": "ఈ చాట్‌లు ఇక్కడ చదవడానికి-మాత్రమే. {app}లో సమాధానమివ్వండి.",
+    "chatAppsAddToContacts": "Omiని కాంటాక్ట్‌లకు జోడించండి",
+    "chatAppsProPerkContext": "ప్రతి యాప్‌లో Omi సందర్భాన్ని గుర్తుంచుకుంటుంది",
+    "chatAppsWhatsAppMeantime": "Telegram, iMessage ఈరోజే పనిచేస్తాయి, అవే జ్ఞాపకాలు, టాస్క్‌లతో.",
+    "chatAppsComingLater": "తర్వాత వస్తుంది",
+    "chatAppsProblemRateLimited": "చాలా ప్రయత్నాలు. ఒక నిమిషం ఆగి మళ్లీ ప్రయత్నించండి.",
+    "chatAppsMessage": "సందేశం",
+    "chatAppsOpenApp": "{app} తెరవండి",
+    "chatAppsTelegramSubtitle": "రెండు ట్యాప్‌లలో సెటప్ చేయండి",
+    "chatAppsLoadFailedTitle": "చాట్ యాప్‌లను లోడ్ చేయలేకపోయాం",
+    "chatAppsInsights": "Omi నుండి అంతర్దృష్టులు",
+    "chatAppsShowInAppOff": "ఆఫ్: మీరు వాటిని {app}లో మాత్రమే చూస్తారు.",
+    "chatAppsProPerkText": "Telegram, iMessage నుండి Omiకి మెసేజ్ చేయండి",
+    "chatAppsVoiceNotesSubtitle": "వాయిస్ నోట్ పంపండి, Omi సమాధానమిస్తుంది.",
+    "chatAppsPartOfPro": "చాట్ యాప్‌లు Proలో భాగం",
+    "chatAppsMessagesApp": "సందేశాలు",
+    "chatAppsTelegramOtherDevice": "మరో పరికరంలో Telegram ఉందా?",
+    "chatAppsHeroMessage": "మీ రోజు గురించి అడగండి, జ్ఞాపకాలను సేవ్ చేయండి, టాస్క్‌లను Telegram లేదా iMessage నుండే నిర్వహించండి. మీ చాట్‌లు మీరు వాడే యాప్‌లోనే ఉంటాయి, మీరు మాట్లాడినది Omi అన్నిచోట్లా గుర్తుంచుకుంటుంది.",
+    "chatAppsTryRemind": "ఆదివారం అమ్మకు కాల్ చేయమని గుర్తు చేయి",
+    "chatAppsChannelsTitle": "చాట్ యాప్‌లు",
+    "chatAppsDoesAnswer": "మీ సంభాషణలు, జ్ఞాపకాల గురించిన ప్రశ్నలకు సమాధానమిస్తుంది",
+    "chatAppsChannelChats": "{app} చాట్‌లు",
+    "chatAppsIncludedWithPro": "OMI PROలో భాగం",
+    "chatAppsLink": "లింక్",
+    "chatAppsNeverMessagesOthers": "మీ తరఫున ఇతరులకు ఎప్పుడూ మెసేజ్ చేయదు",
+    "chatAppsNotConnectedTitle": "కనెక్ట్ కాలేదు",
+    "chatAppsTelegramPrivacyNote": "Omiతో మీ చాట్‌లను Telegram కూడా నిల్వ చేస్తుంది. Omi మీకు మాత్రమే సమాధానమిస్తుంది, ఇతరులకు ఎప్పుడూ కాదు, మీరు ఎప్పుడైనా డిస్‌కనెక్ట్ చేయవచ్చు.",
+    "chatAppsProblemOffline": "మీరు ఆఫ్‌లైన్‌లో ఉన్నారు. కనెక్షన్ చెక్ చేసి మళ్లీ ప్రయత్నించండి.",
+    "chatAppsIMessageSubtitle": "మీ ఫోన్ నంబర్ నుండి Omiకి మెసేజ్ చేయండి",
+    "chatAppsPrivateMemories": "ప్రైవేట్ జ్ఞాపకాలను యాప్‌లోనే ఉంచండి",
+    "chatAppsConnectTelegramTitle": "Telegram కనెక్ట్ చేయండి",
+    "chatAppsInsightsSubtitle": "Omi ఇక్కడ మీకు సారాంశం లేదా అంతర్దృష్టి పంపనివ్వండి.",
+    "chatAppsTelegramWaiting": "మీరు Telegramలో ప్రారంభించు నొక్కడం కోసం వేచి ఉంది…",
+    "chatAppsEntrySubtitle": "మీరు ప్రతిరోజూ వాడే యాప్‌లలోనే Omiతో మాట్లాడండి.",
+    "chatAppsConnectedAs": "{handle}గా కనెక్ట్ అయింది",
+    "chatAppsProPerkSave": "చాట్ నుండే జ్ఞాపకాలను సేవ్ చేసి టాస్క్‌లను నిర్వహించండి",
+    "chatAppsConnectIMessageTitle": "కనెక్ట్ చేయడానికి Omiకి మెసేజ్ చేయండి",
+    "chatAppsWaitingMessage": "సందేశాలులో మెసేజ్ పంపండి. Omiకి అందగానే ఈ స్క్రీన్ అప్‌డేట్ అవుతుంది.",
+    "chatAppsShowInApp": "ఈ చాట్‌లను Omi యాప్‌లో చూపించు",
+    "chatAppsCodeExpiredMessage": "కొత్త కోడ్ తీసుకుని సందేశాలు నుండి పంపండి.",
+    "chatAppsNoMessages": "మెసేజ్‌లు లేవు",
+    "chatAppsHeroTitle": "మీరు ఇప్పటికే చాట్ చేసే చోటే Omiతో చాట్ చేయండి",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage మరియు మరిన్ని",
+    "chatAppsCodeExpiresIn": "కోడ్ గడువు {time}లో ముగుస్తుంది",
+    "chatAppsNotConnectedMessage": "ఈ చాట్ యాప్ డిస్‌కనెక్ట్ చేయబడింది.",
+    "chatAppsRepliesOnlyNote": "Omi మీకు మాత్రమే సమాధానమిస్తుంది. అది ఎప్పుడూ ముందుగా మెసేజ్ చేయదు.",
+    "chatAppsDisconnectFooter": "డిస్‌కనెక్ట్ చేస్తే {app} కోసం Omi ఉంచే చరిత్ర తొలగించబడుతుంది.",
+    "chatAppsReplyThereAnytime": "ఎప్పుడైనా {app}లో Omiకి మెసేజ్ చేయండి.",
+    "chatAppsTryAsking": "ఇలా అడిగి చూడండి",
+    "chatAppsTelegramStepReturn": "ఇక్కడికి తిరిగి రండి. అది పనిచేసిందని మేము నిర్ధారిస్తాం.",
+    "chatAppsDoesFiles": "ఫైల్స్, ఫోటోలు, వాయిస్ నోట్స్ పంపుతుంది, అందుకుంటుంది",
+    "chatAppsTryWeek": "నా వారాన్ని మూడు లైన్లలో సారాంశం చెప్పు",
+    "chatAppsChannelFooter": "మీ {app} చాట్‌లు {app}లోనే ఉంటాయి. యాప్‌లో, మీ ఇతర చాట్ యాప్‌లలో మీరు మాట్లాడినది Omiకి ఇప్పటికీ తెలుసు.",
+    "chatAppsWhatsAppTitle": "WhatsApp త్వరలో వస్తోంది",
+    "chatAppsCodeExpiredTitle": "ఈ కోడ్ గడువు ముగిసింది",
+    "chatAppsProblemUnavailable": "మీ ఖాతాకు చాట్ యాప్‌లు ఇంకా అందుబాటులో లేవు.",
+    "chatAppsWhatOmiDoes": "చాట్ యాప్‌లలో Omi ఏం చేస్తుంది",
+    "chatAppsVoiceNotes": "వాయిస్ నోట్స్",
+    "chatAppsNotAvailableYet": "ఇంకా అందుబాటులో లేదు",
+    "chatAppsOpenMessagesAgain": "సందేశాలు మళ్లీ తెరవండి",
+    "chatAppsConnectedOn": "{date} న కనెక్ట్ అయింది",
+    "chatAppsWaitingTitle": "మీ మెసేజ్ కోసం వేచి ఉంది",
+    "chatAppsEntryTitle": "Omiతో చాట్ చేయండి",
+    "chatAppsTelegramStepOpen": "కింద ఉన్న Telegram తెరవండి నొక్కండి",
+    "chatAppsShowInAppOn": "ఆన్: అవి Omi యాప్‌లో చదవడానికి-మాత్రమే చాట్‌లుగా కనిపిస్తాయి.",
+    "chatAppsDisconnectChannel": "{app} డిస్‌కనెక్ట్ చేయండి",
+    "chatAppsTelegramStepStart": "Omiతో మీ చాట్‌లో ప్రారంభించు నొక్కండి",
+    "chatAppsLocked": "Omi Pro అవసరం",
+    "chatAppsIMessageBody": "హాయ్ Omi, లింక్ కోడ్ {code}",
+    "chatAppsChatIn": "{app}లో చాట్",
+    "chatAppsContactsApp": "కాంటాక్ట్‌లు",
+    "chatAppsCodeNote": "కోడ్ ఒక్కసారి మాత్రమే పనిచేస్తుంది, 10 నిమిషాల్లో గడువు ముగుస్తుంది.",
+    "chatAppsMoreComing": "మరిన్ని యాప్‌లు వస్తున్నాయి.",
+    "chatAppsInTheMeantime": "ఈలోగా",
+    "chatAppsGetNewCode": "కొత్త కోడ్ పొందండి",
+    "chatAppsNotifyMe": "నాకు తెలియజేయండి",
+    "chatAppsPrefilled": "ముందే నింపబడింది",
+    "chatAppsTextThisTo": "తెరుచుకోలేదా? దీన్ని {address}కు పంపండి",
+    "chatAppsLinkExpired": "ఆ లింక్ గడువు ముగిసింది. కొత్తది కోసం Telegram తెరవండి నొక్కండి.",
+    "chatAppsIMessageTo": "గ్రహీత: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "“{task}”ని పూర్తయినట్లు గుర్తించాలా?",
+    "reviewProposalRetireTask": "“{task}” పనిని తీసివేయాలా?",
+    "reviewProposalMergePeople": "“{name}” మరియు “{other}” ఒకే వ్యక్తా?",
+    "reviewProposalMergeMemories": "రెండు నకిలీ జ్ఞాపకాలను విలీనం చేయాలా?",
+    "reviewProposalMemory": "ఈ జ్ఞాపకాన్ని నవీకరించాలా?",
+    "reviewProposalEntitySummary": "“{name}” సారాంశాన్ని నవీకరించాలా?",
+    "reviewProposalGeneric": "ఈ సూచించిన సవరణను వర్తింపజేయాలా?",
+    "reviewProposalApply": "వర్తింపజేయి",
+    "reviewProposalSuggested": "సూచించినది",
+    "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు."
 }

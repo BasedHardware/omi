@@ -10,14 +10,14 @@ GetMemoriesResult _failedFetch() =>
     const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
 
 Memory _memory() => Memory(
-      id: 'mem-1',
-      uid: 'memories-load-failure-user',
-      content: 'A real memory',
-      category: MemoryCategory.manual,
-      createdAt: DateTime(2026, 8, 17),
-      updatedAt: DateTime(2026, 8, 17),
-      visibility: MemoryVisibility.private,
-    );
+  id: 'mem-1',
+  uid: 'memories-load-failure-user',
+  content: 'A real memory',
+  category: MemoryCategory.manual,
+  createdAt: DateTime(2026, 8, 17),
+  updatedAt: DateTime(2026, 8, 17),
+  visibility: MemoryVisibility.private,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +60,59 @@ void main() {
 
     expect(provider.loadFailed, isTrue);
     expect(provider.showLoadError, isFalse, reason: 'stale memories must still be shown');
+    expect(provider.memories.map((item) => item.id), [memory.id]);
+  });
+
+  test('a truncated empty page is a load error, not an empty memories list', () async {
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true, truncated: true),
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+
+    expect(provider.loadFailed, isTrue);
+    expect(provider.showLoadError, isTrue);
+    expect(provider.memories, isEmpty);
+    expect(provider.loading, isFalse);
+  });
+
+  test('a truncated empty refresh keeps previously loaded memories', () async {
+    var truncateEmpty = false;
+    final memory = _memory();
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        if (truncateEmpty) return const GetMemoriesResult([], true, truncated: true);
+        return GetMemoriesResult([memory], true);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    expect(provider.memories.map((item) => item.id), [memory.id]);
+
+    truncateEmpty = true;
+    await provider.loadMemories();
+
+    expect(provider.loadFailed, isTrue);
+    expect(provider.showLoadError, isFalse, reason: 'stale memories must still be shown');
+    expect(provider.showPartialLoadError, isTrue);
+    expect(provider.memories.map((item) => item.id), [memory.id]);
+  });
+
+  test('a truncated page that already has rows stops without marking the load failed', () async {
+    final memory = _memory();
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([memory], true, truncated: true),
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+
+    expect(provider.loadFailed, isFalse);
+    expect(provider.showLoadError, isFalse);
     expect(provider.memories.map((item) => item.id), [memory.id]);
   });
 

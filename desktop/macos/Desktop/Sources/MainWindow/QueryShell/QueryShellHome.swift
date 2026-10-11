@@ -75,6 +75,7 @@ struct QueryShellHome: View {
   @State private var recentScreenFrames: [RecentScreenFrameRow] = []
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
+  @State private var showClearConfirmation = false
   /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
   /// the send now, so re-reading the bar would retry an empty string.
   @State private var sendLedger = QueryShellSendLedger()
@@ -172,9 +173,13 @@ struct QueryShellHome: View {
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
       ChatSwitchPerfLog.mark("QueryShellHome.appear")
+      QueryShellComposerAutomation.publish(mode)
       takePendingDraftIfAny()
       refreshRecentScreenFrames()
       claimCaret()
+    }
+    .onChange(of: searchText) { _, _ in
+      QueryShellComposerAutomation.publish(mode)
     }
     // A prefilled draft (first-real-app card, daily-summary follow-up) lands in the composer,
     // focused and unsent. This is the app's only chat destination, so it is the only consumer.
@@ -206,14 +211,29 @@ struct QueryShellHome: View {
       )
       .fixedSize()
     }
-    .alert("Upgrade Required", isPresented: $chatProvider.showOmiThresholdAlert) {
-      Button("Upgrade to Omi Pro") {
-        chatProvider.showOmiThresholdAlert = false
-        if let url = URL(string: "https://omi.me/pricing") { NSWorkspace.shared.open(url) }
-      }
-      Button("Later", role: .cancel) { chatProvider.showOmiThresholdAlert = false }
-    } message: {
-      Text("Upgrade to Omi Pro for $199/month to continue chatting.")
+    // The plan limit sends the reader to the plans the app actually sells, in Settings → Plan and
+    // Usage, rather than naming a price and a plan the Settings page does not offer.
+    .shellConfirmation(
+      isPresented: $chatProvider.showOmiThresholdAlert,
+      title: "Chat Limit Reached",
+      message: "You've used this plan's chat allowance. Upgrade your plan to keep chatting.",
+      confirmTitle: "See Plans",
+      isDestructive: false
+    ) {
+      NotificationCenter.default.post(
+        name: .navigateToSidebarItem, object: nil,
+        userInfo: [
+          "rawValue": SidebarNavItem.settings.rawValue,
+          "settingsSection": SettingsContentView.SettingsSection.planUsage.rawValue,
+        ])
+    }
+    .shellConfirmation(
+      isPresented: $showClearConfirmation,
+      title: "Clear Chat?",
+      message: "This removes every message in this chat. It can't be undone.",
+      confirmTitle: "Clear Chat"
+    ) {
+      clearTranscript()
     }
     // `home_open_chat` / `home_ask` / `home_attach` / `home_close_panel`. They were written against
     // the legacy hub and have been inert since Home became this surface — the bridge answered "ok"
@@ -371,9 +391,9 @@ struct QueryShellHome: View {
   /// Settings gear that is already present on every page.
   private var chatMenu: some View {
     Menu {
-      Button(didCopyTranscript ? "Copied" : "Copy conversation", action: copyTranscript)
+      Button(didCopyTranscript ? "Copied" : "Copy Chat", action: copyTranscript)
         .disabled(!menu.canCopy)
-      Button("Clear conversation", role: .destructive, action: clearTranscript)
+      Button("Clear Chat…", role: .destructive) { showClearConfirmation = true }
         .disabled(!menu.canClear)
     } label: {
       QueryPanelChipLabel(
@@ -386,19 +406,18 @@ struct QueryShellHome: View {
     // Same override and same reason as `Filter ›`: a `Menu` label inherits the shell's `.tint`,
     // which on this surface is the accent that belongs to `⌘⏎ Ask` alone.
     .tint(Ink.primary)
-    .help("Conversation actions")
-    .accessibilityLabel("Conversation actions")
+    .help("Chat actions")
+    .accessibilityLabel("Chat actions")
     .accessibilityIdentifier("query-shell-chat-menu")
   }
 
   private func copyTranscript() {
     let text = HomeChatTranscript.plainText(chatProvider.messages)
     guard !text.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
+    guard OmiClipboard.copy(text) else { return }
     AnalyticsManager.shared.shareAction(category: "main_chat_conversation_copy")
     didCopyTranscript = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { didCopyTranscript = false }
+    DispatchQueue.main.asyncAfter(deadline: .now() + OmiFeedbackTiming.confirmation) { didCopyTranscript = false }
   }
 
   /// Clearing empties the one transcript; the page stays a chat, ready for the next question.
@@ -548,6 +567,19 @@ struct QueryShellHome: View {
   }
 
   private func takePendingDraftIfAny() {
+    if let request = MainChatNavigationRequestStore.shared.consumeAutoSendRequest() {
+      searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      Task { @MainActor in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        let answer = await chatProvider.sendMessage(request.question)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        if answer == nil && chatProvider.draftText.isEmpty {
+          chatProvider.draftText = request.question
+          claimCaret()
+        }
+      }
+      return
+    }
     guard let draft = MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: chatProvider.draftText) else {
       return
     }

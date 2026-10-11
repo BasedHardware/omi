@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-value-preencoded-before-client-reencodes",
+  "violated_contract": "A value handed to an HTTP client's automatic param/body encoder must be raw. Manually percent-encoding it first, then passing it through the client's own encoder, encodes reserved characters like \"+\" a second time and changes what the receiving server parses.",
+  "canonical_prevention": "Build request values unencoded and let exactly one layer -- the HTTP client's params/body encoder -- perform encoding. Prove it with a test that constructs the real request object the code path sends and asserts the final wire-encoded string, not the pre-client intermediate value.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-arxiv-app/main.py",
+    "plugins/omi-arxiv-app/test_main.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/omi-arxiv-app/main.py",
+    "plugins/**/main.py"
+  ],
+  "status": "open"
+}

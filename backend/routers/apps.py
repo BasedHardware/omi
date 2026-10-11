@@ -6,11 +6,11 @@ from html import escape
 from datetime import datetime, timezone
 
 import httpx
-from typing import List, Optional
+from typing import List, Mapping, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query, Request
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -23,7 +23,12 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import (
+    UnsafeWebhookURLError,
+    get_pinned_delivery_client,
+    get_webhook_semaphore,
+    safe_request_targets,
+)
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -124,6 +129,7 @@ from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
@@ -149,6 +155,15 @@ from utils.social import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
+
+def _safe_app_from_dict(app: Optional[dict]) -> Optional[App]:
+    if not isinstance(app, dict):
+        return None
+    try:
+        return App(**app)
+    except (ValidationError, TypeError):
+        return None
 
 
 class AppSelectOption(PydanticBaseModel):
@@ -413,6 +428,12 @@ def _write_file(path: str, data: bytes):
         f.write(data)
 
 
+def _set_instructions_url_flag(external_integration: dict) -> None:
+    if path := (external_integration.get('setup_instructions_file_path') or '').strip():
+        external_integration['setup_instructions_file_path'] = path
+        external_integration['is_instructions_url'] = path.startswith('http')
+
+
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
     """Fetch and process chat tools manifest, updating and returning app_dict.
 
@@ -643,15 +664,23 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
-def _matches_search_text(app: App, query: str) -> bool:
-    """Whether `app` matches a lowercased search query.
+def _raw_app_matches_search_text(app: Mapping[str, object], query: str) -> bool:
+    """Whether an unhydrated app record matches a lowercased search query.
 
     Name *or* description — the contract the `q` parameter documents, and the same fields the
     clients' offline fallback ranks over (desktop `appRanking.ts`). Matching the name alone made
     the remote endpoint strictly narrower than that fallback: an app found offline by a word in
     its description returned "No apps found" once the endpoint answered.
+
+    This runs before install/review enrichment and Pydantic construction so a selective query pays
+    those costs only for its matches. Type guards preserve the poison-record contract: malformed
+    legacy fields cannot crash search and will still be rejected by `App` if another field matches.
     """
-    return query in app.name.lower() or query in (app.description or '').lower()
+    name = app.get('name')
+    description = app.get('description')
+    return (isinstance(name, str) and query in name.lower()) or (
+        isinstance(description, str) and query in description.lower()
+    )
 
 
 def _name_match_tier(app: App, query: str) -> int:
@@ -687,6 +716,8 @@ def search_apps(
     Returns a flat list of apps matching the search and filter criteria.
     """
 
+    search_query = q.strip().lower() if q and q.strip() else None
+
     enabled_app_ids = None
     if installed_apps:
         enabled_app_ids = list(get_enabled_apps(uid))
@@ -710,6 +741,13 @@ def search_apps(
     if skipped_no_id:
         logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
     apps_data = valid_apps_data
+
+    # The catalog read is shared and cached, but installs/reviews are separate Redis MGETs and
+    # App construction validates every record. Apply the query to the cheap cached projection
+    # first so each keystroke enriches only records it can return, without changing substring
+    # matching or ranking semantics.
+    if search_query:
+        apps_data = [app for app in apps_data if _raw_app_matches_search_text(app, search_query)]
 
     app_ids = [app['id'] for app in apps_data]
     apps_installs = get_apps_installs_count(app_ids)
@@ -738,13 +776,14 @@ def search_apps(
                 [err['loc'][0] for err in e.errors() if err.get('loc')],
             )
 
-    # Always exclude persona type apps from results
-    filtered_apps = [app for app in apps if not app.is_a_persona()]
-
-    # Apply text search filter
-    if q and q.strip():
-        search_query = q.strip().lower()
-        filtered_apps = [app for app in filtered_apps if _matches_search_text(app, search_query)]
+    # Persona apps are hidden from browse/search — they are private chat identities, not catalog
+    # listings. The one exception is the installed-apps read: the mobile chat picker loads the
+    # user's installed apps from this endpoint, and a persona the user already enabled must
+    # reappear there after restart/refresh or the picker silently loses it.
+    if installed_apps:
+        filtered_apps = apps
+    else:
+        filtered_apps = [app for app in apps if not app.is_a_persona()]
 
     # Apply rating filter
     if rating is not None:
@@ -763,8 +802,7 @@ def search_apps(
         filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
     else:
         # sort by installs when searching, otherwise by name
-        if q and q.strip():
-            search_query = q.strip().lower()
+        if search_query:
             # Name matches rank above description-only matches before popularity: results are
             # paginated, so an exact-name app must not be pushed off page 1 by a more-installed
             # app that only mentions the query in its description.
@@ -839,14 +877,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         # Trigger on
         if external_integration.get('triggers_on'):
             normalize_required_webhook_url(external_integration)
-            if external_integration.get('setup_instructions_file_path'):
-                external_integration['setup_instructions_file_path'] = external_integration[
-                    'setup_instructions_file_path'
-                ].strip()
-                if external_integration['setup_instructions_file_path'].startswith('http'):
-                    external_integration['is_instructions_url'] = True
-                else:
-                    external_integration['is_instructions_url'] = False
+            _set_instructions_url_flag(external_integration)
 
         # Actions
         if actions := external_integration.get('actions'):
@@ -866,13 +897,13 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         app = AppCreate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Build app dict
     app_dict = app.model_dump(exclude_unset=True)
@@ -926,7 +957,7 @@ async def create_persona(
     try:
         app_create = AppCreate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     await run_blocking(db_executor, add_app_to_db, app_create.model_dump(exclude_unset=True))
 
@@ -987,7 +1018,7 @@ async def update_persona(
     try:
         update_app = AppUpdate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
@@ -1002,7 +1033,7 @@ async def update_persona(
 def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     app = get_persona_by_uid(uid)
     # print(app)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='Persona not found')
     if app.uid != uid:
@@ -1024,11 +1055,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
-        # Return existing persona
-        return persona
+        safe_persona = _safe_app_from_dict(persona)
+        if safe_persona is not None:
+            return safe_persona
+        logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
     # Create a new persona for the user
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
@@ -1060,7 +1093,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     try:
         persona_create = AppCreate.model_validate(persona_data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Save username
     await run_blocking(db_executor, save_username, persona_data['username'], uid)
@@ -1091,16 +1124,23 @@ def update_app(
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
+    # Ownership was checked on the path id; a body `id` must not retarget the write to another app.
+    data['id'] = app_id
     data['updated_at'] = datetime.now(timezone.utc)
 
-    # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
+        _set_instructions_url_flag(data['external_integration'])
+
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        if field in data and data[field] is None:
+            del data[field]
 
     try:
         update_app = AppUpdate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Build update dict
     update_dict = update_app.model_dump(exclude_unset=True)
@@ -1121,11 +1161,11 @@ def update_app(
 
     # payment link
     upsert_app_payment_link(
-        data.get('id'),
+        app_id,
         data.get('is_paid', False),
         data.get('price'),
         data.get('payment_plan'),
-        data.get('uid'),
+        uid,
         previous_price=app.get("price", 0),
     )
 
@@ -1183,7 +1223,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
         ext_int_update['chat_messages_enabled'] = False
         ext_int_update['chat_messages_target'] = 'app'
         ext_int_update['chat_messages_notify'] = False
-    update_dict['external_integration'] = ext_int_update
+    update_dict.update({f'external_integration.{key}': value for key, value in ext_int_update.items()})
 
     update_app_in_db(update_dict)
 
@@ -1212,7 +1252,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id_with_reviews(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if not app.approved and app.uid != uid:
@@ -1260,7 +1300,7 @@ def get_app_categories():
 @router.post('/v1/apps/review', tags=['v1'], response_model=AppMutationResponse)
 def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1270,14 +1310,17 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
+    old_review = get_specific_user_review(app_id, uid) or {}
     review_data = {
         'score': data.score,
         'review': data.review or '',
         'username': data.username or '',
-        'response': data.response or '',
+        'response': old_review.get('response', ''),
         'rated_at': datetime.now(timezone.utc).isoformat(),
         'uid': uid,
     }
+    if old_review.get('responded_at'):
+        review_data['responded_at'] = old_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
@@ -1296,7 +1339,7 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'], response_model=AppMutationResponse)
 def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1317,6 +1360,8 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
         'response': old_review.get('response', ''),
         'uid': uid,
     }
+    if old_review.get('responded_at'):
+        review_data['responded_at'] = old_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
@@ -1335,7 +1380,7 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
 @router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'], response_model=AppMutationResponse)
 def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1381,7 +1426,7 @@ def app_reviews(app_id: str):
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.uid != uid:
@@ -1542,7 +1587,7 @@ async def generate_sample_prompts_endpoint(
     import json
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
 1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
@@ -1597,7 +1642,7 @@ async def generate_app_endpoint(
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -1625,9 +1670,11 @@ async def generate_app_endpoint(
                 'memory_prompt': generated_app.memory_prompt,
             },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating app: {e}")
-        raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
+        raise HTTPException(status_code=500, detail='Failed to generate app')
 
 
 @router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
@@ -1644,7 +1691,7 @@ async def generate_app_icon_endpoint(
     import base64
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     app_name = data.name.strip()
     app_description = data.description.strip()
@@ -1665,9 +1712,11 @@ async def generate_app_icon_endpoint(
         icon_base64 = base64.b64encode(icon_bytes).decode('utf-8')
 
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating icon: {e}")
-        raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
+        raise HTTPException(status_code=500, detail='Failed to generate icon')
 
 
 # ******************************************************
@@ -1894,8 +1943,11 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 client_info = await register_oauth_client(
                     oauth_meta['registration_endpoint'], redirect_uri, scopes=oauth_meta.get('scopes_supported')
                 )
+            except HTTPException:
+                raise
             except Exception as e:
-                raise HTTPException(status_code=502, detail=f'OAuth client registration failed: {str(e)}')
+                logger.error(f"OAuth client registration failed: {e}")
+                raise HTTPException(status_code=502, detail='OAuth client registration failed')
         else:
             raise HTTPException(
                 status_code=422,
@@ -1957,8 +2009,11 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         # No OAuth — discover tools directly
         try:
             tools = await discover_mcp_tools(server_url)
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f'Failed to discover MCP tools: {str(e)}')
+            logger.error(f"Failed to discover MCP tools: {e}")
+            raise HTTPException(status_code=502, detail='Failed to discover MCP tools')
 
         if not tools:
             raise HTTPException(status_code=422, detail='No tools found on the MCP server')
@@ -2031,7 +2086,11 @@ async def mcp_oauth_callback(code: str, state: str):
             code_verifier=oauth_tokens.get('code_verifier'),
         )
     except Exception as e:
-        return HTMLResponse(f'<html><body><h1>Token exchange failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+        logger.error(f"Token exchange failed: {e}")
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2043,7 +2102,11 @@ async def mcp_oauth_callback(code: str, state: str):
     try:
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
-        return HTMLResponse(f'<html><body><h1>Tool discovery failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+        logger.error(f"Tool discovery failed: {e}")
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2134,8 +2197,11 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
             return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
         raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f'Failed to discover tools: {str(e)}')
+        logger.error(f"Failed to discover tools: {e}")
+        raise HTTPException(status_code=502, detail='Failed to discover tools')
 
     update_dict = {
         'id': app_id,
@@ -2185,48 +2251,136 @@ def _disabled_app_install_detail(app: App, uid: str) -> str:
 
 
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
+        logger.warning('app_install_failure class=missing_app')
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
+        logger.warning('app_install_failure class=disabled')
         raise HTTPException(status_code=400, detail=_disabled_app_install_detail(app, uid))
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
+            logger.warning('app_install_failure class=private_access')
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if app.works_externally() and app.external_integration.setup_completed_url:
-        client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
-        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not _setup_completed_from_response(res):
-            raise HTTPException(status_code=400, detail='App setup is not completed')
-
     # Check payment status
     if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+        logger.warning('app_install_failure class=payment_required')
+        raise HTTPException(
+            status_code=403,
+            detail='This app requires a paid subscription. Complete the purchase on the app page, then try again.',
+        )
+    if app.works_externally():
+        if app.external_integration is None:
+            logger.warning('app_install_failure class=setup_configuration')
+            raise HTTPException(
+                status_code=422,
+                detail='This app is missing its integration setup configuration. Contact its developer.',
+            )
+        if app.external_integration.setup_completed_url:
+            client = get_pinned_delivery_client()
+            setup_url = app.external_integration.setup_completed_url
+            # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
+            # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
+            # IP while presenting the original Host/SNI, so a DNS record swapped between check and
+            # connect (SSRF / DNS rebinding) cannot redirect this probe at an internal service.
+            # Pinned URLs run on the non-pooling client: a pooled keep-alive connection keyed by
+            # the resolved IP could be reused for another setup hostname resolving to the same IP
+            # and skip that hostname's TLS certificate verification.
+            try:
+                pinned_targets = await run_blocking(db_executor, safe_request_targets, setup_url)
+            except UnsafeWebhookURLError:
+                logger.warning('app_install_failure class=setup_configuration')
+                raise HTTPException(
+                    status_code=422,
+                    detail='This app has an invalid setup endpoint. Contact its developer.',
+                )
+            res = None
+            for pinned_url, pin_kwargs in pinned_targets:
+                separator = '&' if '?' in pinned_url else '?'
+                try:
+                    async with get_webhook_semaphore():
+                        res = await client.get(
+                            f'{pinned_url}{separator}uid={uid}',
+                            headers=pin_kwargs['headers'],
+                            extensions=pin_kwargs['extensions'],
+                            follow_redirects=False,
+                        )
+                    break
+                except (UnsafeWebhookURLError, httpx.InvalidURL):
+                    # InvalidURL: a malformed developer URL that survived pinning (e.g. illegal
+                    # characters in the path) must not 500 — it is an app misconfiguration,
+                    # and no resolved address can fix the path. UnsafeWebhookURLError from the
+                    # request stack keeps the same invalid-configuration mapping.
+                    logger.warning('app_install_failure class=setup_configuration')
+                    raise HTTPException(
+                        status_code=422,
+                        detail='This app has an invalid setup endpoint. Contact its developer.',
+                    )
+                except httpx.RequestError as exc:
+                    # Multi-A / dual-stack hostnames: try every safe resolved address
+                    # before reporting the setup service unavailable, matching
+                    # HTTPX's normal address fallback that pinning replaced.
+                    logger.info(
+                        f'app setup probe: pinned address unreachable reason={type(exc).__name__}; '
+                        'trying next resolved address'
+                    )
+                    res = None
+                    continue
+            if res is None:
+                logger.warning('app_install_failure class=setup_unavailable')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if res.status_code != 200:
+                logger.warning(f'app_install_failure class=setup_unavailable status={res.status_code}')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if not _setup_completed_from_response(res):
+                logger.warning('app_install_failure class=setup_incomplete')
+                integration = app.external_integration
+                has_setup_ui = bool(
+                    integration and (integration.auth_steps or integration.setup_instructions_file_path)
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        'App setup is not completed. Open the app setup instructions and connect the '
+                        'required account, then try again.'
+                        if has_setup_ui
+                        else 'App setup is not completed. Finish the setup on the developer side, then try again.'
+                    ),
+                )
 
-    await run_blocking(db_executor, enable_app, uid, app_id)
+    newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
     if (
-        (app.private is None or not app.private)
+        newly_enabled
+        and (app.private is None or not app.private)
         and (app.uid is None or app.uid != uid)
         and not await run_blocking(db_executor, is_tester, uid)
     ):
         await run_blocking(db_executor, increase_app_installs_count, app_id)
+    record_product_event('app_enabled', request=request, op='enable')
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/disable', response_model=AppMutationResponse)
-def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
     if is_app_enabled(uid, app_id):
         disable_app(uid, app_id)
         app = get_available_app_by_id(app_id, uid)
         if app:
-            app = App(**app)
-            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
+            app = _safe_app_from_dict(app)
+            is_public = (app.private is None or not app.private) if app else False
+            if app and is_public and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 decrease_app_installs_count(app_id)
+        record_product_event('app_enabled', request=request, op='disable')
         return {'status': 'ok'}
 
     raise HTTPException(status_code=404, detail='App not found')
@@ -2428,7 +2582,10 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
     if app.get('uid') != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to delete API keys for this app')
 
-    delete_api_key_db(app_id, key_id)
+    if not delete_api_key_db(app_id, key_id):
+        # The client shows "API key revoked successfully" for any 2xx, so a delete that
+        # removed nothing must not be reported as a confirmed revocation.
+        raise HTTPException(status_code=404, detail='API key not found')
 
     return {'status': 'ok', 'message': 'API key deleted'}
 

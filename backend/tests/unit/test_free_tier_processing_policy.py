@@ -72,6 +72,24 @@ def policy():
         yield load_module_fresh('utils.free_tier_processing_policy', _POLICY_PATH)
 
 
+@pytest.fixture(autouse=True)
+def _quiet_remote_kill_switch(monkeypatch):
+    """Hermetic remote kill switch for admitted-cohort assertions.
+
+    Without this, ``free_tier_local_processing_enabled(UID)`` on an admitted
+    cohort consults the real ``free_tier_cohort._kill_switch_state``: a
+    ``POSTHOG_*_API_KEY`` in the ambient environment pays a real provider
+    call (and a 30 s process-wide backoff without one), and a remotely
+    ENABLED kill switch would flip these ``is True`` assertions to False.
+    The seam is the one the module documents for tests.
+    """
+    from utils import free_tier_cohort as _cohort
+    from utils.jit_rollout import TriState
+
+    monkeypatch.setattr(_cohort, '_kill_switch_state', lambda _uid: TriState.UNKNOWN)
+    yield
+
+
 def _decision(
     *,
     allowed: bool,
@@ -470,14 +488,31 @@ def test_structure_feature_is_configured_and_not_on_the_free_allowlist(policy) -
 # --- 5. rollout helper reads the module constant; env parse is true-only -----------------------
 
 
-# red-proof: snapshot the flag at import (`return True`) so monkeypatching the constant is ignored
+# red-proof: snapshot the flag at import (`return True`) so monkeypatching the constant is ignored;
+# red-proof: drop the cohort consult (`return FREE_TIER_LOCAL_PROCESSING`) and the flag lights everyone
 def test_free_tier_local_processing_enabled_reads_module_constant_and_is_monkeypatchable(monkeypatch, policy) -> None:
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', f'uid:{UID}')
     monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', True)
-    assert policy.free_tier_local_processing_enabled() is True
+    assert policy.free_tier_local_processing_enabled(UID) is True
     monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', False)
-    assert policy.free_tier_local_processing_enabled() is False
-    monkeypatch.setattr(policy, 'free_tier_local_processing_enabled', lambda: True)
+    assert policy.free_tier_local_processing_enabled(UID) is False
+    monkeypatch.setattr(policy, 'free_tier_local_processing_enabled', lambda uid=None: True)
     assert policy.free_tier_local_processing_enabled() is True
+
+
+def test_flag_is_necessary_never_sufficient(monkeypatch, policy) -> None:
+    """A lit flag admits only the configured cohort; no uid or no cohort admits nobody."""
+    monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', True)
+    monkeypatch.delenv('FREE_TIER_LOCAL_PROCESSING_COHORT', raising=False)
+    assert policy.free_tier_local_processing_enabled(UID) is False
+    assert policy.free_tier_local_processing_enabled() is False
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', f'uid:{UID}')
+    assert policy.free_tier_local_processing_enabled(UID) is True
+    assert policy.free_tier_local_processing_enabled('someone-else') is False
+    # The coordinator's no-uid call is fail-closed even for a configured cohort.
+    assert policy.free_tier_local_processing_enabled() is False
+    monkeypatch.setenv('FREE_TIER_EMERGENCY_STOP', 'true')
+    assert policy.free_tier_local_processing_enabled(UID) is False
 
 
 def _load_policy_with_env(value: str | None) -> ModuleType:
@@ -517,12 +552,20 @@ def _load_policy_with_env(value: str | None) -> ModuleType:
 )
 def test_env_parse_accepts_only_true_case_insensitive(value, expected) -> None:
     previous = os.environ.get('FREE_TIER_LOCAL_PROCESSING')
+    previous_cohort = os.environ.get('FREE_TIER_LOCAL_PROCESSING_COHORT')
+    os.environ['FREE_TIER_LOCAL_PROCESSING_COHORT'] = f'uid:{UID}'
     try:
         mod = _load_policy_with_env(value)
         assert mod.FREE_TIER_LOCAL_PROCESSING is expected
-        assert mod.free_tier_local_processing_enabled() is expected
+        assert mod.free_tier_local_processing_enabled(UID) is expected
+        # A lit flag never answers a uid-less caller.
+        assert mod.free_tier_local_processing_enabled() is False
     finally:
         if previous is None:
             os.environ.pop('FREE_TIER_LOCAL_PROCESSING', None)
         else:
             os.environ['FREE_TIER_LOCAL_PROCESSING'] = previous
+        if previous_cohort is None:
+            os.environ.pop('FREE_TIER_LOCAL_PROCESSING_COHORT', None)
+        else:
+            os.environ['FREE_TIER_LOCAL_PROCESSING_COHORT'] = previous_cohort

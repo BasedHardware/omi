@@ -76,6 +76,7 @@ enum AgentClient {
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
     let modelsUsed: [String]
+    let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
     let jitCostStatus: String?
@@ -97,6 +98,7 @@ enum AgentClient {
       cacheReadTokens = result.cacheReadTokens
       cacheWriteTokens = result.cacheWriteTokens
       modelsUsed = result.modelsUsed
+      providerTargets = result.providerTargets
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
       jitCostStatus = result.jitCostStatus
@@ -638,8 +640,6 @@ enum AgentClient {
     harnessMode: String = "piMono",
     mode: String? = nil,
     cwd: String? = nil,
-    jitBudget: JITProactivityAgentBudget? = nil,
-    jitSourceProjection: JITProactivitySourceProjection? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },
     onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
@@ -654,30 +654,26 @@ enum AgentClient {
       let authorization = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
     else { throw BridgeError.authMissing }
-    if jitSourceProjection != nil,
-      !AgentRuntimeProcess.hasPrivateJITQAStateDirectory(requireDatabase: false)
-    {
-      throw BridgeError.agentError("JIT QA source capture requires owner-only runtime state")
-    }
     let bridge = AgentClient.makeBridge(harnessMode: harnessMode)
     try await bridge.start(authorizationSnapshot: authorization)
     do {
       // SQLite may create WAL/SHM sidecars during startup. Recheck after the
       // daemon has opened its owner-scoped database and before sending any
       // source prompt bytes.
-      if jitSourceProjection != nil,
-        !AgentRuntimeProcess.hasPrivateJITQAStateDirectory()
-      {
-        throw BridgeError.agentError("JIT QA source capture requires owner-only runtime state")
-      }
 
       guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
       }
-      let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
+      let persistedChatBridgeMode =
+        UserDefaults.standard.string(forKey: .chatBridgeMode)
+        ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
-        modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+        modelProfile: model
+          ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
+            harnessMode,
+            persistedChatBridgeMode: persistedChatBridgeMode
+          ),
         workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )
       let session = try await bridge.resolveSurfaceSession(
@@ -731,10 +727,6 @@ enum AgentClient {
         surface: surface,
         mode: mode,
         expectedContext: snapshot.freshness,
-        jitBudget: jitBudget,
-        jitCostEvidenceProjection: jitSourceProjection.map {
-          RuntimeJSONPayloadBox($0.wireDictionary)
-        },
         authorizationSnapshot: authorization,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,

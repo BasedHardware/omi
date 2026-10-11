@@ -139,6 +139,94 @@ import XCTest
       XCTAssertEqual(update.status, .failed)
     }
 
+    // MARK: - I1c: answer-text completion separates "fragment" from "delivery cut"
+
+    func testAnswerTextCompletionTravelsInAssistantRowMetadata() throws {
+      // 2026-09-09 incident: a barge-in after the provider finished cut only
+      // spoken delivery, but the `.failed` row was indistinguishable from a
+      // mid-stream fragment — so later context re-answered the thread. The
+      // row must state the answer text completed.
+      let message = ChatMessage(
+        id: "turn-4", text: "The complete answer.", createdAt: Date(), sender: .ai)
+      let write = message.journalWrite(
+        origin: "realtime_voice",
+        status: .failed,
+        continuityKey: "voice:abc",
+        messageSource: "realtime_voice",
+        terminalReason: VoiceTurnTerminalReason.interruptedByBargeIn.rawValue,
+        answerTextCompleted: true)
+
+      let metadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any])
+      XCTAssertEqual(metadata["terminalReason"] as? String, "interrupted_by_barge_in")
+      XCTAssertEqual(metadata["answerTextCompleted"] as? Bool, true)
+    }
+
+    func testAnswerTextCompletionStaysAbsentForFragments() throws {
+      // Absent means "fragment or legacy row": the renderer's stricter
+      // cut-off guidance applies. The key must not appear with a false value.
+      let message = ChatMessage(
+        id: "turn-5", text: "Cut off mid-", createdAt: Date(), sender: .ai)
+      let write = message.journalWrite(
+        origin: "realtime_voice",
+        status: .failed,
+        continuityKey: "voice:abc",
+        messageSource: "realtime_voice",
+        terminalReason: VoiceTurnTerminalReason.interruptedByBargeIn.rawValue)
+
+      let metadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(write.metadataJSON.utf8)) as? [String: Any])
+      XCTAssertNil(metadata["answerTextCompleted"])
+    }
+
+    func testJournalUpdateCarriesAnswerTextCompletionOnTheStreamingPath() throws {
+      // The barge-in rows from the incident were finalized through the
+      // streaming path (metadata = terminalReason only), so the flag must
+      // ride the same update.
+      let message = ChatMessage(
+        id: "turn-6", text: "The complete answer.", createdAt: Date(), sender: .ai)
+      let update = message.journalUpdate(
+        status: .failed,
+        terminalReason: VoiceTurnTerminalReason.interruptedByBargeIn.rawValue,
+        answerTextCompleted: true)
+
+      let metadataJSON = try XCTUnwrap(update.metadataJSON)
+      let metadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(metadataJSON.utf8)) as? [String: Any])
+      XCTAssertEqual(metadata["terminalReason"] as? String, "interrupted_by_barge_in")
+      XCTAssertEqual(metadata["answerTextCompleted"] as? Bool, true)
+
+      let fragment = ChatMessage(
+        id: "turn-7", text: "Cut off mid-", createdAt: Date(), sender: .ai)
+      let fragmentUpdate = fragment.journalUpdate(
+        status: .failed,
+        terminalReason: VoiceTurnTerminalReason.interruptedByBargeIn.rawValue)
+      let fragmentMetadataJSON = try XCTUnwrap(fragmentUpdate.metadataJSON)
+      let fragmentMetadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(fragmentMetadataJSON.utf8)) as? [String: Any])
+      XCTAssertNil(fragmentMetadata["answerTextCompleted"])
+    }
+
+    func testSealedTerminalRevisionKeepsAnswerTextCompletion() throws {
+      // A sealed row exists only when the funnel journaled at
+      // provider-response-finish: the downgraded row keeps stating the answer
+      // text completed (#12743 revision).
+      let revision = KernelJournalTurnUpdate.sealedTerminalRevision(
+        turnId: "turn-8", terminalReason: "answer_not_delivered", answerTextCompleted: true)
+      let revisionMetadataJSON = try XCTUnwrap(revision.metadataJSON)
+      let metadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(revisionMetadataJSON.utf8)) as? [String: Any])
+      XCTAssertEqual(metadata["terminalReason"] as? String, "answer_not_delivered")
+      XCTAssertEqual(metadata["answerTextCompleted"] as? Bool, true)
+
+      let legacy = KernelJournalTurnUpdate.sealedTerminalRevision(
+        turnId: "turn-9", terminalReason: "playback_failed")
+      let legacyMetadataJSON = try XCTUnwrap(legacy.metadataJSON)
+      let legacyMetadata = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(legacyMetadataJSON.utf8)) as? [String: Any])
+      XCTAssertNil(legacyMetadata["answerTextCompleted"])
+    }
+
     // MARK: - I2: a failed tool result reaches the model as a failure
 
     func testFailedBackendToolProducesTheEnvelopeTheRelayTreatsAsFailure() throws {

@@ -191,6 +191,7 @@ final class DeferredConfigurationRecovery: @unchecked Sendable {
 final class StreamingPCMPlayer: @unchecked Sendable {
   private let engine = AVAudioEngine()
   private let player = AVAudioPlayerNode()
+  private let timePitch: AVAudioUnitTimePitch?
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
@@ -211,12 +212,22 @@ final class StreamingPCMPlayer: @unchecked Sendable {
   var onPlaybackProgress: ((StreamingPCMPlaybackProgress) -> Void)?
   var onPlaybackIdle: ((Int) -> Void)?
 
-  init(sampleRate: Double = 24000) {
+  init(sampleRate: Double = 24000, playbackRate: Float = 1) {
     // Float32 mono at the source rate; the mixer resamples to the device rate.
     format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
+    if playbackRate == 1 {
+      timePitch = nil
+    } else {
+      let unit = AVAudioUnitTimePitch()
+      unit.rate = min(2, max(0.5, playbackRate))
+      timePitch = unit
+    }
     engine.attach(player)
-    engine.connect(player, to: engine.mainMixerNode, format: format)
+    if let timePitch {
+      engine.attach(timePitch)
+    }
+    connectPlaybackGraph()
     configureRenderCapacity()
     // Output-level tap for the notch speaking animation. Tapping the mixer
     // (not enqueue-time RMS) keeps the visual in sync with what is audibly
@@ -248,16 +259,25 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     }
   }
 
+  /// XCTest has no live CoreAudio I/O cycle. The opt-in localhost timing
+  /// harness uses AVAudioEngine's supported offline mode so it can exercise
+  /// decode, scheduling, and player start without changing production output.
+  func enableManualRenderingForTesting() throws {
+    try engine.enableManualRenderingMode(
+      .offline,
+      format: format,
+      maximumFrameCount: StreamingPCMRenderCapacity.minimumFrames)
+  }
+
   deinit {
     if let observer = configObserver {
       NotificationCenter.default.removeObserver(observer)
     }
   }
 
-  /// Ensure the engine + player are actually running before scheduling. Checking
-  /// the real `isRunning`/`isPlaying` state (not a one-shot flag) is what makes
-  /// playback survive past the first turn: AVAudioEngine auto-suspends when idle
-  /// after a reply finishes, so later turns must restart it.
+  /// Ensure the engine is running before scheduling. The player node starts only
+  /// after a buffer is queued: starting an empty node can wait indefinitely for
+  /// a first I/O cycle on newer macOS audio stacks.
   private func ensureRunning() -> Bool {
     if !engine.isRunning {
       engine.prepare()
@@ -271,6 +291,12 @@ final class StreamingPCMPlayer: @unchecked Sendable {
         return false
       }
     }
+    return engine.isRunning
+  }
+
+  /// AVAudioEngine auto-suspends when idle after a reply finishes, so later
+  /// turns must restart the player after first putting work on its queue.
+  private func startPlayerIfNeeded() -> Bool {
     if !player.isPlaying {
       player.play()
     }
@@ -284,19 +310,36 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     player.stop()
     engine.stop()
     engine.disconnectNodeOutput(player)
-    engine.connect(player, to: engine.mainMixerNode, format: format)
+    if let timePitch {
+      engine.disconnectNodeOutput(timePitch)
+    }
+    connectPlaybackGraph()
     configureRenderCapacity()
-    _ = ensureRunning()
+    guard ensureRunning() else { return }
     for buffer in buffersToReplay {
       schedule(buffer)
+    }
+    if !buffersToReplay.isEmpty {
+      _ = startPlayerIfNeeded()
     }
   }
 
   private func configureRenderCapacity() {
+    let processingUnits = [player.auAudioUnit, timePitch?.auAudioUnit, engine.mainMixerNode.auAudioUnit]
+      .compactMap { $0 }
     renderCapacities = StreamingPCMRenderCapacity.configure(
-      units: [player.auAudioUnit, engine.mainMixerNode.auAudioUnit])
+      units: processingUnits)
     if renderCapacities.contains(where: { $0 < StreamingPCMRenderCapacity.minimumFrames }) {
       log("StreamingPCMPlayer: render capacity remained below 4096 frames: \(renderCapacities)")
+    }
+  }
+
+  private func connectPlaybackGraph() {
+    if let timePitch {
+      engine.connect(player, to: timePitch, format: format)
+      engine.connect(timePitch, to: engine.mainMixerNode, format: nil)
+    } else {
+      engine.connect(player, to: engine.mainMixerNode, format: format)
     }
   }
 
@@ -318,7 +361,22 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     }
     guard ensureRunning() else { return false }
     schedule(buffer)
-    return true
+    return startPlayerIfNeeded()
+  }
+
+  /// Enqueues already-decoded Float32 mono PCM at the configured sample rate.
+  /// This is used by progressive HTTP TTS after its incremental MP3 decoder;
+  /// realtime callers continue to use the PCM16 `Data` overload above.
+  @discardableResult
+  func enqueue(_ buffer: AVAudioPCMBuffer) -> Bool {
+    guard buffer.frameLength > 0,
+      buffer.format.commonFormat == .pcmFormatFloat32,
+      buffer.format.channelCount == format.channelCount,
+      buffer.format.sampleRate == format.sampleRate
+    else { return false }
+    guard ensureRunning() else { return false }
+    schedule(buffer)
+    return startPlayerIfNeeded()
   }
 
   private func schedule(_ buffer: AVAudioPCMBuffer) {

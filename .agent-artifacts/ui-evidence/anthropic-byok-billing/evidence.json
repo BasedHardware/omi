@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-reported-billing-copy.png",
+      "platform": "desktop-macos",
+      "description": "Original user-supplied Discord feedback screenshot quoting the misleading managed-lane billing message. This is the reported before state, not a live account reproduction or after screenshot.",
+      "captured_by": "human",
+      "source": "manual"
+    }
+  ]
+}

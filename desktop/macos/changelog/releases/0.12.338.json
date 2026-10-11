@@ -1,0 +1,7 @@
+{
+  "version": "0.12.338",
+  "date": "2026-09-11",
+  "changes": [
+    "Fixed: chat follow/pin scroll timers and recording timers no longer keep running after their owner is gone, removing a small idle CPU wake."
+  ]
+}

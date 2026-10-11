@@ -1,3 +1,5 @@
+import { APP_STORE_HARDWARE_PRODUCT } from '@/src/constants/app-store-hardware-product';
+
 export interface ProductBannerBase {
   className?: string;
   onClick?: () => void;
@@ -19,13 +21,9 @@ export interface CategoryBannerProps extends ProductBannerBase {
 }
 
 export const PRODUCT_INFO = {
-  name: 'Omi',
-  price: '$89',
-  // Canonical storefront (legacy omi-dev-kit-2 / friend-dev-kit-2 slugs redirect into the storefront).
-  url: 'https://www.omi.me/?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page',
-  shipping: 'Ships Worldwide',
-  images: {
-    primary: '/omi_1.webp',
-    secondary: '/omi_2.webp',
-  },
+  name: APP_STORE_HARDWARE_PRODUCT.name,
+  price: APP_STORE_HARDWARE_PRODUCT.displayPrice,
+  url: APP_STORE_HARDWARE_PRODUCT.marketplaceOrderUrl,
+  shipping: APP_STORE_HARDWARE_PRODUCT.shipping,
+  images: APP_STORE_HARDWARE_PRODUCT.images,
 } as const;

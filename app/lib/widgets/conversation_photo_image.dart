@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/ui.dart';
 
 typedef ConversationPhotoStorageFetcher = Future<Uint8List?> Function(String conversationId, String photoId);
 
@@ -18,7 +19,7 @@ class ConversationPhotoBytesCache {
   final Map<String, Future<Uint8List?>> _storageRequests = {};
 
   ConversationPhotoBytesCache({ConversationPhotoStorageFetcher? fetchStorageImage})
-      : _fetchStorageImage = fetchStorageImage ?? getConversationPhotoImage;
+    : _fetchStorageImage = fetchStorageImage ?? getConversationPhotoImage;
 
   Future<Uint8List?> load(ConversationPhoto photo, String? conversationId) {
     if (photo.base64.isNotEmpty) {
@@ -93,7 +94,8 @@ class _ConversationPhotoImageState extends State<ConversationPhotoImage> {
   @override
   void didUpdateWidget(covariant ConversationPhotoImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final photoChanged = oldWidget.photo.id != widget.photo.id ||
+    final photoChanged =
+        oldWidget.photo.id != widget.photo.id ||
         oldWidget.photo.base64 != widget.photo.base64 ||
         oldWidget.photo.storageId != widget.photo.storageId ||
         oldWidget.conversationId != widget.conversationId ||
@@ -109,7 +111,7 @@ class _ConversationPhotoImageState extends State<ConversationPhotoImage> {
       future: _bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting || snapshot.connectionState == ConnectionState.active) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: OmiSpinner());
         }
         final bytes = snapshot.data;
         if (bytes == null || bytes.isEmpty) {

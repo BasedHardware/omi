@@ -61,7 +61,11 @@ class CliError(click.ClickException):
     def show(self, file: Optional[object] = None) -> None:
         """Render via the AppContext's Renderer when available; else plain stderr."""
         ctx = click.get_current_context(silent=True)
-        renderer = getattr(ctx.obj, "renderer", None) if ctx is not None and ctx.obj is not None else None
+        renderer = (
+            getattr(ctx.obj, "renderer", None)
+            if ctx is not None and ctx.obj is not None
+            else None
+        )
         if renderer is not None:
             renderer.error(self.message, detail=self.detail, extra=self.extra)
             return
@@ -87,8 +91,16 @@ class AuthError(CliError):
     exit_code = EXIT_AUTH
 
 
+class PermissionDeniedError(AuthError):
+    """A valid credential lacks permission for this operation (HTTP 403)."""
+
+
 class ServerError(CliError):
     exit_code = EXIT_SERVER
+
+
+class TransportError(ServerError):
+    """The request failed at the transport layer, without a usable HTTP response."""
 
 
 class NotFoundError(CliError):
@@ -131,9 +143,10 @@ def from_status(
             detail=detail or "Token rejected. Run `omi auth login` to re-authenticate.",
         )
     if status == 403:
-        return AuthError(
+        return PermissionDeniedError(
             "Insufficient permissions",
-            detail=detail or "Your API key does not have the required scope for this operation.",
+            detail=detail
+            or "Your API key does not have the required scope for this operation.",
         )
     if status == 404:
         return NotFoundError("Not found", detail=detail)
@@ -150,6 +163,7 @@ def from_status(
     if 500 <= status < 600:
         return ServerError(
             f"Server error ({status})",
-            detail=detail or "The Omi API returned an error. Try again or check status.omi.me.",
+            detail=detail
+            or "The Omi API returned an error. Try again or check status.omi.me.",
         )
     return CliError(f"HTTP {status}", detail=detail, exit_code=EXIT_USAGE)

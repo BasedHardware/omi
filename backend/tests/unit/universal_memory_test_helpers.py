@@ -6,7 +6,7 @@ from __future__ import annotations
 def configure_universal_memory(monkeypatch, *uids: str) -> None:
     """Retain old fixture calls as a no-op; every nonblank UID is canonical."""
     assert all(isinstance(uid, str) and uid.strip() for uid in uids)
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
 
 
 def reset_universal_memory_fixture(monkeypatch) -> None:

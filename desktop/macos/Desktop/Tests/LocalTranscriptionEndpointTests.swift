@@ -97,4 +97,86 @@ final class LocalTranscriptionEndpointTests: XCTestCase {
     let buffer = speech(1.0) + silence(2.0) + speech(1.0)
     XCTAssertEqual(leadingSilence(buffer), 0)
   }
+
+  // MARK: - A pause measured against the room
+
+  /// Background measured live with people talking nearby: the quietest 100 ms of microphone
+  /// audio stayed between 0.0041 and 0.0057 RMS for two minutes.
+  private let noisyRoomLevel: Float = 0.006
+
+  private func frames(_ level: Float, count: Int) -> [Float] {
+    [Float](repeating: level, count: count)
+  }
+
+  private func noisyRoomFloor() -> Float {
+    LocalTranscriptionService.quietFloor(recentFrameRMS: frames(noisyRoomLevel, count: 100))
+  }
+
+  /// The live failure. Against the fixed floor a room this noisy never contains a pause, so
+  /// every microphone window ran the full 10 s.
+  func testFixedFloorFindsNoPauseInANoisyRoom() {
+    XCTAssertFalse(isEndpointed(speech(1.0, level: noisyRoomLevel) + speech(2.0) + speech(0.7, level: noisyRoomLevel)))
+  }
+
+  func testPauseInANoisyRoomClosesAgainstTheRoomsFloor() {
+    let buffer = speech(1.0, level: noisyRoomLevel) + speech(2.0) + speech(0.7, level: noisyRoomLevel)
+    XCTAssertTrue(
+      LocalTranscriptionService.isEndpointed(
+        buffer, tailSamples: tailSamples, minSamples: minSamples, floor: noisyRoomFloor()))
+  }
+
+  func testSpeechStillRunningInANoisyRoomDoesNotClose() {
+    let buffer = speech(1.0, level: noisyRoomLevel) + speech(2.7)
+    XCTAssertFalse(
+      LocalTranscriptionService.isEndpointed(
+        buffer, tailSamples: tailSamples, minSamples: minSamples, floor: noisyRoomFloor()))
+  }
+
+  /// The hallucination guard still holds when the floor rises: a blip is not an utterance.
+  func testBlipInANoisyRoomDoesNotClose() {
+    let buffer =
+      speech(2.0, level: noisyRoomLevel) + speech(0.3) + speech(2.7, level: noisyRoomLevel)
+    XCTAssertFalse(
+      LocalTranscriptionService.isEndpointed(
+        buffer, tailSamples: tailSamples, minSamples: minSamples, floor: noisyRoomFloor()))
+  }
+
+  func testRoomNoiseAheadOfSpeechIsTrimmedWithLeadIn() {
+    let buffer = speech(3.0, level: noisyRoomLevel) + speech(2.0)
+    XCTAssertEqual(
+      LocalTranscriptionService.leadingSilenceSamples(
+        buffer, chunk: sampleRate / 10, keep: 2, floor: noisyRoomFloor()),
+      (30 - 2) * (sampleRate / 10))
+  }
+
+  /// A low percentile of the history, so speech in it does not lift the floor.
+  func testQuietFloorIgnoresSpeechInTheHistory() {
+    let floor = LocalTranscriptionService.quietFloor(
+      recentFrameRMS: frames(0.05, count: 70) + frames(noisyRoomLevel, count: 30))
+    XCTAssertEqual(floor, noisyRoomLevel * LocalTranscriptionService.roomNoiseMargin, accuracy: 0.0001)
+  }
+
+  /// A quiet room keeps exactly the floor it had before.
+  func testQuietRoomKeepsTheFixedFloor() {
+    let floor = LocalTranscriptionService.quietFloor(recentFrameRMS: frames(0.001, count: 100))
+    XCTAssertEqual(floor, LocalTranscriptionService.speechFloor)
+  }
+
+  /// Digital silence (the system-audio lane between sounds) keeps it too.
+  func testDigitalSilenceKeepsTheFixedFloor() {
+    XCTAssertEqual(
+      LocalTranscriptionService.quietFloor(recentFrameRMS: frames(0, count: 100)),
+      LocalTranscriptionService.speechFloor)
+  }
+
+  func testLoudRoomCannotMakeSpeechCountAsQuiet() {
+    let floor = LocalTranscriptionService.quietFloor(recentFrameRMS: frames(0.05, count: 100))
+    XCTAssertEqual(floor, LocalTranscriptionService.maximumQuietFloor)
+  }
+
+  func testTooLittleHistoryKeepsTheFixedFloor() {
+    let floor = LocalTranscriptionService.quietFloor(
+      recentFrameRMS: frames(noisyRoomLevel, count: LocalTranscriptionService.minimumRoomLevelFrames - 1))
+    XCTAssertEqual(floor, LocalTranscriptionService.speechFloor)
+  }
 }

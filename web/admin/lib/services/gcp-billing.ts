@@ -43,7 +43,7 @@ export interface GcpBillingSnapshot {
 
 let client: BigQuery | null = null;
 
-function getClient(): BigQuery | null {
+export function getGcpBillingClient(): BigQuery | null {
   if (client) return client;
   const raw = process.env.GCP_BILLING_SA_JSON;
   try {
@@ -51,7 +51,10 @@ function getClient(): BigQuery | null {
       const sa = JSON.parse(raw);
       client = new BigQuery({
         projectId: sa.project_id,
-        credentials: { client_email: sa.client_email, private_key: sa.private_key },
+        credentials: {
+          client_email: sa.client_email,
+          private_key: sa.private_key,
+        },
       });
     } else {
       client = new BigQuery(); // ADC (local dev / explicitly-granted runtime SA)
@@ -72,8 +75,10 @@ export function isLlmService(service: string): boolean {
   return LLM_SERVICE_PATTERN.test(service);
 }
 
-export async function fetchGcpBilling(days: number): Promise<GcpBillingSnapshot | null> {
-  const bq = getClient();
+export async function fetchGcpBilling(
+  days: number
+): Promise<GcpBillingSnapshot | null> {
+  const bq = getGcpBillingClient();
   if (!bq) return null;
 
   // Inclusive end at D-2; start so the series still spans `days` days.
@@ -98,20 +103,35 @@ export async function fetchGcpBilling(days: number): Promise<GcpBillingSnapshot 
 
     const dailyMap = new Map<string, GcpDailyCost>();
     const serviceMap = new Map<string, GcpServiceCost>();
-    for (const row of rows as { day: string; service: string; net_usd: number; gross_usd: number }[]) {
-      const entry =
-        dailyMap.get(row.day) ?? { date: row.day, netUsd: 0, grossUsd: 0, llmNetUsd: 0 };
+    for (const row of rows as {
+      day: string;
+      service: string;
+      net_usd: number;
+      gross_usd: number;
+    }[]) {
+      const entry = dailyMap.get(row.day) ?? {
+        date: row.day,
+        netUsd: 0,
+        grossUsd: 0,
+        llmNetUsd: 0,
+      };
       entry.netUsd += row.net_usd;
       entry.grossUsd += row.gross_usd;
       const llm = isLlmService(row.service);
       if (llm) entry.llmNetUsd += row.net_usd;
       dailyMap.set(row.day, entry);
 
-      const svc = serviceMap.get(row.service) ?? { service: row.service, netUsd: 0, isLlm: llm };
+      const svc = serviceMap.get(row.service) ?? {
+        service: row.service,
+        netUsd: 0,
+        isLlm: llm,
+      };
       svc.netUsd += row.net_usd;
       serviceMap.set(row.service, svc);
     }
-    const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const daily = Array.from(dailyMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
     if (daily.length === 0) return null;
     const round = (v: number) => Math.round(v * 100) / 100;
     for (const d of daily) {

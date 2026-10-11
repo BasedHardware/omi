@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 
@@ -34,6 +35,38 @@ logger = logging.getLogger(__name__)
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
+
+
+def _history_date_str(uid: str, now: datetime, *, firestore_client: Any = None) -> str:
+    """The goal-history document id: the user's own calendar day, not UTC's.
+
+    ``goal_history`` is keyed one document per day (``write_transaction.set``/
+    ``.set(merge=True)`` on ``document(<date>)``), so bucketing by UTC date splits
+    or merges a user's day at the wrong boundary for anyone not on UTC — the same
+    class of bug already fixed for the proactive-notification cap, which resolves
+    the zone via ``database.notifications.resolve_user_timezone``.
+
+    Reads ``time_zone`` directly through ``_get_db(firestore_client)`` (the same
+    seam every other read in this module goes through) rather than calling into
+    ``database.notifications``: that function has no ``firestore_client`` seam of
+    its own, so it always hit the real client — invisible in this module's own
+    tests, which inject a fake client, but it broke a *different* module's tests
+    that exercise ``goals.py`` through ``firestore_client=fake_db`` and don't know
+    to fake out `database.notifications` too. Any failure (missing field, bad
+    zone, a transient read error) falls back to UTC rather than raising, matching
+    the fail-soft posture the rest of this codebase uses for non-critical reads.
+    """
+    try:
+        snapshot = _get_db(firestore_client).collection(users_collection).document(uid).get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        tz = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not tz:
+            return now.strftime('%Y-%m-%d')
+        return now.astimezone(ZoneInfo(str(tz))).strftime('%Y-%m-%d')
+    except Exception:
+        return now.strftime('%Y-%m-%d')
+
+
 users_collection = 'users'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -313,6 +346,11 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
     if status_value not in {status.value for status in GoalStatus}:
         status_value = GoalStatus.background.value if normalized.get('is_active', True) else GoalStatus.abandoned.value
     metric = _metric_from_storage(normalized)
+    success_criteria = normalized.get('success_criteria')
+    if success_criteria is None:
+        success_criteria = []
+    elif not isinstance(success_criteria, list):
+        raise ValueError('success_criteria must be a list')
     normalized.update(
         {
             'id': resolved_id,
@@ -320,7 +358,7 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
             'title': str(normalized.get('title') or ''),
             'desired_outcome': str(normalized.get('desired_outcome') or normalized.get('title') or ''),
             'why_it_matters': normalized.get('why_it_matters'),
-            'success_criteria': list(normalized.get('success_criteria') or []),
+            'success_criteria': list(success_criteria),
             'status': status_value,
             'focus_rank': normalized.get('focus_rank') if status_value == GoalStatus.focused.value else None,
             'metric': metric.model_dump(mode='python') if metric is not None else None,
@@ -344,6 +382,26 @@ def get_goal_by_id(uid: str, goal_id: str, *, firestore_client: Any = None) -> O
     return normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
 
 
+def _normalize_goal_documents(documents: Any) -> List[Dict[str, Any]]:
+    """Normalize streamed goal snapshots independently so one corrupt row cannot hide peers.
+
+    Snapshot conversion and stream iteration stay outside the per-row error boundary. A Firestore
+    read failure therefore still propagates to callers; only invalid stored goal payloads are
+    skipped, with a diagnostic that contains no row contents.
+    """
+    goals = []
+    for doc in documents:
+        data = _goal_dict(doc)
+        try:
+            goals.append(normalize_goal_storage(data, goal_id=doc.id))
+        except (AttributeError, TypeError, ValueError) as exc:
+            logger.warning(
+                'Skipping malformed goal during list projection error_type=%s',
+                type(exc).__name__,
+            )
+    return goals
+
+
 def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     """Released compatibility projection: focused first, otherwise oldest non-terminal goal."""
 
@@ -363,7 +421,7 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
     return goals[:limit]
@@ -390,7 +448,7 @@ def get_all_goals(
     """
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)
@@ -799,6 +857,10 @@ def _append_goal_progress_event(
     goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
+    # Resolved once, outside the transaction: `apply` below can retry on contention,
+    # and _history_date_str is a Firestore read of its own — repeating it on every
+    # retry would multiply reads for no benefit, since `now` doesn't change.
+    history_date = _history_date_str(uid, now, firestore_client=client)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
@@ -852,11 +914,14 @@ def _append_goal_progress_event(
             goal_patch['metric'] = event.metric.model_dump(mode='python')
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
-        if authority_account_generation is not None and record.metric is not None:
-            history_ref = goal_ref.collection(goal_history_collection).document(now.strftime('%Y-%m-%d'))
+        # History is a projection of this journal commit for every producer.
+        # Keeping it here prevents partial saves and post-commit writers from
+        # overwriting newer progress; idempotent replays return before any write.
+        if record.metric is not None:
+            history_ref = goal_ref.collection(goal_history_collection).document(history_date)
             write_transaction.set(
                 history_ref,
-                {'date': now.strftime('%Y-%m-%d'), 'value': record.metric.current, 'recorded_at': now},
+                {'date': history_date, 'value': record.metric.current, 'recorded_at': now},
             )
         return record
 
@@ -914,7 +979,7 @@ def update_goal_progress(
         return None
     metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
     metric = metric.model_copy(update={'current': current_value})
-    record = _append_goal_progress_event(
+    _append_goal_progress_event(
         uid,
         goal_id,
         GoalProgressEventCreate(
@@ -932,9 +997,6 @@ def update_goal_progress(
         first_write_wins=idempotency_key is not None,
         firestore_client=firestore_client,
     )
-    persisted_value = record.metric.current if record.metric is not None else current_value
-    if authority_account_generation is None:
-        save_goal_progress_history(uid, goal_id, persisted_value, firestore_client=firestore_client)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
 
 
@@ -945,20 +1007,6 @@ def get_task_workflow_account_generation(uid: str, *, firestore_client: Any = No
     if not snapshot.exists:
         return 0
     return int(parse_snapshot_strict(TaskWorkflowControl, snapshot).account_generation)
-
-
-def save_goal_progress_history(
-    uid: str,
-    goal_id: str,
-    value: float,
-    *,
-    firestore_client: Any = None,
-) -> None:
-    now = datetime.now(timezone.utc)
-    history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(now.strftime('%Y-%m-%d')).set(
-        {'date': now.strftime('%Y-%m-%d'), 'value': value, 'recorded_at': now}, merge=True
-    )
 
 
 def get_goal_history(
@@ -1017,7 +1065,6 @@ __all__ = [
     'goal_document_ref',
     'list_goal_progress_events',
     'normalize_goal_storage',
-    'save_goal_progress_history',
     'transition_goal_lifecycle',
     'unfocus_goal',
     'update_goal',

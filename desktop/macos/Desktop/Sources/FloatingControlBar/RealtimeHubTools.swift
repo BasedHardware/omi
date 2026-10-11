@@ -161,9 +161,7 @@ enum RealtimeHubTools {
       tool call, and never read tool JSON or ids aloud. The think_deeper and web_search tool cards \
       are exceptions: call either one silently and immediately because the app speaks an instant \
       acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
-      result arrives. record_interject_feedback is also silent and immediate: call it without a \
-      spoken heads-up; the app does not play a canned acknowledgement for that tool, unlike \
-      think_deeper, so go straight to the user-facing reply. You cannot see the user's data without calling a tool. \
+      result arrives. You cannot see the user's data without calling a tool. \
       \(screenRule(turnFrameAttached: turnScreenFrameAttached))
 
       Conversation sources attached to this turn or earlier turns are already retained as \
@@ -369,7 +367,7 @@ enum RealtimeHubTools {
     case normal
     case heavy
 
-    /// OpenAI Chat Completions `reasoning_effort` wire value for gpt-5.6-luna.
+    /// OpenAI Chat Completions `reasoning_effort` wire value for gpt-6-luna.
     /// OpenAI rejects function tools combined with a non-none effort on that
     /// surface, so escalations carry no client tools and the effort travels
     /// verbatim on the request.

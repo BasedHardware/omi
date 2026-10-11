@@ -48,10 +48,21 @@ void main() {
       _Listener(),
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
-          claims.add(claimLiveCapture);
-          return UploadFilesResult.queued('job-${claims.length}');
-        },
+        uploader:
+            (
+              files, {
+              onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation,
+            }) async {
+              claims.add(claimLiveCapture);
+              return UploadFilesResult.queued('job-${claims.length}');
+            },
         fairUseStatusLoader: () async => {'stage': 'none'},
       ),
     );

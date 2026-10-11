@@ -15,7 +15,7 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 <Info>
 **What you'll need to build an Omi:**
 - **Tools:** Soldering station with hot air, solder paste + stencils, multimeter, tweezers, UV lamp (for adhesive)
-- **Software:** KiCad or Altium (PCB), FreeCAD or Fusion 360 (mechanical), nRF Connect SDK (firmware)
+- **Software:** KiCad (free — all shipped PCB sources are KiCad 9 projects despite the "altium" folder names), FreeCAD or Fusion 360 (mechanical), nRF Connect SDK (firmware)
 - **Accounts:** PCB fabricator (JLCPCB/PCBWay), component distributor (Mouser/DigiKey/LCSC)
 - **Skills:** SMT soldering (QFN packages), basic mechanical assembly, firmware flashing via SWD
 - **Budget:** ~$30-50 per unit in small quantities (PCBs + components + enclosure, excluding tools)
@@ -24,7 +24,7 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 
 <CardGroup cols={2}>
   <Card title="Electronics" icon="microchip" href="/doc/hardware/consumer/electronics">
-    PCB schematics, Altium source, Gerber files for mainboard, charger, and FPC
+    PCB schematics, KiCad source, Gerber files for mainboard, charger, and FPC
   </Card>
   <Card title="Mechanical & Packaging" icon="cube" href="/doc/hardware/consumer/mechanical">
     STEP files for enclosure, charger, foam inserts, and packaging
@@ -46,7 +46,7 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 | Processor | nRF5340 dual-core Bluetooth LE SoC |
 | Wi-Fi | nRF7002 Wi-Fi 6 chip |
 | Audio | 2x TDK T5838 top-port PDM microphones |
-| Storage | 8GB NAND Flash (CSNP4GCR01) |
+| Storage | 4Gbit (512MB) SD NAND Flash (CSNP4GCR01) |
 | IMU | LSM6DS3TR-C 6-axis |
 | Battery | 3.7V 150mAh LiPo |
 | Charging | BQ25101 charger IC, magnetic pogo pins |
@@ -96,7 +96,7 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
     Use the [BOM CSV](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv) to order from distributors. The MPN column has exact manufacturer part numbers.
 
     <Warning>
-    **Long-lead items to order first:** nRF5340-CLAA (SoC), nRF7002-CEAA-R7 (Wi-Fi), CSNP4GCR01-DPW (8GB Flash). These can take 2-4 weeks from Mouser/DigiKey. Check LCSC for faster China-based shipping.
+    **Long-lead items to order first:** nRF5340-CLAA (SoC), nRF7002-CEAA-R7 (Wi-Fi), CSNP4GCR01-DPW (4Gbit/512MB Flash). These can take 2-4 weeks from Mouser/DigiKey. Check LCSC for faster China-based shipping.
     </Warning>
 
     <Tip>The 150mAh LiPo battery (D16×H6.1mm) is a custom form factor. Search for "GRP1654M1" or order the closest match and verify dimensions.</Tip>

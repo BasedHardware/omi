@@ -2,8 +2,9 @@ import random
 from typing import Any, List, Protocol, Tuple, cast
 from .clients import get_llm
 from .usage_tracker import track_usage, Features
-from database.memories import get_memories
+from database._client import db as firestore_db
 from utils.executors import db_executor, run_blocking
+from utils.memory.memory_service import MemoryService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,14 @@ def _memory_content(memory: MemoryRecord) -> str:
 
 async def get_relevant_memories(uid: str, limit: int = 100) -> List[MemoryRecord]:
     """Get recent relevant memories to personalize notifications."""
-    memories: List[MemoryRecord] = await run_blocking(db_executor, get_memories, uid, limit)
-    return [m for m in memories if not m.get('is_locked')]
+    universal_memories = await run_blocking(
+        db_executor,
+        MemoryService(db_client=firestore_db).read,
+        uid,
+        limit=limit,
+        offset=0,
+    )
+    return [m.dict() for m in universal_memories if not m.is_locked]
 
 
 async def generate_notification_message(uid: str, name: str, plan_type: str = "basic") -> Tuple[str, str]:

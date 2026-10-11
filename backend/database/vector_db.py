@@ -28,6 +28,9 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.observability.fallback import record_fallback
+
+from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -141,14 +144,20 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 @_account_external_data_write
-def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
     if index is None:
-        return
-    data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
-    typed_metadata: Dict[str, Any] = data['metadata']
-    typed_metadata.update(metadata)
-    res = index.upsert(vectors=[data], namespace="ns1")
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        return False
+    try:
+        data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
+        typed_metadata: Dict[str, Any] = data['metadata']
+        typed_metadata.update(metadata)
+        res = index.upsert(vectors=[data], namespace="ns1")
+    except Exception:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        raise
     logger.info(f'upsert_vector {res}')
+    return True
 
 
 @_account_external_data_write
@@ -590,8 +599,13 @@ def upsert_canonical_memory_vector(
 def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
     """Delete canonical vectors by authoritative UID metadata, including legacy bare-ID rows."""
     if index is None:
-        logger.warning('Pinecone index not initialized, skipping canonical memory vector filter delete')
-        return False
+        # No vector store is configured, so no vector copy can exist: the desired
+        # absence is trivially confirmed. Privacy deletion must not fail closed
+        # on a projection the deployment never writes (#10446 regression class —
+        # without this, every explicit memory delete 503s on Pinecone-less
+        # deployments). A configured index that raises still fails closed below.
+        logger.warning('Pinecone index not initialized, nothing to purge for canonical memory vector delete')
+        return True
     delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
     index.delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
     logger.info(
@@ -910,26 +924,55 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
         return 0
 
 
+# Embedding input for action-item similarity is scraped/untrusted text. The
+# embeddings gateway rejects empty or oversized input with a 400, so validate
+# and clip before spending the call; callers degrade to "no candidates".
+_ACTION_ITEM_QUERY_MAX_CHARS = 8000
+
+
+def _prepare_action_item_query(query: str) -> Optional[str]:
+    """Strip, reject empty, and clip untrusted action-item query text."""
+    prepared = (query or "").strip()
+    if not prepared:
+        return None
+    return prepared[:_ACTION_ITEM_QUERY_MAX_CHARS]
+
+
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping action item search')
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
+        logger.warning('Pinecone index not initialized or empty query, skipping action item search')
         return []
 
-    vector = embeddings.embed_query(query)
-    filter_data: Dict[str, Any] = {'uid': uid}
+    try:
+        vector = embeddings.embed_query(prepared_query)
+        filter_data: Dict[str, Any] = {'uid': uid}
 
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
-    )
+        xc = index.query(
+            vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+        )
 
-    matches: List[Any] = xc.get('matches', [])
-    top_score = matches[0]['score'] if matches else None
-    kept = [m for m in matches if m.get('score', 0.0) >= min_score]
-    logger.info(
-        f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
-        f'top_score={top_score} min_score={min_score}'
-    )
-    return [m['metadata'].get('action_item_id') for m in kept]
+        matches: List[Any] = xc.get('matches', [])
+        top_score = matches[0]['score'] if matches else None
+        kept = [m for m in matches if m.get('score', 0.0) >= min_score]
+        logger.info(
+            f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
+            f'top_score={top_score} min_score={min_score}'
+        )
+        return [m['metadata'].get('action_item_id') for m in kept]
+    except Exception as e:
+        logger.exception(f'search_action_items_by_vector failed uid={uid}: {e}')
+        # Degrade telemetry: without this, a provider outage is indistinguishable
+        # from a genuine no-match search in the empty-list result.
+        record_fallback(
+            component='other',
+            from_mode='action_item_vector_search',
+            to_mode='no_candidates',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return []
 
 
 def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[Dict[str, Any]]:
@@ -944,11 +987,12 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
     caller treats "no candidates" as "user has nothing relevant," which is
     the same behavior as a brand-new user.
     """
-    if index is None:
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
         return []
 
     try:
-        vector = embeddings.embed_query(query)
+        vector = embeddings.embed_query(prepared_query)
         xc = index.query(
             vector=vector,
             top_k=limit,
@@ -1121,6 +1165,8 @@ def search_transcript_chunks(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     query_vector: Optional[List[float]] = None,
+    *,
+    timeout_seconds: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
@@ -1135,12 +1181,16 @@ def search_transcript_chunks(
     if created_at is not None:
         filter_data['created_at'] = created_at
     vector = query_vector if query_vector is not None else embeddings.embed_query(query)
+    query_kwargs: Dict[str, Any] = {}
+    if timeout_seconds is not None:
+        query_kwargs['_request_timeout'] = timeout_seconds
     xc = index.query(
         vector=vector,
         top_k=limit,
         include_metadata=True,
         filter=filter_data,
         namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
+        **query_kwargs,
     )
     results: List[Dict[str, Any]] = []
     matches: List[Any] = xc.get('matches', [])

@@ -140,6 +140,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'database.daily_summaries',
         get_daily_summary_by_date=MagicMock(return_value=None),
         create_daily_summary=MagicMock(return_value='summary-123'),
+        mark_daily_summary_delivery_completed=MagicMock(),
     )
     redis_db = _module(
         'database.redis_db',
@@ -147,6 +148,8 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         # A guard that declines before the LLM call hands the day back rather than sitting on a
         # 2h key; the harness has to carry it or the module under test cannot import.
         release_daily_summary_lock=MagicMock(),
+        try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+        release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
     )
 
     mock_conversation = MagicMock()
@@ -155,6 +158,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
     conversation_factory = _module(
         'utils.conversations.factory',
         deserialize_conversation=MagicMock(return_value=mock_conversation),
+        deserialize_conversations=MagicMock(return_value=[mock_conversation]),
     )
     generate_summary = MagicMock()
     external_integrations = _module(
@@ -166,6 +170,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.notifications',
         send_bulk_notification=MagicMock(),
         send_notification=send_notification,
+        send_notification_result=send_notification,
     )
     notification_message = MagicMock()
     notification_message.get_message_as_dict = MagicMock(return_value={})

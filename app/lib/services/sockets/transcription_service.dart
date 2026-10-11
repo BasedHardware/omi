@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -10,10 +12,12 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
@@ -101,6 +105,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool speechProfileRedo;
   Geolocation? geolocation;
 
+  /// Reports foreground / live-transcript visibility to the server while connected.
+  VoidCallback? _clientStateListener;
+
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
@@ -114,7 +121,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.geolocation,
     this.clientConversationId,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    var params =
+        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
@@ -141,10 +149,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Enable server-side speaker auto-assignment (backward compatibility flag)
     params += '&speaker_auto_assign=enabled';
 
-    // Whether the backend may auto-create a new person when it detects a name.
-    // Mirrors the user's "Auto-create Speakers" setting; a detected name with no
-    // existing match is still surfaced for manual tagging when this is off.
-    params += '&create_speakers=${SharedPreferencesUtil().autoCreateSpeakersEnabled}';
+    // The backend may auto-create a new person when it detects a name.
+    params += '&create_speakers=true';
 
     if (SharedPreferencesUtil().vadGateEnabled) {
       params += '&vad_gate=enabled';
@@ -200,7 +206,15 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
   }
 
+  int _binaryAudioBytesSent = 0;
+  int get binaryAudioBytesSent => _binaryAudioBytesSent;
+
+  bool _stoppedIntentionally = false;
+  bool get stoppedIntentionally => _stoppedIntentionally;
+
   Future stop({String? reason}) async {
+    _stoppedIntentionally = true;
+    _detachClientState();
     await _socket.stop();
     _listeners.clear();
 
@@ -211,8 +225,40 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future send(dynamic message) async {
+    final List<int>? audioFrame = message is List<int> ? message : null;
+    final connectedOnEntry = audioFrame != null && _socket.status == PureSocketStatus.connected;
     _socket.send(message);
+    if (connectedOnEntry && _socket.status == PureSocketStatus.connected) {
+      _binaryAudioBytesSent += audioFrame.length;
+    }
     return;
+  }
+
+  /// S1 optional source unit. WebSocket ordering binds this control record to
+  /// exactly the next binary frame; the server verifies its byte digest.
+  void sendEvidenceFrame(WalFrame frame) {
+    final root = frame.captureRoot;
+    final ordinal = frame.sourceFramePosition;
+    final epoch = frame.sourceClockEpoch;
+    if (root == null || ordinal == null || epoch == null) {
+      send(frame.payload);
+      return;
+    }
+    if (_socket.status != PureSocketStatus.connected) return;
+    _socket.send(
+      jsonEncode({
+        'type': 'capture_evidence_frame',
+        'version': 1,
+        'capture_root': root,
+        'clock_epoch': epoch,
+        'source_frame': ordinal,
+        'byte_length': frame.payload.length,
+      }),
+    );
+    _socket.send(frame.payload);
+    if (_socket.status == PureSocketStatus.connected) {
+      _binaryAudioBytesSent += frame.payload.length;
+    }
   }
 
   Future sendText(String message) async {
@@ -224,8 +270,28 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     await sendText(jsonEncode({'type': 'start_onboarding'}));
   }
 
+  void _sendClientState() {
+    if (_socket.status != PureSocketStatus.connected) return;
+    _socket.send(jsonEncode(ListenClientState.instance.value.toJson()));
+  }
+
+  void _attachClientState() {
+    _detachClientState();
+    final listener = _sendClientState;
+    _clientStateListener = listener;
+    ListenClientState.instance.addListener(listener);
+    _sendClientState();
+  }
+
+  void _detachClientState() {
+    final listener = _clientStateListener;
+    if (listener != null) ListenClientState.instance.removeListener(listener);
+    _clientStateListener = null;
+  }
+
   @override
   void onClosed([int? closeCode]) {
+    _detachClientState();
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
     });
@@ -309,6 +375,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onConnected() {
+    _binaryAudioBytesSent = 0;
+    _stoppedIntentionally = false;
+    _attachClientState();
     _listeners.forEach((k, v) {
       v.onConnected();
     });
@@ -494,8 +563,9 @@ class TranscriptSocketServiceFactory {
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model:
-            config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: config.effectiveModel.isNotEmpty
+            ? config.effectiveModel
+            : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -505,10 +575,12 @@ class TranscriptSocketServiceFactory {
     // Deepgram Live and other streaming providers
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
 
     // Build WebSocket URL with query params
     final wsUrl = _buildUrlWithParams(url, params);
@@ -532,10 +604,12 @@ class TranscriptSocketServiceFactory {
 
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
     final audioFieldName = requestConfig['audio_field_name'] ?? config.audioFieldName ?? 'file';
     final requestType = config.effectiveRequestType;
 

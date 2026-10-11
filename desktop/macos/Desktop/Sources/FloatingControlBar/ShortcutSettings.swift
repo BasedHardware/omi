@@ -293,7 +293,10 @@ class ShortcutSettings: ObservableObject {
     keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
+  /// The same chords onboarding offers, in the same order, plus two more. A chord picked during
+  /// onboarding must never show up in Settings as "Custom".
   static let askOmiPresets: [KeyboardShortcut] = [
+    askOmiControlCommandOShortcut,
     askOmiCommandOShortcut,
     askOmiCommandReturnShortcut,
     askOmiCommandShiftReturnShortcut,
@@ -370,6 +373,38 @@ class ShortcutSettings: ObservableObject {
   /// like Wispr Flow. The track keeps playing silently rather than being paused.
   @Published var pttMuteSystemAudio: Bool {
     didSet { UserDefaults.standard.set(pttMuteSystemAudio, forKey: "shortcut_pttMuteSystemAudio") }
+  }
+
+  /// Silent Type: dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript, so what you type by voice stays out
+  /// of Omi's chat context. Off by default — dictations are journaled as usual.
+  @Published var silentTypeEnabled: Bool {
+    didSet { UserDefaults.standard.set(silentTypeEnabled, forKey: .shortcutSilentTypeEnabled) }
+  }
+
+  /// The persisted read behind `silentTypeEnabled`'s initial value — what a
+  /// fresh process restores at launch. Split out of `private init` so a test
+  /// can exercise the decode itself: a same-process write followed by a read
+  /// only exercises the `didSet` writer, never this restore path. Absent key
+  /// reads false — Silent Type ships off.
+  static func persistedSilentTypeEnabled(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .shortcutSilentTypeEnabled) as? Bool ?? false
+  }
+
+  /// Ignore dictation apps: while Wispr Flow, superwhisper, or macOS Dictation holds the
+  /// microphone and no call app does, ambient capture replaces its own mic contribution with
+  /// silence for exactly that window, so a dictation never becomes a conversation. On by
+  /// default — see `DictationMicSuppressionPolicy`.
+  @Published var ambientIgnoresDictationApps: Bool {
+    didSet {
+      UserDefaults.standard.set(ambientIgnoresDictationApps, forKey: .transcriptionIgnoreDictationApps)
+    }
+  }
+
+  /// The persisted read behind `ambientIgnoresDictationApps`'s initial value. Absent key reads
+  /// true — the feature ships on.
+  static func persistedAmbientIgnoresDictationApps(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .transcriptionIgnoreDictationApps) as? Bool ?? true
   }
 
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
@@ -478,111 +513,6 @@ class ShortcutSettings: ObservableObject {
     return "Maximum"
   }
 
-  /// A selectable voice for floating-bar replies.
-  struct VoiceOption: Identifiable, Equatable, Sendable {
-    enum Gender: String, Sendable {
-      case female
-      case male
-    }
-
-    enum Provider: String, Sendable {
-      case localSystem
-      case openAI
-    }
-
-    let id: String
-    let name: String
-    let gender: Gender
-    let description: String
-    let provider: Provider
-    let openAIVoice: String?
-    let openAIInstructions: String?
-    let preferredSystemVoiceIdentifiers: [String]
-    let preferredSystemVoiceNames: [String]
-
-    var isLocalSystem: Bool {
-      provider == .localSystem
-    }
-
-    var isOpenAI: Bool {
-      provider == .openAI
-    }
-  }
-
-  static let openAIShimmerVoiceID = "openai:shimmer"
-  static let openAIOnyxVoiceID = "openai:onyx"
-
-  /// Curated OpenAI voices available from the voice picker.
-  static let availableVoices: [VoiceOption] = [
-    VoiceOption(
-      id: openAIOnyxVoiceID,
-      name: "Onyx",
-      gender: .male,
-      description: "OpenAI, deep, grounded",
-      provider: .openAI,
-      openAIVoice: "onyx",
-      openAIInstructions:
-        "Speak in a deep, natural, grounded voice with calm confidence and smooth pacing.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: openAIShimmerVoiceID,
-      name: "Shimmer",
-      gender: .female,
-      description: "OpenAI, warm human, cheap",
-      provider: .openAI,
-      openAIVoice: "shimmer",
-      openAIInstructions:
-        "Speak naturally in a warm, relaxed adult tone. Keep it conversational, calm, and human without sounding exaggerated.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: "openai:coral",
-      name: "Coral",
-      gender: .female,
-      description: "OpenAI, bright, expressive",
-      provider: .openAI,
-      openAIVoice: "coral",
-      openAIInstructions:
-        "Speak naturally in a warm, expressive human tone with smooth pacing and light emotional color.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: "openai:nova",
-      name: "Nova",
-      gender: .female,
-      description: "OpenAI, clear, friendly",
-      provider: .openAI,
-      openAIVoice: "nova",
-      openAIInstructions:
-        "Speak in a natural, friendly, confident tone with clear articulation and relaxed pacing.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-  ]
-
-  static let defaultVoiceID = openAIShimmerVoiceID
-
-  static func voiceOption(for id: String) -> VoiceOption {
-    availableVoices.first(where: { $0.id == id })
-      ?? availableVoices.first(where: { $0.id == defaultVoiceID })
-      ?? availableVoices[0]
-  }
-
-  /// Selected voice ID for floating-bar TTS replies.
-  @Published var selectedVoiceID: String {
-    didSet {
-      guard selectedVoiceID != oldValue else { return }
-      UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
-      FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
-      FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
-      FloatingBarVoicePlaybackService.shared.prewarmRealtimeSlowToolAcknowledgementPhrases()
-    }
-  }
-
   var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
     true
   }
@@ -636,6 +566,8 @@ class ShortcutSettings: ObservableObject {
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
+    self.silentTypeEnabled = Self.persistedSilentTypeEnabled()
+    self.ambientIgnoresDictationApps = Self.persistedAmbientIgnoresDictationApps()
     self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
@@ -651,12 +583,6 @@ class ShortcutSettings: ObservableObject {
     self.floatingBarTypedQuestionVoiceAnswersEnabled =
       UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
     self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4
-    let storedVoiceID = UserDefaults.standard.string(forKey: "shortcut_selectedVoiceID") ?? Self.defaultVoiceID
-    let validVoiceID =
-      Self.availableVoices.contains(where: { $0.id == storedVoiceID })
-      ? storedVoiceID
-      : Self.defaultVoiceID
-    self.selectedVoiceID = validVoiceID
 
     NotificationCenter.default.addObserver(forName: .modelTierDidChange, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor [weak self] in

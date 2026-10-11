@@ -8,6 +8,7 @@ import {
   type MemoryCategory,
   type MemoryLayerFilter
 } from '../../lib/memoryFilters'
+import type { MemoryReadView } from '../../lib/memoriesCache'
 
 // The layer filter renders Default / Short-term / Long-term only. "Archive" is a
 // server-side explicit-archive scope on Mac; the default /v3/memories read never
@@ -15,6 +16,12 @@ import {
 // deferred until an archive-scoped fetch is wired. The whole control is gated on
 // canonicalLifecycleExposed, so it never appears against a backend without tiers.
 const LAYER_OPTIONS: readonly MemoryLayerFilter[] = ['default', 'short_term', 'long_term']
+const MEMORY_VIEW_OPTIONS: readonly MemoryReadView[] = ['useful_now', 'history', 'all']
+const MEMORY_VIEW_LABEL: Record<MemoryReadView, string> = {
+  useful_now: 'Useful now',
+  history: 'History',
+  all: 'All memories'
+}
 
 type MemoryFilterBarProps = {
   search: string
@@ -27,6 +34,9 @@ type MemoryFilterBarProps = {
   layerExposed: boolean
   layer: MemoryLayerFilter
   onLayerChange: (l: MemoryLayerFilter) => void
+  beliefEnabled: boolean
+  view: MemoryReadView
+  onViewChange: (view: MemoryReadView) => void
 }
 
 function categoryButtonLabel(categories: Set<MemoryCategory>): string {
@@ -44,7 +54,10 @@ export function MemoryFilterBar({
   categoryCounts,
   layerExposed,
   layer,
-  onLayerChange
+  onLayerChange,
+  beliefEnabled,
+  view,
+  onViewChange
 }: MemoryFilterBarProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -122,6 +135,44 @@ export function MemoryFilterBar({
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+
+      {/* Layer filter (gated on canonical tiering) */}
+      {beliefEnabled && (
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm transition-colors ${
+                view !== 'useful_now'
+                  ? 'border-white/25 bg-white/10 text-white'
+                  : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              {MEMORY_VIEW_LABEL[view]}
+              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={8}
+              className="z-[120] w-48 rounded-xl border border-white/10 bg-[var(--bg-secondary)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+            >
+              {MEMORY_VIEW_OPTIONS.map((option) => (
+                <DropdownMenu.Item
+                  key={option}
+                  onSelect={() => onViewChange(option)}
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-white/80 outline-none data-[highlighted]:bg-white/5"
+                >
+                  <span className="flex-1">{MEMORY_VIEW_LABEL[option]}</span>
+                  {view === option && <Check className="h-3.5 w-3.5 text-white" />}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      )}
 
       {/* Layer filter (gated on canonical tiering) */}
       {layerExposed && (

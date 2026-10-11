@@ -146,8 +146,8 @@ export async function connectAndListen(
   let characteristics: any[] = [];
   if (typeof peripheral.discoverSomeServicesAndCharacteristicsAsync === 'function') {
     const found = await peripheral.discoverSomeServicesAndCharacteristicsAsync(
-      [OMI_SERVICE_UUID],
-      [AUDIO_DATA_UUID]
+      [wantService],
+      [wantChar]
     );
     characteristics = found.characteristics ?? [];
   } else {
@@ -165,9 +165,6 @@ export async function connectAndListen(
       `Audio characteristic ${AUDIO_DATA_UUID} not found on ${deviceId} (service ${OMI_SERVICE_UUID})`
     );
   }
-
-  // keep service uuid check soft — some stacks omit parent service on char
-  void wantService;
 
   const onData = (data: ArrayBufferView | ArrayBuffer | number[]) => {
     const u8 =

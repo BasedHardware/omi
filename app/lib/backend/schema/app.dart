@@ -346,7 +346,7 @@ class App {
 
   bool worksWithMemories() => hasCapability('memories');
 
-  bool worksWithChat() => hasCapability('chat');
+  bool worksWithChat() => hasCapability('chat') || hasCapability('persona');
 
   bool worksExternally() => hasCapability('external_integration');
 
@@ -658,8 +658,6 @@ class App {
       'disabled_error': disabledError,
     };
   }
-
-  static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
 
   List<NotificationScope> getNotificationScopesFromIds(List<NotificationScope> allScopes) {
     if (proactiveNotification == null) {

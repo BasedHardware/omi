@@ -13,6 +13,8 @@ steps:
     bridge.action:
       name: open_ask_omi
       reset: true
+    expect:
+      result.detail.target: "main_chat"
     wait:
       state.askOmiOpen: true
 

@@ -1,5 +1,6 @@
 import envConfig from '@/src/constants/envConfig';
 import { markdownToPlainText } from '@/src/lib/markdown-to-plain-text.mjs';
+import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ParamsTypes } from '@/src/types/params.types';
@@ -46,9 +47,12 @@ interface DailySummary {
 
 async function getSharedRecap(id: string): Promise<DailySummary | null> {
   try {
-    const response = await fetch(`${envConfig.API_URL}/v1/daily-summaries/${id}/shared`, {
-      cache: 'no-cache',
-    });
+    const response = await fetch(
+      sharedApiUrl(envConfig.API_URL, 'v1', 'daily-summaries', id, 'shared'),
+      {
+        cache: 'no-cache',
+      },
+    );
     if (!response.ok) return null;
     return (await response.json()) as DailySummary;
   } catch {

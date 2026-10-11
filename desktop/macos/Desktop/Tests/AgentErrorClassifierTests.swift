@@ -39,7 +39,8 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertFalse(
       classified.userMessage.lowercased().contains("try again"),
       "copy must not prescribe retries for an unretryable billing error")
-    XCTAssertTrue(classified.userMessage.contains("credit balance"))
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.userMessage.contains("Your Anthropic"), "the error does not identify the account owner")
   }
 
   /// Reproduced live: the Omi-account proxy answers an exhausted billing lane
@@ -255,6 +256,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       // it renders as the generic "Omi couldn't answer this one", which is what
       // the 2026-08-20 gateway-parameter outage showed users for ~19 hours.
       ("Upstream provider error", true, true),
+      ("HTTP 503 status code (no body)", true, true),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)
@@ -276,5 +278,76 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertNotNil(notice)
     XCTAssertNotEqual(notice?.text, ChatTurnFailureNotice.unclassifiedText)
     XCTAssertEqual(notice?.text, classified.userMessage)
+  }
+
+  /// The same proxy receives BYOK and managed requests. A bare status cannot
+  /// prove that a saved key was ignored or identify whose billing rejected it.
+  func testBillingCopyDoesNotGuessTheAccountOrSuggestAnotherKey() {
+    let classified = AgentErrorClassifier.classify("HTTP 402 status code (no body)")
+
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.userMessage.contains("managed lane"))
+    XCTAssertFalse(classified.userMessage.contains("Your Anthropic"))
+    XCTAssertFalse(classified.userMessage.contains("add a key"))
+    XCTAssertTrue(classified.userMessage.contains("Settings → AI & Automation"))
+    XCTAssertTrue(classified.userMessage.contains("contact Omi Support"))
+  }
+
+  func testBillingClassificationSurvivesDisplayedCopyAndRuntimeWrapping() {
+    for raw in ["HTTP 402 status code (no body)", "402 Payment Required", "Credit balance is too low"] {
+      let first = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(AgentErrorClassifier.classify(first.userMessage), first)
+      XCTAssertEqual(
+        AgentErrorClassifier.classify(
+          AgentRuntimeFailure(code: "adapter_execution_failed", userMessage: first.userMessage)),
+        first)
+    }
+  }
+
+  func testPreviouslyShippedManagedBillingCopyIsNotReclassifiedAsPlanLimit() {
+    let oldCopy =
+      "Omi's managed AI service declined this request for billing reasons. "
+      + "This request ran on the managed lane — your own provider key is used only "
+      + "when the request goes to a provider you hold a key for. Check Settings → "
+      + "Plan and Usage, or add a key for the provider this path uses. "
+      + "Resending the same message won't help."
+    let classified = AgentErrorClassifier.classify(oldCopy)
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertEqual(classified.userMessage, AgentErrorClassifier.billingFailureMessage)
+    XCTAssertFalse(classified.retryable)
+  }
+
+  func testAnExplicitPlanLimitStillWinsOverItsTransportStatus() {
+    let classified = AgentErrorClassifier.classify(
+      "HTTP 402: You've hit your Free plan limit. Upgrade in Settings → Plan and Usage.")
+    XCTAssertEqual(classified.code, .planLimitReached)
+    XCTAssertFalse(classified.retryable)
+  }
+
+  /// Reproduced 2026-09-09: desktop-backend returned HTTP 503 with an empty
+  /// body. The classifier had 402 and 502 rules; 503 fell through to unknown
+  /// and the transcript showed "Omi couldn't answer this one".
+  func testBareHTTP503IsClassifiedRetryableLikeUpstreamProviderError() {
+    for raw in [
+      "HTTP 503 status code (no body)",
+      "HTTP 503",
+      "Request failed: http/503",
+      "status 503",
+      "status code: 503",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .upstreamProviderFailed, "unclassified: \(raw)")
+      XCTAssertTrue(classified.retryable, "503 is retryable: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.contains("503"),
+        "raw transport status must not reach the user: \(raw)")
+      XCTAssertNotEqual(classified.userMessage, raw, "must not show the raw transport string: \(raw)")
+    }
+    XCTAssertNotEqual(
+      AgentErrorClassifier.classify("elapsed 1503ms").code,
+      .upstreamProviderFailed,
+      "an unrelated number must not be read as HTTP 503")
   }
 }

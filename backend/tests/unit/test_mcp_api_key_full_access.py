@@ -4,8 +4,17 @@ from google.cloud import firestore
 import pytest
 
 import database.mcp_api_key as mcp_api_key_db
+import database.api_key_cache as api_key_cache
 from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult, ApiKeyValidationError
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
 import scripts.backfill_mcp_key_full_access as backfill_mcp_keys
+
+
+@pytest.fixture(autouse=True)
+def _local_revocation_store(monkeypatch):
+    store = RedisStore()
+    monkeypatch.setattr(api_key_cache, "_redis", lambda: store)
+    return store
 
 
 class _DocSnapshot:
@@ -35,7 +44,9 @@ class _DocReference:
     def collection(self, name):
         return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
 
-    def get(self):
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def get(self, **_read_options):
         return _DocSnapshot(self, self._collection._docs.get(self.id))
 
     def set(self, data, merge=False):
@@ -79,7 +90,7 @@ class _Query:
         self._limit = limit
         return self
 
-    def stream(self):
+    def stream(self, **_read_options):
         matches = [
             _DocSnapshot(_DocReference(self._collection, doc_id), data)
             for doc_id, data in self._collection._docs.items()
@@ -105,6 +116,9 @@ class _Collection:
 
 
 class _DB:
+    def batch(self):
+        return AtomicKeyBatch()
+
     def __init__(self):
         self._collections = {}
 
@@ -164,7 +178,9 @@ def _grant_for(db, uid, key_id, app_id=mcp_api_key_db.MCP_DEFAULT_APP_ID):
 def test_create_mcp_key_persists_full_access_identity_and_memory_grant(monkeypatch):
     db = _DB()
     monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
-    monkeypatch.setattr(mcp_api_key_db, "generate_api_key", lambda: ("omi_mcp_secret", "hashed", "omi_mcp"))
+    monkeypatch.setattr(
+        mcp_api_key_db, "generate_api_key", lambda: ("omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "hashed", "omi_mcp")
+    )
     monkeypatch.setattr(mcp_api_key_db.uuid, "uuid4", lambda: "key-1")
 
     with pytest.raises(ApiKeyValidationError, match="Invalid MCP API key app_id"):
@@ -174,7 +190,7 @@ def test_create_mcp_key_persists_full_access_identity_and_memory_grant(monkeypat
     raw_key, key = mcp_api_key_db.create_mcp_key("user-1", "Agent")
 
     key_doc = db.collection("mcp_api_keys").document("key-1").get().to_dict()
-    assert raw_key == "omi_mcp_secret"
+    assert raw_key == "omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     assert key.app_id == mcp_api_key_db.MCP_DEFAULT_APP_ID
     assert "memories.write" in key.scopes
     assert key_doc["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
@@ -209,7 +225,7 @@ def test_legacy_mcp_key_auth_repairs_identity_scopes_and_memory_grant(monkeypatc
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
     monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
 
-    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert auth["user_id"] == "user-1"
     assert auth["key_id"] == "legacy-key"
@@ -249,7 +265,7 @@ def test_stale_cached_mcp_key_auth_repairs_once_and_rewrites_cache(monkeypatch):
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
     monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
 
-    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert auth["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
     assert "memories.write" in auth["scopes"]
@@ -274,7 +290,7 @@ def test_fresh_cached_mcp_key_auth_does_not_write_firestore(monkeypatch):
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
     monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
 
-    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert auth["user_id"] == "user-1"
     assert db.collection("mcp_api_keys").update_count == 0

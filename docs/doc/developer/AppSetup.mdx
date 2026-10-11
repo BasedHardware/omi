@@ -419,3 +419,19 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     How to contribute to Omi
   </Card>
 </CardGroup>
+
+
+## Testing mobile voice enrollment
+
+First-run speech-profile enrollment asks for a short sample about any topic.
+Its progress uses approximately five seconds of user transcript spans; the
+server still validates the uploaded WAV. Settings redo uses its existing
+sentence target. Run the provider and onboarding widget regressions from `app/`:
+
+```bash
+flutter test test/providers/speech_profile_provider_test.dart test/widgets/speech_profile_onboarding_test.dart
+```
+
+For device verification, use the dev flavor and dev backend. Check speaking,
+Skip, and upload failure on the actual onboarding step. Advancing through All
+Done is a navigation event; verify the upload result separately.
