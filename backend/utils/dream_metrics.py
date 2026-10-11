@@ -41,6 +41,7 @@ ERROR_TYPES = {
     'ValidationError',
     'RuntimeError',
     'PreTokenFailure',
+    'CapacityWait',
     'ReadError',
     'ReadTimeout',
     'ConnectError',
@@ -55,7 +56,7 @@ ERROR_TYPES = {
 
 def record_pass(report):
     status = report.get('status', 'failed')
-    if status not in {'complete', 'failed', 'deadline', 'not_admitted'}:
+    if status not in {'complete', 'failed', 'deadline', 'not_admitted', 'waiting'}:
         status = 'failed'
     error = report.get('error_type')
     PASSES.labels(status, error if error in ERROR_TYPES else 'other' if error else 'none').inc()

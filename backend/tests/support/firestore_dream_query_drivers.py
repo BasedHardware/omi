@@ -48,7 +48,16 @@ def entries():
             base={'uid': UID},
             domains={'collection': ['conversations', 'action_items', 'people', 'memory_items'], 'rank': [0, 17]},
         ),
-        DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
+        DriverEntry(
+            'database.dream_scheduler.candidates',
+            domains={'limit': [1, 100]},
+            neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
+        ),
+        DriverEntry(
+            'database.dream_scheduler.candidate_page',
+            domains={'after': [None, 'one'], 'limit': [1, 100]},
+            neutrals={'transaction': (None, 'transaction does not change query shape')},
+        ),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
         DriverEntry(
             'database.dream_store.acquire',

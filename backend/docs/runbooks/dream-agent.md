@@ -485,3 +485,12 @@ change cohorts/schedules, or deploy anything.
 Registered, previously processed owners with empty dirty queues may run again after one hour under the same daily caps. Successful model passes record target review timestamps atomically with completion; failed passes do not. Empty passes refund inference admission but persist page progress. Synthetic canaries skip backfill.
 
 Uniform epsilon sampling uses collection counts and a random document rank, without rerolling filtered records. Offsets can bill linear skipped reads and large histories can hit the 3-second RPC deadline; this cost is outside the model USD reservation. Disable the random share when that cost is unsuitable. The sample is unbiased for a stable stored population before visibility/age/cooldown rejection, not an unbiased sample of automatically editable records.
+
+
+### Reserved background admission and fair drain
+
+The drain rotates bounded 100-owner document-ID pages using an atomic cursor, then ranks by `usage_weight × seconds since last successful pass` (paid weight 2, other weight 1; paid wins equal priorities). New registrations have epoch age. Page rotation prevents a permanent top-100 cutoff; priority is page-local, not a global sort. Deadline-interrupted owners retain their leases; unattended expired leases still require operator recovery.
+
+`DREAM_AGENT_CONCURRENCY` defaults to 2, bounded 1–8. Redis slots share this bound across replicas, have 240-second TTLs and compare-token release. All replicas should use the same setting. Admission requires exactly one active Flash reservation in the existing reservation evidence store, configured Redis and no dedicated-429 cooldown (120 seconds). Reasoning rechecks status after triage; a race is stopped by reserved-only gateway routing. Capacity failures cannot use Dream's provider or LKG fallback. Gemini never uses shared capacity. Unknown status/store outage waits; there is no measured GSU utilization percentage, so active status plus cooldown and slots is a conservative proxy, not guaranteed headroom.
+
+Global model USD reservation and per-user daily pass caps are unchanged. The owner can continue hourly testing with `DREAM_AGENT_PASSES_PER_DAY=24`; this PR changes no deployment configuration. Waiting before admission reserves no Firestore budget. A capacity rejection after paid triage retains its billed reservation and dirty versions without incrementing poison failures.

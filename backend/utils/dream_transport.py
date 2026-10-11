@@ -32,6 +32,10 @@ class PreTokenFailure(RuntimeError):
     """The gateway rejected a call before producing any billable model output."""
 
 
+class CapacityWait(PreTokenFailure):
+    """Reserved capacity unavailable; retain dirty versions without poisoning."""
+
+
 def _truncate_arrays(value, schema, root):
     """Keep ordered prefixes at the original Plan/Triage Pydantic array bounds.
 
@@ -165,6 +169,12 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
+        try:
+            failure = response.json().get('error', {}).get('failure_class')
+        except (ValueError, AttributeError):
+            failure = None
+        if lane == MAIN_LANE and failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}:
+            raise CapacityWait('dream_capacity_wait') from exc
         raise PreTokenFailure('dream_gateway_rejected') from exc
     body = response.json()
     usage = body['usage']

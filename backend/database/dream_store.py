@@ -78,7 +78,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # Bump once in the final chunk: a concurrent pass must not clear the
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
-            batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
+            batch.set(state, {'score': firestore.Increment(weight), 'usage_weight': weight}, merge=True)
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True
@@ -120,18 +120,6 @@ def trim_dirty(uid, *, firestore_client=None):
                 tx.set(state, {'dirty_dropped': firestore.Increment(len(victims))}, merge=True)
 
         trim(database.transaction())
-
-
-def candidates(*, limit=100, firestore_client=None):
-    # Single-field query: no composite index or collection-group scan.
-    return [
-        s.id
-        for s in client(firestore_client)
-        .collection('dream_users')
-        .order_by('score', direction='DESCENDING')
-        .limit(limit)
-        .stream()
-    ]
 
 
 class AdmissionDenied(Exception):

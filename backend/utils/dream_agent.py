@@ -7,11 +7,11 @@ from collections import Counter
 
 from pydantic import ValidationError
 
-from config.dream_agent import Caps, mode, auto_apply_kinds, apply_policy
-from database import dream_store, dream_feedback, review_changes, review_store
+from config.dream_agent import Caps, mode, concurrency, auto_apply_kinds, apply_policy
+from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
-from utils import dream_reads, dream_tools, dream_transport, dream_guards
+from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
 from utils.dream_context import EvidenceRecords, target_refs
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -23,6 +23,8 @@ from utils.dream_prompt import mount, evidence_message, evidence_chars, person_n
 
 async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
     async def invoke(uid, lane, mount, messages):
+        if turn is None and lane == dream_transport.MAIN_LANE and await dream_capacity.available_model() is None:
+            raise dream_transport.CapacityWait("dream_capacity_wait")
         if usage_sink is not None:
             key = 'triage_evidence_chars' if lane == dream_transport.TRIAGE_LANE else 'reasoning_evidence_chars'
             usage_sink[key] = evidence_chars(messages)
@@ -130,6 +132,33 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
 
 
 async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None):
+    # Injected synthetic turns need no provider admission. Real/manual/canary calls do.
+    slot = await dream_capacity.claim(concurrency()) if turn is None else None
+    if turn is None and slot is None:
+        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        record_pass(report)
+        return report
+    try:
+        report = await _run_admitted_pass(
+            uid,
+            caps=caps,
+            turn=turn,
+            trigger=trigger,
+            canary=canary,
+            timeout_seconds=min(timeout_seconds, 180),
+            progress=progress,
+        )
+    except BaseException:
+        # Cancellation/ambiguous failures keep the slot until TTL, just as owner leases.
+        raise
+    if slot is not None and report.get('error_type') != 'TimeoutError':
+        await dream_capacity.release(slot)
+    return report
+
+
+async def _run_admitted_pass(
+    uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None
+):
     caps = caps or Caps.from_env()
     lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
     if lease is None:
@@ -332,6 +361,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         refund = True
     except Exception as exc:
         report.update(status='failed', error_type=type(exc).__name__)
+        if isinstance(exc, dream_transport.CapacityWait):
+            report.update(status='waiting', reason='reserved_capacity')
         if isinstance(exc, ValidationError):
             counts = Counter(report.get('validation_errors', {}))
             counts.update(dream_transport.validation_counts(exc))
@@ -356,7 +387,11 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         refund=refund,
         reviewed=reviewed,
         cleanup_cursor=cleanup_cursor,
-        count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
+        count_failure=report['status'] != 'waiting'
+        and not success
+        and release
+        and report['tokens'] > 0
+        and report.get('reasoning_attempted', False),
     )
     record_pass(report)
     return report
@@ -366,17 +401,24 @@ DRAIN_TIMEOUT_SECONDS = 120
 
 
 async def drain(*, limit=100):
-    if mode() == 'off':
+    if mode() == 'off' or limit <= 0:
         return []
     results = []
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
-            for uid in await run_blocking(db_executor, dream_store.candidates, limit=max(0, min(limit, 100))):
-                if mode() == 'off':
-                    break
-                results.append(await run_pass(uid))
+            if await dream_capacity.available_model() is None:
+                return [{'status': 'waiting', 'reason': 'reserved_capacity'}]
+            owners = iter(await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100)))
+
+            async def worker():
+                for uid in owners:
+                    if mode() == 'off':
+                        return
+                    results.append(await run_pass(uid))
+
+            async with asyncio.TaskGroup() as group:
+                for _ in range(concurrency()):
+                    group.create_task(worker())
     except TimeoutError:
-        # Cancellation leaves any in-flight lease/reservation intact. Offloaded
-        # storage may still settle; never admit another pass for that user.
         results.append({'status': 'deadline'})
     return results

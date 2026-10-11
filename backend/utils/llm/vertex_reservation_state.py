@@ -354,6 +354,14 @@ class ReservationState:
         self, model: str, capacity: str, status: int, traffic_type: str | None, *, timeout_seconds: float = 0.3
     ) -> None:
         self._check_scope()
+        if model in RESERVATIONS and capacity == 'dedicated' and status == 429:
+            try:
+                client = self.client()
+                if client is not None:
+                    async with asyncio.timeout(0.3):
+                        await client.set(self.key() + ':saturated:' + model, '1', ex=120)
+            except Exception:
+                logger.warning('vertex_reservation_saturation_publish_failed model=%s', model)
         if (
             model in RESERVATIONS
             and capacity == 'dedicated'
