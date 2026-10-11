@@ -1,3 +1,4 @@
+import { BigQueryDate } from "@google-cloud/bigquery";
 import { getGcpBillingClient } from "@/lib/services/gcp-billing";
 
 // Aggregate tables only: no user identifiers are read by the dashboard.
@@ -348,11 +349,14 @@ export async function fetchPlanEconomics(now = new Date()) {
   if (!pending || pending.today !== today) {
     const bq = getGcpBillingClient();
     if (!bq) throw new Error("Plan economics billing client unavailable");
+    // Bind as a real BigQueryDate: @google-cloud/bigquery 9.x serializes a
+    // bare string with declared `types: {today: "DATE"}` as a parameter with
+    // a type but NO value (NULL), so every date filter matched nothing and
+    // all panels rendered "Cost feed unavailable".
     const value = bq
       .query({
         query: PLAN_ECONOMICS_QUERY,
-        params: { today },
-        types: { today: "DATE" },
+        params: { today: new BigQueryDate(today) },
         location: "US",
         maximumBytesBilled: "100000000",
       })

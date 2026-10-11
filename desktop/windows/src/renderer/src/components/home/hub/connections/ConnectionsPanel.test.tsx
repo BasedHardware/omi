@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-// useMemories, the Calendar status probe, and useGoogleConnection all fetch on
-// mount; keep them offline. One mock for every GET: callers read .memories or
+// useMemories and the Calendar status probe fetch on mount; keep them offline.
+// One mock for every GET: callers read .memories or
 // .connected — both fall out to empty/false, which every tile/row renders fine.
 const { omiGet } = vi.hoisted(() => ({ omiGet: vi.fn() }))
 vi.mock('../../../../lib/apiClient', () => ({
@@ -26,7 +26,6 @@ beforeEach(() => {
   ;(window as unknown as { omi: Record<string, unknown> }).omi = {
     openExternalUrl,
     readStickyNotes: vi.fn(),
-    googleStatus: vi.fn().mockResolvedValue({ connected: false }),
     xStatus: vi
       .fn()
       .mockResolvedValue({ connected: false, postCount: 0, memoryCount: 0, syncing: false }),
@@ -57,7 +56,6 @@ describe('ConnectionsPanel tray (top level)', () => {
     expect(screen.getByText('Use omi memory anywhere')).toBeTruthy()
     // Left (sources) + right (destinations) tiles.
     for (const tile of [
-      'tray-tile-gmail',
       'tray-tile-calendar',
       'tray-tile-sticky-notes',
       'tray-tile-x-twitter',
@@ -76,9 +74,9 @@ describe('ConnectionsPanel tray (top level)', () => {
 
   it('drills into a source connector and returns via Back', async () => {
     renderPanel()
-    fireEvent.click(screen.getByTestId('tray-tile-gmail'))
-    // The Gmail connector detail (renders the "Email" row) is now shown.
-    await waitFor(() => expect(screen.getByText('Email')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('tray-tile-calendar'))
+    // The Calendar connector detail is now shown.
+    await waitFor(() => expect(screen.getByText('Calendar')).toBeTruthy())
     expect(screen.getByTestId('connections-back')).toBeTruthy()
     // Back returns to the tray.
     fireEvent.click(screen.getByTestId('connections-back'))
@@ -96,7 +94,7 @@ describe('ConnectionsPanel tray (top level)', () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-more-imports'))
     await waitFor(() => expect(screen.getByText('Imports')).toBeTruthy())
-    for (const title of ['Calendar', 'Email', 'Sticky Notes', 'X (Twitter)', 'ChatGPT', 'Claude']) {
+    for (const title of ['Calendar', 'Sticky Notes', 'X (Twitter)', 'ChatGPT', 'Claude']) {
       expect(screen.getByText(title)).toBeTruthy()
     }
   })

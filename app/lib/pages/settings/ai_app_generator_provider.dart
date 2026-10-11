@@ -147,14 +147,14 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     _errorMessage = null;
 
     // Step 1: Creating plan
-    _updateStep(GenerationStep.creatingPlan, 'Analyzing your idea...');
+    _updateStep(GenerationStep.creatingPlan, 'Analyzing your idea…');
 
     try {
       // Small delay for UX
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Step 2: Developing logic
-      _updateStep(GenerationStep.developingLogic, 'Crafting app logic...');
+      _updateStep(GenerationStep.developingLogic, 'Crafting app logic…');
 
       // Generate app configuration
       final appData = await generateAppFromPrompt(prompt);
@@ -167,7 +167,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       }
 
       // Step 3: Designing app
-      _updateStep(GenerationStep.designingApp, 'Designing your app...');
+      _updateStep(GenerationStep.designingApp, 'Designing your app…');
       await Future.delayed(const Duration(milliseconds: 300));
 
       _generatedName = appData['name'] as String?;
@@ -192,7 +192,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       }
 
       // Step 5: Final touches
-      _updateStep(GenerationStep.finalTouches, 'Final touches...');
+      _updateStep(GenerationStep.finalTouches, 'Final touches…');
       await Future.delayed(const Duration(milliseconds: 300));
 
       _state = GenerationState.idle;

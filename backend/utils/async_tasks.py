@@ -21,6 +21,7 @@ import asyncio
 import logging
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Awaitable, Coroutine, Dict, Generic, Iterable, List, TypeVar, cast
@@ -211,8 +212,10 @@ class WebSocketTaskSupervisor:
             label=self.label,
         )
 
-    async def drain_monitored(self, *, timeout: float, cancel: bool = False) -> int:
-        return await drain_tasks(self._monitored_tasks, timeout=timeout, label=f"{self.label}_bg", cancel=cancel)
+    async def drain_monitored(self, *, timeout: float, cancel: bool = False, deadline: float | None = None) -> int:
+        return await drain_tasks(
+            self._monitored_tasks, timeout=timeout, label=f"{self.label}_bg", cancel=cancel, deadline=deadline
+        )
 
     async def drain_all(self, *, timeout: float, cancel: bool = True) -> int:
         return await drain_tasks(
@@ -306,6 +309,7 @@ async def drain_tasks(
     timeout: float = 30.0,
     label: str = "drain",
     cancel: bool = True,
+    deadline: float | None = None,
 ) -> int:
     """Cancel and wait for tasks to finish within timeout.
 
@@ -320,7 +324,10 @@ async def drain_tasks(
             task.cancel()
 
     with DRAIN_DURATION.labels(label=label).time():
-        done, still_pending = await asyncio.wait(pending, timeout=timeout)
+        done, still_pending = await asyncio.wait(
+            pending,
+            timeout=timeout if deadline is None else max(0.0, min(timeout, deadline - time.monotonic())),
+        )
 
     for task in done:
         if not task.cancelled():
@@ -338,7 +345,9 @@ async def drain_tasks(
         for task in still_pending:
             task.cancel()
         # Bounded wait for cancel acknowledgement — never block indefinitely
-        _, truly_stuck = await asyncio.wait(still_pending, timeout=5.0)
+        _, truly_stuck = await asyncio.wait(
+            still_pending, timeout=5.0 if deadline is None else max(0.0, min(5.0, deadline - time.monotonic()))
+        )
         force_cancelled = len(still_pending)
         if truly_stuck:
             logger.error(

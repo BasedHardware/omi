@@ -33,7 +33,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
 
     notification_db = _module(
         'database.notifications',
-        get_users_for_daily_summary=no_db_work,
+        get_users_for_daily_summary_indexed=no_db_work,
         get_users_token_in_timezones=no_db_work,
         get_users_id_in_timezones=no_db_work,
     )
@@ -67,6 +67,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'utils.conversations.factory': _module(
             'utils.conversations.factory',
             deserialize_conversation=lambda value: value,
+            deserialize_conversations=lambda items: list(items),
         ),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
@@ -75,7 +76,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *_args, **_kwargs: None,
+            send_notification_result=lambda *_args, **_kwargs: 1,
         ),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
         'utils.durable_queue_metrics': _module(
@@ -86,6 +87,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
 
@@ -133,8 +135,8 @@ def test_daily_summary_user_read_runs_off_loop_and_preserves_empty_result() -> N
                 assert release.wait(timeout=2)
                 return []
 
-            notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC']}
-            notification_db.get_users_for_daily_summary = blocking_read
+            notifications._get_timezones_grouped_by_hour = lambda *_args: {8: ['UTC']}
+            notification_db.get_users_for_daily_summary_indexed = blocking_read
 
             result = await _assert_loop_responsive_while_worker_waits(
                 notifications.send_daily_summary_notification(),
@@ -178,12 +180,12 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
 
 def test_daily_summary_db_failure_remains_fail_soft() -> None:
     with _loaded_other_notifications() as (notifications, notification_db):
-        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {8: ['UTC']}
 
         def fail_read(_timezones: list[str], _target_hour: int) -> list[Any]:
             raise RuntimeError('firestore unavailable')
 
-        notification_db.get_users_for_daily_summary = fail_read
+        notification_db.get_users_for_daily_summary_indexed = fail_read
 
         outcome = asyncio.run(notifications.send_daily_summary_notification())
         assert outcome.ok is False
@@ -194,14 +196,14 @@ def test_daily_summary_all_chunks_failed_is_a_typed_hour_reject() -> None:
     """Two timezone chunks, both raising, must not ACK the hour as an empty success."""
     with _loaded_other_notifications() as (notifications, notification_db):
         timezones = [f'tz-{index}' for index in range(31)]
-        notifications._get_timezones_grouped_by_hour = lambda: {8: timezones}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {8: timezones}
         calls: list[int] = []
 
         def fail_every_chunk(chunk: list[str], _target_hour: int) -> list[Any]:
             calls.append(len(chunk))
             raise RuntimeError('all chunks unavailable')
 
-        notification_db.get_users_for_daily_summary = fail_every_chunk
+        notification_db.get_users_for_daily_summary_indexed = fail_every_chunk
         outcome = asyncio.run(notifications.send_daily_summary_notification())
         assert calls == [30, 1]
         assert outcome.ok is False
@@ -218,8 +220,8 @@ def test_daily_summary_poison_hour_does_not_block_later_hours() -> None:
                 raise RuntimeError('malformed payload')
             return []
 
-        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC'], 9: ['US/Eastern']}
-        notification_db.get_users_for_daily_summary = users_for_hour
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {8: ['UTC'], 9: ['US/Eastern']}
+        notification_db.get_users_for_daily_summary_indexed = users_for_hour
 
         outcome = asyncio.run(notifications.send_daily_summary_notification())
         assert outcome.ok is False
@@ -228,8 +230,8 @@ def test_daily_summary_poison_hour_does_not_block_later_hours() -> None:
 
 def test_daily_summary_hour_send_failures_are_a_typed_cron_failure() -> None:
     with _loaded_other_notifications() as (notifications, notification_db):
-        notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC']}
-        notification_db.get_users_for_daily_summary = lambda *_args: [('uid', 'token')]
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {8: ['UTC']}
+        notification_db.get_users_for_daily_summary_indexed = lambda *_args: [('uid', 'token')]
 
         async def fail_sends(_users: list[Any], **kwargs: Any) -> bool:
             stats = kwargs.get('stats')

@@ -77,11 +77,11 @@ void main() {
       expect((await s.getMissingWals()).map((w) => w.id), [_sdWal().id]);
     });
 
-    test('drops a recording from the previous device without deleting on the new one', () async {
+    test('keeps a recording from the previous device until that device confirms the delete', () async {
       final stale = _sdWal(device: 'omi-0');
       final s = sync(wals: [stale]);
       await s.deleteWal(stale);
-      expect(await s.getMissingWals(), isEmpty);
+      expect((await s.getMissingWals()).map((w) => w.id), [stale.id]);
     });
 
     test('still sends the delete to the device for its own recording', () async {

@@ -34,7 +34,22 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
     folders = folders_db.get_folders(uid)
     if not folders:
         folders = folders_db.initialize_system_folders(uid)
-    return folders
+
+    valid_folders = []
+    for f in folders:
+        if not f or not f.get('id'):
+            continue
+        try:
+            Folder.model_validate(f)
+            valid_folders.append(f)
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping malformed folder doc {f.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])
@@ -73,6 +88,14 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
         raise HTTPException(status_code=404, detail="Folder not found")
 
     update_data = request.model_dump(exclude_unset=True)
+    # Released clients serialize an omitted field as null, not absent. The Folder model requires
+    # name, color, icon, and order, so writing a null over the stored value would make every
+    # Folder(**doc) read raise ValidationError (breaking GET /v1/folders and GET /v1/folders/{id})
+    # with no un-poisoning path. A null for these required fields means "not sent".
+    for field in ('name', 'color', 'icon', 'order'):
+        if update_data.get(field) is None and field in update_data:
+            update_data.pop(field)
+
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)
 

@@ -15,8 +15,10 @@ from models.candidate import (
     CandidateResolutionReceipt,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
 from utils.executors import postprocess_executor, submit_with_context
+from utils.notifications import sync_action_item_reminder
 from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
@@ -163,11 +165,40 @@ def drain_candidate_integrations(uid: str, *, account_generation: int, limit: in
     return sum(1 for result in results if result.outcome.kind == OutcomeKind.ACK)
 
 
-def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) -> CandidateResolutionReceipt:
+def _sync_task_reminder(uid: str, task_id: str) -> None:
+    """Reconcile the client-scheduled reminder for a task an accepted Candidate wrote (#5085).
+
+    Accepting a suggestion creates tasks with a due date and can reschedule or complete an
+    existing one, so it owes the same reconciliation as the action-item routes.
+    """
+    task = action_items_db.get_action_item(uid, task_id)
+    if task is None:
+        return
+    sync_action_item_reminder(
+        user_id=uid,
+        action_item_id=task_id,
+        description=task.get('description', ''),
+        completed=bool(task.get('completed')),
+        due_at=task.get('due_at'),
+        status=task.get('status'),
+        deleted=bool(task.get('deleted')),
+    )
+
+
+def accept_candidate(
+    uid: str,
+    candidate_id: str,
+    *,
+    account_generation: int,
+    summary_item: Optional[SummaryTaskReference] = None,
+    review_edits: Optional[dict] = None,
+) -> CandidateResolutionReceipt:
     candidate = candidates_db.get_candidate(uid, candidate_id)
     if candidate is None:
         raise candidates_db.CandidateNotFoundError(candidate_id)
     if candidate.subject_kind == CandidateSubjectKind.workstream:
+        if summary_item is not None:
+            raise candidates_db.CandidateConflictError('Summary promotion requires a task-create Candidate')
         if _workstream_resolver is None:
             raise candidates_db.WorkstreamCandidateResolverUnavailableError(
                 'Ticket 04 workstream resolver is not registered'
@@ -189,8 +220,13 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
                 receipt.task_id,
                 account_generation=account_generation,
             )
+            _sync_task_reminder(uid, receipt.task_id)
         return receipt
 
+    if review_edits is not None:
+        from utils.review_candidate_edits import edited_candidate
+
+        candidate = edited_candidate(candidate, review_edits)
     expected_task_links = None
     final_goal_id = candidate.goal_id
     final_workstream_id = candidate.workstream_id
@@ -207,12 +243,26 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
         if final_workstream_id is None:
             final_workstream_id = expected_task_links[1]
     task_links.validate_task_links(uid, goal_id=final_goal_id, workstream_id=final_workstream_id)
-    receipt = candidates_db.resolve_task_candidate(
-        uid,
-        candidate_id,
-        account_generation=account_generation,
-        expected_task_links=expected_task_links,
-    )
+    if summary_item is None and review_edits is not None:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+            review_edits=review_edits,
+        )
+    elif summary_item is None:
+        receipt = candidates_db.resolve_task_candidate(
+            uid, candidate_id, account_generation=account_generation, expected_task_links=expected_task_links
+        )
+    else:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+            summary_item=summary_item,
+        )
     if candidate.proposed_action == CandidateAction.create and receipt.task_id:
         _dispatch_task_integration(
             uid,
@@ -220,6 +270,8 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
             receipt.task_id,
             account_generation=account_generation,
         )
+    if receipt.task_id:
+        _sync_task_reminder(uid, receipt.task_id)
     return receipt
 
 

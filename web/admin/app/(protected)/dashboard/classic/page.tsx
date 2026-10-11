@@ -374,7 +374,7 @@ interface ProfitabilityData {
       firebaseAuth: boolean;
       firestoreTokens: boolean;
       posthogDesktop?: boolean;
-      mixpanelMobile?: boolean;
+      posthogMobile?: boolean;
       stripeActive: boolean;
       stripeNewPaid: boolean;
       infraCosts?: boolean;

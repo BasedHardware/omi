@@ -8,9 +8,10 @@ lookups using public Open-Meteo APIs.
 from typing import Any, Literal, Optional
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -31,6 +32,29 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
+
+
+class _NullMeansDefault(BaseModel):
+    """The Omi backend sends every optional tool parameter the model did not
+    supply as JSON null (langchain-core 1.3.3 forwards defaulted fields), so a
+    null must mean 'use the default', not 'invalid request'."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
+
+
 class ChatToolResponse(BaseModel):
     """Response model for Omi chat tool endpoints."""
 
@@ -38,18 +62,51 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
-class CurrentWeatherRequest(BaseModel):
+class CurrentWeatherRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
-    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
+    temperature_unit: Optional[Literal["celsius", "fahrenheit"]] = Field(default="celsius")
+
+    @field_validator("temperature_unit", mode="before")
+    @classmethod
+    def coerce_temperature_unit(cls, v: Any) -> str:
+        if v is None:
+            return "celsius"
+        cleaned = str(v).strip().lower()
+        if cleaned not in ("celsius", "fahrenheit"):
+            raise ValueError("temperature_unit must be 'celsius' or 'fahrenheit'")
+        return cleaned
 
 
-class ForecastRequest(BaseModel):
+class ForecastRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
-    days: int = Field(default=3, ge=1, le=MAX_FORECAST_DAYS)
-    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
+    days: Optional[int] = Field(default=3, ge=1, le=MAX_FORECAST_DAYS)
+    temperature_unit: Optional[Literal["celsius", "fahrenheit"]] = Field(default="celsius")
+
+    @field_validator("days", mode="before")
+    @classmethod
+    def coerce_days(cls, v: Any) -> int:
+        if v is None:
+            return 3
+        try:
+            val = int(v)
+        except (ValueError, TypeError):
+            raise ValueError("days must be an integer between 1 and 7")
+        if not (1 <= val <= MAX_FORECAST_DAYS):
+            raise ValueError(f"days must be between 1 and {MAX_FORECAST_DAYS}")
+        return val
+
+    @field_validator("temperature_unit", mode="before")
+    @classmethod
+    def coerce_temperature_unit(cls, v: Any) -> str:
+        if v is None:
+            return "celsius"
+        cleaned = str(v).strip().lower()
+        if cleaned not in ("celsius", "fahrenheit"):
+            raise ValueError("temperature_unit must be 'celsius' or 'fahrenheit'")
+        return cleaned
 
 
-class AirQualityRequest(BaseModel):
+class AirQualityRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
 
 

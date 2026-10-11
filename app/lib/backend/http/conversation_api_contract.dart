@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'api_presentation.dart';
@@ -49,24 +51,26 @@ class ConversationApiStatus extends StatelessWidget {
           ApiViewPhase.data => null,
         };
         if (keyName == null) return const SizedBox.shrink();
-        final copy = switch (view.phase) {
-          ApiViewPhase.empty => context.l10n.noConversationsYet,
-          _ => context.l10n.somethingWentWrong,
-        };
+        // A successful empty response keeps Home's icon, hint and placement.
+        // Retain the typed-state key used by the conversation surface contract.
+        if (view.phase == ApiViewPhase.empty) {
+          return NoConversationsHero(key: ValueKey(keyName));
+        }
+        final copy = context.l10n.somethingWentWrong;
         return Semantics(
           container: true,
           liveRegion: view.phase == ApiViewPhase.error,
           label: copy,
           child: Padding(
             key: ValueKey(keyName),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(OmiSpacing.xl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   copy,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+                  style: OmiType.body,
                 ),
                 if (view.problem?.retryable == true)
                   TextButton(onPressed: () => provider.forceRefreshConversations(), child: Text(context.l10n.retry)),

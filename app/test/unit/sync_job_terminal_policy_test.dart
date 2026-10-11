@@ -161,6 +161,7 @@ void main() {
       expect(isAutoUploadEligible(wal(retryCount: 0, status: WalStatus.uploaded)), isFalse);
       expect(isAutoUploadEligible(wal(retryCount: 0, status: WalStatus.synced)), isFalse);
       expect(isAutoUploadEligible(wal(retryCount: 0, status: WalStatus.outsideRecoveryWindow)), isFalse);
+      expect(isAutoUploadEligible(wal(retryCount: 0, status: WalStatus.unsupportedAudio)), isFalse);
     });
 
     test('a spent budget is exactly what the sync row renders as failed', () {

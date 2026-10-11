@@ -10,15 +10,21 @@ key and document why the wrong key drops the attribution.
 """
 
 import models.notification_message as nm
-from utils.app_integrations import _build_app_notification_payload
+from utils.notification_dispatch import NotificationIntent
 
 
 def test_send_app_notification_attributes_via_plugin_id():
-    title, payload = _build_app_notification_payload('Calendar', 'app123', 'Your event starts soon', 'app')
+    intent = NotificationIntent.app_integration(
+        user_id='user-1',
+        app_name='Calendar',
+        app_id='app123',
+        message='Your event starts soon',
+        source='test',
+    )
 
-    assert title == 'Calendar says'
-    assert payload['plugin_id'] == 'app123'
-    assert 'app_id' not in payload
+    assert intent.title == 'Calendar says'
+    assert intent.data['plugin_id'] == 'app123'
+    assert 'app_id' not in intent.data
 
 
 def test_plugin_id_survives_payload_but_unknown_app_id_is_dropped():

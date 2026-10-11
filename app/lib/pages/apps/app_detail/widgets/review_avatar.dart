@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+
 /// Initials avatar rendered entirely locally — no network dependency.
 ///
 /// Review reviewer photos are not stored anywhere, so avatars were previously
@@ -22,15 +24,17 @@ class ReviewAvatar extends StatelessWidget {
     this.foregroundColor,
   });
 
+  // A fixed rotation of initials-avatar background colours. No token fits a multi-hue rotating
+  // palette, and INV-UI-1 only bans purple/indigo, not colour itself.
   static const List<Color> _palette = [
-    Color(0xFF6C5CE7),
-    Color(0xFF00B894),
-    Color(0xFF0984E3),
-    Color(0xFFE17055),
-    Color(0xFFD63031),
-    Color(0xFF00CEC9),
-    Color(0xFFE84393),
-    Color(0xFFFDCB6E),
+    Color(0xFF6AB04C), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFF00B894), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFF0984E3), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFFE17055), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFFD63031), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFF00CEC9), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFFE84393), // omi-ux-allow: color-literal -- avatar palette
+    Color(0xFFFDCB6E), // omi-ux-allow: color-literal -- avatar palette
   ];
 
   String get _initial => username.isNotEmpty ? username[0].toUpperCase() : 'A';
@@ -57,7 +61,7 @@ class ReviewAvatar extends StatelessWidget {
   // foreground from the background's luminance when no override is given.
   Color get _foreground {
     if (foregroundColor != null) return foregroundColor!;
-    return _background.computeLuminance() > 0.5 ? const Color(0xFF1F1F25) : Colors.white;
+    return _background.computeLuminance() > 0.5 ? OmiColors.surface1 : OmiColors.textPrimary;
   }
 
   @override

@@ -346,7 +346,7 @@ class App {
 
   bool worksWithMemories() => hasCapability('memories');
 
-  bool worksWithChat() => hasCapability('chat');
+  bool worksWithChat() => hasCapability('chat') || hasCapability('persona');
 
   bool worksExternally() => hasCapability('external_integration');
 

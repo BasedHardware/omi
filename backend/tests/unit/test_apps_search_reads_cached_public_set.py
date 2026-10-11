@@ -134,6 +134,27 @@ def test_search_populates_the_shared_cache_on_a_cold_read(env):
     assert 'description' in cached[0]
 
 
+def test_search_enriches_only_query_matches(env, monkeypatch):
+    enrichment_ids = {}
+
+    def installs(ids):
+        enrichment_ids['installs'] = list(ids)
+        return {'a1': 3}
+
+    def reviews(ids):
+        enrichment_ids['reviews'] = list(ids)
+        return {}
+
+    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', installs)
+    monkeypatch.setattr(apps_mod, 'get_apps_reviews', reviews)
+
+    response = env.client.get('/v2/apps/search', params={'q': 'todoist', 'limit': 100})
+
+    assert response.status_code == 200
+    assert [a['id'] for a in response.json()['data']] == ['a1']
+    assert enrichment_ids == {'installs': ['a1'], 'reviews': ['a1']}
+
+
 def test_warm_cache_serves_search_without_streaming_the_collection(env):
     assert env.client.get('/v2/apps/search', params={'q': 'grok', 'limit': 100}).status_code == 200
     env.firestore.collection_obj.streams = 0
@@ -201,3 +222,60 @@ def test_installed_apps_over_the_in_limit_uses_the_cache_for_the_public_set(env,
     assert sorted(a['id'] for a in response.json()['data']) == ['a1', 'a2']
     # Exactly one stream: the uid-scoped query for the user's own private/unapproved apps.
     assert env.firestore.collection_obj.streams == 1
+
+
+def test_installed_apps_over_the_in_limit_applies_category_and_capability_filters(env, monkeypatch):
+    """>30 enabled ids must not re-insert or leak user_apps that fail category/capability filters."""
+    enabled = {'a1', 'a2', 'priv1'} | {f'x{i}' for i in range(30)}
+    monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: enabled)
+    env.client.get('/v2/apps/search', params={'limit': 100})  # warm the cache WITHOUT priv1
+    # Add priv1 only after the warm, so it can enter the result solely through the >30 user_apps
+    # merge — the path this test exists to guard.
+    env.docs.append(
+        _app_doc(
+            'priv1', 'Private Entertainment', category='entertainment', capabilities=['memories'], private=True, uid=UID
+        )
+    )
+
+    by_cat = env.client.get(
+        '/v2/apps/search', params={'installed_apps': 'true', 'category': 'entertainment', 'limit': 100}
+    )
+    assert by_cat.status_code == 200
+    assert [a['id'] for a in by_cat.json()['data']] == ['priv1']
+
+    by_cap = env.client.get(
+        '/v2/apps/search', params={'installed_apps': 'true', 'capability': 'memories', 'limit': 100}
+    )
+    assert by_cap.status_code == 200
+    assert [a['id'] for a in by_cap.json()['data']] == ['priv1']
+
+
+def test_my_apps_with_null_capabilities_does_not_crash_on_capability_filter(env):
+    """A user app record with explicit capabilities=None must not raise TypeError when capability filter is active."""
+    env.docs.append(_app_doc('nullcap', 'Draft Null Cap', capabilities=None, uid=UID))
+    response = env.client.get('/v2/apps/search', params={'my_apps': 'true', 'capability': 'chat', 'limit': 100})
+    assert response.status_code == 200  # the null record must not 500 the capability filter
+    ids = [a['id'] for a in response.json()['data']]
+    # The guard's effect: an explicit capabilities=None record is dropped, not compared (`x in None`).
+    assert 'nullcap' not in ids
+    assert 'a1' in ids
+
+
+def test_installed_apps_includes_persona_apps_for_the_chat_picker(env, monkeypatch):
+    """The mobile chat picker loads installed apps from /v2/apps/search.
+
+    Browse/search hides personas (they are private chat identities, not catalog
+    listings), but an installed persona must reappear in the installed read or
+    the picker silently loses it after restart/refresh.
+    """
+    # Seed the persona before any read so it is part of the cached public set.
+    env.docs.append(_app_doc('a4', 'Friend Persona', capabilities=['persona'], chat_prompt='be a friend'))
+    monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: {'a1', 'a4'})
+
+    browse = env.client.get('/v2/apps/search', params={'limit': 100})
+    assert 'a4' not in [a['id'] for a in browse.json()['data']]
+
+    installed = env.client.get('/v2/apps/search', params={'installed_apps': 'true', 'limit': 100})
+    ids = [a['id'] for a in installed.json()['data']]
+    assert 'a4' in ids
+    assert 'a1' in ids

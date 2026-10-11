@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryCard } from '@/components/memories/MemoryCard';
 import type { Memory } from '@/types/conversation';
@@ -164,5 +164,42 @@ describe('MemoryCard layout', () => {
 
     expect(content).not.toHaveClass('line-clamp-2');
     expect(screen.getByRole('button', { name: 'Show less' })).toBeInTheDocument();
+  });
+});
+
+describe('MemoryCard delete', () => {
+  it('lets the user try again when the delete throws', async () => {
+    const onDelete = vi.fn().mockRejectedValue(new Error('network down'));
+    render(
+      <MemoryCard
+        memory={memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={onDelete}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('Delete memory'));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith(memory.id));
+    await waitFor(() => expect(screen.getByTitle('Delete memory')).not.toBeDisabled());
+  });
+
+  it('lets the user try again when the delete is rejected', async () => {
+    const onDelete = vi.fn().mockResolvedValue(false);
+    render(
+      <MemoryCard
+        memory={memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={onDelete}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const deleteButton = screen.getByTitle('Delete memory');
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith(memory.id));
+    await waitFor(() => expect(screen.getByTitle('Delete memory')).not.toBeDisabled());
   });
 });

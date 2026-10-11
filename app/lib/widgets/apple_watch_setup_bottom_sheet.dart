@@ -4,16 +4,20 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AppleWatchSetupBottomSheet extends StatefulWidget {
   final String deviceId;
   final VoidCallback? onConnected;
 
-  const AppleWatchSetupBottomSheet({Key? key, required this.deviceId, this.onConnected}) : super(key: key);
+  const AppleWatchSetupBottomSheet({super.key, required this.deviceId, this.onConnected});
+
+  /// Presents [sheet] in the shared sheet shell (docs/ux-contract.md §2).
+  static Future<void> show(BuildContext context, {required AppleWatchSetupBottomSheet sheet}) {
+    return showOmiSheet<void>(context: context, builder: (_) => sheet);
+  }
 
   @override
   State<AppleWatchSetupBottomSheet> createState() => _AppleWatchSetupBottomSheetState();
@@ -53,124 +57,45 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    final responsive = ResponsiveHelper(context);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xl),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
-          ),
-
-          // Main content
-          Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              children: [
-                // Apple Watch image
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: 120,
-                  width: 120,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: responsive.mediumShadow,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(Assets.images.appleWatch.path, fit: BoxFit.cover),
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                if (_isLoading) ...[
-                  Text(context.l10n.checkingAppleWatch, style: responsive.titleLarge, textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-                    strokeWidth: 2,
-                  ),
-                ] else if (_isAppInstalled == false) ...[
-                  // App not installed
-                  Text(
-                    context.l10n.installOmiOnAppleWatch,
-                    style: responsive.titleLarge.copyWith(height: 1.2),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    context.l10n.installOmiOnAppleWatchDescription,
-                    style: responsive.bodyLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                ] else ...[
-                  // App installed but not reachable (not open)
-                  Text(
-                    context.l10n.openOmiOnAppleWatch,
-                    style: responsive.titleLarge.copyWith(height: 1.2),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    context.l10n.openOmiOnAppleWatchDescription,
-                    style: responsive.bodyLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-
-                const SizedBox(height: 32),
-
-                // Action buttons
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: _isChecking ? null : _handlePrimaryAction,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ResponsiveHelper.purplePrimary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          elevation: 0,
-                        ),
-                        child: _isChecking
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : Text(
-                                _getPrimaryButtonText(context),
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-                InkWell(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Text(context.l10n.cancel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
-                ),
-
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-              ],
+          ExcludeSemantics(
+            child: ClipRRect(
+              borderRadius: OmiRadius.lgAll,
+              child: Image.asset(Assets.images.appleWatch.path, height: 120, width: 120, fit: BoxFit.cover),
             ),
           ),
+          const SizedBox(height: OmiSpacing.xxl),
+          if (_isLoading) ...[
+            Text(context.l10n.checkingAppleWatch, style: OmiType.title3, textAlign: TextAlign.center),
+            const SizedBox(height: OmiSpacing.md),
+            const OmiSpinner(),
+          ] else ...[
+            Text(
+              _isAppInstalled == false ? context.l10n.installOmiOnAppleWatch : context.l10n.openOmiOnAppleWatch,
+              style: OmiType.title3.copyWith(height: 1.2),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: OmiSpacing.md),
+            Text(
+              _isAppInstalled == false
+                  ? context.l10n.installOmiOnAppleWatchDescription
+                  : context.l10n.openOmiOnAppleWatchDescription,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: OmiSpacing.xxl),
+          OmiButton(
+            label: _getPrimaryButtonText(context),
+            expand: true,
+            isLoading: _isChecking,
+            onPressed: _isLoading ? null : _handlePrimaryAction,
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton.tertiary(label: context.l10n.cancel, expand: true, onPressed: () => Navigator.of(context).pop()),
         ],
       ),
     );
@@ -205,7 +130,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbar(context.l10n.unableToOpenWatchApp, duration: const Duration(seconds: 6));
+        OmiFeedback.error(context, context.l10n.unableToOpenWatchApp);
 
         Navigator.of(context).pop();
       }
@@ -223,7 +148,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
 
       if (isReachable) {
         if (mounted) {
-          AppSnackbar.showSnackbar(context.l10n.appleWatchConnectedSuccessfully, duration: const Duration(seconds: 2));
+          OmiFeedback.confirm(context, context.l10n.appleWatchConnectedSuccessfully);
 
           // Close the bottom sheet and notify parent
           Navigator.of(context).pop();
@@ -231,20 +156,15 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
         widget.onConnected?.call();
       } else {
         if (mounted) {
-          AppSnackbar.showSnackbar(context.l10n.appleWatchNotReachable, duration: const Duration(seconds: 4));
+          OmiFeedback.info(context, context.l10n.appleWatchNotReachable);
         }
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbar(
-          context.l10n.errorCheckingConnection(readableError(e)),
-          duration: const Duration(seconds: 3),
-        );
+        OmiFeedback.error(context, context.l10n.errorCheckingConnection(readableError(e)));
       }
     } finally {
-      setState(() {
-        _isChecking = false;
-      });
+      if (mounted) setState(() => _isChecking = false);
     }
   }
 }

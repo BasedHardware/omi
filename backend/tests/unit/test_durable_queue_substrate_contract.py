@@ -17,7 +17,6 @@ PRODUCTION_DRAIN_MODULES = (
     ('backend/database/candidate_integration_outbox.py', 'decide_attempt('),
     ('backend/database/chat_first_intent_queue.py', 'drain_isolated('),
     ('backend/database/chat_first_intents.py', 'drain_intent_batch('),
-    ('backend/utils/chat_first_materialize_queue.py', 'drain_isolated('),
     ('backend/utils/memory/daily_memory_sweep_queue.py', 'drain_isolated('),
     ('backend/utils/memory/daily_memory_sweep.py', 'drain_sweep_uids('),
     ('backend/utils/other/notifications.py', 'drain_isolated_async('),

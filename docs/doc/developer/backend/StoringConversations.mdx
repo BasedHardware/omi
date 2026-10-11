@@ -78,6 +78,16 @@ flowchart TD
 
 ## Firestore Structure
 
+### Folder deletion and concurrent conversation changes
+
+`DELETE /v1/folders/{folder_id}` rechecks each discovered conversation's current
+folder membership before rehoming it. A newer move or unfile decision is preserved,
+and a conversation deleted during cleanup is not recreated. Cleanup uses bounded
+transactions, not one all-or-nothing transaction across a large folder. A failed
+chunk leaves the source folder available for retry. This protects discovered
+candidates; it does not serialize new assignments into the source folder or
+concurrent deletion of the destination folder.
+
 ```
 users/
 ├── {uid}/
@@ -439,3 +449,15 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
     Environment setup and configuration
   </Card>
 </CardGroup>
+
+### Manual speaker attribution during concurrent writes
+
+Manual speaker decisions live in a protected sparse receipt alongside the transcript.
+Live STT merging and both processing-result writers read that receipt in their
+commit transaction. Live merging preserves every manually covered speech span,
+including speaker-wide defaults, explicit clears, and training opt-outs. The
+committed transcript and deleted-ID delta are returned together for client delivery.
+Translation and inference-only writers patch current IDs without owning the segment
+set. Privacy-level migration re-encodes the transcript and receipt together.
+Changing attribution does not automatically regenerate a summary; refresh remains
+an explicit user action. Enrollment remains best-effort.

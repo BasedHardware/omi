@@ -148,7 +148,7 @@ printf '%s\n' "$!" >"$OMI_FAULT_APP_PID_FILE"
   printf 'launch_transport=open\n'
 } >"$OMI_DESKTOP_LAUNCH_SIGNAL_FILE"
 chmod 600 "$OMI_DESKTOP_LAUNCH_SIGNAL_FILE"
-env | sort >"$OMI_FAULT_ENV_CAPTURE"
+env -0 >"$OMI_FAULT_ENV_CAPTURE"
 SH
   chmod +x "$fixture/run.sh"
 
@@ -159,6 +159,7 @@ SH
   chmod +x "$fixture/scripts/omi-harness"
 
   PATH="$bin_dir:$PATH" \
+    OMI_FAULT_MULTILINE_FIXTURE=$'first\nsecond' \
     OMI_FAULT_TEST_REPO_ROOT="$fixture" \
     OMI_FAULT_RUN_TOKEN="$fault_run_token" \
     OMI_FAULT_STATE_DIR="$qualification_fault_state" \
@@ -180,9 +181,13 @@ from pathlib import Path
 import sys
 
 captured = {}
-for line in open(sys.argv[1], encoding="utf-8"):
-    key, value = line.rstrip("\n").split("=", 1)
-    captured[key] = value
+for entry in Path(sys.argv[1]).read_bytes().split(b"\0"):
+    if not entry:
+        continue
+    key, separator, value = entry.partition(b"=")
+    assert separator, entry
+    captured[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+assert captured.get("OMI_FAULT_MULTILINE_FIXTURE") == "first\nsecond"
 
 fault_url = f"http://127.0.0.1:{sys.argv[4]}"
 fault_bundle = f"omi-fault-{sys.argv[5]}"

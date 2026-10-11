@@ -36,7 +36,7 @@ class GoalRelationshipDisposition(str, Enum):
 
 
 class GoalMetric(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     type: GoalType
     current: float
@@ -55,7 +55,7 @@ class GoalMetric(BaseModel):
 class GoalCreate(BaseModel):
     """Canonical create shape with explicit compatibility for released request fields."""
 
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     title: str = Field(min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -123,7 +123,7 @@ class GoalCreate(BaseModel):
 
 
 class GoalUpdate(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)

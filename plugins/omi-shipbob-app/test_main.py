@@ -537,17 +537,30 @@ def _headers_ok():
 class TestCancelWroRegression13183(unittest.TestCase):
     """Regression tests for cancel_wro error classification (#13183)."""
 
+    TOOLS_SECRET = "test-shipbob-tools-secret"
+
     def setUp(self):
         from fastapi.testclient import TestClient
 
+        self._old_secret = os.environ.get("SHIPBOB_TOOLS_SECRET")
+        os.environ["SHIPBOB_TOOLS_SECRET"] = self.TOOLS_SECRET
         self.client = TestClient(main.app)
+
+    def tearDown(self):
+        if self._old_secret is None:
+            os.environ.pop("SHIPBOB_TOOLS_SECRET", None)
+        else:
+            os.environ["SHIPBOB_TOOLS_SECRET"] = self._old_secret
+
+    def _auth_headers(self):
+        return {"Authorization": f"Bearer {self.TOOLS_SECRET}"}
 
     @patch("main.get_shipbob_headers", return_value=_headers_ok())
     @patch("main.refresh_token_if_needed")
     @patch("main.requests.post")
     def test_cancel_empty_body_500_is_error(self, mock_post, _refresh, _headers):
         mock_post.return_value = FakeResp(status_code=500, text="")
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertTrue(body.get("error"))
@@ -557,7 +570,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value=None)
     def test_cancel_none_result_is_error(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertTrue(body.get("error"))
 
@@ -565,7 +578,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value={"error": "forbidden", "status_code": 403})
     def test_cancel_nonempty_error_is_surfaced(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertIn("forbidden", body.get("error", ""))
 
@@ -573,7 +586,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value={"id": 123, "status": "cancelled"})
     def test_cancel_success_200_object(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertIn(body.get("error"), (None, ""))
         self.assertIn("cancelled", (body.get("result") or "").lower())

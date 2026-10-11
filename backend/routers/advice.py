@@ -1,12 +1,17 @@
 """Advice — proactive coaching items."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from models.advice import Advice
 from models.shared import StatusResponse
 import database.advice as advice_db
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -32,6 +37,33 @@ class UpdateAdviceRequest(BaseModel):
 
 
 # ============================================================================
+# HELPERS
+# ============================================================================
+
+
+def _require_advice_id(advice_id: str) -> str:
+    """Classify a blank path coordinate as a bad request before it reaches the data layer.
+
+    ``/v1/advice/{advice_id}`` carrying only whitespace is a caller bug, not a lookup:
+    Firestore accepts the string as a document id and the read simply misses, so the route
+    answered 404 (PATCH) or 200 (DELETE) for what the caller meant as "no id at all".
+    """
+    stripped = advice_id.strip()
+    if not stripped:
+        raise HTTPException(status_code=400, detail='Valid advice_id is required')
+    return stripped
+
+
+def _log_database_failure(action: str, uid: str, error: Exception) -> None:
+    """Log a data-layer failure server-side, masking anything token- or PII-shaped.
+
+    The client only ever receives a fixed message: raw exception text names Firestore and
+    provider internals and can echo stored document contents, so it stays in the log.
+    """
+    logger.error(f'advice {action} failed uid={uid}: {sanitize(str(error))}', exc_info=True)
+
+
+# ============================================================================
 # ENDPOINTS
 # ============================================================================
 
@@ -41,16 +73,25 @@ def create_advice(
     request: CreateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return advice_db.create_advice(
-        uid,
-        content=request.content,
-        category=request.category or 'other',
-        reasoning=request.reasoning,
-        source_app=request.source_app,
-        confidence=request.confidence,
-        context_summary=request.context_summary,
-        current_activity=request.current_activity,
-    )
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail='content cannot be empty or whitespace only')
+    try:
+        return advice_db.create_advice(
+            uid,
+            content=content,
+            category=request.category or 'other',
+            reasoning=request.reasoning,
+            source_app=request.source_app,
+            confidence=request.confidence,
+            context_summary=request.context_summary,
+            current_activity=request.current_activity,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('create', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to create advice')
 
 
 @router.get('/v1/advice', tags=['advice'], response_model=list[Advice])
@@ -61,7 +102,15 @@ def get_advice(
     include_dismissed: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return advice_db.get_advice(uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed)
+    try:
+        return advice_db.get_advice(
+            uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('list', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to load advice')
 
 
 @router.patch('/v1/advice/{advice_id}', tags=['advice'], response_model=Advice)
@@ -70,7 +119,16 @@ def update_advice(
     request: UpdateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
+    advice_id = _require_advice_id(advice_id)
+    if request.is_read is None and request.is_dismissed is None:
+        raise HTTPException(status_code=400, detail='At least one of is_read or is_dismissed is required')
+    try:
+        result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('update', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to update advice')
     if result is None:
         raise HTTPException(status_code=404, detail='Advice not found')
     return result
@@ -81,11 +139,26 @@ def delete_advice(
     advice_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    advice_db.delete_advice(uid, advice_id)
+    advice_id = _require_advice_id(advice_id)
+    try:
+        deleted = advice_db.delete_advice(uid, advice_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('delete', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to delete advice')
+    if not deleted:
+        raise HTTPException(status_code=404, detail='Advice not found')
     return {'status': 'ok'}
 
 
 @router.post('/v1/advice/mark-all-read', tags=['advice'], response_model=StatusResponse)
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
-    count = advice_db.mark_all_advice_read(uid)
+    try:
+        count = advice_db.mark_all_advice_read(uid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('mark_all_read', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to mark advice as read')
     return {'status': f'marked {count} as read'}

@@ -18,7 +18,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
 
     _animation1 = Tween<Offset>(
       begin: const Offset(0, 0.2),
@@ -45,6 +45,17 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
       begin: Colors.grey[400],
       end: Colors.grey[600],
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      _controller.stop();
+      _controller.value = .5;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-composite-action-reads-unavailable-context",
+  "violated_contract": "A composite GitHub Action may reference only the expression contexts a composite action can access. `vars` and `secrets` do not exist there. GitHub rejects the whole action at load time (\"Unrecognized named-value: 'vars'\"), so the failure is not confined to the step that used it: every workflow that calls the action fails before its first step, in every environment. The file is valid YAML and every string-level wiring assertion passes, so nothing short of executing the action or checking the context rule catches it.",
+  "canonical_prevention": "Pass the value into the composite action as an input and read `vars`/`secrets` only in the calling workflow, where those contexts exist. Guard it with a test that scans every composite action's `${{ }}` expressions for `vars.` and `secrets.` references, and prove that test red against the defective revision rather than only green against the fix.",
+  "canonical_prevention_artifact": [
+    ".github/actions/deploy-backend-stack/action.yml",
+    "backend/tests/unit/test_free_tier_basic_gates.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/actions/**"
+  ],
+  "status": "open"
+}

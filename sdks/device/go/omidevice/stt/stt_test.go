@@ -57,6 +57,36 @@ func TestParakeetWSURL(t *testing.T) {
 			sampleRate: 16000,
 			want:       "wss://parakeet.example/gateway/v3/stream?sample_rate=16000&token=abc",
 		},
+		{
+			name:       "replace percent-encoded sample rate key",
+			apiURL:     "https://parakeet.example/gateway?%73ample_rate=8000&token=a%26b",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/gateway/v3/stream?sample_rate=16000&token=a%26b",
+		},
+		{
+			name:       "replace encoded underscore and valueless rate",
+			apiURL:     "https://parakeet.example?region=eu&sample%5Frate",
+			sampleRate: 8000,
+			want:       "wss://parakeet.example/v3/stream?region=eu&sample_rate=8000",
+		},
+		{
+			name:       "collapse mixed duplicate rate keys",
+			apiURL:     "https://parakeet.example?%73ample_rate=8000&token=a%2Fb&sample_rate=48000",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/v3/stream?sample_rate=16000&token=a%2Fb",
+		},
+		{
+			name:       "decode keys only once",
+			apiURL:     "https://parakeet.example?%2573ample_rate=8000&token=a+b",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/v3/stream?%2573ample_rate=8000&token=a+b&sample_rate=16000",
+		},
+		{
+			name:       "preserve unrelated malformed escape",
+			apiURL:     "https://parakeet.example?tenant%ZZ=demo&sample_rate=8000",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/v3/stream?tenant%ZZ=demo&sample_rate=16000",
+		},
 	}
 
 	for _, tc := range tests {

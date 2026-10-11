@@ -57,6 +57,23 @@ def _as_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _as_text(value: Any, default: str = "") -> str:
+    """Return a displayable string for a JSON text field.
+
+    ``dict.get(key, default)`` does not apply its default when the key is
+    present and null, so ``coin.get("symbol", "").upper()`` raised
+    AttributeError on an explicit ``"symbol": null`` and lost the whole result
+    list. Absent, null and non-string values all fall back to ``default``.
+    """
+    if isinstance(value, str):
+        return value or default
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return str(value)
+    return default
+
+
 def _coerce_number(value: Any) -> Optional[float]:
     """Coerce a JSON numeric field to float, or None when unusable."""
     if isinstance(value, bool) or value is None:
@@ -360,9 +377,9 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
         lines = [f"Cryptocurrency search results for '{req.query}':"]
 
         for idx, coin in enumerate(selected, 1):
-            name = coin.get("name", "Unknown")
-            symbol = coin.get("symbol", "").upper()
-            coin_id = coin.get("id", "")
+            name = _as_text(coin.get("name"), "Unknown")
+            symbol = _as_text(coin.get("symbol")).upper()
+            coin_id = _as_text(coin.get("id"))
             rank = coin.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
@@ -389,9 +406,9 @@ async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse
 
         for idx, item_wrapper in enumerate(selected, 1):
             item = _as_dict(item_wrapper.get("item"))
-            name = item.get("name", "Unknown")
-            symbol = item.get("symbol", "").upper()
-            coin_id = item.get("id", "")
+            name = _as_text(item.get("name"), "Unknown")
+            symbol = _as_text(item.get("symbol")).upper()
+            coin_id = _as_text(item.get("id"))
             rank = item.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
@@ -430,8 +447,8 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
 
         for coin in markets:
             rank = coin.get("market_cap_rank") or "-"
-            name = coin.get("name", "Unknown")
-            symbol = str(coin.get("symbol") or "").upper()
+            name = _as_text(coin.get("name"), "Unknown")
+            symbol = _as_text(coin.get("symbol")).upper()
             price = _coerce_number(coin.get("current_price"))
             change = _coerce_number(coin.get("price_change_percentage_24h"))
             mcap = _coerce_number(coin.get("market_cap"))

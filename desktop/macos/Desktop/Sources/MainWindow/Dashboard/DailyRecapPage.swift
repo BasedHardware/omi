@@ -45,57 +45,47 @@ struct DailyRecapPage: View {
 
   // MARK: - Top bar
 
+  /// A drill-in's header (docs/ux-contract.md §11): Back to the page that opened the recap, the
+  /// shared page title, the page's actions trailing.
   private var topBar: some View {
     HStack(spacing: OmiSpacing.md) {
-      Button {
+      BackChip((navigation.dailyRecapOrigin ?? .chat).title, accessibilityIdentifier: "daily-recap-back") {
         navigation.closeDailyRecap()
-      } label: {
-        Image(systemName: "chevron.left")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(Ink.primary)
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
       }
-      .buttonStyle(.plain)
-      .accessibilityLabel(Text("Back"))
-      .accessibilityIdentifier("daily-recap-back")
-      .help("Back")
-
-      Text("Daily recap")
-        .scaledFont(size: OmiType.micro, weight: .semibold)
-        .foregroundStyle(Ink.secondary)
-        .tracking(0.6)
-        .textCase(.uppercase)
-
-      Spacer(minLength: OmiSpacing.md)
-
-      // Single-line by construction: one line of text that never wraps. A wrapped
-      // action pill reads as two controls.
-      Button {
-        askAboutThisDay()
-      } label: {
-        Label("Ask about this day", systemImage: "text.bubble")
-          .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
-      }
-      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-      .accessibilityIdentifier("daily-recap-ask")
-
-      if !isSynthesizedID {
-        Button {
-          Task { await regenerate() }
-        } label: {
-          Label(isRegenerating ? "Regenerating…" : "Regenerate", systemImage: "arrow.clockwise")
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-        }
-        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-        .disabled(isRegenerating)
-        .accessibilityIdentifier("daily-recap-regenerate")
+      GlassPageHeader(title: "Daily recap") {
+        topBarActions
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm + 2)
+  }
+
+  @ViewBuilder
+  private var topBarActions: some View {
+    // Single-line by construction: one line of text that never wraps. A wrapped
+    // action pill reads as two controls.
+    Button {
+      askAboutThisDay()
+    } label: {
+      Label("Ask about this day", systemImage: "text.bubble")
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    .accessibilityIdentifier("daily-recap-ask")
+
+    if !isSynthesizedID {
+      Button {
+        Task { await regenerate() }
+      } label: {
+        Label(isRegenerating ? "Regenerating…" : "Regenerate", systemImage: "arrow.clockwise")
+          .lineLimit(1)
+          .fixedSize(horizontal: true, vertical: false)
+      }
+      .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      .disabled(isRegenerating)
+      .accessibilityIdentifier("daily-recap-regenerate")
+    }
   }
 
   // MARK: - Body
@@ -134,7 +124,7 @@ struct DailyRecapPage: View {
       .frame(maxWidth: 720, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .top)
     }
-    .omiAnimation(.easeOut(duration: 0.2), value: record.id)
+    .omiAnimation(.standard, value: record.id)
   }
 
   private func header(_ record: DailySummaryRecord) -> some View {

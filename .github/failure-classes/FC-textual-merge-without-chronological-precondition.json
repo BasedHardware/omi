@@ -1,0 +1,14 @@
+{
+ "schema_version": 1,
+ "id": "FC-textual-merge-without-chronological-precondition",
+ "violated_contract": "A merge that repairs a record from its neighbour on textual evidence alone must first establish that the two records really are neighbours in time. Ingest pipelines do not guarantee arrival order: a late item from an earlier batch is appended after a newer tail and only sorted afterwards, so the record adjacent in the list is not necessarily adjacent in the stream. When such a repair also rewrites timestamps or deletes the absorbed record, applying it to a non-adjacent pair silently corrupts the record rather than failing: the surviving record can carry an end that precedes its start, and content can be reattributed to the wrong owner at the wrong time. The corruption is durable and invisible at the merge site, because every field involved remains individually well-formed.",
+ "canonical_prevention": "The repair branch carries an explicit chronological precondition alongside its textual one: the candidate successor must not start before the predecessor starts or end before it ends, and must fall inside the same continuity window the module's other merge paths already require. Behavioural tests pin all three cases — a late arrival that starts before the current tail is left alone, a pair separated by a long silence is left alone, and the contiguous pair the repair exists for still merges — so the guard cannot be removed without turning the first two red.",
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_transcript_segment.py"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  "backend/models/transcript_segment.py"
+ ],
+ "status": "open"
+}

@@ -340,6 +340,16 @@ def test_an_unreadable_account_record_inside_the_real_helper_does_not_open_a_bil
     assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('on_device', 0, 'allowance_unavailable')
 
 
+def test_transient_reasons_cover_only_unresolved_lookups_not_real_exhaustion(sub) -> None:
+    """routers/sync.py reads this set to decide whether a failed lookup may durably lock a
+    conversation (#15232): a lookup that could not be resolved must not, but a plan that is
+    genuinely out of minutes still must. Regression for the set drifting either way.
+    """
+    assert sub.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS == {'allowance_unavailable', 'usage_invalid'}
+    assert 'plan_allowance_exhausted' not in sub.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+    assert 'subscription_inactive' not in sub.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+
+
 def test_both_wrappers_delegate_to_the_resolver_with_exact_arguments(monkeypatch, sub) -> None:
     """Not merely equivalent logic: the wrappers ARE the resolver's projections."""
     calls: list[tuple] = []

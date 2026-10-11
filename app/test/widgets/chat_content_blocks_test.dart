@@ -46,9 +46,10 @@ class _RecordingActionItemsProvider extends ActionItemsProvider {
   Future<void> ensureLoaded({bool showShimmer = false}) async {}
 
   @override
-  Future<void> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+  Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
     updates.add((item.id, newState));
     notifyListeners();
+    return true;
   }
 }
 

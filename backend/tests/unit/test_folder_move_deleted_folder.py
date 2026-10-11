@@ -26,6 +26,7 @@ from unittest.mock import patch
 from google.api_core.exceptions import NotFound
 
 import database.folders as folders
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 class _FakeSnapshot:
@@ -46,6 +47,9 @@ class _FakeDocRef:
 
     def get(self):
         return _FakeSnapshot(self.id, self._store.get(self.id), reference=self)
+
+    def set(self, values):
+        self._store[self.id] = dict(values)
 
     def update(self, values):
         if self.id not in self._store:
@@ -73,6 +77,9 @@ class _FakeQuery:
         return _FakeQuery(self._store, self._predicates + [(filter.field_path, filter.value)])
 
     def order_by(self, _field, direction=None):
+        return self
+
+    def select(self, _fields):
         return self
 
     def offset(self, _n):
@@ -136,6 +143,12 @@ class _FakeBatch:
 class _FakeDb:
     def __init__(self, conversations, folders_store):
         self._collections = {'conversations': conversations, 'folders': folders_store}
+        # Reuse the shared ordering guard for the converted deletion primitive;
+        # legacy query/count doubles still own these policy tests. Commit/retry
+        # behavior is proven separately against the real emulator.
+        self._strict = StrictFirestore()
+        for doc_id, data in conversations.items():
+            self._strict.rows[('conversations', doc_id)] = data
 
     def collection(self, _name):
         return _FakeUsersCollection(self._collections)
@@ -143,7 +156,13 @@ class _FakeDb:
     def batch(self):
         return _FakeBatch()
 
-    def get_all(self, references):
+    def transaction(self):
+        return self._strict.transaction()
+
+    def get_all(self, references, *, field_paths=None, transaction=None):
+        if transaction is not None:
+            strict_refs = [self._strict.document(f'conversations/{reference.id}') for reference in references]
+            return self._strict.get_all(strict_refs, field_paths=field_paths, transaction=transaction)
         return [reference.get() for reference in references]
 
 
@@ -151,7 +170,8 @@ def test_move_off_a_deleted_folder_does_not_500():
     conversations = {'conv-1': {'folder_id': 'deleted-folder', 'discarded': False}}
     folders_store = {'work': {'conversation_count': 0}}
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    fake = _FakeDb(conversations, folders_store)
+    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
         # Pre-fix this raised NotFound from the old folder's count refresh.
         assert folders.move_conversation_to_folder('u1', 'conv-1', 'work') is True
 
@@ -167,7 +187,8 @@ def test_bulk_move_off_a_deleted_folder_does_not_500():
     }
     folders_store = {'work': {'conversation_count': 0}}
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    fake = _FakeDb(conversations, folders_store)
+    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.bulk_move_conversations_to_folder('u1', ['conv-1', 'conv-2'], 'work') == 2
 
     assert folders_store['work']['conversation_count'] == 2
@@ -178,7 +199,8 @@ def test_delete_folder_without_a_default_target_unfiles_instead_of_orphaning():
     # No folder carries is_default — the post-'Other' account shape.
     folders_store = {'doomed': {'conversation_count': 1, 'order': 0}}
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    fake = _FakeDb(conversations, folders_store)
+    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.delete_folder('u1', 'doomed') is True
 
     assert 'doomed' not in folders_store
@@ -193,8 +215,67 @@ def test_delete_folder_still_moves_conversations_to_the_default_folder():
         'other': {'is_default': True, 'conversation_count': 0, 'order': 1},
     }
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    fake = _FakeDb(conversations, folders_store)
+    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.delete_folder('u1', 'doomed') is True
 
     assert conversations['conv-1']['folder_id'] == 'other'
     assert folders_store['other']['conversation_count'] == 1
+
+
+def test_delete_default_folder_excludes_self_and_unfiles_conversations():
+    conversations = {'conv-1': {'folder_id': 'legacy-other', 'discarded': False}}
+    folders_store = {
+        'legacy-other': {'is_default': True, 'is_system': False, 'conversation_count': 1, 'order': 0},
+        'work': {'is_default': False, 'is_system': True, 'conversation_count': 0, 'order': 1},
+    }
+
+    fake = _FakeDb(conversations, folders_store)
+    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+        assert folders.delete_folder('u1', 'legacy-other') is True
+
+    assert 'legacy-other' not in folders_store
+    assert conversations['conv-1']['folder_id'] is None
+
+
+def test_create_folder_tolerates_null_order_in_existing_folder():
+    conversations = {}
+    folders_store = {
+        'corrupted': {'name': 'Corrupted', 'order': None},
+    }
+
+    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+        created = folders.create_folder('u1', name='New Folder')
+
+    assert created['order'] == 1
+    assert folders_store[created['id']]['order'] == 1
+
+
+def test_update_folder_db_ignores_null_non_nullable_fields_and_allows_null_description():
+    conversations = {}
+    folders_store = {
+        'f1': {
+            'id': 'f1',
+            'name': 'Work',
+            'description': 'Meetings',
+            'color': '#3B82F6',
+            'icon': '💼',
+            'order': 2,
+        }
+    }
+
+    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+        assert (
+            folders.update_folder(
+                'u1',
+                'f1',
+                {'name': None, 'color': None, 'icon': None, 'order': None, 'description': None},
+            )
+            is True
+        )
+
+    assert folders_store['f1']['name'] == 'Work'
+    assert folders_store['f1']['color'] == '#3B82F6'
+    assert folders_store['f1']['icon'] == '💼'
+    assert folders_store['f1']['order'] == 2
+    assert folders_store['f1']['description'] is None

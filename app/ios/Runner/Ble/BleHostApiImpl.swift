@@ -59,8 +59,13 @@ final class BleHostApiImpl: BleHostApi {
         )
     }
 
-    func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws {
-        bleManager.subscribeCharacteristic(peripheralUuid: peripheralUuid, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
+    func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
+                                 completion: @escaping (Result<Void, Error>) -> Void) {
+        bleManager.subscribeCharacteristic(peripheralUuid: peripheralUuid, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, completion: completion)
+    }
+
+    func setCaptureAuthorized(uuid: String, authorized: Bool) throws {
+        bleManager.setCaptureAuthorized(uuid: uuid, authorized: authorized)
     }
 
     func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws {
@@ -93,6 +98,10 @@ final class BleHostApiImpl: BleHostApi {
 
     func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void) {
         completion(.success(bleManager.getDeviceDiagnostics(uuid: uuid)))
+    }
+
+    func getExtendedDeviceDiagnostics(uuid: String, completion: @escaping (Result<String, Error>) -> Void) {
+        completion(.success(bleManager.getExtendedDeviceDiagnostics(uuid: uuid)))
     }
 
     func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void) {

@@ -12,6 +12,7 @@ on:
           - ensure-infrastructure-api
           - indexes-plan
           - indexes-apply
+          - index-oracle
           - prepare
           - inspect
           - drain-verify
@@ -111,7 +112,7 @@ jobs:
             echo "ERROR: source_sha must not be the all-zero SHA." >&2
             exit 1
           fi
-          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && "$OPERATION" != sweep-verify && "$OPERATION" != sweep-repair && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
+          if [[ "$OPERATION" != bootstrap && "$OPERATION" != ensure-infrastructure-api && "$OPERATION" != indexes-plan && "$OPERATION" != indexes-apply && "$OPERATION" != index-oracle && "$OPERATION" != sweep-verify && "$OPERATION" != sweep-repair && ! "$RUN_ID" =~ ^[a-z0-9][a-z0-9_-]{0,47}$ ]]; then
             echo "ERROR: run_id is required and must match [a-z0-9][a-z0-9_-]{0,47}." >&2
             exit 1
           fi
@@ -143,7 +144,7 @@ jobs:
             exit 1
           fi
           case "$OPERATION:$CONFIRMATION" in
-            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|sweep-verify:SWEEP_VERIFY_QA|sweep-repair:SWEEP_REPAIR_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
+            bootstrap:PREPARE_QA|ensure-infrastructure-api:ENABLE_QA_API|indexes-plan:|index-oracle:|indexes-apply:APPLY_JIT_QA_INDEXES|prepare:PREPARE_QA|inspect:|drain-verify:DRAIN_VERIFY_QA|sweep-verify:SWEEP_VERIFY_QA|sweep-repair:SWEEP_REPAIR_QA|rollforward:ROLLFORWARD_QA|rollback:ROLLBACK_QA) ;;
             *)
               echo "ERROR: confirmation does not match the selected QA operation." >&2
               exit 1
@@ -227,7 +228,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -261,12 +264,14 @@ jobs:
 
           path = Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
           payload = json.loads(path.read_text(encoding="utf-8"))
-          if payload.get("type") != "service_account":
-              raise SystemExit("development auth action must provide a service-account credential")
-          if payload.get("project_id") != os.environ["QA_PROJECT"]:
-              raise SystemExit("development auth action credential is not scoped to the QA project")
-          client_email = payload.get("client_email")
-          if not isinstance(client_email, str) or not client_email.endswith("@based-hardware-dev.iam.gserviceaccount.com"):
+          # GitHub WIF: an external-account config that impersonates the dev
+          # deployer. No service-account key reaches the runner.
+          if payload.get("type") != "external_account":
+              raise SystemExit("development auth action must provide a GitHub WIF external-account credential")
+          impersonation_url = payload.get("service_account_impersonation_url")
+          if not isinstance(impersonation_url, str) or not impersonation_url.endswith(
+              "@based-hardware-dev.iam.gserviceaccount.com:generateAccessToken"
+          ):
               raise SystemExit("development auth action credential has an unexpected service-account identity")
           credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
           if credentials is None:
@@ -474,6 +479,21 @@ jobs:
           unset ENCRYPTION_SECRET
           rm -f "$operator_dir/operation.json"
 
+      - name: Validate index rules against isolated QA Firestore
+        if: ${{ inputs.operation == 'index-oracle' }}
+        env:
+          ENCRYPTION_SECRET: omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv
+        run: |
+          set -euo pipefail
+          unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH
+          oracle_dir="$RUNNER_TEMP/jit-qa-operator/artifacts/index-oracle"
+          install -d -m 700 "$oracle_dir"
+          "$QA_PYTHON" backend/scripts/firestore_query_shapes.py --export "$oracle_dir/shapes.json"
+          "$QA_PYTHON" backend/scripts/firestore_index_oracle.py \
+            --export "$oracle_dir/shapes.json" \
+            --project "$QA_PROJECT" --database "$QA_DATABASE" \
+            --output-dir "$oracle_dir"
+
       - name: Execute one bounded QA sweep and verify durable output
         if: ${{ inputs.operation == 'sweep-verify' }}
         env:
@@ -493,7 +513,7 @@ jobs:
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH: "false"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED: "true"
-          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-5.6-luna
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "3"
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD: "0.05"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
@@ -544,7 +564,7 @@ jobs:
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --async \
-            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
             --format=json > "$operator_dir/sweep.launch.json"
           execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
           import json

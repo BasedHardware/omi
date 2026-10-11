@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-readback-verifier-treats-omitted-proto-default-as-drift",
+  "violated_contract": "A verifier that reads a resource back from a Google Cloud API after provisioning must compare against the API's serialized representation, not the request it sent. Proto3 JSON omits fields that hold their default value (0, false, empty string, empty list), so a correctly provisioned resource with a zero threshold, a false flag or an empty list has no such key in describe/get output; a strict equality check on the raw key reports drift on a resource that matches, and every run that provisions it fails after the real work succeeded.",
+  "canonical_prevention": "In readback checks, read every scalar with its proto default (dict.get(key, 0 / False / '' / [])) before comparing, and pin the verifier with a test whose fixture is the live describe output of the provisioned resource (with defaults omitted), not a hand-written request body.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_ensure_firestore_missing_index_alert.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/scripts/ensure_*",
+    ".github/scripts/verify_*",
+    "backend/scripts/verify_*",
+    "backend/scripts/reconcile_*"
+  ],
+  "status": "open"
+}

@@ -9,7 +9,7 @@ A successfully decoded empty list is a real transcript. It still binds to the
 empty-transcript digest — we observed emptiness, we did not invent it.
 
 Red-proofs (one-line mutation that would make the named assertion pass wrongly):
-- decode the transactional snapshot through ``_prepare_conversation_for_read``
+- decode the transactional snapshot through ``prepare_conversation_for_read``
   instead of ``_decode_transcript_segments_strict`` (corrupted blob becomes
   ``[]`` and the empty-transcript digest binds)
 - catch decode failure and still hash ``[]`` (same skeleton-key)
@@ -131,10 +131,10 @@ def _row(store: StrictFirestore) -> Dict[str, Any]:
 def test_permissive_read_decoder_maps_undecryptable_enhanced_to_empty_strict_raises() -> None:
     """The read path still degrades this blob to ``[]`` — that is the trap.
 
-    red-proof: decode binding through ``_prepare_conversation_for_read``.
+    red-proof: decode binding through ``prepare_conversation_for_read``.
     """
     snapshot = _undecryptable_enhanced_snapshot()
-    prepared = conversations_db._prepare_conversation_for_read(snapshot, _UID)  # pyright: ignore[reportPrivateUsage]
+    prepared = conversations_db.prepare_conversation_for_read(snapshot, _UID)
     assert prepared is not None
     assert prepared['transcript_segments'] == []
     assert transcript_sha256_for_binding([]) == EMPTY_DIGEST
@@ -151,7 +151,7 @@ def test_permissive_read_decoder_maps_undecryptable_enhanced_to_empty_strict_rai
 # ---------------------------------------------------------------------------
 
 
-# red-proof: decode the transactional snapshot through _prepare_conversation_for_read
+# red-proof: decode the transactional snapshot through prepare_conversation_for_read
 def test_undecryptable_enhanced_transcript_does_not_bind_empty_digest(caplog: pytest.LogCaptureFixture) -> None:
     snapshot = _undecryptable_enhanced_snapshot()
     mutation = _mutation(EMPTY_DIGEST, processing_admitted_at=_NOW)
@@ -167,7 +167,7 @@ def test_undecryptable_enhanced_transcript_does_not_bind_empty_digest(caplog: py
     assert _SEGMENT_TEXT not in warnings[0].getMessage()
 
 
-# red-proof: decode the transactional snapshot through _prepare_conversation_for_read
+# red-proof: decode the transactional snapshot through prepare_conversation_for_read
 def test_undecryptable_enhanced_projection_is_not_stored(monkeypatch: pytest.MonkeyPatch) -> None:
     store = _install_strict_conversation_db(monkeypatch, _undecryptable_enhanced_snapshot())
 

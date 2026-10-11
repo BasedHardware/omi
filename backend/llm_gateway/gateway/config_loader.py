@@ -8,6 +8,8 @@ from typing import Any, TypeAlias, cast
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
+from llm_gateway.gateway.dream_lanes import dream_lane_items
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -50,15 +52,34 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
         generated_route_overrides
     )
     desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
+    dream_lanes, dream_artifacts = dream_lane_items(desktop_lane_items, desktop_artifact_items)
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
+    systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
-    lanes = _parse_lanes([*generated_lane_items, *desktop_lane_items, *embedding_lane_items, *lane_items])
+    lanes = _parse_lanes(
+        [
+            *generated_lane_items,
+            *desktop_lane_items,
+            *embedding_lane_items,
+            *systemone_lane_items,
+            *dream_lanes,
+            *lane_items,
+        ]
+    )
     route_artifacts = _parse_route_artifacts(
-        [*generated_artifact_items, *desktop_artifact_items, *embedding_artifact_items, *artifact_items],
+        [
+            *generated_artifact_items,
+            *desktop_artifact_items,
+            *embedding_artifact_items,
+            *systemone_artifact_items,
+            *dream_artifacts,
+            *artifact_items,
+        ],
         prod_mode=resolved_prod_mode,
     )
     feature_bundles = _parse_feature_bundles([*generated_bundle_items, *bundle_items])
 
+    _validate_reserved_generation_routes(route_artifacts)
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
 
@@ -246,7 +267,7 @@ def _generated_feature_route_items(
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
-                'output_budget': _output_budget_for_feature(feature, provider),
+                'output_budget': None,
                 'timeouts': {
                     'request_ms': (
                         override.request_timeout_ms
@@ -317,7 +338,7 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'surface': 'openai.chat_completions',
                 'capabilities': capabilities,
                 'objective': {'quality': 0.5, 'latency': 0.3, 'cost': 0.2},
-                'credential_policy': _credential_policy(),
+                'credential_policy': _reserved_credential_policy(),
                 'active_route': route_id,
                 'last_known_good': route_id,
             }
@@ -328,8 +349,8 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'lane_id': lane_id,
                 'surface': 'openai.chat_completions',
                 'primary': {'provider': 'gemini', 'model': anchor},
-                'fallbacks': [],
-                'provider_options': {},
+                'fallbacks': [ptr.LUNA_FALLBACK],
+                'provider_options': {ptr.RESERVED_CAPACITY_OPTION: True, 'reasoning_effort': 'none'},
                 'output_budget': None,
                 'timeouts': {'request_ms': 120000},
                 'retry': {'max_attempts': 1},
@@ -341,9 +362,14 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                     'dev_only': False,
                 },
                 'rollout': {'stage': 'active', 'percent': 100},
-                'credential_policy': _credential_policy(),
+                'credential_policy': _reserved_credential_policy(),
                 'fallback_policy': {
-                    'fallback_on': ['timeout_before_output', 'provider_429_omi_paid', 'provider_5xx_omi_paid'],
+                    'fallback_on': [
+                        'reserved_capacity_unavailable',
+                        'timeout_before_output',
+                        'provider_5xx_omi_paid',
+                        'provider_invalid_request',
+                    ],
                     'never_fallback_on': [
                         'byok_auth',
                         'byok_quota',
@@ -351,12 +377,27 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                         'byok_unsupported_provider',
                         'missing_byok_key',
                         'capability_mismatch',
-                        'provider_invalid_request',
                         'invalid_config',
                     ],
                 },
             }
         )
+    luna_lane = {
+        **lanes[0],
+        'lane_id': 'omi:auto:desktop-luna',
+        'active_route': 'route.desktop-luna.001',
+        'last_known_good': 'route.desktop-luna.001',
+    }
+    luna_artifact = {
+        **artifacts[0],
+        'route_artifact_id': 'route.desktop-luna.001',
+        'lane_id': 'omi:auto:desktop-luna',
+        'primary': ptr.LUNA_FALLBACK,
+        'fallbacks': [],
+        'provider_options': {'reasoning_effort': 'none'},
+    }
+    lanes.append(luna_lane)
+    artifacts.append(luna_artifact)
     return lanes, artifacts
 
 
@@ -433,14 +474,64 @@ def _generated_embedding_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
     return lanes, artifacts
 
 
-def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
-    """Keep pilot caps explicit and disabled until an operator enables the experiment."""
-    if feature == 'session_titles' and provider == 'gemini':
-        return {
-            'experiment': 'session_titles',
-            'max_completion_tokens': 128,
-        }
-    return None
+def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """The one decision-model lane (``omi:auto:jev-decisions``, #14835).
+
+    Pinned to one Jev version on OpenRouter's systemone endpoint. One provider
+    attempt and no fallback: callers treat any failure as "no answer" and keep
+    their safe default, so a second provider would only add latency.
+    """
+    capabilities = {
+        'text_input': True,
+        'streaming': False,
+        'structured_output': 'none',
+        'tools': False,
+        'translation': False,
+    }
+    route_id = 'route.jev-decisions.systemone.001'
+    lane = {
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'capabilities': capabilities,
+        'objective': {'quality': 0.4, 'latency': 0.5, 'cost': 0.1},
+        'credential_policy': _credential_policy(),
+        'active_route': route_id,
+        'last_known_good': route_id,
+    }
+    artifact = {
+        'route_artifact_id': route_id,
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'primary': {'provider': JEV_PROVIDER, 'model': JEV_MODEL},
+        'fallbacks': [],
+        'provider_options': {},
+        'output_budget': None,
+        'timeouts': {'request_ms': JEV_GATEWAY_REQUEST_MS},
+        'retry': {'max_attempts': 1},
+        'capabilities': capabilities,
+        'evidence': {
+            'benchmark_snapshot': 'jev_pilots_2026_09_23',
+            'eval_report': 'github.com/BasedHardware/omi/issues/14835',
+            'benchmark_source': 'omi_eval',
+            'dev_only': False,
+        },
+        'rollout': {'stage': 'active', 'percent': 100},
+        'credential_policy': _credential_policy(),
+        'fallback_policy': {
+            'fallback_on': [],
+            'never_fallback_on': [
+                'byok_auth',
+                'byok_quota',
+                'byok_rate_limit',
+                'byok_unsupported_provider',
+                'missing_byok_key',
+                'capability_mismatch',
+                'provider_invalid_request',
+                'invalid_config',
+            ],
+        },
+    }
+    return [lane], [artifact]
 
 
 def _surface_for_feature(feature: str, provider: str) -> str:
@@ -487,3 +578,45 @@ def _provider_model_name(provider: str, model: str) -> str:
     if provider == 'openrouter' and model.startswith('gemini'):
         return f'google/{model}'
     return model
+
+
+def _reserved_credential_policy() -> dict[str, Any]:
+    policy = _credential_policy()
+    policy['fallback_eligible_failure_classes'] = [
+        'reserved_capacity_unavailable',
+        'timeout_before_output',
+        'provider_5xx_omi_paid',
+        'provider_invalid_request',
+    ]
+    policy['never_fallback_failure_classes'].remove('provider_invalid_request')
+    return policy
+
+
+def _validate_reserved_generation_routes(artifacts: dict[str, RouteArtifact]) -> None:
+    from llm_gateway.gateway.schemas import CredentialMode, Surface, FailureClass
+
+    for artifact in artifacts.values():
+        if artifact.credential_policy.mode == CredentialMode.BYOK or artifact.surface == Surface.OPENAI_EMBEDDINGS:
+            continue
+        refs = [artifact.primary, *artifact.fallbacks]
+        for index, ref in enumerate(refs):
+            gemini = ref.provider == 'gemini' or ref.model.lower().removeprefix('google/').startswith('gemini')
+            if not gemini:
+                continue
+            if (
+                index != 0
+                or ref.provider != 'gemini'
+                or ref.model not in ptr.DESKTOP_TEXT_LANES
+                or artifact.provider_options.get(ptr.RESERVED_CAPACITY_OPTION) is not True
+            ):
+                raise ConfigValidationError(
+                    f'{artifact.route_artifact_id}: company-paid Gemini requires reserved capacity only'
+                )
+            if (
+                not artifact.fallbacks
+                or artifact.fallbacks[0].model_dump() != ptr.LUNA_FALLBACK
+                or FailureClass.RESERVED_CAPACITY_UNAVAILABLE not in artifact.fallback_policy.fallback_on
+                or FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+                not in artifact.credential_policy.fallback_eligible_failure_classes
+            ):
+                raise ConfigValidationError(f'{artifact.route_artifact_id}: reserved Gemini requires Luna fallback')

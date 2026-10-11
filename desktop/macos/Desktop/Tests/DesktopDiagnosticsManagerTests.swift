@@ -705,13 +705,25 @@ import XCTest
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
       for area in [
         "screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow",
-        "auth_storage", "ptt_input_routing",
+        "auth_storage", "ptt_input_routing", "screen_task_gate", "screen_task_extraction",
       ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)
         try assertLatestHealthSnapshot(
           event: .fallbackTriggered, contains: ["area": area, "outcome": "degraded"])
+      }
+    }
+
+    func testScreenTaskFallbackReasonsRemainTyped() throws {
+      for reason in [
+        "ocr_unusable", "gate_invalid_response", "provider_5xx", "timeout", "offline", "dispatch_disabled",
+      ] {
+        DesktopDiagnosticsManager.shared.resetForTests()
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "screen_task_extraction", from: "gemini_3_8", to: "legacy", reason: reason, outcome: .degraded)
+        try assertLatestHealthSnapshot(
+          event: .fallbackTriggered, contains: ["area": "screen_task_extraction", "reason": reason])
       }
     }
 

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "FC-android-sync-tied-to-screen-on",
+  "violated_contract": "An in-flight Android recording file transfer (CV1 BLE drain or phone-disk cloud upload) must stay scheduled for its own lifetime. Activity paused / screen-off is allowed to refuse new discovery passes, but it must not drop the CPU/process keep-alive the current transfer is using or leave Dart WAL drains to Doze once the screen turns off.",
+  "canonical_prevention": "Hold a dataSync foreground service plus PARTIAL_WAKE_LOCK for the transfer refcount: acquire at RecordingTransferCoordinator pass start and SyncProvider._performSync, release on complete, cancelSync, or Flutter engine death. Coordinator wake() lets an in-flight pass finish after setForeground(false), does not queue another whole-WAL drain from background connectivity, and drops a coalesced extra pass when the screen turns off. Behavioral coverage: coordinator in-flight drain after screen-off, no second pass from background connectivity or a queued extra wake, keep-alive refcount, and SyncProvider acquire/release around syncWal plus immediate releaseAll on cancel.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/wals/sync_transfer_keep_alive.dart",
+    "app/lib/services/wals/recording_transfer_coordinator.dart",
+    "app/lib/providers/sync_provider.dart",
+    "app/android/app/src/main/kotlin/com/friend/ios/sync/SyncTransferForegroundService.kt",
+    "app/test/services/wals/recording_transfer_coordinator_test.dart",
+    "app/test/services/wals/sync_transfer_keep_alive_test.dart",
+    "app/test/providers/sync_provider_sync_wal_wake_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**",
+    "app/lib/providers/sync_provider.dart",
+    "app/android/app/src/main/kotlin/com/friend/ios/sync/**"
+  ],
+  "status": "open"
+}

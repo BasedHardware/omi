@@ -90,6 +90,13 @@ enum ConferencingApps {
     return title.range(of: browserCallTitlePattern, options: .regularExpression) != nil
   }
 
+  /// The meeting code a joined Google Meet tab is titled with ("Meet - amc-iajq-asx" gives
+  /// "amc-iajq-asx"), or nil for any other title. Two Meets back to back differ only here.
+  static func meetingCode(fromTitle title: String) -> String? {
+    guard let range = title.range(of: browserCallTitlePattern, options: .regularExpression) else { return nil }
+    return String(title[range].suffix(12)).lowercased()
+  }
+
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
@@ -113,9 +120,21 @@ enum ConferencingApps {
     "net.whatsapp.whatsapp",  // WhatsApp (net.whatsapp.WhatsApp)
   ]).union(telegramBundleIDs)
 
-  /// Whether a bundle ID belongs to a known native conferencing app (case-insensitive).
+  /// Whether a bundle ID belongs to a known native conferencing app or one of its helper
+  /// processes (case-insensitive).
   static func isNativeCallApp(bundleID: String) -> Bool {
-    nativeCallBundleIDs.contains(bundleID.lowercased())
+    nativeCallAppID(bundleID: bundleID) != nil
+  }
+
+  /// The catalog entry a process belongs to. Electron and Chromium-based apps capture the
+  /// microphone in a helper process with its own bundle ID: a Discord call holds the mic in
+  /// `com.hnc.Discord.helper.Renderer` (measured 2026-09-26), so an exact match missed the call
+  /// entirely. A helper is `<catalog id>.<suffix>`; the longest matching entry wins, so helpers
+  /// of one app always map to the same identity.
+  static func nativeCallAppID(bundleID: String) -> String? {
+    let lower = bundleID.lowercased()
+    if nativeCallBundleIDs.contains(lower) { return lower }
+    return nativeCallBundleIDs.filter { lower.hasPrefix($0 + ".") }.max { $0.count < $1.count }
   }
 
   /// Bundle-ID prefixes (lowercased) of web browsers. A browser process using the **microphone**
@@ -199,22 +218,25 @@ enum ConferencingApps {
   /// Recording permission; without it this returns false (native-app calls are still detected).
   /// This is the fallback that catches a *muted* browser call (where mic input has dropped).
   static func browserCallWindowPresent() -> Bool {
+    onScreenBrowserWindowTitles().contains(where: isBrowserCallTitle)
+  }
+
+  /// Titles of normal-layer on-screen browser windows (each shows its active tab's title).
+  /// Empty without Screen Recording permission.
+  private static func onScreenBrowserWindowTitles() -> [String] {
     guard
       let windows = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     else {
-      return false
+      return []
     }
-    for window in windows {
-      let layer = window[kCGWindowLayer as String] as? Int ?? -1
-      guard layer == 0 else { continue }
-      guard let owner = window[kCGWindowOwnerName as String] as? String,
-        browserApps.contains(owner),
-        let title = window[kCGWindowName as String] as? String
-      else { continue }
-      if isBrowserCallTitle(title) { return true }
+    return windows.compactMap { window in
+      guard window[kCGWindowLayer as String] as? Int ?? -1 == 0,
+        let owner = window[kCGWindowOwnerName as String] as? String,
+        browserApps.contains(owner)
+      else { return nil }
+      return window[kCGWindowName as String] as? String
     }
-    return false
   }
 
   // MARK: - Active outgoing screen share detection
@@ -274,6 +296,30 @@ enum ConferencingApps {
     return false
   }
 
+  /// One CoreAudio pass plus, only when `browserTitles` asks for them, one
+  /// window-title pass. The meeting detector uses this as its only probe per tick.
+  static func captureCallAudioSnapshot(browserTitles: CallAudioBrowserTitles) -> CallAudioSnapshot {
+    let processes: [CallAudioProcessSnapshot]
+    if #available(macOS 14.4, *) {
+      processes = callAudioProcesses()
+    } else {
+      processes = []
+    }
+    let includeTitles: Bool
+    switch browserTitles {
+    case .always:
+      includeTitles = true
+    case .whenCallSurfaceHoldsInput:
+      includeTitles = processes.contains {
+        $0.isRunningInput && isCallSurface(bundleID: $0.bundleID)
+      }
+    }
+    return CallAudioSnapshot(
+      processes: processes,
+      defaultInputDeviceID: defaultInputDeviceID(),
+      browserWindowTitles: includeTitles ? onScreenBrowserWindowTitles() : [])
+  }
+
   // MARK: - CoreAudio process API (macOS 14.4+) — microphone-in-use detection
 
   @available(macOS 14.4, *)
@@ -293,6 +339,48 @@ enum ConferencingApps {
     guard AudioObjectGetPropertyData(system, &address, 0, nil, &dataSize, &objects) == noErr
     else { return [] }
     return objects
+  }
+
+  @available(macOS 14.4, *)
+  private static func callAudioProcesses() -> [CallAudioProcessSnapshot] {
+    var processes: [CallAudioProcessSnapshot] = []
+    for process in audioProcessObjects() {
+      guard let bundleID = processBundleID(process) else { continue }
+      processes.append(
+        CallAudioProcessSnapshot(
+          bundleID: bundleID.lowercased(),
+          pid: processPID(process),
+          isRunningInput: processBoolProperty(process, kAudioProcessPropertyIsRunningInput),
+          isRunningOutput: processBoolProperty(process, kAudioProcessPropertyIsRunningOutput)))
+    }
+    return processes
+  }
+
+  @available(macOS 14.4, *)
+  private static func processPID(_ process: AudioObjectID) -> Int32 {
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioProcessPropertyPID,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain)
+    var value: pid_t = -1
+    var size = UInt32(MemoryLayout<pid_t>.size)
+    guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else {
+      return -1
+    }
+    return value
+  }
+
+  private static func defaultInputDeviceID() -> UInt32 {
+    var deviceID: AudioDeviceID = 0
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDefaultInputDevice,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain)
+    let status = AudioObjectGetPropertyData(
+      AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+    guard status == noErr else { return 0 }
+    return deviceID
   }
 
   @available(macOS 14.4, *)

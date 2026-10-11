@@ -7,6 +7,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -14,6 +15,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class OmiBackgroundAudioStreamerTest {
+    @Before fun resetCaptureAdmissionLatch() {
+        CaptureAdmissionLatch.resetForTest()
+    }
+
     private class Preferences : NativeBlePreferences {
         val values = ConcurrentHashMap<String, Any>(mapOf(
             "nativeBleStreamingEnabled" to true,
@@ -195,6 +200,43 @@ class OmiBackgroundAudioStreamerTest {
         h.sockets.single().open()
         assertTrue(h.sockets.single().closed)
         assertTrue(h.sockets.single().frames.isEmpty())
+    }
+
+    @Test fun `capture mute drops queued live audio and explicit unmute admits new audio`() {
+        val h = Harness()
+        h.frame(1)
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":1,\"muted\":true}"
+        h.frame(2)
+        h.sockets.single().open()
+        assertTrue(h.sockets.single().frames.isEmpty())
+
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":2,\"muted\":false}"
+        h.frame(3)
+        assertEquals(listOf(3), h.sockets.single().values())
+    }
+
+    @Test fun `invalid capture policy fails closed until a valid revision is written`() {
+        val h = Harness()
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":1,\"muted\":1}"
+        h.frame(1)
+        assertTrue(h.sockets.isEmpty())
+
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":2,\"muted\":false}"
+        h.frame(2)
+        h.sockets.single().open()
+        assertEquals(listOf(2), h.sockets.single().values())
+    }
+
+    @Test fun `new capture revision retires already queued live audio`() {
+        val h = Harness()
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":1,\"muted\":false}"
+        h.frame(1)
+        h.prefs.values["capturePolicy"] = "{\"version\":1,\"revision\":2,\"muted\":false}"
+        h.sockets.single().open()
+        assertTrue(h.sockets.single().frames.isEmpty())
+
+        h.frame(2)
+        assertEquals(listOf(2), h.sockets.single().values())
     }
 
     @Test fun `auth refreshed before onOpen reconnects and preserves queue`() {

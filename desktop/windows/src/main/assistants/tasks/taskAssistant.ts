@@ -1,8 +1,8 @@
 // The Task assistant — Mac's screen→task extractor on Windows. The fourth
 // coordinator peer (with Focus, Insight, Memory). It watches whitelisted screen
 // frames and, on a context switch (primary trigger), a fallback tick, or the
-// messaging fast-path, runs the single-phase multi-tool Gemini loop
-// (loop.ts), applies a confidence gate, and stages each extracted task through
+// messaging fast-path, runs the local OCR → JEV gate → one-call Luna extraction
+// pipeline, applies a confidence gate, and stages each new task through
 // the create → sync → embed → promote lifecycle (create.ts). No glow, no
 // notification in PR-B — it stages durable tasks silently.
 //
@@ -20,18 +20,18 @@
 //                        dedupe so the two paths can't overlap or double-analyze.
 //
 // Both triggers call the SAME runPipeline(frame, epoch). It pins the session
-// epoch before the (long) Gemini loop and re-checks it before every write
+// epoch before OCR/model work and re-checks it before every write
 // (Memory's discipline); a monotonic seq additionally guards the dev analyzeNow
 // path. Titles, OCR and task contents are NEVER logged — only app names + counts.
 import { getAppSettings } from '../../appSettings'
 import { mayAnalyzeFrame } from '../core/privacy'
 import { readFrameImageBase64 } from '../core/frameImage'
 import { getBackendSession, getSessionEpoch } from '../core/session'
-import { intervalElapsed } from '../insight/gating'
+import { intervalElapsed } from '../core/cadence'
 import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
 import type { RewindFrame } from '../../../shared/types'
-import { isAppAllowed, isMessagingApp, isPromptMessagingApp, isWindowAllowed } from './appLists'
-import { runExtractionLoop } from './loop'
+import { isAppAllowed, isMessagingApp, isWindowAllowed } from './appLists'
+import { runScreenTaskPipeline } from './screenTaskPipeline'
 import { createStagedTaskFromExtraction } from './create'
 import type { ExtractedTask } from './models'
 
@@ -186,8 +186,8 @@ export class TaskAssistant implements ProactiveAssistant {
   /**
    * The shared extraction pipeline for both triggers. Re-entrancy-locked (so the
    * two triggers can't overlap), per-window deduped (so a hot window isn't re-run
-   * every 3s coordinator tick), session/epoch/seq guarded. Runs the tool loop,
-   * then stages each returned task that clears the confidence gate.
+   * every 3s coordinator tick), session/epoch/seq guarded. Runs JEV and one Luna
+   * request, then stages each new task that clears the confidence gate.
    */
   private async runPipeline(frame: RewindFrame, opts?: { bypassDedupe?: boolean }): Promise<void> {
     if (this.running) return // a context-switch run and an analyze run can't overlap
@@ -204,15 +204,27 @@ export class TaskAssistant implements ProactiveAssistant {
       const mySeq = ++this.seq
       console.log(`[tasks] analyzing frame app=${frame.app}`)
 
-      const session = getBackendSession()
+      // Pin the auth epoch before obtaining the session. If session acquisition
+      // ever becomes asynchronous, an account switch can otherwise pair the
+      // returned old token with the new user's epoch and pass later guards.
+      const sessionEpoch = getSessionEpoch()
+      const session = await getBackendSession()
+      if (getSessionEpoch() !== sessionEpoch) return
       if (!session) {
         console.log('[tasks] no backend session yet — skipping analysis')
         return
       }
-      // Pin the epoch BEFORE the long Gemini loop; create.ts re-checks it right
+      // Pin the epoch BEFORE OCR, gate and extraction; create.ts re-checks it right
       // before every write, so a task formed under this session is never written
       // into the next user's data if the user signs out mid-analysis.
-      const sessionEpoch = getSessionEpoch()
+      const validateWork = (): void => {
+        if (
+          getSessionEpoch() !== sessionEpoch || !this.isEnabled() || !getAppSettings().screenAnalysisEnabled ||
+          !mayAnalyzeFrame(frame) ||
+          !shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)
+        ) throw new DOMException('screen task work is no longer authorized', 'AbortError')
+      }
+      validateWork()
 
       const imageBase64 = await readFrameImageBase64(frame)
       if (!imageBase64) {
@@ -222,16 +234,18 @@ export class TaskAssistant implements ProactiveAssistant {
 
       let results: ExtractedTask[]
       try {
-        results = await runExtractionLoop({
+        const extraction = await runScreenTaskPipeline({
           session,
+          sessionEpoch,
           app: frame.app,
-          today: formatToday(),
-          isMessaging: isPromptMessagingApp(frame.app),
-          imageBase64
+          today: formatToday().slice(0, 10),
+          imageBase64,
+          validateWork
         })
+        results = extraction.results
       } catch (e) {
-        // Transport already retried + ran the fallback model; a throw here means no
-        // tasks this cycle. Log the name only (never the body) and move on.
+        // Typed gate denials and Luna failures terminate this frame. Never fall
+        // back to a paid Gemini model. Log no screen content.
         console.warn('[tasks] extraction error:', e instanceof Error ? e.name : 'Error')
         return
       }
@@ -256,6 +270,11 @@ export class TaskAssistant implements ProactiveAssistant {
       let staged = 0
       for (const task of results) {
         if (task.confidence < minConfidence) continue
+        try {
+          validateWork()
+        } catch {
+          return
+        }
         // Bail the whole batch if the session departed mid-loop — don't write a
         // departed user's tasks (create.ts also re-checks, belt-and-suspenders).
         if (getSessionEpoch() !== sessionEpoch) return

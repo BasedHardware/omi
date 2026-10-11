@@ -37,6 +37,11 @@ from models.knowledge_ledger_search import (
 )
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.messaging.memory_privacy import (
+    channel_private_filter_active,
+    is_channel_private_memory,
+    omit_channel_private,
+)
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.memory_service import MAX_LEDGER_HISTORY_PROVIDER_WINDOW, MemoryService
 
@@ -70,6 +75,12 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return cast(Optional[Dict[str, Any]], agent_config_context.get())
     except (ImportError, LookupError):
         return None
+
+
+def _configurable(config: RunnableConfig | None) -> Optional[dict]:
+    cfg = config if isinstance(config, dict) else None
+    inner = cfg.get("configurable") if isinstance(cfg, dict) else None
+    return inner if isinstance(inner, dict) else None
 
 
 def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
@@ -331,6 +342,7 @@ def search_knowledge(
             limit=limit,
             db_client=get_firestore_client(),
         )
+        rows = omit_channel_private(rows, _configurable(config))
         return _format_search_results(rows, query=normalized_query)
     except Exception as exc:
         logger.error("search_knowledge failed error_type=%s", type(exc).__name__)
@@ -383,11 +395,14 @@ def search_historical_facts(
             offset=offset,
             include_rejected=include_rejected,
         )
-        rows = [
-            match.memory
-            for match in page.matches
-            if _is_historical_fact_memory(match.memory, uid=uid, include_rejected=include_rejected)
-        ]
+        rows = omit_channel_private(
+            [
+                match.memory
+                for match in page.matches
+                if _is_historical_fact_memory(match.memory, uid=uid, include_rejected=include_rejected)
+            ],
+            _configurable(config),
+        )
         return _format_historical_fact_results(
             rows,
             query=normalized_query,
@@ -429,7 +444,7 @@ def read_playbook(
         from database._client import get_firestore_client
 
         item = read_current_playbook(uid, normalized_id, db_client=get_firestore_client())
-        if item is None:
+        if item is None or (channel_private_filter_active(_configurable(config)) and is_channel_private_memory(item)):
             return "Playbook unavailable."
         description = " ".join((item.content or "").split())[:MAX_PLAYBOOK_DESCRIPTION_CHARACTERS]
         body = (item.body or "")[:MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS]

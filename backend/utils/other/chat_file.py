@@ -25,6 +25,7 @@ from utils.llm.gateway_client import (
     is_gateway_model_not_found,
     should_route_features_through_gateway,
 )
+from utils.llm.model_config import LUNA_MODEL
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,8 @@ logger = logging.getLogger(__name__)
 # In gateway feature mode both are omi:auto:file-chat-* lanes, so the model call
 # lands in the gateway ledger; OpenAI Files upload/download stays direct
 # (file bytes/file_id lifecycle, no model tokens).
-_FILE_CHAT_VISION_MODEL = "gpt-5.6-luna"
-_FILE_CHAT_DOCUMENT_MODEL = "gpt-5.6-luna"
+_FILE_CHAT_VISION_MODEL = LUNA_MODEL
+_FILE_CHAT_DOCUMENT_MODEL = LUNA_MODEL
 _FILE_CHAT_COMPLETION_TOKENS = 2048
 
 
@@ -66,7 +67,7 @@ def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChat
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
-def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
     A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
@@ -101,6 +102,20 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
 
 
 _async_openai: AsyncOpenAI | None = None
+
+
+def download_owned_chat_file(uid: str, file_id: str, *, max_bytes: int) -> bytes:
+    """Resolve and bound bytes for a file owned by the current user."""
+    rows = chat_db.get_chat_files(uid, [file_id])
+    if len(rows) != 1:
+        raise PermissionError('Owned file unavailable')
+    data = bytearray()
+    with _get_sync_openai().files.with_streaming_response.content(rows[0]['openai_file_id']) as response:
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError('Owned file too large')
+    return bytes(data)
 
 
 def _get_async_openai() -> AsyncOpenAI:
@@ -231,7 +246,7 @@ class FileChatTool:
         self.chat_session = ChatSession(**session_data)
 
     @staticmethod
-    def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
+    def upload(file_path: Union[str, Path], file_name: Optional[str] = None) -> Dict[str, Any]:
         # OpenAI Files upload/download stays direct by design: it is the file
         # bytes/file_id lifecycle, not a model call; only the completions hop
         # is gateway-metered.
@@ -257,7 +272,11 @@ class FileChatTool:
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
             try:
-                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+                # file_path is a randomized temp name on the upload routes; send the
+                # provider the name the user picked so it is what lands on the chat
+                # record, not the temp basename the provider would echo back.
+                upload_file = (Path(file_name).name, f) if file_name else f
+                response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
@@ -276,7 +295,7 @@ class FileChatTool:
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments (non-streaming, agentic tool path)."""
         files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
-        files = _safe_file_chats(files_data)
+        files = safe_file_chats(files_data)
         return self._ask_files(question, files)
 
     async def process_chat_with_file_stream(
@@ -294,7 +313,7 @@ class FileChatTool:
             files_data = await run_blocking(
                 db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
             )
-            files = _safe_file_chats(files_data)
+            files = safe_file_chats(files_data)
         except Exception:
             callback.end_nowait()
             raise
@@ -483,7 +502,12 @@ class FileChatTool:
     def cleanup(self) -> None:
         """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""
         logger.info("start cleanup chat with file")
-        files = chat_db.get_chat_files(self.uid)
+        # Only this session's files: get_chat_files with no ids answers with every
+        # file the account owns, so clearing one chat wiped attachments from the rest.
+        file_ids = list(self.chat_session.file_ids or [])
+        if not file_ids:
+            return
+        files = chat_db.get_chat_files(self.uid, file_ids)
         if files:
             # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).

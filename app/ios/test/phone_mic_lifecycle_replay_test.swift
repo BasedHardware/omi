@@ -84,7 +84,8 @@ final class FakeEngine: PhoneMicEngineControlling {
     var isRunning: Bool { true }
     var audioEngineForMonitor: AVAudioEngine? { nil }
 
-    func buildAndInstallTap(epoch: UInt64) throws {}
+    var installedEpoch: UInt64 = 0
+    func buildAndInstallTap(epoch: UInt64) throws { installedEpoch = epoch }
 
     func startEngine() throws {
         if startFailuresRemaining > 0 {
@@ -307,9 +308,119 @@ func frameBytes(_ vector: Vector, _ index: Int) -> Data {
     vector.events[index].frame!
 }
 
+// Replays observed input order from a metadata-only physical trace. The
+// samples use synthetic silence and compressed time: this tests controller
+// policy, NOT the OS scheduling, radio, or wall-clock continuity in the trace.
+// Accepts start/stop, denied permission, foreground and interruption signals.
+// Unsupported inputs fail closed; outputs must match independently tested policy.
+func replayDeviceTrace(_ path: String) {
+    let doc = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+    precondition(doc["schema"] as? String == "phone-mic-device-probe/v1", "unsupported device trace")
+    precondition(doc["scope"] as? String == "native-stream-only" && doc["audio_retained"] as? Bool == false,
+                 "device trace scope mismatch")
+    let events = doc["events"] as! [[String: Any]]
+    let sessionId = doc["session_id"] as! Int64
+    let expectedStates = events.filter { $0["kind"] as? String == "state" }.map { $0["state"] as! String }
+    let denied = events.contains { $0["kind"] as? String == "start_failed" && $0["code"] as? String == "permission_denied" }
+    precondition(expectedStates.first == "starting" && expectedStates.last == "idle", "invalid lifecycle boundaries")
+    precondition(events.last?["kind"] as? String == "observation_completed", "incomplete trace")
+    let world = ReplayWorld()
+    let controller = world.makeController(permission: FakePermission(status: denied ? .denied : .granted))
+    var started = false
+    var stopped = false
+    var frameSamples = 0
+    var interruptionOpen = false
+    let pcm = Data(repeating: 0, count: 320)
+    for event in events {
+        let kind = event["kind"] as! String
+        switch kind {
+        case "start_requested":
+            precondition(!started && !stopped, "duplicate start")
+            let result = start(controller, sessionId)
+            if denied {
+                guard case .failure(let error) = result, (error as? PhoneMicPigeonError)?.code == "permission_denied" else {
+                    preconditionFailure("denied permission must fail with permission_denied")
+                }
+                precondition(world.engineBox.engines.isEmpty, "denied permission must not create an engine")
+            } else {
+                guard case .success = result else { preconditionFailure("trace start failed") }
+            }
+            started = true
+        case "os_signal":
+            precondition(started && !stopped, "OS signal outside live session")
+            let count = world.engineBox.engines.count
+            let signal = event["signal"] as! String
+            switch signal {
+            case "appBecameActive":
+                world.monitorBox.monitor!.fire(.appBecameActive)
+                drainMain(seconds: 0.05)
+                if !interruptionOpen { precondition(world.engineBox.engines.count == count, "healthy foreground return rebuilt engine") }
+            case "interruptionBegan":
+                precondition(!interruptionOpen, "nested interruption requires review")
+                world.monitorBox.monitor!.fire(.interruptionBegan)
+                waitForState(world.sink, "interrupted", label: "device interruption")
+                interruptionOpen = true
+                let before = world.sink.deliveries.count
+                let old = world.engineBox.engines.last!
+                old.emitConverted(pcm, epoch: old.installedEpoch)
+                drainMain(seconds: 0.03)
+                precondition(world.sink.deliveries.count == before, "stale frame escaped interruption")
+            case "interruptionEnded":
+                precondition(interruptionOpen, "end without interruption")
+                guard let resume = event["should_resume"] as? Bool else { preconditionFailure("missing should_resume") }
+                world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: resume))
+                waitForState(world.sink, "running", label: "device interruption recovery")
+                precondition(world.engineBox.engines.count >= count, "recovery lost engine")
+                interruptionOpen = false
+            case "allCallsEnded": world.monitorBox.monitor!.fire(.allCallsEnded); drainMain(seconds: 0.05)
+            case "routeChanged":
+                world.monitorBox.monitor!.fire(.routeChanged(reasonDescription: "device-redacted")); drainMain(seconds: 0.05)
+            case "engineConfigChanged": world.monitorBox.monitor!.fire(.engineConfigChanged); drainMain(seconds: 0.05)
+            case "mediaServicesReset": world.monitorBox.monitor!.fire(.mediaServicesReset); drainMain(seconds: 0.05)
+            default: preconditionFailure("unsupported OS signal: add a reviewed adapter")
+            }
+        case "sample":
+            precondition(started && !stopped, "sample outside live session")
+            if denied { preconditionFailure("denied attempt cannot sample audio") }
+            let before = world.sink.deliveries.filter { $0.kind == .frame }.count
+            let engine = world.engineBox.engines.last!
+            engine.emitConverted(pcm, epoch: engine.installedEpoch)
+            drainMain(seconds: 0.03)
+            let running = world.sink.deliveries.last(where: { $0.kind == .state })?.state == "running"
+            precondition(world.sink.deliveries.filter { $0.kind == .frame }.count == before + (running ? 1 : 0),
+                         "sample delivery violated running/interrupted policy")
+            if running { frameSamples += 1 }
+        case "stop_requested":
+            precondition(started && !stopped, "stop without start or duplicate stop")
+            stop(controller)
+            stopped = true
+            let before = world.sink.deliveries.count
+            for engine in world.engineBox.engines { engine.emitConverted(pcm, epoch: engine.installedEpoch) }
+            drainMain(seconds: 0.05)
+            precondition(world.sink.deliveries.count == before, "late frame escaped after stop")
+        case "start_failed", "capture_error":
+            precondition(denied && event["code"] as? String == "permission_denied", "unexpected capture failure")
+        case "state", "app_lifecycle", "start_completed", "stop_completed", "observation_completed":
+            break // observed outputs, compared below; lifecycle is OS-owned, not simulated
+        default:
+            preconditionFailure("unsupported/failing trace event: \(kind)")
+        }
+    }
+    precondition(started && stopped && !interruptionOpen && (denied || frameSamples > 0),
+                 "trace replay executed no complete capture/denial")
+    let actualStates = world.sink.deliveries.filter { $0.kind == .state }.map { $0.state! }
+    precondition(actualStates == expectedStates, "device/replay state sequence differs")
+    assertNoFrameAfterIdle(world.sink.deliveries, label: "device trace")
+    print("phone-mic device trace: lifecycle policy replay passed (synthetic audio, compressed time)")
+}
+
 @main
 struct Harness {
     static func main() {
+        if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--device-trace" {
+            replayDeviceTrace(CommandLine.arguments[2])
+            return
+        }
         let vectors = loadVectors()
 
         // 1. start-running: starting, running, two frames under the live epoch.
@@ -456,6 +567,31 @@ struct Harness {
             drainMain(seconds: 0.05)
             stop(controller)
             assertDeliveriesMatch(vector, staleIndices: [], world.sink.deliveries, label: "session-adoption")
+        }
+
+        // A permission failure cannot poison a later start on the same
+        // controller. No engine before consent; a fresh session owns recovery.
+        do {
+            let world = ReplayWorld()
+            let permission = FakePermission(status: .denied)
+            let controller = world.makeController(permission: permission)
+            guard case .failure(let error) = start(controller, 91),
+                  (error as? PhoneMicPigeonError)?.code == "permission_denied" else {
+                preconditionFailure("permission recovery must begin with denied start")
+            }
+            precondition(world.engineBox.engines.isEmpty, "engine created without consent")
+            permission.status = .granted
+            guard case .success = start(controller, 92) else { preconditionFailure("permission restoration did not recover") }
+            let engine = world.engineBox.engines.last!
+            engine.emitConverted(Data(repeating: 0, count: 320), epoch: engine.installedEpoch)
+            drainMain(seconds: 0.05)
+            let frames = world.sink.deliveries.filter { $0.kind == .frame }
+            precondition(frames.count == 1 && frames[0].sessionId == 92, "restored permission delivered wrong session")
+            stop(controller)
+            let before = world.sink.deliveries.count
+            engine.emitConverted(Data(repeating: 0, count: 320), epoch: engine.installedEpoch)
+            drainMain(seconds: 0.05)
+            precondition(world.sink.deliveries.count == before, "restored session leaked after stop")
         }
 
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")

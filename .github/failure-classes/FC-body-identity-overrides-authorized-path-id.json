@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-body-identity-overrides-authorized-path-id",
+  "violated_contract": "A mutation must write to the exact record its authorization check ran on, and ownership fields must never come from the request body. PATCH /v1/apps/{app_id} checked that the caller owned the path app_id, then validated the multipart body into AppUpdate (which required its own `id` and accepted `uid`) and wrote to apps/{body id}. Any user who owned one app could rewrite another app's webhook URLs, prompts, chat tools and price, or reassign its owner, and the payment-link step used the body's id and uid as well.",
+  "canonical_prevention": "Overwrite the record identifier in the validated payload with the authorized path identifier before validation, keep ownership fields out of update models entirely, and pass the path id and the authenticated uid to every downstream side effect. Cover it with a test that sends a body id naming a different record and asserts the write targets the path record, plus a test that a body uid never reaches the write.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_app_update_path_id_authority.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/apps.py",
+    "backend/models/app.py"
+  ],
+  "status": "open"
+}

@@ -11,6 +11,18 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.check_output(['git', *args], cwd=repo, text=True).strip()
 
 
+def _init_hermetic_repo(repo: Path) -> None:
+    subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+    subprocess.run(['git', 'config', 'user.email', 'ci@example.com'], cwd=repo, check=True)
+    subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=repo, check=True)
+    # Hermetic to developer/system git config (system /etc/gitconfig can force
+    # commit signing, and an orb-installed ~/.config/git/hooks dispatcher has
+    # no scripts/<hook> to dispatch to in a temp fixture repo): a commit or
+    # merge here must never fail on that config, and it is not under test.
+    subprocess.run(['git', 'config', 'core.hooksPath', '/nonexistent-omi-test-hooks'], cwd=repo, check=True)
+    subprocess.run(['git', 'config', 'commit.gpgsign', 'false'], cwd=repo, check=True)
+
+
 def _commit(repo: Path, message: str) -> str:
     subprocess.run(['git', 'add', '-A'], cwd=repo, check=True)
     subprocess.run(['git', 'commit', '-m', message], cwd=repo, check=True, stdout=subprocess.DEVNULL)
@@ -20,9 +32,7 @@ def _commit(repo: Path, message: str) -> str:
 def test_changed_files_reports_delete_rename_and_file_type_change(tmp_path):
     repo = tmp_path / 'repo'
     repo.mkdir()
-    subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
-    subprocess.run(['git', 'config', 'user.email', 'ci@example.com'], cwd=repo, check=True)
-    subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=repo, check=True)
+    _init_hermetic_repo(repo)
 
     risky = repo / 'backend/desktop_backend.py'
     risky.parent.mkdir(parents=True)
@@ -76,9 +86,7 @@ def test_changed_files_three_dot_agrees_on_both_merge_parent_orders(tmp_path):
     """
     repo = tmp_path / 'repo'
     repo.mkdir()
-    subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
-    subprocess.run(['git', 'config', 'user.email', 'ci@example.com'], cwd=repo, check=True)
-    subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=repo, check=True)
+    _init_hermetic_repo(repo)
 
     (repo / 'base.txt').write_text('base\n')
     _commit(repo, 'base')

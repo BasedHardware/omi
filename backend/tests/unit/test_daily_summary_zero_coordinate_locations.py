@@ -41,6 +41,21 @@ def _leaf(name, **attrs):
     return mod
 
 
+def _wall_window_duration(conversation):
+    """Duration stub for this suite: every conversation here is transcript-free.
+
+    `utils.llm.external_integrations` imports the duration authority at module load, so the
+    fixture stubs that leaf like the others instead of letting the fresh load resolve it under
+    a fake parent package (which is order-dependent and failed CI's shard with
+    ModuleNotFoundError). The authority's wall-window fallback is what these stats consume.
+    """
+    started = getattr(conversation, 'started_at', None)
+    finished = getattr(conversation, 'finished_at', None)
+    if isinstance(started, datetime) and isinstance(finished, datetime):
+        return max(0.0, (finished - started).total_seconds())
+    return None
+
+
 def _real_pkg(name, *relpath):
     pkg = ModuleType(name)
     pkg.__path__ = [os.path.join(str(_BACKEND), *relpath)]  # type: ignore[attr-defined]
@@ -59,11 +74,13 @@ def ext():
         "utils": _real_pkg("utils", "utils"),
         "utils.llm": _real_pkg("utils", "llm"),
         "utils.llms": _real_pkg("utils", "llms"),
+        "utils.observability": _real_pkg("utils", "observability"),
         "utils.conversations": _real_pkg("utils", "conversations"),
         "models": _real_pkg("models", "models"),
         "database": _real_pkg("database", "database"),
         "database.action_items": _leaf("database.action_items"),
         "database.daily_summaries": _leaf("database.daily_summaries"),
+        "database.goals": _leaf("database.goals"),
         "database.memories": _leaf("database.memories"),
         "database.users": _leaf("database.users"),
         "models.conversation": _leaf("models.conversation"),
@@ -72,10 +89,14 @@ def ext():
         "models.other": _leaf("models.other"),
         "utils.conversations.render": _leaf("utils.conversations.render"),
         "utils.conversations.location": _leaf("utils.conversations.location"),
+        "utils.conversations.duration": _leaf(
+            "utils.conversations.duration", conversation_duration_seconds=_wall_window_duration
+        ),
         "utils.llm.clients": _leaf("utils.llm.clients"),
         "utils.llm.usage_tracker": _leaf("utils.llm.usage_tracker"),
         "utils.llms.memory": _leaf("utils.llms.memory"),
         "utils.log_sanitizer": _leaf("utils.log_sanitizer"),
+        "utils.observability.fallback": _leaf("utils.observability.fallback", record_fallback=MagicMock()),
         "langchain_core": AutoMockModule("langchain_core"),
         "langchain_core.prompts": _leaf("langchain_core.prompts", ChatPromptTemplate=MagicMock()),
     }
@@ -121,7 +142,10 @@ def _configure(ext):
             "ptt_turns": 0,
         }
     )
+    ext.daily_summaries_db.get_daily_summaries = MagicMock(return_value=[])
+    ext.goals_db.get_user_goals = MagicMock(return_value=[])
     ext.get_prompt_memories = MagicMock(return_value=("TestUser", ""))
+    ext.record_fallback.reset_mock()
     ext.get_google_maps_location = MagicMock(return_value=None)
     ext.conversations_to_string = MagicMock(return_value="history")
     # Non-JSON LLM output -> JSONDecodeError -> _basic_daily_summary(..., locations)

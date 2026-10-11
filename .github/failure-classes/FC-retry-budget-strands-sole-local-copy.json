@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-retry-budget-strands-sole-local-copy",
+  "violated_contract": "A retry budget may only terminate work whose data survives elsewhere. Desktop on-device (Parakeet) sessions finalize by POSTing their locally stored transcript to /v1/conversations/from-segments, and the device holds the only copy until that succeeds. The canonical finalizer gave them the same five-attempt budget as cloud reconciliation (2/4/8/16-minute backoff) and counted offline transport errors against it, while every recovery query required retryCount < maxRetries and the only post-exhaustion query covered cloud reconciliation alone. About thirty minutes offline after a conversation, or a backend brownout (from-segments failed 74% of the time for two days in late August 2026), left the row failed forever: never uploaded, never summarized or synced, never listed, and no longer retried.",
+  "canonical_prevention": "Budget attempts by what they can prove, not by how many were made. Work that holds the sole copy of user data and whose upload is idempotent (from-segments dedups on uuid5(uid, client_conversation_id)) has no exhausted state: it retries on a capped backoff. Offline transport failures do not spend budget, and the retry loop does not attempt while the network path monitor reports offline. Permanent 4xx rejections are classified and persisted separately but stay queued at the capped cadence so a backend fix drains them. The recovery query admits failed rows of that strategy at any retry count, so rows an older build stranded are picked up on upgrade. The behavioral contract test drives a session through the old budget, an offline gate, a false-positive reachability window and recovery, and asserts the upload with one stable idempotency key.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/LocalSegmentsFinalizationRetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ConversationFinalizationService.swift",
+    "desktop/macos/Desktop/Sources/TranscriptionRetryService.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Core/FinalizationRetryPolicy.swift"
+  ],
+  "status": "open"
+}

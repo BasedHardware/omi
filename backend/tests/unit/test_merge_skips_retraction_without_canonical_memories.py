@@ -299,7 +299,7 @@ def test_end_to_end_fenced_empty_source_is_skipped_through_the_real_helper():
     absent_head = MagicMock()
     absent_head.read_error_reason = V3AccountGenerationFailureReason.MISSING_STATE_HEAD
 
-    with patch.dict(os.environ, {"MEMORY_MODE": "off", "MEMORY_ENABLED": ""}, clear=False):
+    with patch.dict(os.environ, {"MEMORY_ENABLED": "off"}, clear=False):
         with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
             with patch.object(rs, "read_memory_v3_trusted_account_generation", return_value=absent_head):
                 with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
@@ -316,7 +316,7 @@ def test_end_to_end_intake_on_retracts_even_though_the_source_is_empty():
     service = MagicMock()
     service.history.iter_all_live.return_value = iter([])
 
-    with patch.dict(os.environ, {"MEMORY_MODE": "write", "MEMORY_ENABLED": ""}, clear=False):
+    with patch.dict(os.environ, {"MEMORY_ENABLED": "on"}, clear=False):
         with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
             with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
                 _delete_conversation_and_related_data("uid-any", "conv-1")

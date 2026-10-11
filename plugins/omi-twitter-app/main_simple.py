@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
+from urllib.parse import quote
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 
@@ -29,7 +31,9 @@ async def root(uid: str = Query(None)):
     """Root endpoint with setup instructions."""
     # If uid provided, show personalized setup page
     if uid:
-        auth_url = f"/auth?uid={uid}"
+        # uid is client-controlled; percent-encode it for the query and escape
+        # the result for the attribute so it cannot break out of the href.
+        auth_url = "/auth?uid=" + html.escape(quote(uid, safe=""), quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -523,14 +527,18 @@ async def auth_callback(
         )
     
     except Exception as e:
+        # `state` comes straight from the query string, so it is attacker-controlled.
+        # Percent-encode it for the URL query and HTML-escape the result for the
+        # attribute so a quote or angle bracket cannot break out of the href.
         error_uid = state if state else "unknown"
+        error_uid_attr = html.escape(quote(error_uid, safe=""), quote=True)
         return HTMLResponse(
             content=f"""
             <html>
                 <body style="font-family: Arial; padding: 40px; text-align: center;">
                     <h2>❌ Authentication Error</h2>
                     <p>Failed to complete authentication.</p>
-                    <p><a href="/auth?uid={error_uid}">Try again</a></p>
+                    <p><a href="/auth?uid={error_uid_attr}">Try again</a></p>
                 </body>
             </html>
             """,
@@ -708,7 +716,7 @@ async def process_segments(
         SimpleSessionStorage.update_session(
             session_id,
             tweet_mode="recording",
-            accumulated_text=tweet_content,
+            accumulated_text=tweet_content or "",
             segments_count=1
         )
         
@@ -717,7 +725,7 @@ async def process_segments(
     
     # If in recording mode, collect more segments
     elif session["tweet_mode"] == "recording":
-        accumulated = session.get("accumulated_text", "")
+        accumulated = session.get("accumulated_text") or ""
         segments_count = session.get("segments_count", 0)
         
         # Add this segment

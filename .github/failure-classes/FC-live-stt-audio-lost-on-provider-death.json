@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-stt-audio-lost-on-provider-death",
+  "violated_contract": "A recoverable live STT provider death must not discard recently accepted but unfinalized speech or duplicate already finalized speech.",
+  "canonical_prevention": "Keep a bounded session-local PCM ring, reconnect eligible transient deaths with capture-positioned replay, trim at finalized capture samples, and cap reconnect count and replay cost. Keep a flag-off path and regression tests for rotation, bounds, and teardown.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/resilient_stream.py",
+    "backend/tests/unit/test_live_stt_resilient_stream.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/receiver.py",
+    "backend/utils/stt/soniox.py"
+  ],
+  "status": "open"
+}

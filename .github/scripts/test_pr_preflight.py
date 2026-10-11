@@ -629,6 +629,7 @@ class SelectionTests(unittest.TestCase):
                 "failure-class-protocol",
                 "failure-class-guard-artifact-ratchet",
                 "desktop-changelog-data",
+                "mobile-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",

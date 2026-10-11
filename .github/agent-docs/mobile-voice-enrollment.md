@@ -13,6 +13,11 @@ continues to use SpeechProfileProvider.
 microphone capture, transcription, enrollment, and explicit memory/goal submission.
 The controller has a fakeable I/O boundary for state-transition tests.
 
+First-run onboarding reserves its back/progress header above the introduction's
+scroll viewport through `OnboardingStepLayout`. The host consumes the top safe
+area once; Settings already supplies an AppBar. Keep this spacing in the host,
+so scrolling and large text cannot move the page under the navigation controls.
+
 - Prompt progress advances only after Next or Skip. The separate audio-level
   indicator measures PCM energy, not transcription or enrollment quality.
 - Recording does not auto-finish after five seconds. Each answer pauses at 45
@@ -39,13 +44,23 @@ The controller has a fakeable I/O boundary for state-transition tests.
 From `app/`:
 
 ```sh
-flutter test test/providers/guided_voice_controller_test.dart test/widgets/speech_profile_onboarding_test.dart test/providers/speech_profile_provider_test.dart
+flutter test test/providers/guided_voice_controller_test.dart test/widgets/speech_profile_onboarding_test.dart test/widgets/onboarding_header_spacing_test.dart test/providers/speech_profile_provider_test.dart
 ```
 
 Tests cover prompt progress, no five-second cutoff, skipped content, transcription
 and upload retries, independent memory writes, interruption, stale completion,
 and layout with large text on a small phone. Physical-device acceptance still
 requires real speech, enrollment, and memory save/readback against a dev backend.
+
+`app/integration_test/onboarding_header_capture.dart` is a native screenshot fixture
+for the first prompt, using the production page and layout with inert voice I/O.
+It captures the former floating-header layout and the reserved-header layout
+without signing in or resetting app data. Images are written to
+`omi-layout-evidence` under iOS Documents or Android external app storage.
+Use it only for layout evidence; it does not verify recording, enrollment, or
+saving. Selecting the fixture with `-t` leaves `app/lib/main.dart` unchanged. If the
+fixture is installed over the regular phone app, reinstall a normal app build
+afterward; no source entry-point edits are needed.
 
 ## Guided introduction follow-up
 
@@ -87,3 +102,28 @@ resets for each prompt and reveals save errors after a failed attempt; dragging
 the review dismisses the keyboard. Tests include partial saves, duplicate taps,
 cleanup meaning preservation, restore-original, and a small screen with large
 text and the keyboard open.
+
+## Labeling other speakers
+
+Mobile preserves the backend's canonical `speaker_id`; provider labels are not
+rewritten. Installed older mobile builds still parse labels. macOS, Windows and
+web domain adapters still need a separate canonical-ID adaptation review.
+
+The name sheet edits the selected segments, including previously assigned ones.
+Selecting every related segment explicitly sets a speaker-wide default. Labels
+are painted only after the REST assignment succeeds; failed saves remain in the
+sheet. All assignment routes share the transactional manual command. Name-only
+suggestions populate this sheet without creating contacts until accepted.
+
+People shows stored voice readiness, not an enrollment guarantee. A clean labeled
+sample with saved audio can teach a later conversation, but live teaching remains
+best-effort; labeling before audio arrives or a failed/crashed attempt can be lost.
+Reassigning is the current retry. Private-cloud-off suppresses new saved capture
+audio; it does not erase earlier samples or universally disable recognition.
+On-device/custom STT and multiple people sharing a phone-call channel do not gain
+automatic diarization or acoustic recognition from this change.
+
+A changed saved label on summarized completed content offers Reprocess
+Conversation beside the transcript. It runs only on a tap; failed regeneration
+keeps the label and action. It is not proof that the earlier summary used an
+unnamed speaker. No exact historical summary receipt is stored.

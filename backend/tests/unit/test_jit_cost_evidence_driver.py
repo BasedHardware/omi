@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import scripts.jit_cost_evidence_driver as driver
+from utils.llm.model_config import LUNA_MODEL
 
 FIXTURE = (
     Path(__file__).parents[2] / "testing" / "jit_processing" / "fixtures" / "jit_architecture_quality_cost_v2.json"
@@ -109,7 +110,7 @@ def test_plan_is_explicitly_prompt_only_and_preserves_caps(fixture: dict) -> Non
     for case in plan["cases"]:
         assert case["matched_input"]["evaluation_time"] == "2026-09-05T10:00:00-04:00"
         assert case["matched_input"]["timezone"] == "America/New_York"
-        assert case["legacy"]["route"]["served_model"] == "gpt-5.6-luna"
+        assert case["legacy"]["route"]["served_model"] == LUNA_MODEL
         assert case["jit"]["nano"]["route"]["served_model"] == "gpt-5-nano"
         assert case["jit"]["full"]["route"]["gateway_lane"] == "omi:auto:chat-agent"
 
@@ -213,7 +214,7 @@ def test_endpoint_metadata_without_durable_legacy_event_cannot_claim_nano_saving
                 {
                     "operation": "proactive_reasoning",
                     "lane": "omi:auto:desktop-proactive-reasoning",
-                    "provider_model": "gpt-5.6-luna",
+                    "provider_model": LUNA_MODEL,
                     "usage": {"cached_tokens": 0, "cache_write_tokens": 0},
                     "cache_write": False,
                     "fallback_class": "none",

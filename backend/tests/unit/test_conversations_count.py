@@ -1,13 +1,22 @@
 """Tests for get_conversations_count logic and /v1/conversations/count endpoint.
 
-The DB function is tested inline against a module-local MagicMock ``mock_db``; the
-test never imports ``database.*`` (it only reads production source via ``open()`` for
-the parity assertions), so no import-time stubbing is required. The inline copy is
-kept hermetic and fast; ``test_source_matches_implementation`` guards against drift.
+``TestConversationsCount`` exercises a module-local MagicMock ``mock_db`` inline
+copy (``test_source_matches_implementation`` guards against drift);
+``TestConversationsCountRealHelper`` exercises the real
+``database.conversations.get_conversations_count`` against a deterministic fake.
 """
 
 import os
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
+
+os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
+
+import database.conversations as conversations_db
 
 try:
     from google.cloud.firestore_v1 import FieldFilter
@@ -36,7 +45,8 @@ def get_conversations_count(
     sources=None,
 ):
     """Mirrors database.conversations.get_conversations_count."""
-    conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
+    collection = mock_db.collection('users').document(uid).collection('conversations')
+    conversations_ref = collection
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
@@ -59,8 +69,20 @@ def get_conversations_count(
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    if start_date or end_date:
+        conversations_ref = conversations_ref.order_by('created_at', direction='DESCENDING')
     result = conversations_ref.count().get()
-    return int(result[0][0].value)
+    matching = int(result[0][0].value)
+    for doc in collection.where(filter=FieldFilter('deleted', '==', True)).stream():
+        data = doc.to_dict() or {}
+        if not include_discarded and data.get('discarded'):
+            continue
+        if statuses and data.get('status') not in statuses:
+            continue
+        if sources and data.get('source') not in sources:
+            continue
+        matching -= 1
+    return matching
 
 
 class TestConversationsCount:
@@ -87,6 +109,8 @@ class TestConversationsCount:
         assert "FieldFilter('starred', '==', starred)" in source
         assert "FieldFilter('created_at', '>=', start_date)" in source
         assert "FieldFilter('created_at', '<=', end_date)" in source
+        assert "order_by('created_at', direction=firestore.Query.DESCENDING)" in source
+        assert "FieldFilter('deleted', '==', True)" in source
         assert '.count().get()' in source
         assert 'result[0][0].value' in source
 
@@ -94,6 +118,7 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(42)
 
         result = get_conversations_count('uid1')
@@ -104,11 +129,12 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(10)
 
         result = get_conversations_count('uid1', statuses=['processing', 'completed'])
         assert result == 10
-        assert ref.where.call_count == 2
+        assert ref.where.call_count == 3
         # Verify FieldFilter arguments (FieldFilter doesn't support equality, check attrs)
         f0 = ref.where.call_args_list[0].kwargs['filter']
         assert f0.field_path == 'discarded'
@@ -116,11 +142,15 @@ class TestConversationsCount:
         f1 = ref.where.call_args_list[1].kwargs['filter']
         assert f1.field_path == 'status'
         assert f1.value == ['processing', 'completed']
+        f2 = ref.where.call_args_list[2].kwargs['filter']
+        assert f2.field_path == 'deleted'
+        assert f2.value is True
 
     def test_count_composes_sources_and_statuses(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(3)
 
         result = get_conversations_count('uid1', statuses=['processing', 'completed'], sources=['omi'])
@@ -131,21 +161,27 @@ class TestConversationsCount:
             ('discarded', '==', False),
             ('source', '==', 'omi'),
             ('status', 'in', ['processing', 'completed']),
+            ('deleted', '==', True),
         ]
 
     def test_count_include_discarded_skips_filter(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
+        ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(55)
 
         result = get_conversations_count('uid1', include_discarded=True)
         assert result == 55
-        ref.where.assert_not_called()
+        f = ref.where.call_args.kwargs['filter']
+        assert f.field_path == 'deleted'
+        assert f.value is True
 
     def test_count_zero(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(0)
 
         result = get_conversations_count('uid1')
@@ -156,34 +192,45 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(7)
 
         result = get_conversations_count('uid1')
         assert result == 7
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'discarded'
-        assert f.value is False
+        assert ref.where.call_count == 2
+        f0 = ref.where.call_args_list[0].kwargs['filter']
+        assert f0.field_path == 'discarded'
+        assert f0.value is False
+        f1 = ref.where.call_args_list[1].kwargs['filter']
+        assert f1.field_path == 'deleted'
+        assert f1.value is True
 
     def test_count_include_discarded_with_statuses(self):
         """include_discarded=True + statuses — only status filter, no discarded filter."""
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(20)
 
         result = get_conversations_count('uid1', include_discarded=True, statuses=['processing'])
         assert result == 20
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'status'
-        assert (f.op_string, f.value) == ('==', 'processing')
+        assert ref.where.call_count == 2
+        f0 = ref.where.call_args_list[0].kwargs['filter']
+        assert f0.field_path == 'status'
+        assert (f0.op_string, f0.value) == ('==', 'processing')
+        f1 = ref.where.call_args_list[1].kwargs['filter']
+        assert f1.field_path == 'deleted'
+        assert f1.value is True
 
     def test_count_applies_list_filter_parity(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(3)
+
+        ref.order_by.return_value = ref
 
         result = get_conversations_count(
             'uid1',
@@ -195,6 +242,7 @@ class TestConversationsCount:
         )
 
         assert result == 3
+        assert ref.order_by.call_args.args == ('created_at',)
         filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
         assert [(f.field_path, f.op_string, f.value) for f in filters] == [
             ('discarded', '==', False),
@@ -203,6 +251,7 @@ class TestConversationsCount:
             ('starred', '==', False),
             ('created_at', '>=', '2026-06-01T00:00:00Z'),
             ('created_at', '<=', '2026-06-02T00:00:00Z'),
+            ('deleted', '==', True),
         ]
 
 
@@ -350,3 +399,335 @@ class TestAppsV2LimitBoundary:
         """limit=1 should be accepted (ge=1)."""
         limit = 1
         assert 1 <= limit <= 100
+
+
+class _CountDoc:
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+def _count_filter_match(data, filt):
+    """Firestore comparison semantics: a document missing the field never matches."""
+    field = getattr(filt, 'field_path', None)
+    if not field or field not in data:
+        return False
+    actual = data[field]
+    op = getattr(filt, 'op_string', '==')
+    value = getattr(filt, 'value', None)
+    if op == '==':
+        return actual == value
+    if op == 'in':
+        return actual in value
+    if op == '>=':
+        return actual >= value
+    if op == '<=':
+        return actual <= value
+    raise AssertionError(f'unsupported count filter {field} {op}')
+
+
+class _CountQuery:
+    """Deterministic collection/query fake for the real get_conversations_count.
+
+    ``where`` accumulates filters, ``order_by`` records the ordering and applies
+    Firestore's implicit existence rule (ordered documents must carry the field),
+    and ``count()`` records the aggregate request — including how many documents
+    matched before ordering was applied — so tests can prove ordering never
+    changes membership when a ``created_at`` bound already requires the field.
+    """
+
+    def __init__(self, docs, record, filters=(), orders=()):
+        self._docs = docs
+        self._record = record
+        self._filters = filters
+        self._orders = orders
+
+    def _copy(self, **overrides):
+        params = {'filters': self._filters, 'orders': self._orders}
+        params.update(overrides)
+        return _CountQuery(self._docs, self._record, **params)
+
+    def where(self, *args, filter=None, **kwargs):
+        filt = filter if filter is not None else (args[0] if args else None)
+        return self._copy(filters=(*self._filters, filt))
+
+    def order_by(self, field_path, direction=None):
+        name = getattr(direction, 'name', None) or str(direction)
+        return self._copy(orders=(*self._orders, (field_path, name)))
+
+    def _matched(self):
+        docs = [doc for doc in self._docs if all(_count_filter_match(doc, f) for f in self._filters)]
+        matched_unordered = len(docs)
+        for field, _direction in self._orders:
+            docs = [doc for doc in docs if field in doc]
+        return matched_unordered, docs
+
+    def stream(self):
+        return iter(_CountDoc(doc) for doc in self._matched()[1])
+
+    def count(self):
+        matched_unordered, docs = self._matched()
+        self._record.append(
+            {
+                'filters': [(f.field_path, f.op_string, f.value) for f in self._filters],
+                'orders': list(self._orders),
+                'matched_unordered': matched_unordered,
+                'count': len(docs),
+            }
+        )
+        return SimpleNamespace(get=lambda: [[SimpleNamespace(value=len(docs))]])
+
+
+class _CountFirestore:
+    def __init__(self, docs):
+        self._docs = list(docs)
+        self.record = []
+
+    def collection(self, name):
+        assert name == 'users'
+        record = self._record_ref()
+        return SimpleNamespace(
+            document=lambda _uid: SimpleNamespace(
+                collection=lambda collection_name: self._collection(collection_name, record)
+            )
+        )
+
+    def _record_ref(self):
+        return self.record
+
+    def _collection(self, collection_name, record):
+        assert collection_name == 'conversations'
+        return _CountQuery(self._docs, record)
+
+
+_T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+_T1 = datetime(2026, 9, 1, tzinfo=timezone.utc)
+_T2 = datetime(2026, 9, 15, tzinfo=timezone.utc)
+_T3 = datetime(2026, 9, 29, tzinfo=timezone.utc)
+_T4 = datetime(2026, 10, 5, tzinfo=timezone.utc)
+_T_LEGACY = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+
+def _seeded_conversation_docs():
+    return [
+        {
+            'id': 'a-processing',
+            'created_at': _T1,
+            'discarded': False,
+            'status': 'processing',
+            'starred': True,
+            'source': 'omi',
+            'folder_id': 'folder-a',
+        },
+        {
+            'id': 'b-completed',
+            'created_at': _T2,
+            'discarded': False,
+            'status': 'completed',
+            'starred': False,
+            'source': 'friend',
+        },
+        {'id': 'c-failed', 'created_at': _T0, 'discarded': False, 'status': 'failed', 'source': 'desktop'},
+        {
+            'id': 'd-in-progress',
+            'created_at': _T2,
+            'discarded': False,
+            'status': 'in_progress',
+            'starred': True,
+            'source': 'omi',
+        },
+        {
+            'id': 'e-merging',
+            'created_at': _T3,
+            'discarded': False,
+            'status': 'merging',
+            'starred': False,
+            'source': 'friend',
+            'folder_id': 'folder-b',
+        },
+        {'id': 'f-missing-status', 'created_at': _T1, 'discarded': False, 'starred': True, 'source': 'omi'},
+        {'id': 'g-missing-created-at', 'discarded': False, 'status': 'completed', 'starred': True, 'source': 'omi'},
+        {'id': 'h-legacy', 'created_at': _T_LEGACY, 'discarded': False, 'status': 'completed', 'source': 'omi'},
+        {'id': 'i-missing-discarded', 'created_at': _T4, 'status': 'completed', 'starred': True, 'source': 'omi'},
+        {'id': 'j-missing-source', 'created_at': _T1, 'discarded': False, 'status': 'completed', 'starred': True},
+        {
+            'id': 'k-user-discarded',
+            'created_at': _T2,
+            'discarded': True,
+            'status': 'completed',
+            'starred': False,
+            'source': 'omi',
+        },
+        {
+            'id': 'l-donor-tombstone',
+            'created_at': _T2,
+            'discarded': True,
+            'deleted': True,
+            'status': 'completed',
+            'source': 'omi',
+            'sync_merged_into': 'b-completed',
+        },
+        {
+            'id': 'm-redirect-tombstone',
+            'created_at': _T1,
+            'discarded': True,
+            'deleted': True,
+            'status': 'processing',
+            'source': 'friend',
+            'sync_merged_into': 'a-processing',
+        },
+    ]
+
+
+def _real_count(monkeypatch, docs=None, **kwargs):
+    fake = _CountFirestore(_seeded_conversation_docs() if docs is None else docs)
+    monkeypatch.setattr(conversations_db, 'db', fake)
+    result = conversations_db.get_conversations_count('u1', **kwargs)
+    return result, fake.record
+
+
+class TestConversationsCountRealHelper:
+    """Regression tests against the real database.conversations.get_conversations_count."""
+
+    def test_unbounded_count_retains_missing_created_at_and_orders_nothing(self, monkeypatch):
+        result, record = _real_count(monkeypatch)
+
+        assert result == 9
+        assert record[0]['orders'] == []
+        assert record[0]['matched_unordered'] == record[0]['count'] == 9
+
+    def test_include_discarded_counts_user_discards_but_subtracts_tombstones(self, monkeypatch):
+        result, record = _real_count(monkeypatch, include_discarded=True)
+
+        assert record[0]['count'] == 13
+        assert result == 11
+
+    @pytest.mark.parametrize(
+        ('kwargs', 'expected'),
+        [
+            ({'start_date': _T1, 'end_date': _T2}, 5),
+            ({'start_date': _T1}, 6),
+            ({'end_date': _T2}, 7),
+        ],
+    )
+    def test_bounded_counts_are_inclusive_exclude_missing_created_at_and_order_desc(
+        self, monkeypatch, kwargs, expected
+    ):
+        result, record = _real_count(monkeypatch, **kwargs)
+
+        assert result == expected
+        assert record[0]['orders'] == [('created_at', 'DESCENDING')]
+        assert (
+            record[0]['matched_unordered'] == record[0]['count']
+        ), 'created_at ordering must not change membership vs the same range unordered'
+
+    def test_bounded_count_exact_boundaries(self, monkeypatch):
+        result, record = _real_count(monkeypatch, start_date=_T2, end_date=_T2)
+        assert result == 2
+        assert record[0]['orders'] == [('created_at', 'DESCENDING')]
+
+    def test_starred_false_excludes_missing_starred(self, monkeypatch):
+        result, _ = _real_count(monkeypatch, starred=False)
+        assert result == 2
+
+    def test_starred_true_excludes_missing_starred(self, monkeypatch):
+        result, _ = _real_count(monkeypatch, starred=True)
+        assert result == 5
+
+    def test_single_source_uses_equality_filter(self, monkeypatch):
+        result, record = _real_count(monkeypatch, sources=['omi'])
+
+        assert result == 5
+        assert ('source', '==', 'omi') in record[0]['filters']
+
+    def test_multi_source_with_single_status_uses_in_and_equality(self, monkeypatch):
+        result, record = _real_count(monkeypatch, sources=['omi', 'friend'], statuses=['completed'])
+
+        assert result == 3
+        assert ('source', 'in', ['omi', 'friend']) in record[0]['filters']
+        assert ('status', '==', 'completed') in record[0]['filters']
+
+    def test_omitted_statuses_count_every_status_including_missing(self, monkeypatch):
+        all_statuses, _ = _real_count(monkeypatch)
+        default_list_statuses, _ = _real_count(monkeypatch, statuses=['processing', 'completed'])
+
+        assert all_statuses == 9
+        assert default_list_statuses == 5
+
+    def test_folder_id_filter_counts_only_matching_folder(self, monkeypatch):
+        result, _ = _real_count(monkeypatch, folder_id='folder-a')
+        assert result == 1
+
+    def test_tombstone_subtraction_applies_under_discarded_toggle_and_status(self, monkeypatch):
+        result, record = _real_count(monkeypatch, include_discarded=True, statuses=['completed'])
+
+        assert record[0]['count'] == 7
+        assert result == 6
+
+    @pytest.mark.parametrize(
+        ('kwargs', 'raw', 'expected'),
+        [
+            ({'start_date': _T1, 'end_date': _T2}, 4, 2),
+            ({'start_date': _T1}, 4, 2),
+            ({'end_date': _T2}, 6, 3),
+        ],
+    )
+    def test_dated_include_discarded_subtracts_only_matching_tombstones(self, monkeypatch, kwargs, raw, expected):
+        shared = {'status': 'completed', 'source': 'omi', 'folder_id': 'folder-a', 'starred': False}
+        docs = [
+            {'id': 'keep-a', 'created_at': _T1, 'discarded': False, **shared},
+            {'id': 'keep-b', 'created_at': _T2, 'discarded': True, **shared},
+            {'id': 'keep-c', 'created_at': _T0, 'discarded': False, **shared},
+            {
+                'id': 'other-status',
+                'created_at': _T2,
+                'discarded': False,
+                'status': 'failed',
+                'source': 'friend',
+                'starred': True,
+            },
+            {
+                'id': 'tomb-x',
+                'created_at': _T1,
+                'discarded': True,
+                'deleted': True,
+                'sync_merged_into': 'keep-a',
+                **shared,
+            },
+            {
+                'id': 'tomb-y',
+                'created_at': _T2,
+                'discarded': True,
+                'deleted': True,
+                'sync_merged_into': 'keep-b',
+                **shared,
+            },
+            {
+                'id': 'tomb-z',
+                'created_at': _T0,
+                'discarded': True,
+                'deleted': True,
+                'sync_merged_into': 'keep-c',
+                **shared,
+            },
+        ]
+
+        result, record = _real_count(
+            monkeypatch,
+            docs=docs,
+            include_discarded=True,
+            statuses=['completed'],
+            sources=['omi'],
+            folder_id='folder-a',
+            starred=False,
+            **kwargs,
+        )
+
+        assert record[0]['orders'] == [('created_at', 'DESCENDING')]
+        assert record[0]['count'] == raw
+        assert (
+            record[0]['matched_unordered'] == record[0]['count']
+        ), 'created_at ordering must not change membership vs the same range unordered'
+        assert result == expected

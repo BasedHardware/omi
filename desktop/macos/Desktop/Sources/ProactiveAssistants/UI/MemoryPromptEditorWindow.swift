@@ -35,105 +35,18 @@ class MemoryPromptEditorWindow: NSWindow {
     WindowGlass.wear(self, as: .titled)
 
     contentView = NSHostingView(
-      rootView: MemoryPromptEditorView(onClose: { [weak self] in
-        self?.close()
-      }).withFontScaling())
-  }
-}
-
-struct MemoryPromptEditorView: View {
-  @State private var promptText: String
-  @State private var hasChanges: Bool = false
-  @State private var showingResetAlert: Bool = false
-
-  var onClose: (() -> Void)?
-
-  init(onClose: (() -> Void)? = nil) {
-    self.onClose = onClose
-    _promptText = State(initialValue: MemoryAssistantSettings.shared.analysisPrompt)
-  }
-
-  var body: some View {
-    VStack(spacing: 0) {
-      // Header
-      HStack {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Memory Extraction Prompt")
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-
-          Text("Customize how the AI extracts memories from screenshots")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.secondary)
+      rootView: AssistantPromptEditorView(
+        store: .memory,
+        onClose: { [weak self] in
+          self?.close()
         }
-
-        Spacer()
-
-        if hasChanges {
-          Text("Unsaved changes")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.orange)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xxs)
-            .background(Color.orange.opacity(0.1))
-            .cornerRadius(OmiChrome.stripRadius)
-        }
-      }
-      .padding()
-
-      Divider()
-
-      // Editor
-      TextEditor(text: $promptText)
-        .scaledFont(size: OmiType.body, design: .monospaced)
-        .padding(OmiSpacing.sm)
-        .onChange(of: promptText) { _, newValue in
-          hasChanges = newValue != MemoryAssistantSettings.shared.analysisPrompt
-        }
-
-      Divider()
-
-      // Footer with buttons
-      HStack {
-        Button("Reset to Default") {
-          showingResetAlert = true
-        }
-        .alert("Reset Prompt?", isPresented: $showingResetAlert) {
-          Button("Cancel", role: .cancel) {}
-          Button("Reset", role: .destructive) {
-            promptText = MemoryAssistantSettings.defaultAnalysisPrompt
-            MemoryAssistantSettings.shared.resetPromptToDefault()
-            hasChanges = false
-          }
-        } message: {
-          Text("This will reset the memory extraction prompt to its default value. This cannot be undone.")
-        }
-
-        Spacer()
-
-        Button("Cancel") {
-          onClose?()
-        }
-        .keyboardShortcut(.escape, modifiers: [])
-
-        Button("Save") {
-          MemoryAssistantSettings.shared.analysisPrompt = promptText
-          hasChanges = false
-          onClose?()
-        }
-        .keyboardShortcut(.return, modifiers: .command)
-        .buttonStyle(.borderedProminent)
-        .disabled(!hasChanges)
-      }
-      .padding()
-    }
-    .frame(minWidth: 500, minHeight: 400)
-    .inkGlassPanel(cornerRadius: 0, shadow: nil)
+      ).withFontScaling())
   }
 }
 
 #if canImport(PreviewsMacros)
   #Preview {
-    MemoryPromptEditorView()
+    AssistantPromptEditorView(store: .memory)
       .frame(width: 700, height: 600)
   }
 #endif

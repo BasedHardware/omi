@@ -222,9 +222,29 @@ def test_include_archive_pagination_and_locked_privacy(monkeypatch):
         is_locked=True,
     )
     newer_short = _item("mem-short", tier=MemoryLayer.short_term, content="short", updated_at=now + timedelta(hours=1))
+    short_row = memory_item_to_memorydb(newer_short)
+    locked_row = memory_item_to_memorydb(locked_archive)
+    slots = [
+        (short_row, (newer_short.updated_at, newer_short.memory_id)),
+        (locked_row, (locked_archive.updated_at, locked_archive.memory_id)),
+    ]
+
+    def _forbid_full_fetch(**_kwargs):
+        raise AssertionError("offset read must not stream the canonical collection")
+
+    def _scan(_uid, **kwargs):
+        assert kwargs.get("include_archive") is True
+        return slots, True
+
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-        lambda **_kwargs: [locked_archive, newer_short],
+        _forbid_full_fetch,
+    )
+    monkeypatch.setattr("utils.memory.memory_service.read_canonical_scan_page", _scan)
+    monkeypatch.setattr(
+        "utils.memory.memory_service.fetch_authoritative_product_memory_items",
+        _forbid_full_fetch,
+        raising=False,
     )
 
     page = CanonicalMemoryBackend().read(

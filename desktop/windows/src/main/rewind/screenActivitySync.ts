@@ -106,6 +106,8 @@ async function syncTick(): Promise<void> {
     })
 
     const ok = await pushScreenActivityRows(session, payload, epoch)
+    // An aborted request from the previous account cannot alter this session's timer.
+    if (getSessionEpoch() !== epoch) return
     if (!ok) {
       consecutiveFailures += 1
       if (timer) {
@@ -116,7 +118,12 @@ async function syncTick(): Promise<void> {
     }
     if (getSessionEpoch() !== epoch) return
     markScreenActivitySyncCandidates(candidates)
+    const wasBackingOff = consecutiveFailures > 0
     consecutiveFailures = 0
+    if (wasBackingOff && timer) {
+      clearInterval(timer)
+      timer = setInterval(() => void runSyncTick(), SYNC_INTERVAL_MS)
+    }
   } catch (e) {
     console.warn('[screen-activity-sync] tick error:', (e as Error).message)
   }
@@ -146,7 +153,7 @@ async function resolveAccountGeneration(session: BackendSession, epoch: number):
     if (getSessionEpoch() !== epoch) return 0
     if (!res.ok) return 0
     const parsed = parseAccountGeneration(await res.json())
-    if (parsed === null) return 0
+    if (getSessionEpoch() !== epoch || parsed === null) return 0
     cachedAccountGeneration = { epoch, value: parsed }
     return parsed
   } catch {
@@ -207,7 +214,16 @@ async function pushScreenActivityRows(
       console.warn(`[screen-activity-sync] HTTP ${res.status}`)
       return false
     }
-    return true
+    // The backend acknowledges the whole batch using synced + its maximum row id.
+    // Keep rows pending on malformed/partial acknowledgements so retry is idempotent.
+    const acknowledgement: unknown = await res.json()
+    if (getSessionEpoch() !== epoch) return false
+    if (!acknowledgement || typeof acknowledgement !== 'object') return false
+    const { synced, last_id } = acknowledgement as Record<string, unknown>
+    return (
+      synced === payload.rows.length &&
+      last_id === Math.max(...payload.rows.map((row) => Number(row.id)))
+    )
   } catch (e) {
     console.warn('[screen-activity-sync] request failed:', (e as Error).message)
     return false

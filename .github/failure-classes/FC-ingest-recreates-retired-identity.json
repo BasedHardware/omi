@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-ingest-recreates-retired-identity",
+  "violated_contract": "An idempotent ingest identity retired by explicit user deletion must remain retired after the content row is removed. Treating absence as a new create allows a delayed local outbox retry to recreate deleted content and rerun its derived-data pipeline.",
+  "canonical_prevention": "Persist content-free deletion intent before destructive cleanup, point-read that intent before admitting a client-bound create, acknowledge retired identities without processing, and resolve the producing local outbox row on that acknowledgement.",
+  "canonical_prevention_artifact": [
+    "backend/database/conversation_tombstones.py",
+    "backend/tests/unit/test_conversation_tombstones.py",
+    "desktop/macos/Desktop/Tests/LocalSegmentsFinalizationRetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/routers/developer.py", "desktop/macos/Desktop/Sources/ConversationFinalizationService.swift"],
+  "status": "open"
+}

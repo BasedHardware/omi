@@ -10,7 +10,19 @@ actor RewindIndexer {
   /// Capture provenance is sampled once per session so every new row carries
   /// a stable canonical-memory identity plus a user-facing computer name.
   private let currentComputerName = Host.current().localizedName
-  private let currentClientDeviceId = ClientDeviceService.shared.clientDeviceId
+  /// Resolved on first frame write, not at actor init: `ClientDeviceService`
+  /// may read the login Keychain, and `RewindIndexer.shared` is touched by
+  /// owner-transition finalization (RuntimeOwnerIdentity) that tests and
+  /// headless automation run before any UI/keychain unlock exists. The device
+  /// id is stable for the process lifetime, so deferring the read preserves
+  /// provenance while keeping init keychain-free.
+  private var cachedClientDeviceId: String?
+  private var currentClientDeviceId: String {
+    if let cachedClientDeviceId { return cachedClientDeviceId }
+    let resolved = ClientDeviceService.shared.clientDeviceId
+    cachedClientDeviceId = resolved
+    return resolved
+  }
 
   private var isInitialized = false
   private var isInitializing = false
@@ -118,6 +130,9 @@ actor RewindIndexer {
     // Kick off OCR embedding backfill in background
     Task(priority: .background) {
       await OCREmbeddingService.shared.backfillIfNeeded()
+    }
+    Task(priority: .background) {
+      await LocalEmbeddingIndexer.shared.backfillIfNeeded()
     }
 
     // Reduce ocrDataJson float precision for existing rows (one-time migration)
@@ -630,6 +645,7 @@ actor RewindIndexer {
       PowerMonitor.shared.onACReconnected = {
         Task {
           await RewindIndexer.shared.backfillUnindexedScreenshots()
+          await LocalEmbeddingIndexer.shared.backfillIfNeeded()
         }
       }
     }

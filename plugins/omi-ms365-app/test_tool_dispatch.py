@@ -74,9 +74,15 @@ def load_app():
     services.auth.AuthError = AuthError
     services.auth.get_access_token = get_access_token
 
+    class HTMLResponseStub:
+        def __init__(self, content, status_code=200):
+            self.content = content
+            self.body = content.encode() if isinstance(content, str) else content
+            self.status_code = status_code
+
     stubs = {
         "fastapi": _module("fastapi", FastAPI=FastAPI, HTTPException=HTTPException, Query=lambda *a, **k: None, Request=object),
-        "fastapi.responses": _module("fastapi.responses", HTMLResponse=str, JSONResponse=dict, RedirectResponse=str),
+        "fastapi.responses": _module("fastapi.responses", HTMLResponse=HTMLResponseStub, JSONResponse=dict, RedirectResponse=str),
         "itsdangerous": _module("itsdangerous", BadSignature=Exception, URLSafeSerializer=Serializer),
         "config": _module("config", get_settings=lambda: settings),
         "services": services,
@@ -84,9 +90,9 @@ def load_app():
     for name in ("auth", "mail", "profile", "calendar", "teams", "sharepoint"):
         stubs[f"services.{name}"] = getattr(services, name)
 
-    spec = importlib.util.spec_from_file_location("ms365_main_under_test", MAIN_PATH)
+    spec = importlib.util.spec_from_file_location("main", MAIN_PATH)
     module = importlib.util.module_from_spec(spec)
-    with patch.dict(sys.modules, stubs):
+    with patch.dict("sys.modules", stubs):
         spec.loader.exec_module(module)
     return module
 
@@ -94,27 +100,22 @@ def load_app():
 app = load_app()
 
 
-def _request(body, query=None):
-    class _Request:
+def _request(json_payload, query=None):
+    class Request:
         query_params = query or {}
 
         async def json(self):
-            if isinstance(body, Exception):
-                raise body
-            return body
+            if isinstance(json_payload, Exception):
+                raise json_payload
+            return json_payload
 
-    return _Request()
+    return Request()
 
 
 def _omi_call(tool_name, **params):
-    """The exact envelope the Omi backend posts for a chat tool call."""
-    return {
-        **params,
-        "uid": "user-1",
-        "app_id": "app-1",
-        "tool_name": tool_name,
-        "geolocation": {"latitude": 1.0, "longitude": 2.0},
-    }
+    payload = {"uid": "user-1", "app_id": "ms365", "tool_name": tool_name}
+    payload.update(params)
+    return payload
 
 
 class DispatchPassesOmiParameters(unittest.TestCase):
@@ -160,6 +161,22 @@ class DispatchPassesOmiParameters(unittest.TestCase):
                 with self.assertRaises(HTTPException) as raised:
                     asyncio.run(app.tool_dispatch("get_me", _request(body)))
                 self.assertEqual(raised.exception.status_code, 400)
+
+
+class HtmlSanitizationTests(unittest.TestCase):
+    def test_setup_page_escapes_uid(self):
+        raw_uid = '<script>alert("xss")</script>'
+        res = asyncio.run(app.setup_page(uid=raw_uid))
+        self.assertNotIn('<script>', res)
+        self.assertIn('%3Cscript%3E', res)
+
+    def test_auth_callback_escapes_error_html(self):
+        res = asyncio.run(app.auth_callback(error='<b onmouseover="alert(1)">err</b>', error_description='<img src=x onerror=alert(1)>'))
+        self.assertEqual(res.status_code, 400)
+        body_text = res.body.decode() if isinstance(res.body, bytes) else str(res.body)
+        self.assertNotIn('<b onmouseover', body_text)
+        self.assertIn('&lt;b onmouseover', body_text)
+        self.assertIn('&lt;img src=x', body_text)
 
 
 if __name__ == "__main__":

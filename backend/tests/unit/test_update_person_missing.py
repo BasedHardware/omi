@@ -57,6 +57,62 @@ def test_person_alias_boundary_maps_transactional_not_found_to_missing():
         assert person_aliases.rename_person_retaining_aliases(fake_db, "u1", "racing", "Alice") is False
 
 
+def test_dismiss_person_boundary_maps_transactional_not_found_to_missing():
+    fake_db = MagicMock()
+    with patch.object(
+        person_aliases,
+        "dismiss_person_transaction",
+        side_effect=person_aliases.NotFound("person deleted mid-dismiss"),
+    ):
+        assert person_aliases.dismiss_person_soft(fake_db, "u1", "racing") is False
+
+
+def test_person_dismiss_transaction_preserves_record_and_marks_soft_state():
+    transaction = MagicMock()
+    person_ref = MagicMock()
+    person_ref.get.return_value.exists = True
+
+    assert person_aliases.dismiss_person_transaction.to_wrap(transaction, person_ref) is True
+
+    transaction.update.assert_called_once()
+    payload = transaction.update.call_args.args[1]
+    assert payload["is_dismissed"] is True
+    assert payload["dismissed_at"].tzinfo is not None
+    assert payload["updated_at"] == payload["dismissed_at"]
+    person_ref.delete.assert_not_called()
+
+
+def test_person_dismiss_transaction_returns_false_for_missing_person():
+    transaction = MagicMock()
+    person_ref = MagicMock()
+    person_ref.get.return_value.exists = False
+
+    assert person_aliases.dismiss_person_transaction.to_wrap(transaction, person_ref) is False
+    transaction.update.assert_not_called()
+
+
+def test_person_dismiss_transaction_is_idempotent_and_preserves_first_timestamp():
+    transaction = MagicMock()
+    person_ref = MagicMock()
+    person_ref.get.return_value.exists = True
+    person_ref.get.return_value.to_dict.return_value = {
+        "is_dismissed": True,
+        "dismissed_at": "original-timestamp",
+    }
+
+    assert person_aliases.dismiss_person_transaction.to_wrap(transaction, person_ref) is True
+    transaction.update.assert_not_called()
+
+
+def test_users_dismiss_person_uses_owner_scoped_soft_boundary():
+    fake_db = MagicMock()
+    with patch.object(users_db, "db", fake_db), patch.object(
+        users_db, "dismiss_person_soft", return_value=True
+    ) as dismiss:
+        assert users_db.dismiss_person("u1", "p1") is True
+    dismiss.assert_called_once_with(fake_db, "u1", "p1")
+
+
 def test_person_rename_transaction_retains_old_names_as_bounded_exact_aliases():
     transaction = MagicMock()
     person_ref = MagicMock()

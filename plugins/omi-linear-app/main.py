@@ -37,6 +37,8 @@ from models import (
     WorkflowState,
 )
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 # Linear API Configuration
@@ -95,6 +97,7 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, Any]]:
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code == 200:
@@ -141,7 +144,8 @@ def linear_graphql_request(
         response = requests.post(
             LINEAR_API_URL,
             headers=headers,
-            json={"query": query, "variables": variables or {}}
+            json={"query": query, "variables": variables or {}},
+            timeout=REQUEST_TIMEOUT,
         )
         
         if response.status_code >= 400:
@@ -442,7 +446,7 @@ async def home(request: Request, uid: Optional[str] = None):
         "user_profile": user_profile,
         "teams": teams,
         "default_team": default_team,
-        "oauth_url": f"/auth/linear?uid={uid}"
+        "oauth_url": f"/auth/linear?uid={urllib.parse.quote(uid, safe='')}"
     })
 
 
@@ -495,6 +499,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code != 200:
@@ -516,7 +521,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
     )
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -537,7 +542,7 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 async def disconnect_linear(uid: str):
     """Disconnect Linear account."""
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================

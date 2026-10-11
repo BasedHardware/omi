@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-double-accepts-payload-store-rejects",
+  "violated_contract": "An in-memory store double must reject every payload the production store rejects. On 2026-10-09 the dream dirty signal (#20979/#20993) wrote event refs as an array of arrays; StrictFirestore stored it, all tests passed, and production Firestore rejected every write with InvalidArgument, so the shadow cohort's queue stayed empty.",
+  "canonical_prevention": "Validate payload shape inside the shared Firestore double (StrictFirestore rejects arrays nested directly in arrays on set/create/update) rather than in individual tests, so every hermetic test exercising a write inherits the production constraint.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/tests/unit/fixtures/**",
+    "backend/database/**"
+  ],
+  "status": "open"
+}

@@ -329,15 +329,13 @@ struct ShortcutsSettingsSection: View {
         .padding(.vertical, OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-            .fill(
-              (isSelected || recordingTarget == target)
-                ? Ink.accent.opacity(0.3)
-                : Ink.rowFill)
+            .fill(SettingsSelection.optionFill(isSelected: isSelected || recordingTarget == target))
         )
         .overlay(
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected || recordingTarget == target ? Ink.accent : Color.clear,
+              isSelected || recordingTarget == target
+                ? SettingsSelection.optionStroke(isSelected: true) : Color.clear,
               lineWidth: 2)
         )
     }
@@ -353,14 +351,11 @@ struct ShortcutsSettingsSection: View {
         .padding(.vertical, OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-            .fill(
-              isDisabled
-                ? Ink.accent.opacity(0.3)
-                : Ink.rowFill)
+            .fill(SettingsSelection.optionFill(isSelected: isDisabled))
         )
         .overlay(
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-            .stroke(isDisabled ? Ink.accent : Color.clear, lineWidth: 2)
+            .stroke(isDisabled ? SettingsSelection.optionStroke(isSelected: true) : Color.clear, lineWidth: 2)
         )
     }
     .buttonStyle(.plain)
@@ -378,14 +373,11 @@ struct ShortcutsSettingsSection: View {
     .padding(.vertical, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-        .fill(
-          isSelected
-            ? Ink.accent.opacity(0.3)
-            : Ink.rowFill)
+        .fill(SettingsSelection.optionFill(isSelected: isSelected))
     )
     .overlay(
       RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-        .stroke(isSelected ? Ink.accent : Color.clear, lineWidth: 2)
+        .stroke(isSelected ? SettingsSelection.optionStroke(isSelected: true) : Color.clear, lineWidth: 2)
     )
   }
 
@@ -419,7 +411,7 @@ struct ShortcutsSettingsSection: View {
         Spacer()
 
         Button(action: action) {
-          Text(isRecording ? "Listening..." : "Save")
+          Text(isRecording ? "Listening…" : "Save")
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }

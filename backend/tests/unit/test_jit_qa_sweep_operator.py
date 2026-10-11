@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from llm_gateway.gateway.config_loader import load_gateway_config
+from utils.llm.model_config import LUNA_MODEL
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / "scripts" / "jit_qa_sweep_operator.py"
@@ -461,7 +462,7 @@ def test_qa_environment_validation_uses_explicit_mapping_and_fixed_policy():
         "MEMORY_DAILY_MEMORY_SWEEP_ENABLED": "true",
         "MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH": "false",
         "MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED": "true",
-        "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME": "gpt-5.6-luna",
+        "MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME": LUNA_MODEL,
         "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES": str(OPERATOR.QA_SWEEP_MAX_MODEL_CANDIDATES),
         "MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD": "0.05",
         "MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED": "true",

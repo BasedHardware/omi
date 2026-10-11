@@ -54,6 +54,7 @@ def conv():
     endpoints_stub.get_current_user_uid = _fake_get_current_user_uid
     endpoints_stub.with_rate_limit = _fake_with_rate_limit
     endpoints_stub.get_user = MagicMock()
+    endpoints_stub.timeit = lambda fn: fn
 
     # utils.memory.* — MemorySystem is a str-Enum used in type annotations across the memory graph.
     class _MemorySystem(str, Enum):

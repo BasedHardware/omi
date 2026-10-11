@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The link printed on the share cards. Part of the card art (a brand URL), so it is not translated.
+const String _wrappedUrl = 'omi.me/wrapped';
+
 // Bold color palette - matching wrapped_2025_page.dart
 class WrappedColors {
   static const Color blue = Color(0xFF0077B5);
   static const Color lightBlue = Color(0xFFE8F4F8);
   static const Color coral = Color(0xFFFF6B6B);
   static const Color mint = Color(0xFF4ECDC4);
-  static const Color purple = Color(0xFF9B59B6);
   static const Color yellow = Color(0xFFF39C12);
   static const Color pink = Color(0xFFE91E63);
   static const Color teal = Color(0xFF00897B);
@@ -45,7 +47,7 @@ class WrappedShareFrame extends StatelessWidget {
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: const Text(
-                    'omi.me/wrapped',
+                    _wrappedUrl,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -196,6 +198,7 @@ class TopCategoryShareTemplate extends StatelessWidget {
           // Category list
           ...categories.take(5).map((cat) {
             final isFirst = categories.indexOf(cat) == 0;
+            final label = '${cat['name']} · ${cat['percentage']}%';
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Row(
@@ -208,7 +211,7 @@ class TopCategoryShareTemplate extends StatelessWidget {
                   const SizedBox(width: 20),
                   Expanded(
                     child: Text(
-                      '${cat['name']} · ${cat['percentage']}%',
+                      label,
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: isFirst ? 44 : 36,
@@ -377,6 +380,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
   }
 
   Widget _buildDayItem(Map<String, dynamic> day) {
+    final dateLabel = '· ${day['dateStr'] ?? ''}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 40),
       child: Column(
@@ -404,7 +408,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                '· ${day['dateStr'] ?? ''}',
+                dateLabel,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 22,
@@ -1057,7 +1061,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: const Text(
-                  'omi.me/wrapped',
+                  _wrappedUrl,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,

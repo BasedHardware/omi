@@ -44,6 +44,7 @@ void main() {
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
     SharedPreferencesUtil().uid = 'test-user';
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -131,6 +132,7 @@ void main() {
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -145,7 +147,10 @@ void main() {
     await provider.setConnectedDevice(device);
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
     SharedPreferencesUtil().uid = 'user-b';
+    AnalyticsManager().bindIdentity('user-b');
+    AnalyticsManager().identify();
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
     await AnalyticsManager.flushPending(force: true);

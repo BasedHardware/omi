@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, Optional
 
-JIT_CONVERSATION_RETRIEVAL_ENV = "JIT_CONVERSATION_RETRIEVAL_ENABLED"
 JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY = "jit_conversation_retrieval_enabled"
 JIT_CONVERSATION_RETRIEVAL_PROMPT_SECTION = """
 <jit_conversation_retrieval>

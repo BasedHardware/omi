@@ -203,6 +203,15 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     lkg_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 11)
     assert 'route_serving_class="lkg"' in lkg_panel['targets'][0]['expr']
     assert 'fallback_used' not in lkg_panel['targets'][0]['expr']
+    chain_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 15)
+    assert chain_panel['title'].startswith('Live STT chain exhaustion')
+    assert 'omi_fallback_total' in chain_panel['targets'][0]['expr']
+    assert 'omi_listen_accepted_total' in chain_panel['targets'][0]['expr']
+    leg_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 16)
+    assert 'to_mode' in leg_panel['targets'][0]['expr']
+    intake_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 17)
+    assert 'omi_sync_intake_total' in intake_panel['targets'][0]['expr']
+    assert 'Scrape gap' in intake_panel['description']
 
 
 def test_omi_queue_family_is_not_zero_initialised():

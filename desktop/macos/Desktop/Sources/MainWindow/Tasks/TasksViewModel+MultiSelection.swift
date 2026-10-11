@@ -259,14 +259,4 @@ extension TasksViewModel {
       selectedAllScope = nil
     }
   }
-
-  static func confirmBulkDelete(count: Int) -> Bool {
-    let alert = NSAlert()
-    alert.messageText = "Delete \(count) tasks?"
-    alert.informativeText = "This cannot be undone."
-    alert.alertStyle = .warning
-    alert.addButton(withTitle: "Delete")
-    alert.addButton(withTitle: "Cancel")
-    return alert.runModal() == .alertFirstButtonReturn
-  }
 }

@@ -15,8 +15,7 @@ mutated.
 
 | Control | Owner | Meaning |
 | --- | --- | --- |
-| `MEMORY_MODE` | backend + maintenance manifests | Global readiness/incident declaration. Never a user selector. |
-| `MEMORY_V3_GET_ENABLED` | backend manifests | Deprecated, non-authoritative declaration pending manifest cleanup. Never a user selector. |
+| `MEMORY_ENABLED` | backend manifests | Canonical intake incident stop; unset fail-closes to off. Never a user selector. |
 | `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | `memory-maintenance-job` only | Enables scheduled Short-term normalization, TTL audit, consolidation, and outbox drain. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | maintenance job | Global L2 cost/incident switch. Required processing, TTL audit, and outbox ownership remain independent. |
 | consolidation batch/candidate caps | maintenance job | Bound one L2 call and one pass. |

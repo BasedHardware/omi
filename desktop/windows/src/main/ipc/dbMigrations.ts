@@ -92,6 +92,21 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 3,
+    name: 'retire proactivity trigger runtime',
+    up: (d) => {
+      // Canonical ledger mirrors, keyframe cleanup, Focus, and shared toast
+      // history remain. No backend or user-account data is touched.
+      d.exec('DROP TABLE IF EXISTS jit_trigger_mirror')
+      d.exec('DROP TABLE IF EXISTS jit_snapshot_receipt')
+      d.exec('DROP TABLE IF EXISTS jit_wakeup_receipt')
+      d.exec('DROP TABLE IF EXISTS jit_proactivity_reservation_receipt')
+      d.exec('DROP TABLE IF EXISTS jit_ambient_context_state')
+      d.exec('DROP TABLE IF EXISTS jit_feedback_outbox')
+      d.exec('DROP TABLE IF EXISTS jit_installation_identity')
+    }
+  },
+  {
+    version: 4,
     name: 'rewind_screen_activity_sync_state',
     up: (d) => {
       const hasRewind = d

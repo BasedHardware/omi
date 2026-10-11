@@ -11,6 +11,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
   bool goalSuccess = true;
   bool unavailable = false;
   int startCount = 0;
+  bool startFails = false;
   Completer<String>? pendingTranscription;
   final uploads = <Uint8List>[];
   String text = 'My name is Robin and I build bicycles.';
@@ -20,6 +21,9 @@ class FakeVoiceIO implements GuidedVoiceIO {
   int stopCount = 0;
   Completer<void>? preparing;
   Completer<bool>? pendingUpload;
+  // Holds the memory save open so a test can observe the review screen while the
+  // voice profile is already saved and the answers are still uploading.
+  Completer<void>? pendingMemory;
   @override
   bool get livePreview => false;
   @override
@@ -30,6 +34,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
   @override
   Future<void> start(void Function(Uint8List) callback, VoidCallback interrupted) async {
     startCount++;
+    if (startFails) throw StateError('microphone failed to start');
     audio = callback;
   }
 
@@ -54,6 +59,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
 
   @override
   Future<bool> remember(String text) async {
+    await pendingMemory?.future;
     if (!memorySuccess) return false;
     remembered.add(text);
     return true;
@@ -72,21 +78,27 @@ class FakeVoiceIO implements GuidedVoiceIO {
   void speak([int seconds = 6]) => audio!(Uint8List(32000 * seconds));
 }
 
-void main() {
-  Future<void> completeAnswers(FakeVoiceIO io, GuidedVoiceController flow) async {
-    await flow.start();
-    for (var i = 0; i < 4; i++) {
-      io.text = i == 3 ? 'Right now my number one goal is to ship Omi.' : 'Personal detail $i';
-      io.speak();
-      await flow.next();
-    }
+Future<void> _completeAnswers(FakeVoiceIO io, GuidedVoiceController flow) async {
+  await flow.start();
+  for (var i = 0; i < 4; i++) {
+    io.text = i == 3 ? 'Right now my number one goal is to ship Omi.' : 'Personal detail $i';
+    io.speak();
+    await flow.next();
   }
+}
 
+void main() {
+  _registerSaveAndCompletionTests();
+  _registerPromptAndVoiceTests();
+  _registerRecorderAndLifecycleTests();
+}
+
+void _registerSaveAndCompletionTests() {
   test('one save finishes voice, selected memories and cleaned goal; double taps do nothing', () async {
     final io = FakeVoiceIO()..pendingUpload = Completer<bool>();
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     flow.setKeep(1, false);
     final saving = flow.saveAll();
     expect(flow.busy, isTrue);
@@ -104,7 +116,7 @@ void main() {
     final io = FakeVoiceIO()..uploadSuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.stage, IntroductionStage.review);
     expect(flow.voiceError, 'upload');
@@ -121,7 +133,7 @@ void main() {
     final io = FakeVoiceIO()..goalSuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.error, 'goal');
     expect(flow.voiceSaved, isTrue);
@@ -137,7 +149,7 @@ void main() {
     final io = FakeVoiceIO()..memorySuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.goalSaved, isTrue);
     expect(flow.voiceSaved, isTrue);
@@ -152,7 +164,7 @@ void main() {
   test('disposed combined save does not start subsequent memory or goal requests', () async {
     final io = FakeVoiceIO()..pendingUpload = Completer<bool>();
     final flow = GuidedVoiceController(io);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     final saving = flow.saveAll();
     flow.dispose();
     io.pendingUpload!.complete(true);
@@ -160,7 +172,9 @@ void main() {
     expect(io.remembered, isEmpty);
     expect(io.goals, isEmpty);
   });
+}
 
+void _registerPromptAndVoiceTests() {
   test('backgrounding during transcription prevents automatic microphone restart', () async {
     final io = FakeVoiceIO();
     final flow = GuidedVoiceController(io);
@@ -279,7 +293,9 @@ void main() {
     await flow.saveMemories();
     expect(io.remembered, isEmpty);
   });
+}
 
+void _registerRecorderAndLifecycleTests() {
   test('transcription failure preserves audio for retry and does not advance', () async {
     final io = FakeVoiceIO()..transcriptionFails = true;
     final flow = GuidedVoiceController(io);
@@ -399,5 +415,16 @@ void main() {
     io.pendingUpload!.complete(true);
     await saving;
     expect(flow.voiceSaved, isFalse);
+  });
+
+  test('recorder start failure sets microphone error and pauses without recording forever', () async {
+    final io = FakeVoiceIO()..startFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    expect(flow.stage, IntroductionStage.paused);
+    expect(flow.error, 'microphone');
+    expect(flow.active, isFalse);
+    expect(flow.busy, isFalse);
   });
 }

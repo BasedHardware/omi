@@ -11,6 +11,33 @@ Swift/Kotlin lifecycle replay of the `phone-mic-native-events/v1` vectors)
 are hermetically tested and run in CI; **actual device qualification requires
 provisioned hardware and stays pending real evidence**.
 
+For agents without a phone, start with [offline capture regression tools](IPHONE_HARNESS.md).
+
+## Interactive native microphone probe
+
+For an explicitly authorized, operator-assisted recording session (including
+on a borrowed phone), see the [native mic probe](../../app/ios/test/phone_mic_probe/README.md).
+It builds a separate offline app, captures lifecycle metadata without saving
+audio, and feeds foreground-return traces into the existing native replay
+suite. It does not register a personal phone as dedicated, grant future access,
+or satisfy this lane's full-app/device qualification. The registry and lease
+requirements below remain the authority for unattended device operations.
+
+`device doctor` uses devicectl JSON to identify booted, paired physical iPhones
+and iPads; watches, simulators, and Macs are excluded. Candidate discovery is
+not proof of signing, Developer Mode, or install/launch readiness. A detached
+CoreDevice tunnel can reconnect on demand even for a USB-attached phone.
+
+For the same explicitly authorized interactive session, the
+[isolated real-app capture guide](physical_capture.md) covers the production
+Flutter/native capture and WAL path against private synthetic services.
+[Build admission](PHYSICAL_CAPTURE_BUILD.md) and the
+[host collector](physical_capture_collect.md) preserve source/artifact and
+process-lifecycle evidence separately. The
+[diagnostic permission helper](../../app/ios/test/phone_probe_ui/README.md)
+automates only its named diagnostic apps. These tools do not enroll a personal
+phone, grant future access, or emit this dedicated lane's qualification receipt.
+
 ## Commands
 
 Everything hangs off the canonical mobile session command:

@@ -235,6 +235,189 @@ actor ScreenActivitySyncService {
     }
   }
 
+  /// Push a just-finished meeting's OCR text now, before its notes are written.
+  ///
+  /// The periodic lossless path holds a row until its five-minute bucket has closed plus five
+  /// minutes of slack (fifteen without an embedding), so at finalization the backend's screen-text
+  /// digest is missing the last ten to twenty minutes of the call — usually where the decisions
+  /// are. This closes the meeting's own rows early: one winner per `(app, window, bucket)` inside
+  /// the meeting interval, shipped text-first like any other winner. Rows of the same bucket
+  /// captured after the meeting ended stay pending and may later ship one more winner for that
+  /// bucket; that bounded extra document is the price of notes that see the end of the call.
+  /// Legacy (cursor) sync is left alone. Best effort: every failure leaves the periodic path to it.
+  func flushMeetingWindow(_ interval: DateInterval, deadline: Date) async {
+    let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
+    guard losslessEnabled else { return }
+    // Owner-bound (auth-session invariant): bind before touching this owner's database, recheck
+    // after every read, and send every batch under that owner's session only.
+    guard let authorization = MeetingEvidenceAuthorization.captureCurrentOwner(),
+      let dbPool = await getDBPool()
+    else { return }
+    await Self.flushMeetingWindow(
+      interval, database: dbPool,
+      push: { await self.pushRows($0, authorizationSnapshot: authorization.snapshot) },
+      authorizationIsCurrent: { authorization.isCurrent },
+      // INV-AUTH-1: each sync-state write holds an owner mutation lease through its commit, and
+      // re-requires the owner inside the transaction, so a pool opened for the owner who was
+      // signed in when this began can never mutate a replacement owner's rows.
+      mutation: LocalMutationAuthorization { authorization.isCurrent },
+      shouldContinue: { Date() < deadline },
+      recordFallback: { reason in
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "meeting_screen_evidence", from: "ocr_flush", to: "periodic_sync", reason: reason,
+          outcome: .degraded)
+      })
+  }
+
+  /// `POST /v1/screen-activity/sync` rejects a body of more than 100 rows with a 400.
+  static let meetingFlushBatchSize = 100
+
+  /// Result of one meeting flush, for the caller's log and for tests.
+  enum MeetingFlushResult: Equatable {
+    case nothingPending
+    case synced(Int)
+    /// Degraded from here on: notes are written without the rest, which the periodic path ships.
+    case pushFailed(synced: Int)
+    case databaseFailed(synced: Int)
+    case deadlineReached(synced: Int)
+    /// The signed-in account changed mid-flush: nothing further is sent or marked.
+    case ownerChanged(synced: Int)
+  }
+
+  /// The flush itself, over any database and transport: compact once, then ship the meeting's
+  /// pending rows in batches the sync route accepts, until none remain or `shouldContinue` (the pass
+  /// deadline) says stop. Stopping early is a fail-open path — the notes proceed without the rest of
+  /// the call's screen text — so every early stop records degraded telemetry.
+  @discardableResult
+  static func flushMeetingWindow(
+    _ interval: DateInterval,
+    batchSize: Int = meetingFlushBatchSize,
+    database: any DatabaseWriter,
+    push: ([[String: Any]]) async -> Bool,
+    authorizationIsCurrent: () -> Bool = { true },
+    mutation: LocalMutationAuthorization = .unrestricted,
+    shouldContinue: () -> Bool,
+    recordFallback: (String) -> Void,
+    isolation: isolated (any Actor)? = #isolation
+  ) async -> MeetingFlushResult {
+    var synced = 0
+    do {
+      // `getDBPool()` may have suspended across an account switch: nothing is written, not even
+      // compaction, unless the captured owner is still the signed-in one.
+      guard authorizationIsCurrent() else {
+        log("ScreenActivitySync: meeting flush not started; signed-in account changed")
+        recordFallback("auth")
+        return .ownerChanged(synced: 0)
+      }
+      try await mutation.withCommitLease {
+        try await database.write { db in
+          try mutation.require()
+          try compactMeetingWindow(db: db, interval: interval)
+          try mutation.require()
+        }
+      }
+      while true {
+        let candidates = try await database.read { db in
+          try fetchMeetingWindowCandidates(db: db, interval: interval, limit: batchSize)
+        }
+        guard !candidates.isEmpty else { break }
+        guard authorizationIsCurrent() else {
+          log("ScreenActivitySync: meeting flush stopped; signed-in account changed")
+          recordFallback("auth")
+          return .ownerChanged(synced: synced)
+        }
+        guard shouldContinue() else {
+          log("ScreenActivitySync: meeting flush stopped at the deadline after \(synced) rows")
+          recordFallback("timeout")
+          return .deadlineReached(synced: synced)
+        }
+        guard await push(candidates.map(\.payload)) else {
+          if !authorizationIsCurrent() {
+            log("ScreenActivitySync: meeting flush push abandoned; signed-in account changed")
+            recordFallback("auth")
+            return .ownerChanged(synced: synced)
+          }
+          log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
+          recordFallback("upload_failed")
+          return .pushFailed(synced: synced)
+        }
+        guard authorizationIsCurrent() else {
+          log("ScreenActivitySync: meeting flush stopped after a push; signed-in account changed")
+          recordFallback("auth")
+          return .ownerChanged(synced: synced)
+        }
+        try await mutation.withCommitLease {
+          try await database.write { db in
+            try mutation.require()
+            try markCandidatesSynced(db: db, candidates: candidates)
+            try mutation.require()
+          }
+        }
+        synced += candidates.count
+      }
+    } catch LocalMutationAuthorizationError.revoked {
+      log("ScreenActivitySync: meeting flush write refused; signed-in account changed")
+      recordFallback("auth")
+      return .ownerChanged(synced: synced)
+    } catch {
+      log("ScreenActivitySync: meeting flush read/write error — \(error.localizedDescription)")
+      recordFallback("other")
+      return .databaseFailed(synced: synced)
+    }
+    guard synced > 0 else { return .nothingPending }
+    log("ScreenActivitySync: meeting flush synced \(synced) rows")
+    return .synced(synced)
+  }
+
+  /// `compactClosedBuckets` restricted to one meeting interval, without waiting for the bucket to
+  /// close. Same partition and ranking, so a row it keeps is a row the periodic path would rank.
+  static func compactMeetingWindow(db: Database, interval: DateInterval) throws {
+    try db.execute(
+      sql: """
+        WITH ranked AS (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY appName, COALESCE(windowTitle, ''),
+                                CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                   ORDER BY LENGTH(ocrText) DESC, id DESC
+                 ) AS bucketRank
+          FROM screenshots
+          WHERE screenActivitySyncState = ?
+            AND ocrText IS NOT NULL
+            AND LENGTH(TRIM(ocrText)) > 0
+            AND timestamp >= ? AND timestamp <= ?
+        )
+        UPDATE screenshots
+        SET screenActivitySyncState = ?
+        WHERE id IN (SELECT id FROM ranked WHERE bucketRank > 1)
+        """,
+      arguments: [
+        ScreenActivitySyncState.pending.rawValue,
+        interval.start, interval.end,
+        ScreenActivitySyncState.compacted.rawValue,
+      ])
+  }
+
+  static func fetchMeetingWindowCandidates(
+    db: Database, interval: DateInterval, limit: Int
+  ) throws -> [ScreenActivitySyncCandidate] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId,
+               screenActivitySyncState
+        FROM screenshots
+        WHERE screenActivitySyncState = ?
+          AND ocrText IS NOT NULL
+          AND LENGTH(TRIM(ocrText)) > 0
+          AND timestamp >= ? AND timestamp <= ?
+        ORDER BY id ASC
+        LIMIT ?
+        """,
+      arguments: [ScreenActivitySyncState.pending.rawValue, interval.start, interval.end, limit])
+    return rows.compactMap(syncCandidate(from:))
+  }
+
   private func recordPushFailure(path: String) {
     consecutiveFailures += 1
     if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
@@ -327,17 +510,19 @@ actor ScreenActivitySyncService {
         ScreenActivitySyncState.textSynced.rawValue, limit,
       ])
 
-    return rows.compactMap { row in
-      guard let id = row["id"] as? Int64,
-        let stateRaw = row["screenActivitySyncState"] as? Int64,
-        let state = ScreenActivitySyncState(rawValue: Int(stateRaw)),
-        let payload = payloadRow(from: row)
-      else { return nil }
-      let blobValue = row["embedding"] as DatabaseValue
-      let hasEmbedding: Bool
-      if case .blob = blobValue.storage { hasEmbedding = true } else { hasEmbedding = false }
-      return ScreenActivitySyncCandidate(id: id, priorState: state, hasEmbedding: hasEmbedding, payload: payload)
-    }
+    return rows.compactMap(syncCandidate(from:))
+  }
+
+  static func syncCandidate(from row: Row) -> ScreenActivitySyncCandidate? {
+    guard let id = row["id"] as? Int64,
+      let stateRaw = row["screenActivitySyncState"] as? Int64,
+      let state = ScreenActivitySyncState(rawValue: Int(stateRaw)),
+      let payload = payloadRow(from: row)
+    else { return nil }
+    let blobValue = row["embedding"] as DatabaseValue
+    let hasEmbedding: Bool
+    if case .blob = blobValue.storage { hasEmbedding = true } else { hasEmbedding = false }
+    return ScreenActivitySyncCandidate(id: id, priorState: state, hasEmbedding: hasEmbedding, payload: payload)
   }
 
   static func markCandidatesSynced(db: Database, candidates: [ScreenActivitySyncCandidate]) throws {
@@ -414,7 +599,15 @@ actor ScreenActivitySyncService {
 
   // MARK: - HTTP push
 
-  private func pushRows(_ rows: [[String: Any]]) async -> Bool {
+  /// Whether a push continues into frame-request delivery. Only the periodic path does; the
+  /// owner-bound meeting flush leaves delivery to it.
+  static func deliversFrameRequests(ownerBoundPush: Bool) -> Bool { !ownerBoundPush }
+
+  /// With `authorizationSnapshot` the push is owner-bound: headers are minted for that owner only,
+  /// and the request is abandoned if the session changed while they were built.
+  private func pushRows(
+    _ rows: [[String: Any]], authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> Bool {
     let accountGeneration = await MainActor.run {
       AccountCutoverControlManager.shared.control.accountGeneration
     }
@@ -430,7 +623,14 @@ actor ScreenActivitySyncService {
     }
 
     do {
-      let headers = try await APIClient.shared.buildHeaders()
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+        return false
+      }
+      let headers = try await APIClient.shared.buildHeaders(expectedAuthOwnerId: authorizationSnapshot?.ownerID)
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+        log("ScreenActivitySync: signed-in account changed while preparing a push; not sent")
+        return false
+      }
       let baseURL = await APIClient.shared.rustBackendURL
       guard let url = URL(string: baseURL + "v1/screen-activity/sync") else {
         log("ScreenActivitySync: invalid URL")
@@ -451,6 +651,13 @@ actor ScreenActivitySyncService {
       if httpResponse.statusCode == 200 {
         let syncResponse = try JSONDecoder().decode(OmiAPI.ScreenActivitySyncResponse.self, from: data)
         guard let delivered = syncResponse.frameRequests, !delivered.isEmpty else {
+          return true
+        }
+        guard Self.deliversFrameRequests(ownerBoundPush: authorizationSnapshot != nil) else {
+          // The rows landed. The owner-bound meeting flush never continues into pixel claims and
+          // uploads: those read the Rewind store across further awaits, where an account switch
+          // could pair one owner's pixels with another's session. The backend returns recoverable
+          // requests on every sync response, so the periodic path delivers them.
           return true
         }
         let deviceID = ClientDeviceService.shared.clientDeviceId

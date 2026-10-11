@@ -24,6 +24,35 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     XCTAssertEqual(PostHogManager.captureAttemptOutcomeEventName, "Desktop Capture Attempt Outcome")
   }
 
+  func testUpdateRelaunchContextComesFromConsumedMarker() {
+    let previousKind = CaptureLaunchContext.kind
+    let previousID = CaptureLaunchContext.updateAttemptID
+    let previousStarted = CaptureLaunchContext.hasStartedCapture
+    defer {
+      CaptureLaunchContext.kind = previousKind
+      CaptureLaunchContext.updateAttemptID = previousID
+      CaptureLaunchContext.hasStartedCapture = previousStarted
+    }
+    CaptureLaunchContext.hasStartedCapture = false
+    let attempt = UpdateInstallAttempt(
+      id: "opaque-update", sourceVersion: "1", sourceBuild: "1",
+      targetVersion: "2", targetBuild: "2", channel: "beta", startedAt: Date())
+    CaptureLaunchContext.setPendingRelaunch(
+      PendingUpdateRelaunch(restoreMainWindow: false, attempt: attempt))
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(), .updateRelaunch)
+    CaptureLaunchContext.hasStartedCapture = true
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(), .other)
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(override: .wake), .wake)
+    let capture = CaptureAttemptOutcomeState(
+      mode: "always", intent: .auto,
+      launchContext: CaptureLaunchContext.kind.rawValue,
+      secondsSinceLaunch: "0_10s", updateAttemptID: CaptureLaunchContext.updateAttemptID)
+    let properties = PostHogManager.captureAttemptOutcomeProperties(capture, finalizationReason: .userStop)
+    XCTAssertEqual(properties["launch_context"] as? String, "update_relaunch")
+    XCTAssertEqual(properties["update_attempt_id"] as? String, "opaque-update")
+    XCTAssertEqual(properties["seconds_since_launch"] as? String, "0_10s")
+  }
+
   // MARK: - Payload contract (privacy boundary)
 
   func testOutcomePayloadCarriesExactlyTheBoundedDimensionSet() throws {
@@ -39,6 +68,7 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
       [
         "platform", "attempt_id", "mode", "intent", "capture_eligible", "first_audio_frame",
         "speech_observed", "terminal_reason", "conversation_accepted",
+        "finalization_reason", "launch_context", "seconds_since_launch", "update_attempt_id",
       ])
     XCTAssertEqual(properties["platform"] as? String, "macos")
     XCTAssertEqual(properties["mode"] as? String, "always")
@@ -47,9 +77,31 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["first_audio_frame"] as? Bool, true)
     XCTAssertEqual(properties["speech_observed"] as? Bool, true)
     XCTAssertEqual(properties["terminal_reason"] as? String, "completed")
+    XCTAssertEqual(properties["finalization_reason"] as? String, "user_stop")
     XCTAssertEqual(properties["conversation_accepted"] as? Bool, false)
     let attemptId = try XCTUnwrap(properties["attempt_id"] as? String)
     XCTAssertEqual(attemptId.count, 36, "attempt_id is an opaque UUID string")
+  }
+
+  func testArmedRetryOutcomeCarriesEpisodeAndDistinctFailureReason() {
+    var probe = CaptureAttemptOutcomeState(
+      attemptId: "probe-attempt", mode: "always", intent: .auto,
+      armedEpisodeID: "opaque-episode")
+    probe.noteErrorTerminal()
+    let failed = PostHogManager.captureAttemptOutcomeProperties(probe, finalizationReason: .silentMicExhausted)
+    XCTAssertEqual(failed["armed_retry"] as? Bool, true)
+    XCTAssertEqual(failed["armed_episode_id"] as? String, "opaque-episode")
+    XCTAssertEqual(failed["terminal_reason"] as? String, "armed_retry_silent")
+    XCTAssertEqual(failed["attempt_id"] as? String, "probe-attempt")
+
+    let otherFailure = PostHogManager.captureAttemptOutcomeProperties(probe, finalizationReason: .microphoneUnavailable)
+    XCTAssertEqual(otherFailure["terminal_reason"] as? String, "armed_retry_failed")
+    let recovered = PostHogManager.captureAttemptOutcomeProperties(
+      CaptureAttemptOutcomeState(mode: "always", intent: .auto, armedEpisodeID: "opaque-episode"),
+      finalizationReason: .userStop)
+    XCTAssertEqual(recovered["armed_retry"] as? Bool, true)
+    XCTAssertEqual(recovered["armed_episode_id"] as? String, "opaque-episode")
+    XCTAssertEqual(recovered["terminal_reason"] as? String, "cancelled")
   }
 
   func testPendingPayloadCarriesOnlyTheSurvivingJoinKey() {
@@ -100,6 +152,48 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
         errorTerminal: true)
       XCTAssertEqual(disposition, .error, "for mode \(mode.rawValue)")
     }
+  }
+
+  // MARK: - SCA-526: forced terminations must not hide behind the idle bucket
+
+  func testForcedTerminationReasonsClassifyErrorEvenOnIdleMeetingsWait() {
+    // The heaviest stop/restart loop in the field terminated as
+    // `idle_waiting_meeting` because the stop reason never reached the funnel.
+    // A reason that names a forced termination must classify `error` even when
+    // the call site forgot `noteErrorTerminal()` and no audio ever flowed.
+    for reason in TranscriptionFinalizationReason.allCases where reason.isForcedTermination {
+      let disposition = CaptureAttemptOutcomeState.terminalReason(
+        finalizationReason: reason,
+        mode: AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue,
+        firstAudioFrame: false,
+        errorTerminal: false)
+      XCTAssertEqual(disposition, .error, "for \(reason.rawValue)")
+    }
+  }
+
+  func testNonForcedReasonsNeverClassifyErrorWithoutErrorTerminal() {
+    for reason in TranscriptionFinalizationReason.allCases where !reason.isForcedTermination {
+      let disposition = CaptureAttemptOutcomeState.terminalReason(
+        finalizationReason: reason,
+        mode: AssistantSettings.AudioRecordingMode.always.rawValue,
+        firstAudioFrame: true,
+        errorTerminal: false)
+      XCTAssertNotEqual(disposition, .error, "for \(reason.rawValue)")
+    }
+  }
+
+  func testRecordingStoppedPropertiesCarryFinalizationReason() {
+    let properties = PostHogManager.transcriptionStoppedProperties(
+      wordCount: 7, attemptId: "a1", reason: "rotation_failed")
+    XCTAssertEqual(
+      Set(properties.keys),
+      ["platform", "word_count", "attempt_id", "finalization_reason"])
+    XCTAssertEqual(properties["finalization_reason"] as? String, "rotation_failed")
+
+    // Absent reason must not add the key — bounded payload stays bounded.
+    XCTAssertEqual(
+      Set(PostHogManager.transcriptionStoppedProperties(wordCount: 0, attemptId: nil).keys),
+      ["platform", "word_count"])
   }
 
   func testRotationOfCapturingAttemptIsCompleted() {

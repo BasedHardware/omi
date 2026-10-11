@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
+from urllib.parse import quote
 from dotenv import load_dotenv
 from typing import List, Any
 import secrets
@@ -12,6 +14,14 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
 from slack_client import SlackClient
+try:
+    from slack_client import resolve_channel_id
+except ImportError:
+    def resolve_channel_id(channel, channels=None):
+        target = getattr(sys.modules.get("slack_client"), "resolve_channel_id", None)
+        if callable(target):
+            return target(channel, channels)
+        return None, None
 from message_detector import MessageDetector
 
 load_dotenv()
@@ -168,10 +178,12 @@ async def root(uid: str = Query(None)):
     
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        uid_q = quote(uid, safe="")
+        auth_url = f"/auth?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
                     {get_mobile_css()}
@@ -242,17 +254,22 @@ async def root(uid: str = Query(None)):
     # Authenticated - show channel selection page
     channels = user.get("available_channels", [])
     selected_channel = user.get("selected_channel", "")
-    team_name = user.get("team_name", "Unknown")
+    team_name = user.get("team_name") or "Unknown"
+    team_name_escaped = html.escape(str(team_name), quote=True)
+    uid_q = quote(str(uid), safe="")
     
     channel_options = '<option value="">Select a channel...</option>'
     for channel in channels:
         selected_attr = 'selected' if channel['id'] == selected_channel else ''
         privacy = "🔒" if channel.get('is_private') else "#"
-        channel_options += f'<option value="{channel["id"]}" {selected_attr}>{privacy} {channel["name"]}</option>'
+        escaped_id = html.escape(str(channel['id']), quote=True)
+        escaped_name = html.escape(str(channel['name']), quote=True)
+        channel_options += f'<option value="{escaped_id}" {selected_attr}>{privacy} {escaped_name}</option>'
     
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Settings</title>
             <style>
@@ -264,7 +281,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>💬 Slack Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{team_name_escaped}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default channel (optional - you can specify channel in voice command):
@@ -349,7 +366,7 @@ async def root(uid: str = Query(None)):
                     const channel = select.value;
                     
                     try {{
-                        const response = await fetch('/update-channel?uid={uid}&channel=' + encodeURIComponent(channel), {{
+                        const response = await fetch('/update-channel?uid={uid_q}&channel=' + encodeURIComponent(channel), {{
                             method: 'POST'
                         }});
                         
@@ -366,7 +383,7 @@ async def root(uid: str = Query(None)):
                 }}
                 
                 function refreshChannels() {{
-                    fetch('/refresh-channels?uid={uid}', {{
+                    fetch('/refresh-channels?uid={uid_q}', {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -385,14 +402,14 @@ async def root(uid: str = Query(None)):
                 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid={uid_q}', {{
                             method: 'POST'
                         }});
                         
                         const data = await response.json();
                         
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid={uid_q}';
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -423,21 +440,46 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/callback")
 async def auth_callback(
     request: Request,
     code: str = Query(None),
-    state: str = Query(None)
+    state: str = Query(None),
+    error: str = Query(None)
 ):
     """Handle OAuth callback from Slack."""
+    if error:
+        error_escaped = html.escape(str(error), quote=True)
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>{get_mobile_css()}</style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                            <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Failed</h2>
+                            <p style="margin-bottom: 0;">Access was not granted: {error_escaped}</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+
     if not code or not state:
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -461,6 +503,7 @@ async def auth_callback(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -503,10 +546,14 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
         
+        team_name_escaped = html.escape(str(team_name or "Unknown"), quote=True)
+        uid_q = quote(str(uid), safe="")
+
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <title>Connected Successfully!</title>
                     <style>
@@ -519,14 +566,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px; animation: pulse 1.5s infinite;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your Slack workspace <strong>{team_name}</strong> is now linked
+                                Your Slack workspace <strong>{team_name_escaped}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(channels)}</strong> {('channel' if len(channels) == 1 else 'channels')}
                             </p>
                         </div>
                         
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={uid_q}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
                         
@@ -548,10 +595,12 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        uid_q = quote(str(uid), safe="") if uid else ""
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -560,7 +609,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={uid_q}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -593,7 +642,8 @@ async def update_channel(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error updating default channel: {e}", flush=True)
+        return {"success": False, "error": "Failed to update default channel"}
 
 
 @app.post("/refresh-channels")
@@ -619,7 +669,8 @@ async def refresh_channels(uid: str = Query(...)):
         
         return {"success": True, "channels_count": len(channels)}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error refreshing channels: {e}", flush=True)
+        return {"success": False, "error": "Failed to refresh channels"}
 
 
 @app.post("/logout")
@@ -644,7 +695,8 @@ async def logout(uid: str = Query(...)):
         
         return {"success": True, "message": "Logged out successfully"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error logging out: {e}", flush=True)
+        return {"success": False, "error": "Failed to log out"}
 
 
 @app.post("/webhook")
@@ -677,7 +729,8 @@ async def webhook(
     try:
         payload = await request.json()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {str(e)}")
+        print(f"❌ Invalid JSON payload: {e}", flush=True)
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
     # Handle both formats
     segments = []
@@ -941,6 +994,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Not Found</title>
                 <style>{get_mobile_css()}</style>
@@ -958,9 +1012,11 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         </html>
         """, status_code=404)
     
+    uid_escaped = html.escape(str(uid), quote=True)
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Test Interface</title>
             <style>
@@ -978,7 +1034,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{uid_escaped}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate Slack</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
@@ -1044,7 +1100,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
                         
                         const authStatus = document.getElementById('authStatus');
@@ -1063,7 +1119,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening Slack authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
                 
@@ -1089,7 +1145,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
                         
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1133,7 +1189,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
                         
@@ -1185,7 +1241,7 @@ async def chat_tool_send_message(request: Request):
         data = await request.json()
         
         # Validate required parameters
-        if not data:
+        if not data or not isinstance(data, dict):
             return JSONResponse(
                 content={'error': 'Missing request body'},
                 status_code=400
@@ -1195,17 +1251,17 @@ async def chat_tool_send_message(request: Request):
         channel = data.get('channel')
         message = data.get('message')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not channel:
+        if not channel or not isinstance(channel, str) or not channel.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: channel'},
                 status_code=400
             )
-        if not message:
+        if not message or not isinstance(message, str) or not message.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: message'},
                 status_code=400
@@ -1223,16 +1279,7 @@ async def chat_tool_send_message(request: Request):
         
         # Get channels to find channel ID
         channels = slack_client.list_channels(access_token)
-        channel_id = None
-        channel_name = channel
-        
-        # Try to find channel by name (handle # prefix)
-        channel_search = channel.lstrip('#').lower()
-        for ch in channels:
-            if ch["name"].lower() == channel_search:
-                channel_id = ch["id"]
-                channel_name = ch["name"]
-                break
+        channel_id, channel_name = resolve_channel_id(channel, channels)
         
         if not channel_id:
             return JSONResponse(
@@ -1248,8 +1295,9 @@ async def chat_tool_send_message(request: Request):
         )
         
         if result and result.get("success"):
+            display_name = channel_name.lstrip('#') if channel_name else channel
             return JSONResponse(
-                content={'result': f'Successfully sent message to #{channel_name}'}
+                content={'result': f'Successfully sent message to #{display_name}'}
             )
         else:
             error = result.get("error", "Unknown error") if result else "Failed to send message"
@@ -1263,7 +1311,7 @@ async def chat_tool_send_message(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 
@@ -1285,18 +1333,29 @@ async def chat_tool_search_messages(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query')
         channel = data.get('channel')
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        if not query:
+        if not query or not isinstance(query, str) or not query.strip():
             return JSONResponse(
                 content={'error': 'Missing required parameter: query'},
+                status_code=400
+            )
+        if channel is not None and (not isinstance(channel, str) or not channel.strip()):
+            return JSONResponse(
+                content={'error': 'Invalid channel parameter'},
                 status_code=400
             )
         
@@ -1315,12 +1374,7 @@ async def chat_tool_search_messages(request: Request):
         channel_name = None
         if channel:
             channels = slack_client.list_channels(access_token)
-            channel_search = channel.lstrip('#').lower()
-            for ch in channels:
-                if ch["name"].lower() == channel_search:
-                    channel_id = ch["id"]
-                    channel_name = ch["name"]
-                    break
+            channel_id, channel_name = resolve_channel_id(channel, channels)
         
         # Search messages
         print(f"🔍 Searching messages - query: '{query}', channel: '{channel_name or channel}'", flush=True)
@@ -1384,7 +1438,7 @@ async def chat_tool_search_messages(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 
@@ -1405,15 +1459,22 @@ async def chat_tool_search_channels(request: Request):
     try:
         data = await request.json()
         
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                content={'error': 'Missing request body'},
+                status_code=400
+            )
+
         uid = data.get('uid')
         query = data.get('query', '')  # Allow empty query to list all channels
         
-        if not uid:
+        if not uid or not isinstance(uid, str) or not uid.strip():
             return JSONResponse(
                 content={'error': 'Missing uid parameter'},
                 status_code=400
             )
-        # Query is optional - if empty or "all", will return all channels
+        if query is not None and not isinstance(query, str):
+            query = str(query)
         
         # Get user's authentication token
         user = SimpleUserStorage.get_user(uid)
@@ -1471,7 +1532,7 @@ async def chat_tool_search_channels(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 

@@ -37,14 +37,15 @@ configured right behind it.
 |---|---|---|---|
 | `Internal server error` | `modulate_serve_error` | **ERROR** | yes — one cooldown window |
 | `Unable to complete the request…` | `modulate_serve_error` | **ERROR** | yes |
-| `Monthly usage limit reached.` | `modulate_serve_error` | **ERROR** | yes |
+| `Monthly usage limit reached.` | `provider_budget_exhausted` | **ERROR** | yes |
 | `Invalid input audio` | untyped | WARNING | no — our/client fault |
 | `rate limit`, unknown wordings | untyped | WARNING | no — session-scoped |
 
 - `modulate_death_reason()` (utils/stt/streaming.py) bounds the provider's
-  free-text frame to `MODULATE_DEATH_SERVE_ERROR` for server-fault shapes
-  only; everything else degrades to untyped rather than growing the bounded
-  vocabulary per provider wording.
+  free-text frame to `provider_budget_exhausted` for monthly/quota wording and
+  `MODULATE_DEATH_SERVE_ERROR` for 5xx serve-fault shapes; everything else
+  degrades to untyped rather than growing the bounded vocabulary per provider
+  wording.
 - The socket latches the typed reason next to the raw text on the death
   latch; severity follows fault origin at the frame (serve error stays ERROR
   — it IS the outage signal).

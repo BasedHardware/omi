@@ -44,6 +44,10 @@ def _build_fakes() -> dict[str, ModuleType]:
         fakes[name] = mod
         return mod
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    refresh.preserve = lambda *a, **k: False
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
     add('database', database_pkg)
@@ -51,9 +55,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType('database._client')
     client_mod.db = MagicMock(name='db')
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -119,12 +123,9 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
     ):
@@ -154,12 +155,14 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     byok = ModuleType('utils.byok')
     byok.get_byok_key = lambda _provider: None
     byok.has_validated_byok_keys = lambda: False
     add('utils.byok', byok)
-
+    speaker_id = add('utils.speaker_identification', AutoMockModule('utils.speaker_identification'))
+    speaker_id.extract_speaker_samples = AsyncMock()
     executors = add('utils.executors', AutoMockModule('utils.executors'))
     executors.db_executor = MagicMock()
     executors.llm_executor = MagicMock()
@@ -220,10 +223,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.app_integrations', AutoMockModule('utils.app_integrations'))
     add('utils.conversations.location', AutoMockModule('utils.conversations.location'))
     add('utils.conversations.meeting_receipt', AutoMockModule('utils.conversations.meeting_receipt'))
+    # The finalizer's smart-merge step is off by default; its own tests drive it.
+    smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
+    smart_merge.smart_merge_step = AsyncMock(return_value=False)
     add('utils.jit_rollout', AutoMockModule('utils.jit_rollout'))
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
-    add('utils.task_intelligence.proactive_engine', AutoMockModule('utils.task_intelligence.proactive_engine'))
     services_pkg = ModuleType('services')
     services_pkg.__path__ = []  # type: ignore[attr-defined]
     add('services', services_pkg)
@@ -407,6 +412,90 @@ def test_basic_desktop_without_projection_is_terminal_minimum(monkeypatch, pc) -
     spies['should_defer'].assert_not_called()
 
 
+def _desktop_custom_stt(conversation_id: str = 'desktop-custom-stt') -> Conversation:
+    conversation = _existing_desktop(conversation_id)
+    conversation.uses_custom_stt = True
+    return conversation
+
+
+def _local_projection() -> ClientProcessing:
+    return ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='local title', overview='local overview'),
+        provenance=ProjectionProvenance(
+            model_id='local-test-model',
+            runtime='test-runtime',
+            device_class='test-device',
+            generated_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        ),
+    )
+
+
+# red-proof: put the custom-STT skip back above the S6 branch (desktop custom-STT
+# would complete without persist and without asking the uid-gated flag).
+def test_custom_stt_skip_does_not_strip_unpaid_on_device_projection(monkeypatch, pc) -> None:
+    """#14300 rebase vs #14513: exhausted custom-STT still stores the local summary.
+
+    The skip is a trial-paywall-style early return (completed, no `_get_structured`).
+    It must sit after the unpaid desktop path so a desktop custom-STT session that
+    would hit `store_projection` still persists that projection. Policy is
+    unchanged — this only pins ordering.
+    """
+    seen_uids: list[Any] = []
+
+    def _record(uid):
+        seen_uids.append(uid)
+        return True
+
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _record)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    original_store = pc._store_projected_conversation
+    store_projected = MagicMock(side_effect=original_store)
+    monkeypatch.setattr(pc, '_store_projected_conversation', store_projected)
+    monkeypatch.setattr(pc, 'should_skip_omi_paid_postprocessing', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'store_projection', 'basic_not_entitled'),
+    )
+
+    result = pc.process_conversation(
+        'basic-uid',
+        'en',
+        _desktop_custom_stt(),
+        client_projection=_local_projection(),
+    )
+
+    assert seen_uids == ['basic-uid']
+    store_projected.assert_called_once()
+    spies['get_structured'].assert_not_called()
+    assert payloads, 'unpaid on-device persist must run; custom-STT skip must not return first'
+    assert result.status == ConversationStatus.completed
+
+
+# red-proof: drop the skip after a process_normally fall-through (paid desktop
+# custom-STT would call `_get_structured` on Omi's bill).
+def test_custom_stt_skip_still_blocks_omi_paid_llm_after_unpaid_path(monkeypatch, pc) -> None:
+    """The #7690 gate still skips Omi-paid structuring when S6 falls through."""
+    _enable_flag(monkeypatch, pc)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    monkeypatch.setattr(pc, 'should_skip_omi_paid_postprocessing', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'process_normally', 'plan_paid'),
+    )
+
+    result = pc.process_conversation('paid-uid', 'en', _desktop_custom_stt('desktop-custom-stt-paid'))
+
+    spies['get_structured'].assert_not_called()
+    assert not payloads, 'Omi-paid persist must not run when the custom-STT processing gate skips'
+    assert result.status == ConversationStatus.completed
+
+
 # red-proof: skip `_get_structured` on process_normally (paid desktop would not enrich)
 def test_process_normally_reaches_structured_and_jit_block(monkeypatch, pc) -> None:
     _enable_flag(monkeypatch, pc)
@@ -524,8 +613,7 @@ def test_force_and_reprocess_do_not_rescue_basic_minimum(monkeypatch, pc) -> Non
         'basic-uid',
         'en',
         _desktop_create(),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
 
     assert result.deferred is False
@@ -674,8 +762,7 @@ def test_minimum_store_clears_pending_jit_obligation_so_first_open_dispatches_no
         uid,
         'en',
         _existing_desktop(conv_id),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
 
     assert result.status == ConversationStatus.completed
@@ -771,13 +858,12 @@ async def test_finalizer_completes_minimum_store_without_extracting_memories(mon
     )
     complete = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(
         persisted_finalizer,
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -794,7 +880,7 @@ async def test_finalizer_completes_minimum_store_without_extracting_memories(mon
 
 
 # red-proof: restore the skip_derived_effects early return that complete_fanout
-# and returns before record_and_persist_finalized_meeting_receipt
+# and returns before record_finalized_meeting_receipt
 @pytest.mark.anyio
 @pytest.mark.parametrize('anyio_backend', ['asyncio'])
 async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat_intent(
@@ -825,9 +911,10 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
         transcript_segments=[SimpleNamespace(text='Hello from the desktop capture', start=0.0, end=60.0)],
         structured=SimpleNamespace(title='Recording', overview='', action_items=[]),
     )
+    vector = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
     extract = MagicMock()
     integrations = MagicMock()
-    intent_spy = MagicMock(return_value=SimpleNamespace(intent_id='intent-1'))
 
     def minimum_process(_uid, _lang, conv, **kwargs):
         observer = kwargs.get('persistence_observer')
@@ -867,8 +954,6 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
-    monkeypatch.setattr(meeting_receipt_mod, 'persist_capture_arrival_intent', intent_spy)
     monkeypatch.setattr(
         meeting_receipt_mod.jobs_db,
         'record_meeting_receipt',
@@ -881,12 +966,12 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     monkeypatch.setattr(
         meeting_receipt_mod.jobs_db,
         'mark_meeting_receipt_intent_persisted',
-        MagicMock(return_value=True),
+        MagicMock(side_effect=AssertionError('automatic Chat intents are retired')),
     )
     monkeypatch.setattr(
         persisted_finalizer,
-        'record_and_persist_finalized_meeting_receipt',
-        meeting_receipt_mod.record_and_persist_finalized_meeting_receipt,
+        'record_finalized_meeting_receipt',
+        meeting_receipt_mod.record_finalized_meeting_receipt,
     )
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
@@ -900,11 +985,8 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     assert disposition == persisted_finalizer.ConversationFinalizationDisposition.completed
     extract.assert_not_called()
     integrations.assert_not_called()
+    assert vector.call_count == 1
     complete.assert_called_once_with('job-1', 2, 3)
-    intent_spy.assert_called_once()
-    assert intent_spy.call_args.args == ('uid-1',)
-    assert intent_spy.call_args.kwargs['conversation_id'] == 'meeting-1'
-    assert intent_spy.call_args.kwargs['is_desktop_meeting'] is True
 
 
 # red-proof: call _funding_owner_for_feature / request_carries_validated_byok_key
@@ -946,7 +1028,7 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 # in finalizer.py (attempt 2 would extract memories from a completed minimum)
 @pytest.mark.anyio
 @pytest.mark.parametrize('anyio_backend', ['asyncio'])
-async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(monkeypatch, pc, anyio_backend) -> None:
+async def test_finalizer_retry_after_minimum_persist_suppresses_intelligence(monkeypatch, pc, anyio_backend) -> None:
     """Attempt 1 persists the minimum then fails; attempt 2 must not extract."""
     del anyio_backend
     persisted_finalizer = _load_finalizer()
@@ -957,6 +1039,8 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
         'discarded': False,
     }
     process_calls: list[Any] = []
+    vector = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
     extract = MagicMock()
     integrations = AsyncMock()
     complete = MagicMock(return_value=True)
@@ -1010,13 +1094,12 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
         lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', receipt)
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', receipt)
     monkeypatch.setattr(
         persisted_finalizer,
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
 
     finalize_kwargs = {
         'finalization_job_id': 'job-1',
@@ -1041,6 +1124,7 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
     assert len(process_calls) == 1
     extract.assert_not_called()
     integrations.assert_not_called()
+    assert vector.call_count == 2
     complete.assert_called_once_with('job-1', 2, 3)
 
 
@@ -1085,8 +1169,7 @@ def test_paid_reprocess_clears_stale_terminal_marker_and_runs_derived_effects(mo
         uid,
         'en',
         _existing_desktop(conv_id),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
         derived_effects_disposition_observer=dispositions.append,
     )
 
@@ -1336,9 +1419,7 @@ def _drive_reprocess(pc, conversation: Any, uid: str = 'paid-uid') -> Any:
         uid,
         'en',
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
         persistence_observer=lambda _owned: None,
         defer_derived_effects=True,
         derived_effects_observer=lambda _runner: None,
@@ -1453,6 +1534,31 @@ def test_paid_reprocess_merge_clears_stale_local_pending_and_resets_the_object(m
     # The object the caller returns must agree — not answer a stale pending
     # state back to the client on an enriched conversation.
     assert result.processing_state is None
+
+
+# red-proof: drop `conversation.summary_retryable = None` or `clear_summary_retryable` on the
+# enrichment persist → the Retry chip survives a successful user reprocess
+def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    monkeypatch.setattr(
+        managed_compute,
+        'authorize_managed_compute',
+        lambda *_a, **_k: _memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    uid = 'retry-uid'
+    conv_id = 'dead-lettered-then-retried'
+    path = ('users', uid, 'conversations', conv_id)
+    store = StrictFirestore({path: {'id': conv_id, 'status': 'completed', 'summary_retryable': True}})
+    payloads = _capture_all_persists(monkeypatch, pc, store=store, path=path)
+    conversation = _existing_desktop(conv_id)
+    conversation.summary_retryable = True
+
+    result = _drive_reprocess(pc, conversation, uid=uid)
+
+    assert payloads[-1]['summary_retryable'] is None
+    assert store.rows[path]['summary_retryable'] is None
+    assert result.summary_retryable is None
 
 
 def test_flag_on_minimum_writes_local_pending_and_a_delivered_projection_stays_absent(monkeypatch, pc) -> None:
@@ -1573,7 +1679,7 @@ def test_flag_off_first_open_basic_is_deterministic_minimum(monkeypatch, pc) -> 
     persisted = MagicMock()
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    result = pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+    result = pc.process_conversation('basic-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     assert result.deferred is False
     assert result.status == ConversationStatus.completed
@@ -1597,7 +1703,9 @@ def test_flag_off_manual_reprocess_basic_is_deterministic_minimum(monkeypatch, p
     persisted = MagicMock()
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    result = pc.process_conversation('basic-uid', 'en', _existing_desktop(), is_reprocess=True)
+    result = pc.process_conversation(
+        'basic-uid', 'en', _existing_desktop(), trigger=pc.ProcessingTrigger.USER_REPROCESS
+    )
 
     marker_field = pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD
 
@@ -1640,7 +1748,7 @@ def test_flag_off_identification_failure_fails_open_on_first_open(monkeypatch, p
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('blip-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('blip-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1659,7 +1767,7 @@ def test_flag_off_paid_first_open_processes_normally(monkeypatch, pc) -> None:
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('paid-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('paid-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1674,7 +1782,7 @@ def test_flag_off_non_desktop_basic_keeps_eager_extraction(monkeypatch, pc) -> N
     omi_create = _desktop_create()
     omi_create.source = 'omi'
 
-    pc.process_conversation('basic-uid', 'en', omi_create, force_process=True)
+    pc.process_conversation('basic-uid', 'en', omi_create, trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1698,7 +1806,121 @@ def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('basic-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
     assert auth_calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('anyio_backend', ['asyncio'])
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'jit_processing',
+        'completed_replay',
+        'terminal_replay',
+        'discarded_replay',
+        'deleted_replay',
+        'unstructured_replay',
+    ],
+)
+@pytest.mark.parametrize('claim_status', ['claimed', 'fenced', 'completed'])
+async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, anyio_backend, mode, claim_status):
+    """#21111: replay and suppressed intelligence still index behind the claim.
+
+    The processing case exercises the real JIT coordinator and deferred bundle.
+    Vector writes cannot consume or complete folder/apps obligation receipts.
+    """
+    del anyio_backend
+    finalizer = load_module_fresh('utils.conversations.finalizer', _BACKEND / 'utils/conversations/finalizer.py')
+    conversation = _existing_desktop('vector-conv')
+    conversation.source = ConversationSource.omi
+    if mode == 'jit_processing':
+        conversation.status = ConversationStatus.processing
+    row = {'id': conversation.id, 'status': conversation.status.value, 'source': 'omi'}
+    if mode == 'terminal_replay':
+        row[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    if mode == 'discarded_replay':
+        conversation.discarded = True
+    if mode == 'deleted_replay':
+        row['deleted'] = True
+    if mode == 'unstructured_replay':
+        conversation.structured = None
+    vector_eligible = mode not in {'discarded_replay', 'deleted_replay', 'unstructured_replay'}
+    events = []
+
+    async def inline(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    def claim(*args):
+        events.append('claim')
+        return {'status': claim_status, 'fanout_key': 'key'}
+
+    def vector(uid, conv):
+        assert events == ['claim']
+        assert uid == 'uid' and conv is conversation
+        events.append('vector')
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', inline)
+    monkeypatch.setattr(finalizer.conversations_db, 'get_conversation', lambda *a, **k: row)
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda data: conversation)
+    monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(finalizer, 'await_meeting_evidence', AsyncMock(return_value='not_applicable'))
+    monkeypatch.setattr(finalizer, 'link_duplicate_captures', MagicMock())
+    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', claim)
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *a: events.append('complete') or True
+    )
+    monkeypatch.setattr(finalizer, 'save_structured_vector', vector)
+    monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
+    monkeypatch.setattr(finalizer, 'record_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(finalizer, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(
+        finalizer, 'resolve_frame_request_authority', AsyncMock(return_value=SimpleNamespace(enabled=False))
+    )
+    monkeypatch.setattr(pc, '_get_structured', lambda *a, **k: (conversation.structured, False))
+    monkeypatch.setattr(pc, '_get_conversation_obj', lambda *a, **k: conversation)
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(pc, 'resolve_authorized_first_open_plan', lambda **k: SimpleNamespace(defer_derived_work=True))
+    initialize = MagicMock(return_value=True)
+    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', initialize)
+    apps = MagicMock()
+    folders = MagicMock()
+    submit = MagicMock()
+    monkeypatch.setattr(pc, 'trigger_conversation_apps', apps)
+    monkeypatch.setattr(pc.folders_db, 'get_folders', folders)
+    monkeypatch.setattr(pc, 'submit_with_context', submit)
+    monkeypatch.setattr(pc, '_extract_memories', MagicMock())
+    monkeypatch.setattr(pc, '_save_action_items', MagicMock())
+    receipt = MagicMock()
+    monkeypatch.setattr(pc.conversations_db, 'complete_first_open_effect', receipt)
+
+    result = await finalizer.finalize_persisted_conversation(
+        'uid',
+        conversation.id,
+        finalization_job_id='job',
+        dispatch_generation=1,
+        lease_epoch=1,
+    )
+    assert result.value == ('fenced' if claim_status == 'fenced' else 'completed')
+    # New contract (#21111 follow-up): summary indexing runs on BOTH the
+    # claimed path and the completed-fanout re-finalization path, behind the
+    # same guards. Only the claimed path re-runs fanout completion.
+    expected = ['claim']
+    if claim_status != 'fenced' and vector_eligible:
+        expected.append('vector')
+    if claim_status == 'claimed':
+        expected.append('complete')
+    assert events == expected
+    if mode == 'jit_processing':
+        initialize.assert_called_once_with('uid', conversation.id)
+    apps.assert_not_called()
+    folders.assert_not_called()
+    receipt.assert_not_called()
+    assert all(call.args[1] is not pc.save_structured_vector for call in submit.call_args_list)
+    if mode == 'terminal_replay':
+        finalizer.extract_memories.assert_not_called()
+        finalizer.trigger_external_integrations.assert_not_called()

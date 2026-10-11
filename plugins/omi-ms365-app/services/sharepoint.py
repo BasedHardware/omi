@@ -58,11 +58,15 @@ async def upload_text_file(
 
     folder_path: e.g. "Documents/OMI-Notes" (relative to OneDrive root).
     """
-    folder_path = folder_path.strip("/")
-    path = f"/me/drive/root:/{folder_path}/{filename}:/content"
+    clean_folder = (folder_path or "").strip("/")
+    clean_filename = (filename or "").lstrip("/")
+    if clean_folder:
+        path = f"/me/drive/root:/{clean_folder}/{clean_filename}:/content"
+    else:
+        path = f"/me/drive/root:/{clean_filename}:/content"
     async with GraphClient(user_id) as g:
-        data = await g.put_bytes(path, content.encode("utf-8"), content_type="text/plain")
-        return _slim_item(data) if isinstance(data, dict) else {"status": "uploaded", "name": filename}
+        data = await g.put_bytes(path, str(content or "").encode("utf-8"), content_type="text/plain")
+        return _slim_item(data) if isinstance(data, dict) else {"status": "uploaded", "name": clean_filename}
 
 
 async def read_file_text(user_id: str, item_id: str) -> dict[str, Any]:

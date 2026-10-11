@@ -77,6 +77,24 @@ describe('scheduled passes', () => {
   })
 })
 
+describe('cloud deletes', () => {
+  it('asks the server to remove memories extracted from the recording', async () => {
+    vi.useFakeTimers()
+    h.getPreferences.mockReturnValue({ retentionMode: 'live' })
+    h.get.mockResolvedValue({
+      data: [{ id: 'conv-1', status: 'completed', transcript_segments: [] }]
+    })
+    h.del.mockResolvedValue({})
+
+    const pending = runRetentionSweep('manual')
+    await vi.runAllTimersAsync()
+    await pending
+
+    expect(h.del).toHaveBeenCalledWith('/v1/conversations/conv-1?cascade=true')
+    vi.useRealTimers()
+  })
+})
+
 describe('manual passes', () => {
   it('runs the Preview the user just asked for', async () => {
     // Pressing Preview in Settings is the trigger that makes the mode's advertised

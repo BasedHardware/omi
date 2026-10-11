@@ -123,7 +123,7 @@ def _historical(service_mod, memory_id, *, content=None):
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     module = _load_memory_service(monkeypatch)
 
     @contextmanager
@@ -152,7 +152,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     review_cleanup = MagicMock()
     monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", MagicMock())
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
 
     assert service.read("uid-test") == []
     with pytest.raises(service_mod.HTTPException) as exc_info:
@@ -601,10 +601,16 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
 def test_canonical_read_preserves_lock_and_returns_only_a_preview(service_mod, monkeypatch):
     backend = service_mod.CanonicalMemoryBackend(db_client=_Db())
     secret = "LOCKED_SECRET_CONTENT_" * 10
+    locked = _locked_memory(service_mod, content=secret)
+
+    def _forbid_full_fetch(*_args, **_kwargs):
+        raise AssertionError("offset read must not full-fetch canonical memories")
+
+    monkeypatch.setattr(service_mod, "read_canonical_memories", _forbid_full_fetch)
     monkeypatch.setattr(
         service_mod,
-        "read_canonical_memories",
-        lambda *args, **kwargs: [_locked_memory(service_mod, content=secret)],
+        "read_canonical_scan_page",
+        lambda *args, **kwargs: ([(locked, (locked.updated_at, locked.id))], True),
     )
 
     result = backend.read("uid-test")
@@ -697,6 +703,46 @@ def test_locked_canonical_memory_rejects_every_mutation(service_mod, monkeypatch
     service._canonical.delete_batch.assert_not_called()
     service._write_historical_override.assert_not_called()
     service._write_historical_overrides.assert_not_called()
+
+
+def test_delete_batch_limit_error_sanitizes_detail_and_preserves_413(service_mod, monkeypatch):
+    """The 413 detail must not disclose internal ids or data-layer limits.
+
+    The internal reason stays server-side: masked into the log line and chained
+    as the cause, while the client keeps the released 413 status with a static
+    message.
+    """
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        service_mod,
+        "memory_item_to_memorydb",
+        lambda _item: _memory(service_mod, "mem-1"),
+    )
+    service._write_historical_overrides = MagicMock()
+    internal_marker = "uid-secret-memory-987654321"
+    service._canonical.delete_batch = MagicMock(
+        side_effect=service_mod.CanonicalBatchMutationLimitError(
+            f"canonical memory {internal_marker} alone exceeds Firestore's 500-mutation transaction limit"
+        )
+    )
+    logged = MagicMock()
+    monkeypatch.setattr(service_mod, "logger", logged)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.delete_batch("uid-test", ["mem-1"])
+
+    error = exc_info.value
+    assert error.status_code == 413
+    assert error.detail == "Memory batch exceeds the supported size limit"
+    assert internal_marker not in error.detail
+    assert "Firestore" not in error.detail
+    assert isinstance(error.__cause__, service_mod.CanonicalBatchMutationLimitError)
+    logged.error.assert_called_once()
+    assert logged.error.call_args.kwargs["exc_info"] is True
+    logged_reason = logged.error.call_args.args[1]
+    assert internal_marker not in logged_reason
+    assert "***" in logged_reason
 
 
 def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, monkeypatch):
@@ -823,6 +869,7 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
     assert result["total_count"] == 2
     service.read.assert_called_once_with(
         "uid-test",
+        authoritative=True,
         limit=service_mod.HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
         offset=0,
         include_pending_processing=False,
@@ -2352,24 +2399,32 @@ def test_required_historical_cleanup_keeps_content_when_vector_delete_fails(serv
     delete_content.assert_not_called()
 
 
-def test_required_historical_cleanup_requires_initialized_vector_authority(service_mod, monkeypatch):
+def test_required_historical_cleanup_completes_when_vector_store_unconfigured(service_mod, monkeypatch):
+    """Deletion must stay available on deployments with no vector store.
+
+    ``delete_memory_vector`` no-ops when Pinecone is not configured, so there is
+    no vector copy to purge and the desired absence is trivially confirmed. The
+    production backend and prod desktop-backend deployments run without
+    ``PINECONE_API_KEY`` (see ``backend/deploy/runtime_env.yaml`` and
+    ``desktop_backend_prod.yml``'s ``--remove-secrets=PINECONE_API_KEY``), so
+    requiring an initialized index here made every explicit delete 503 forever
+    (#10446 recurrence: desktop delete errors, mobile silently re-adds).
+    """
     delete_content = MagicMock()
-    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod.vector_db, "index", None)
+    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod, "delete_memory_vector", delete_vector)
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
 
-    with pytest.raises(service_mod.HTTPException) as exc_info:
-        service_mod.HistoricalMemoryAdapter.cleanup(
-            "uid-test",
-            "legacy",
-            db_client=_Db(),
-            required=True,
-        )
+    service_mod.HistoricalMemoryAdapter.cleanup(
+        "uid-test",
+        "legacy",
+        db_client=_Db(),
+        required=True,
+    )
 
-    assert exc_info.value.status_code == 503
-    delete_vector.assert_not_called()
-    delete_content.assert_not_called()
+    delete_vector.assert_called_once()
+    delete_content.assert_called_once()
 
 
 def test_required_historical_cleanup_deletes_vector_before_content(service_mod, monkeypatch):
