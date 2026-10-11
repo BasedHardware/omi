@@ -6,13 +6,15 @@ callers and tests already import from it.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, Sequence
 
 from models.structured import Participant, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.conversations.meeting_participants import MeetingRoster
 
-PRESENTATION_CONTRACT_VERSION = 'v1'
+# Metric label for the presentation contract; v2 adds the title_people_lead repair (#3602).
+PRESENTATION_CONTRACT_VERSION = 'v2'
 
 
 @dataclass
@@ -236,6 +238,129 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
         if item.context:
             item.context = strip_speaker_placeholders(item.context)
     return structured
+
+
+# A two-name lead is used only while the led title fits in this many characters;
+# past it the second name is dropped. It is not a title cap: a one-name lead is
+# never shortened, and no title is ever truncated.
+TWO_NAME_LEAD_MAX_CHARACTERS = 70
+
+# Scripts written without spaces between words (Thai, Lao, Myanmar, Khmer, kana
+# incl. halfwidth, CJK ideographs) and Hangul, whose particles attach to the name.
+# Python's ``\w`` matches them all, so ``\w`` boundaries never form around a name.
+_UNSPACED_SCRIPT_RANGES = (
+    '\u0e00-\u0e7f'  # Thai
+    '\u0e80-\u0eff'  # Lao
+    '\u1000-\u109f'  # Myanmar
+    '\u1780-\u17ff'  # Khmer
+    '\u3040-\u30ff'  # hiragana, katakana
+    '\u3400-\u4dbf\u4e00-\u9fff'  # CJK ideographs
+    '\uac00-\ud7af'  # Hangul syllables
+    '\uff66-\uff9f'  # halfwidth katakana
+)
+_UNSPACED_SCRIPT = re.compile(f'[{_UNSPACED_SCRIPT_RANGES}]')
+# A word character that continues a spaced-script word; an unspaced-script
+# neighbour is a boundary, so "与Sarah讨论预算" names Sarah while "Leeds" is not "Lee".
+_SPACED_WORD_CHAR = f'[^\\W{_UNSPACED_SCRIPT_RANGES}]'
+# Case endings and possessives: a name token this long also matches itself plus a
+# short suffix ("Peters", "Markiem", "Иваном", "Sarahin"), and a name ending in a
+# vowel also matches its stem plus a short suffix ("Сарой", "Anną", "Sárával").
+# The suffix is never empty, so a bare stem ("and" for Andy, "Dan" for Dana) is
+# not a mention.
+_INFLECTED_NAME_MIN_CHARACTERS = 4
+_INFLECTION_MAX_SUFFIX_CHARACTERS = 4
+_NAME_VOWELS = frozenset('aeiouyàáâãäåąæèééêëęìíîïòóôõöøùúûüýаеёиоуыэюяіїє')
+_APOSTROPHES = str.maketrans({'\u2019': "'"})
+
+
+def _normalize_for_match(text: str) -> str:
+    return unicodedata.normalize('NFC', text).translate(_APOSTROPHES)
+
+
+def _name_pattern(name: str) -> re.Pattern[str]:
+    escaped = re.escape(name)
+    if _UNSPACED_SCRIPT.search(name):
+        return re.compile(escaped, re.IGNORECASE)
+    if len(name) >= _INFLECTED_NAME_MIN_CHARACTERS and len(name.split()) == 1:
+        suffix = f'{_SPACED_WORD_CHAR}{{1,{_INFLECTION_MAX_SUFFIX_CHARACTERS}}}'
+        forms = [escaped, f'{escaped}{suffix}']
+        if name[-1].casefold() in _NAME_VOWELS:
+            forms.append(f'{re.escape(name[:-1])}{suffix}')
+        escaped = f'(?:{"|".join(forms)})'
+    return re.compile(f'(?<!{_SPACED_WORD_CHAR}){escaped}(?!{_SPACED_WORD_CHAR})', re.IGNORECASE)
+
+
+def _name_mentions(name: str) -> list[str]:
+    """The full name, its first name, its surname (3+ characters), and any unspaced-script token.
+
+    One unspaced-script character (a common family name such as 王) or a
+    two-letter surname ("Li") is too common to count as a mention on its own.
+    A single-token mention of 4+ characters also matches inflected forms; that
+    over-matches some ordinary words ("Mark" in "Market", "Anna" in "Annual").
+    A false match only keeps a title without a lead, so the matcher must never
+    drive a change to a title the model wrote.
+    """
+    tokens = name.split()
+    mentions = [name]
+    if len(tokens) > 1:
+        mentions.extend(
+            token
+            for index, token in enumerate(tokens)
+            if (index == 0 and len(token) > 1)
+            or (index == len(tokens) - 1 and len(token) > 2)
+            or (len(token) > 1 and _UNSPACED_SCRIPT.search(token))
+        )
+    return mentions
+
+
+def title_names_any_person(title: str, people: Iterable[str]) -> bool:
+    """True when the title already names one of ``people`` (see ``_name_mentions``).
+
+    Title and names are NFC-normalized and ’ reads as ' before matching.
+    """
+    title = _normalize_for_match(title)
+    for name in people:
+        name = _normalize_for_match(name).strip()
+        if name and any(_name_pattern(mention).search(title) for mention in _name_mentions(name)):
+            return True
+    return False
+
+
+def presentable_title_people(people: Sequence[str], transcript_segment_ids: Optional[Iterable[object]]) -> list[str]:
+    """The title people whose names presentation would keep: no speaker placeholder, no transcript ID.
+
+    The title lead runs after presentation sanitization, so a name that sanitization
+    would strip must not reach the title through it.
+    """
+    valid_ids = [
+        segment_id for segment_id in (transcript_segment_ids or ()) if isinstance(segment_id, str) and segment_id
+    ]
+    return [
+        name
+        for name in people
+        if strip_speaker_placeholders(name) == name and not any(_id_pattern(i).search(name) for i in valid_ids)
+    ]
+
+
+def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool]:
+    """Lead a title that names none of the identified people with their names (#3602).
+
+    The prompt asks the model to name the one or two most central of them; this
+    deterministic repair covers only the case where it names nobody. A title that
+    already names any of them is kept as written, however many it names: names
+    cannot be removed from the model's prose without rewriting it, and replacing
+    the title would lose its topic. ``Name: Title`` reads the same in every
+    response language, joins at most two people, and never invents a title or a
+    name.
+    """
+    stripped = title.strip()
+    names = [name.strip() for name in people if name and name.strip()]
+    if not stripped or not names or title_names_any_person(stripped, names):
+        return title, False
+    led = f'{" & ".join(names[:2])}: {stripped}'
+    if len(led) > TWO_NAME_LEAD_MAX_CHARACTERS and len(names) > 1:
+        led = f'{names[0]}: {stripped}'
+    return led, True
 
 
 def _name_in_transcript(name: str, transcript_body: str) -> bool:

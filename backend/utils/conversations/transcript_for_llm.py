@@ -14,7 +14,9 @@ summarizer LLMs copy verbatim into titles and overviews.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Protocol
+import math
+from dataclasses import dataclass
+from typing import Any, Iterable, List, Optional, Protocol
 
 from database.auth import get_user_name
 from models.other import Person
@@ -36,21 +38,97 @@ def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> 
     return speaker_name or f'Speaker {segment.speaker_id}'
 
 
-def _speaker_map(segments: List[Any], user_name: str, people_map: dict[str, str]) -> dict[int, Optional[str]]:
+@dataclass(frozen=True)
+class SpeakerCluster:
+    """Hard identity evidence for one ``(speaker_id_scope, speaker_id)`` cluster (#3602).
+
+    ``speaker_id`` is the key the rendered ``spk`` line uses; ``scope`` is the
+    segment's ``speaker_id_scope``. Merged and multi-source transcripts reuse
+    ids across scopes, so evidence is tallied per scope and never pooled.
+    ``owner`` is set when a segment is ``is_user``; ``names`` are the stripped,
+    distinct names of the people its segments are tagged with, first seen first.
+    ``speech_seconds`` sums each segment's ``max(0, end - start)`` (talk share in
+    any script); ``words`` counts whitespace words for transcripts without timing.
+    """
+
+    speaker_id: int
+    scope: Optional[str]
+    owner: bool
+    names: tuple[str, ...]
+    speech_seconds: float
+    words: int
+
+
+class SpeakerMap(dict[int, Optional[str]]):
+    """``cluster -> bound name`` mapping that also carries owner-aware identity evidence.
+
+    It is the plain mapping every caller already reads, and the rendered ``spk``
+    lines are unchanged. ``owner_name`` is the account owner's real profile name
+    (``None`` when only the ``'User'`` fallback is known) and ``clusters`` the
+    per-scope ``SpeakerCluster`` evidence in first-appearance order, so title
+    naming (#3602) uses only voice/tag bindings and can tell the account owner
+    from the people worth naming.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        owner_name: Optional[str] = None,
+        clusters: Iterable[SpeakerCluster] = (),
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.owner_name = owner_name
+        self.clusters: tuple[SpeakerCluster, ...] = tuple(clusters)
+
+
+def _speech_seconds(segment: Any) -> float:
+    try:
+        seconds = float(getattr(segment, 'end', 0.0) or 0.0) - float(getattr(segment, 'start', 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
+
+
+def _speaker_map(
+    segments: List[Any], user_name: str, people_map: dict[str, str], *, owner_name: Optional[str] = None
+) -> SpeakerMap:
     """Cluster -> bound display name (None = unresolved), ordered by first appearance.
 
     A cluster is bound only through hard evidence: ``is_user`` (profile name) or a
     matched ``person_id`` (person name). Names are never invented.
     """
-    speaker_map: dict[int, Optional[str]] = {}
+    speaker_map = SpeakerMap(owner_name=owner_name)
+    tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
-        if speaker_id is None or speaker_id in speaker_map:
+        if speaker_id is None:
             continue
-        if segment.is_user:
-            speaker_map[speaker_id] = user_name
-        else:
-            speaker_map[speaker_id] = people_map.get(segment.person_id) if segment.person_id else None
+        person_name = people_map.get(segment.person_id) if segment.person_id else None
+        key = (getattr(segment, 'speaker_id_scope', None), speaker_id)
+        owner, names, seconds, words = tallies.get(key, (False, [], 0.0, 0))
+        tagged = (person_name or '').strip()
+        if not segment.is_user and tagged and tagged not in names:
+            names.append(tagged)
+        tallies[key] = (
+            owner or segment.is_user,
+            names,
+            seconds + _speech_seconds(segment),
+            words + len((segment.text or '').split()),
+        )
+        if speaker_id not in speaker_map:
+            speaker_map[speaker_id] = user_name if segment.is_user else person_name
+    speaker_map.clusters = tuple(
+        SpeakerCluster(
+            speaker_id=speaker_id,
+            scope=scope,
+            owner=owner,
+            names=tuple(names),
+            speech_seconds=seconds,
+            words=words,
+        )
+        for (scope, speaker_id), (owner, names, seconds, words) in tallies.items()
+    )
     return speaker_map
 
 
@@ -144,9 +222,9 @@ def conversation_transcript_and_speaker_map(
     if not segments:
         return conversation_transcript_for_llm(uid, conversation, people), {}
 
-    user_name = get_user_name(uid, use_default=False) or 'User'
+    profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
-    speaker_map = _speaker_map(segments, user_name, people_map)
+    speaker_map = _speaker_map(segments, profile_name or 'User', people_map, owner_name=profile_name)
     wake_word_segment_ids = find_wake_word_segment_ids(segments) if mark_wake_words else frozenset()
     lines: list[str] = []
     previous_speaker: Any = _UNSET
@@ -192,6 +270,8 @@ def conversation_transcripts_for_llm(
 
 
 __all__ = [
+    'SpeakerCluster',
+    'SpeakerMap',
     'memory_transcript_from_segments',
     'conversation_action_item_speaker_labels',
     'conversation_transcript_and_speaker_map',

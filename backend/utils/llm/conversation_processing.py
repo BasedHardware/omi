@@ -45,7 +45,11 @@ from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
 from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
-from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
+from utils.llm.conversation_title_people import general_title_static_instructions, title_people_block
+from utils.llm.meeting_notes_presentation import (
+    enforce_conversation_note_presentation,
+    enforce_static_conversation_note_presentation,
+)
 from utils.llm.meeting_notes_validation import (
     enforce_structured_presentation_contract,
     sanitize_structured_speaker_placeholders,
@@ -333,6 +337,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     words = _word_count(context)
+    rich_mode = kwargs.get('rich_context_enabled', False)
     screen_count = len(frames)
     escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
     _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
@@ -350,6 +355,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                     'task_intelligence_capture': kwargs['task_intelligence_capture'],
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
                 ensure_ascii=False,
                 default=str,
@@ -364,8 +370,12 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     # cache hint to work on any lane.
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
     extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
+    format_instructions = extraction_parser.get_format_instructions()
+    static_instructions = mount.instructions + '\n\n' + format_instructions
+    if not rich_mode:
+        static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
     mount = Mount(
-        instructions=mount.instructions + '\n\n' + extraction_parser.get_format_instructions(),
+        instructions=static_instructions,
         budget=mount.budget,
     )
 
@@ -394,7 +404,9 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
     # A one-turn mount cannot buy the legacy presentation revision call.
-    enforce_structured_presentation_contract(structured, prefix.transcript_segment_ids, safe_fallback=True)
+    enforce_static_conversation_note_presentation(
+        structured, prefix.transcript_segment_ids, title_people=() if rich_mode else prefix.title_people
+    )
     now = datetime.now(timezone.utc)
     try:
         user_tz = ZoneInfo(kwargs['tz']) if kwargs['tz'] else timezone.utc

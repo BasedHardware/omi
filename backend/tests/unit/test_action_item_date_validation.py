@@ -140,6 +140,7 @@ _SYS_MODULE_NAMES = [
     "utils.observability",
     "utils.observability.fallback",
     "models.structured_extraction",
+    "utils.llm.conversation_title_people",
     "models.structured",
     "models.calendar_context",
     "models.conversation_enums",
@@ -415,6 +416,10 @@ _load_module_from_file(
 _load_module_from_file(
     "utils.llm.meeting_notes_presentation",
     BACKEND_DIR / "utils" / "llm" / "meeting_notes_presentation.py",
+)
+_load_module_from_file(
+    "utils.llm.conversation_title_people",
+    BACKEND_DIR / "utils" / "llm" / "conversation_title_people.py",
 )
 _load_module_from_file(
     "utils.llm.action_item_normalization",
