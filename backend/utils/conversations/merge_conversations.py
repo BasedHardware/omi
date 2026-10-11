@@ -424,6 +424,19 @@ def perform_merge_async(
         )
 
 
+def _reserved_speaker_ids(segments: List[Dict]) -> List[Dict]:
+    """Integer speaker ids a source keeps verbatim, shaped for ``ConversationSpeakerIdAllocator.hydrate``."""
+    reserved: List[Dict] = []
+    for segment in segments:
+        speaker_id = segment.get('speaker_id')
+        if isinstance(speaker_id, bool) or not isinstance(speaker_id, (int, str)) or not str(speaker_id).isdigit():
+            continue
+        if int(speaker_id) == OMI_SPEAKER_ID_SENTINEL:
+            continue
+        reserved.append({'speaker_id': int(speaker_id)})
+    return reserved
+
+
 def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     """
     Merge transcript segments from all conversations sequentially.
@@ -443,12 +456,26 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     cumulative_offset = 0.0
     allocator = ConversationSpeakerIdAllocator()
     # Full source-receipt migration is outside this change. Never move a
-    # manual voice's numeric authority while its receipt remains at the source.
-    reallocate = not any(
-        conv.get('manual_speaker_assignments')
-        or any(s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or []))
+    # manual voice's numeric authority while its receipt remains at the source:
+    # a source carrying manual or carried labels keeps its numbers verbatim.
+    # Every other source is still renumbered, after reserving the kept numbers,
+    # so an automatic voice from one source can never share an id with a
+    # manually tagged voice from another (the merged conversation's
+    # assign-speaker route selects segments by speaker_id alone).
+    keeps_speaker_ids = {
+        id(conv): bool(
+            conv.get('manual_speaker_assignments')
+            or any(
+                s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or [])
+            )
+        )
         for conv in conversations
-    )
+    }
+    for conv in conversations:
+        if not keeps_speaker_ids[id(conv)]:
+            continue
+        allocator.hydrate(_reserved_speaker_ids(conv.get('transcript_segments') or []))
+        allocator.hydrate_receipt(conv.get('manual_speaker_assignments'))
 
     def copy_segment(segment, source):
         copied = copy.deepcopy(segment)
@@ -462,7 +489,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 # Unidentified legacy inputs cannot establish a new voice scope.
                 if source.get('id'):
                     copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
-            if reallocate and copied.get('speaker_id_scope'):
+            if not keeps_speaker_ids[id(source)] and copied.get('speaker_id_scope'):
                 copied['speaker_id'] = int(speaker_id)
                 allocator.assign(copied)
         return copied
