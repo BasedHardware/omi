@@ -82,6 +82,7 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     assert 0 < len(consumed) < 80
     assert list(records) == [f'conversations/{i}' for i in range(79, 79 - len(consumed), -1)]
     assert fits_triage(records, caps)
+    assert records.target_sources == {ref: 'dirty' for ref in records.targets}
     assert not fits_triage(
         {**records, f'conversations/{79 - len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
     )
