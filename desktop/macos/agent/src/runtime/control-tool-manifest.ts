@@ -367,6 +367,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
             "desktop.mail.read",
             "desktop.messaging.read",
             "desktop.messaging.send",
+            "desktop.compose.propose",
             "external.write_prepare",
             "external.write_send",
           ],
@@ -393,6 +394,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
             "desktop.mail.read",
             "desktop.messaging.read",
             "desktop.messaging.send",
+            "desktop.compose.propose",
             "external.write_prepare",
             "external.write_send",
           ],
@@ -409,7 +411,10 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     label: "Create Desktop Dispatch",
     description: "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
     promptSnippet: "create_desktop_dispatch - Create a durable local decision item",
-    promptGuidelines: ["Use when user attention or approval is required before crossing a boundary."],
+    promptGuidelines: [
+      "Use when user attention or approval is required before crossing a boundary.",
+      "Never use this to send or approve a text, message or email: open a draft with propose_message or propose_email, or call send_message directly when the person asked Omi to send.",
+    ],
     capabilityDoc: controlDoc(
       "Create Desktop Dispatch",
       "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",

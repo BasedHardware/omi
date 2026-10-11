@@ -1622,6 +1622,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     read_message_history: [],
     list_mail_messages: [],
     send_message: ["to", "text"],
+    propose_message: ["to", "text"],
+    propose_email: ["to", "text"],
     run_applescript: ["script"],
     get_product_kb: [],
   };

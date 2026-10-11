@@ -21,4 +21,10 @@ enum UserInputPresence {
     return TimeInterval(
       CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: anyInputEventType))
   }
+
+  /// Seconds since the last key press, so a window that takes keyboard focus
+  /// can wait until the person has stopped typing.
+  static func secondsSinceLastKeyPress() -> TimeInterval {
+    TimeInterval(CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown))
+  }
 }

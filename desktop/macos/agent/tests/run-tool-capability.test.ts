@@ -521,6 +521,45 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("authorizes a compose proposal without a grant, never auto-retried, and keeps it from leaf workers", () => {
+    // The compose window is the person's approval, so no grant is required.
+    // A second automatic attempt would open a second draft, so it never retries.
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "propose-email",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "propose_email",
+      toolInput: { to: ["sam@example.com"], text: "Here is the deck." },
+    });
+    expect(authorized.canonicalToolName).toBe("propose_email");
+    expect(authorized.effectClass).toBe("non_idempotent_write");
+    expect(authorized.retryPolicy).toBe("never_auto_retry");
+    store.close();
+
+    // A background worker runs while the person may not be looking; it must
+    // not be able to put a compose window in front of them.
+    const leaf = fixture("leaf");
+    const leafCapability = createBroker(leaf.store).register({
+      ownerId: leaf.session.ownerId,
+      sessionId: leaf.session.sessionId,
+      runId: leaf.run.runId,
+      attemptId: leaf.attempt.attemptId,
+    });
+    expect(leafCapability.allowedToolNames).not.toContain("propose_email");
+    expect(leafCapability.allowedToolNames).not.toContain("propose_message");
+    leaf.store.close();
+  });
+
   it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
     // Regression: realtime-voice runs relay Swift-executed voice tools that no
     // chat adapter advertises. An adapter-only allowlist rejected every such

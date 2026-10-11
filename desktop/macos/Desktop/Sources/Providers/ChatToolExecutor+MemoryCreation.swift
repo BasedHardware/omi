@@ -90,7 +90,7 @@ extension ChatToolExecutor {
   /// hasExplicitMemorySaveIntent in external-surface-tool-policy.ts.
   private nonisolated static let runtimeClockPreamblePattern = #"^# Current Time\n[^\n]*\n\n"#
 
-  private nonisolated static func strippingRuntimeClockPreamble(_ text: String) -> String {
+  nonisolated static func strippingRuntimeClockPreamble(_ text: String) -> String {
     guard
       let range = text.range(of: runtimeClockPreamblePattern, options: [.regularExpression])
     else { return text }

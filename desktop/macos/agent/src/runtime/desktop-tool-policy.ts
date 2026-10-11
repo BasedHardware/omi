@@ -17,6 +17,7 @@ export type DesktopCoordinatorBundle =
   | "desktop.messaging.read"
   | "desktop.mail.read"
   | "desktop.messaging.send"
+  | "desktop.compose.propose"
   | "desktop.permissions.request"
   | "external.write_prepare"
   | "external.write_send";
@@ -98,6 +99,9 @@ const MESSAGING_READ_TOOLS = new Set(["list_message_chats", "read_message_histor
 // approval rather than riding along as an ordinary local read.
 const MAIL_READ_TOOLS = new Set(["list_mail_messages"]);
 const MESSAGING_SEND_TOOLS = new Set(["send_message"]);
+// Opens Apple's own compose window, filled in, and stops there. The person
+// reviews the draft and presses Send in Messages or Mail; Omi never sends.
+const COMPOSE_PROPOSE_TOOLS = new Set(["propose_message", "propose_email"]);
 // Production actuation, unlike `act_dev_only`: allowed in release bundles but
 // never without a dispatch or an unexpired scoped grant.
 const AUTOMATION_ACT_TOOLS = new Set(["run_applescript"]);
@@ -160,6 +164,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (MESSAGING_READ_TOOLS.has(tool.name)) bundles.add("desktop.messaging.read");
   if (MAIL_READ_TOOLS.has(tool.name)) bundles.add("desktop.mail.read");
   if (MESSAGING_SEND_TOOLS.has(tool.name)) bundles.add("desktop.messaging.send");
+  if (COMPOSE_PROPOSE_TOOLS.has(tool.name)) bundles.add("desktop.compose.propose");
   if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act");
   if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
@@ -195,8 +200,27 @@ const WRITE_BUNDLES: readonly DesktopCoordinatorBundle[] = [
   "desktop.automation.act_dev_only",
   "desktop.automation.act",
   "desktop.messaging.send",
+  "desktop.compose.propose",
   "desktop.permissions.request",
 ];
+
+/// Write bundles whose effect is a system window the person must act on
+/// before anything leaves the Mac. The window is the approval, as on iOS
+/// (`requires_user_confirmation`), so an Omi card in front of it would ask the
+/// person twice for the same effect. A request that also carries any other
+/// write bundle keeps that bundle's approval.
+const PLATFORM_CONFIRMED_BUNDLES: readonly DesktopCoordinatorBundle[] = ["desktop.compose.propose"];
+
+function approvalPolicyFor(
+  bundles: readonly DesktopCoordinatorBundle[],
+  write: boolean,
+  sensitive: boolean,
+): DesktopToolApprovalPolicy {
+  if (sensitive) return "user_approval";
+  if (!write) return "allow";
+  const platformConfirmed = bundles.length > 0 && bundles.every((bundle) => PLATFORM_CONFIRMED_BUNDLES.includes(bundle));
+  return platformConfirmed ? "allow" : "user_approval";
+}
 
 function isSensitiveBundle(bundle: DesktopCoordinatorBundle): boolean {
   return SENSITIVE_BUNDLES.includes(bundle);
@@ -216,7 +240,7 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
     bundles,
     riskTier: destructive || sensitive ? "high" : write ? "medium" : "low",
     privacyTier: sensitive ? "sensitive" : "local_private",
-    approvalPolicy: write || sensitive ? "user_approval" : "allow",
+    approvalPolicy: approvalPolicyFor(bundles, write, sensitive),
     readOnly: tool.annotations.readOnlyHint === true,
     destructive,
   };
@@ -230,7 +254,7 @@ function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): De
     bundles,
     riskTier: sensitive ? "high" : write ? "medium" : "low",
     privacyTier: sensitive ? "sensitive" : "local_private",
-    approvalPolicy: write || sensitive ? "user_approval" : "allow",
+    approvalPolicy: approvalPolicyFor(bundles, write, sensitive),
     readOnly: !write,
     destructive: bundles.includes("desktop.tasks.readwrite") || bundles.includes("external.write_send"),
   };
@@ -310,6 +334,14 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
 
   if (descriptor.approvalPolicy === "deny") {
     return { decision: "deny", descriptor, requiredBundles, reason: "The manifest marks this capability denied." };
+  }
+  if (requiredBundles.every((bundle) => PLATFORM_CONFIRMED_BUNDLES.includes(bundle))) {
+    return {
+      decision: "allow",
+      descriptor,
+      requiredBundles,
+      reason: "The person reviews and sends from a system compose window; Omi never sends.",
+    };
   }
   return { decision: "allow", descriptor, requiredBundles, reason: "Selected bundles allow this read-only local operation." };
 }

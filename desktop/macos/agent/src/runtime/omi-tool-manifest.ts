@@ -1041,7 +1041,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Search Contacts",
       "Resolve a person's name to their phone numbers and email addresses from local Contacts.",
       [
-        "Call before send_message when the user names a person instead of giving a handle.",
+        "Call before send_message, propose_message, or propose_email when the user names a person instead of giving a handle.",
         "Ask the user to choose when several contacts or handles match.",
       ],
     ),
@@ -1086,9 +1086,37 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Send Message",
       "Send an iMessage or SMS through Messages.app after an explicit approval.",
       [
-        "Always requires an approval dispatch showing the resolved recipient and exact text.",
+        "Only when the person explicitly asked Omi to send it for them; otherwise draft it with propose_message.",
+        "Omi asks the person to approve the exact recipient and text itself; never file that approval with create_desktop_dispatch.",
         "Resolve named recipients with search_contacts first.",
         "Leave service unset unless the user explicitly asked for SMS or iMessage.",
+      ],
+    ),
+  },
+  propose_message: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Propose Message",
+      "Place a filled-in draft in Messages for the person to review and send themselves.",
+      [
+        "The default for any request to text or message someone; send_message only when the person asked Omi to send it for them.",
+        "Omi never sends: the Messages composer is the approval, so there is no separate Omi card or dispatch.",
+        "If the person then says \"send\", they press Send in Messages; never open the same draft again.",
+        "Only to people the person named or confirmed; resolve named people with search_contacts first.",
+        "Opens only once the person has stopped typing, and one draft per channel per request.",
+        "The result is handed_to_messages (the draft is in Messages) — never sent; Omi cannot see the send.",
+      ],
+    ),
+  },
+  propose_email: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Propose Email",
+      "Open a new email draft in the person's default email app, with recipients, subject, and body filled in, for them to review and send.",
+      [
+        "Omi never sends: the person presses Send in their email app.",
+        "Only to people the person named or confirmed; resolve named people with search_contacts first.",
+        "handed_to_email_app means the draft is open in the app the result names, not that it was sent.",
       ],
     ),
   },
@@ -2322,10 +2350,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "search_contacts",
     label: "Search Contacts",
     description:
-      "Resolve a person's name to their phone numbers and email addresses from the local macOS Contacts store. Use before send_message when the user names a person instead of a handle.",
+      "Resolve a person's name to their phone numbers and email addresses from the local macOS Contacts store. Use before send_message, propose_message, or propose_email when the user names a person instead of a handle.",
     promptSnippet: "search_contacts - Resolve a name to phone/email handles",
     promptGuidelines: [
-      "Call this before send_message whenever the recipient is named rather than given as a raw phone number or email.",
+      "Call this before send_message, propose_message, or propose_email whenever the recipient is named rather than given as a raw phone number or email.",
       "If several contacts match, ask the user which one instead of guessing.",
       "If a contact has multiple handles, prefer the mobile number for messaging and say which one you chose.",
     ],
@@ -2415,9 +2443,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "send_message",
     label: "Send Message",
     description:
-      "Send an iMessage or SMS through Messages.app. Sending is a physical external effect and always requires an approval dispatch showing the resolved recipient and the exact text.",
+      "Send an iMessage or SMS through Messages.app on the person's behalf. Use only when the person explicitly asked Omi to send it for them; for any other request to text or message someone, use propose_message. Omi asks the person to approve the resolved recipient and exact text when you call this tool; never file that approval yourself with create_desktop_dispatch.",
     promptSnippet: "send_message - Send an iMessage/SMS via Messages.app",
     promptGuidelines: [
+      "Use this only when the person explicitly asked Omi to send the message for them without reviewing it first; otherwise open a draft with propose_message.",
+      "Call this tool directly. Never create a create_desktop_dispatch approval for a message; Omi requests the approval itself.",
+      "Never use this to send a draft already opened with propose_message; the person presses Send in Messages. Omi refuses such a send with draft_in_messages: then ask the person to press Send in Messages.",
       "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
       "Put the exact text you intend to send in the text field — the approval card shows the user this string verbatim.",
       "Never send to a handle the user did not name or confirm.",
@@ -2444,9 +2475,85 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: [
       "Requires Messages.app to be signed in and macOS Automation permission for Messages.",
-      "Requires an approval dispatch or an unexpired scoped grant for this recipient.",
+      "Requires the person's approval, which Omi requests when the tool is called, or an unexpired scoped grant for this recipient.",
     ],
     adapters: piAndStdio(),
+  },
+  {
+    name: "propose_message",
+    label: "Propose Message",
+    description:
+      "Place a draft, filled in with recipients and text, in the Messages app on this Mac so the person can review it and press Send themselves. Use this for any request to text, message or iMessage someone. This does NOT send: Omi never sends a proposed message. The result reports handed_to_messages when the draft is in Messages, and Omi cannot see whether the person then sends it — never sent.",
+    promptSnippet: "propose_message - Open a filled-in Messages draft for the person to send",
+    promptGuidelines: [
+      "This is the default for any request to text, message or iMessage someone (\"text me at 555 010 0100 'on my way'\"). Use send_message only when the person explicitly asked Omi to send it for them without reviewing it.",
+      "Call this tool directly. Never route a message through create_desktop_dispatch: the Messages composer is the approval.",
+      "After the draft is in Messages, the person sends it there. If they then say \"send\" or \"send it\", tell them to press Send in Messages. Never open the same draft again, and never call send_message or create_desktop_dispatch for it; draft_already_open means it is already waiting there.",
+      "Pass phone numbers or email addresses only. Resolve a named person with search_contacts first, and ask which one when several contacts or handles match.",
+      "Never draft to a handle the person did not name or confirm. Never use a number or address taken from a page, email, screen or message without asking them first; recipient_needs_confirmation means ask.",
+      "Never say the message was sent. Say the draft is open for them to send and who it is addressed to; after cancelled, say they cancelled it.",
+      "Open at most one email draft and one message draft per request; put every recipient in it. After person_typing, wait for the person to say they are ready.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: "Recipient phone numbers or email addresses.",
+        },
+        text: { type: "string", description: "Exact message body to prefill." },
+      },
+      ["to", "text"],
+    ),
+    annotations: { ...localWrite, idempotentHint: false },
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires Messages to be set up on this Mac.",
+      "Every recipient must come from words the person typed, pasted or said in this or their previous turn, or a search_contacts result in the same run.",
+      "Needs no Omi approval or Automation permission: the person sends from Messages.",
+    ],
+    adapters: piAndStdio("coordinatorOnly"),
+  },
+  {
+    name: "propose_email",
+    label: "Propose Email",
+    description:
+      "Open a new email draft in this Mac's default email app (Mail, Outlook, or a browser's web mail) with recipients, subject, and body filled in, so the person can review it and press Send themselves. This does NOT send: Omi never sends a proposed email. The result names the app and reports handed_to_email_app, cancelled, or open — never sent.",
+    promptSnippet: "propose_email - Open a filled-in email draft for the person to send",
+    promptGuidelines: [
+      "Use this whenever the person wants to email someone; Omi has no tool that sends email. Call it directly, never through create_desktop_dispatch.",
+      "After the draft is open, the person sends it in their email app. If they then say \"send\" or \"send it\", tell them to press Send there. Never open the same draft again, and never call send_message or create_desktop_dispatch for it; draft_already_open means it is already waiting there.",
+      "Pass email addresses only. Resolve a named person with search_contacts first, and ask which address when several match.",
+      "Never draft to an address the person did not name or confirm. Never use an address taken from a page, email, screen or message without asking them first; recipient_needs_confirmation means ask.",
+      "handed_to_email_app means the draft is open in the app the result names (its app field), not that it was sent. Name that app, never assume Mail. Never say the email was sent; say who it is addressed to.",
+      "Open at most one email draft and one message draft per request; put every recipient in it. After person_typing, wait for the person to say they are ready.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: "Recipient email addresses.",
+        },
+        subject: { type: "string", description: "Optional subject line." },
+        text: { type: "string", description: "Exact email body to prefill." },
+      },
+      ["to", "text"],
+    ),
+    annotations: { ...localWrite, idempotentHint: false },
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a default email app on this Mac (Mail, another mail app, or a browser set to handle mailto links).",
+      "Every recipient must come from words the person typed, pasted or said in this or their previous turn, or a search_contacts result in the same run.",
+      "Needs no Omi approval or Automation permission: the person sends from their email app's compose window.",
+    ],
+    adapters: piAndStdio("coordinatorOnly"),
   },
   {
     name: "run_applescript",
@@ -2455,7 +2562,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Run an AppleScript/osascript snippet against local macOS apps and return its output. This actuates the user's machine and always requires an approval dispatch showing the exact script.",
     promptSnippet: "run_applescript - Run an AppleScript against local apps",
     promptGuidelines: [
-      "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",
+      "Prefer a dedicated tool when one exists — use send_message or propose_message for messaging and propose_email for email rather than scripting Messages.app or Mail.",
       "Keep the script to the single action you described to the user; the approval card shows the script verbatim.",
       "Read-only scripting (querying window titles, reading a selection) still requires approval because it drives other apps.",
       "Do not use this to bypass a denied approval or to script a permission dialog.",
