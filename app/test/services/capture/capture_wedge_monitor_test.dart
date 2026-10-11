@@ -743,7 +743,7 @@ void main() {
   });
 
   group('storage retention risk', () {
-    test('cap engagement is surfaced once with admission-block telemetry', () async {
+    test('count cap emits diagnostic telemetry once without a prompt or recovery', () async {
       var transferRetries = 0;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
       final engagedAt = now;
@@ -752,8 +752,8 @@ void main() {
       monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
       await pumpEventQueue();
 
-      expect(transferRetries, 1);
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+      expect(transferRetries, 0);
+      expect(monitor.visiblePrompt, isNull);
       final detected = forEvent('Capture Wedge Detected').single;
       expect(detected['blocked_wal_count'], 3);
       expect(detected['retained_wal_count'], 720);
@@ -761,13 +761,29 @@ void main() {
       monitor.dispose();
     });
 
+    for (final reason in ['disk_reserve', 'disk_space_unknown']) {
+      test('$reason still surfaces after count-cap diagnostics', () async {
+        var transferRetries = 0;
+        final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+        monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'count_cap');
+        await pumpEventQueue();
+        expect(monitor.visiblePrompt, isNull);
+        monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: reason);
+        await pumpEventQueue();
+        expect(transferRetries, 1);
+        expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+        expect(forEvent('Capture Wedge Detected').map((event) => event['block_reason']), ['count_cap', reason]);
+        monitor.dispose();
+      });
+    }
+
     test('storage risk stays visible alongside a quiet upload episode', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
 
-      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'count_cap');
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
       await pumpEventQueue();
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
       expect(forEvent('Capture Wedge Detected'), hasLength(2));
