@@ -99,14 +99,35 @@ worker download and delete of a synthetic object before switching traffic.
    eight-minute WAV segments: already issued URLs keep naming the old bucket.
 2. Before a **no-copy** cutover, pause new sync intake through an operator-owned
    admission/traffic control that preserves client retry behavior; keep old
-   workers running. Drain fresh/backfill Cloud Tasks, Redis per-UID sequencing,
-   retries and in-flight jobs. Require no nonterminal job referencing old raw
-   paths. A paused queue is not a drained queue. If no safe intake control or
-   drain evidence is available, hold the cutover. An alternative migration must
-   preserve pending raw objects (for example `gcloud storage rsync --recursive
-   "gs://${C025_OLD}" "gs://${C025_NEW}"` with writers stopped), verify them, and
-   qualify mixed-worker/account-deletion behavior separately; copying is not
-   the default procedure here.
+   workers running. Drain fresh/backfill Cloud Tasks, retries and in-flight
+   jobs. **Firestore pending jobs are part of the drain:** accepted backfill
+   jobs not yet enqueued live as `sync_backfill_pending` documents whose
+   payloads carry `raw_blob_paths` (`database/sync_backfill_sequencer.py`
+   `register_job`; `utils/sync/uid_sequencer.py` `kick` enqueues later).
+   Emptying Cloud Tasks and Redis job keys does not touch them, and after the
+   env flip workers resolve those paths against the new bucket and finalize
+   `sync_staged_audio_expired`. Let the sequencer enqueue and the workers
+   finish every pending document (or operator-verify the queue is empty)
+   before declaring the drain complete.
+   **Failed/partial backfill jobs keep their staged blobs** (terminal-ack does
+   not delete raw paths) and `backend/scripts/recover_dev_failed_sync_backfill.py`
+   requeues those original paths, checking object existence only in the
+   *currently configured* `BUCKET_TEMPORAL_SYNC_LOCAL` — see
+   `sync-backfill-sequencer-env-isolation.md`: that recovery is valid only
+   while the one-day lifecycle still holds the objects. Requeue and finish
+   recoverable failed/partial jobs before the flip (no-copy), or copy their
+   objects to the new bucket; do not treat them as already finished.
+   Require no nonterminal job and no recoverable failed/partial job referencing
+   old raw paths. A paused queue is not a drained queue. If no safe intake
+   control or drain evidence is available, hold the cutover. An alternative
+   migration must preserve pending raw objects (for example
+   `gcloud storage rsync --recursive "gs://${C025_OLD}" "gs://${C025_NEW}"`
+   with writers stopped), verify them, and qualify mixed-worker/account-deletion
+   behavior separately; copying is not the default procedure here.
+   Intake pause does not stop chat voice-message staging:
+   `utils/chat.py` `_prepare_voice_message_url` uploads/signs/deletes on this
+   same bucket, so "last old signed URL" keeps moving until that path is
+   paused too — account for it in step 3's clock.
 3. Wait at least 15 minutes after the last old signed URL was generated and
    ensure consumers finished. Redis signed-URL cache keys use only `blob.name`
    (`database/redis_db.py`), so reusing paths before cached URLs expire could
@@ -124,6 +145,15 @@ worker download and delete of a synthetic object before switching traffic.
    in `backend/deploy/runtime_env/{prod,dev}.overlay.yaml`, compose with
    `python3 backend/deploy/compose_runtime_env.py`, and review rendered values.
    Backfill deployment clones backend-sync's runtime; verify it explicitly.
+   Clone order note: in one release, `backend-sync-backfill` is rendered by
+   cloning the *live* `backend-sync` service before that service is updated
+   (`.github/actions/deploy-backend-stack/action.yml`; overlay wins in
+   `render_cloud_run_clone_env.py`) — a new bucket name placed only on
+   `backend-sync` does not reach backfill in that same release. Verify the
+   backfill's effective env separately, and never skip dev provision steps
+   just because dev `syncing-local-development` looks regional: verify its
+   location first, then only skip the dev replacement if it is already
+   `us-central1`.
 5. With intake still paused and old jobs drained, deploy all producers/workers
    through the normal GitHub release workflows, verifying the effective env
    on every serving revision/pod before resuming intake. Run a synthetic fresh
