@@ -107,7 +107,7 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     evidence = EvidenceRecords(records, targets=target_refs(records) if targets is None else targets)
     if not evidence.targets <= set(evidence):
         raise ValueError('dream_unknown_target')
-    sink = {'tokens': 0}
+    sink: dict[str, Any] = {'tokens': 0}
     plan, tokens = await plan_pass(
         uid, evidence, caps or Caps.from_env(), turn=turn, vocabulary=vocabulary, usage_sink=sink
     )
