@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
@@ -7,12 +8,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/http/read_retry.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 
 class _Env extends Fake implements EnvFields {
   @override
   String get apiBaseUrl => 'https://example.test/';
+}
+
+// Replace only transport while exercising the provider's default page fetch,
+// endpoint reporting and actual retry/deadline/timer implementation.
+class _ResponseRetry extends ReadRetry {
+  _ResponseRetry(this.response, {required super.now}) : super(random: () => 0);
+  final Future<http.Response?> Function() response;
+
+  @override
+  Future<http.Response?> run(
+    Future<http.Response?> Function(Duration) send, {
+    required Future<void> Function(http.Response) onRetry,
+    DateTime? deadline,
+  }) =>
+      super.run((_) => response(), onRetry: onRetry, deadline: deadline);
 }
 
 void main() {
@@ -157,5 +175,177 @@ void main() {
       getMemoriesResult(send: (_, __) async => throw error),
       throwsA(same(error)),
     );
+  });
+
+  test('review timing: 2s 503 plus Retry-After 8 does not start a doomed retry', () {
+    fakeAsync((clock) {
+      final starts = <Duration>[];
+      final reports = <GetMemoriesResult>[];
+      GetMemoriesResult? result;
+      getMemoriesResult(
+        retry: ReadRetry(now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed), random: () => 0),
+        send: (_, __) async {
+          starts.add(clock.elapsed);
+          await Future<void>.delayed(const Duration(seconds: 2));
+          return http.Response('', 503, headers: {'retry-after': '8'});
+        },
+        reportFailure: (failure) async => reports.add(failure),
+      ).then((value) => result = value);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 2));
+      expect(result!.statusCode, 503);
+      expect(reports, hasLength(1));
+      clock.elapse(const Duration(seconds: 20));
+      expect(starts, [Duration.zero]);
+      expect(clock.pendingTimers, isEmpty);
+    });
+  });
+
+  test('reporting time consumes caller deadline and failure is recorded once', () {
+    fakeAsync((clock) {
+      var sends = 0;
+      var reports = 0;
+      GetMemoriesResult? result;
+      getMemoriesResult(
+        retry: ReadRetry(now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed), random: () => 0),
+        send: (_, __) async {
+          sends++;
+          return http.Response('', 503);
+        },
+        reportFailure: (_) async {
+          reports++;
+          await Future<void>.delayed(const Duration(seconds: 8));
+        },
+      ).then((value) => result = value);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 8));
+      expect(result!.ok, isFalse);
+      expect(sends, 1);
+      expect(reports, 1);
+      expect(clock.pendingTimers, isEmpty);
+    });
+  });
+
+  test('backoff waking late cannot send after caller deadline', () {
+    fakeAsync((clock) {
+      var sends = 0;
+      GetMemoriesResult? result;
+      final retry = ReadRetry(
+        now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed),
+        random: () => 0,
+        wait: (_) => Future<void>.delayed(const Duration(seconds: 11)),
+      );
+      getMemoriesResult(
+        retry: retry,
+        send: (_, __) async {
+          sends++;
+          return http.Response('', 503);
+        },
+        reportFailure: (_) async {},
+      ).then((value) => result = value);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 11));
+      expect(sends, 1);
+      expect(result!.statusCode, 503);
+    });
+  });
+
+  test('Siri deadline bounds an in-flight read and starts no more sends', () {
+    fakeAsync((clock) {
+      var sends = 0;
+      GetMemoriesResult? result;
+      getMemoriesResult(
+        retry: ReadRetry(now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed)),
+        send: (_, __) {
+          sends++;
+          return Completer<http.Response?>().future;
+        },
+        reportFailure: (_) async {},
+      ).then((value) => result = value);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 10));
+      expect(result!.failureReason, MemoriesFetchFailureReason.noResponse);
+      expect(sends, 1);
+      expect(clock.pendingTimers, isEmpty);
+    });
+  });
+
+  test('provider disposal cancels first backoff timer and all subsequent sends', () {
+    fakeAsync((clock) {
+      var sends = 0;
+      var reports = 0;
+      var completed = false;
+      final retry = ReadRetry(now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed), random: () => 0);
+      final provider = MemoriesProvider(
+        memoriesReadRetry: retry,
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) => getMemoriesResult(
+          retry: retry,
+          send: (_, __) async {
+            sends++;
+            return http.Response('', 503);
+          },
+          reportFailure: (_) async {
+            reports++;
+          },
+        ),
+      );
+      provider.loadMemories().then((_) => completed = true);
+      clock.flushMicrotasks();
+      expect(sends, 1);
+      expect(clock.pendingTimers, hasLength(1));
+      provider.dispose();
+      clock.flushMicrotasks();
+      expect(clock.pendingTimers, isEmpty);
+      clock.elapse(const Duration(minutes: 1));
+      expect(completed, isTrue);
+      expect(sends, 1);
+      expect(reports, 1);
+    });
+  });
+
+  test('closed policy starts no request', () async {
+    final retry = ReadRetry()..close();
+    final result = await getMemoriesResult(
+      retry: retry,
+      send: (_, __) async => fail('closed policy sent a request'),
+      reportFailure: (_) async {},
+    );
+    expect(result.ok, isFalse);
+  });
+
+  test('expired canSend guard blocks transport before auth without expiring account', () async {
+    final result = await makeApiCall(
+      url: 'https://example.test/v3/memories',
+      headers: {},
+      body: '',
+      method: 'GET',
+      canSend: () => false,
+    );
+    expect(result, isNull);
+  });
+
+  test('production provider default fetch shares owned retry and stops on disposal', () {
+    fakeAsync((clock) {
+      var sends = 0;
+      final retry = _ResponseRetry(
+        () async {
+          sends++;
+          return http.Response('', 503);
+        },
+        now: () => DateTime.utc(2026, 10, 11).add(clock.elapsed),
+      );
+      final provider = MemoriesProvider(memoriesReadRetry: retry);
+      var completed = false;
+      provider.loadMemories().then((_) => completed = true);
+      clock.flushMicrotasks();
+      expect(sends, 1);
+      expect(clock.pendingTimers, hasLength(1));
+      provider.dispose();
+      clock.flushMicrotasks();
+      expect(clock.pendingTimers, isEmpty);
+      clock.elapse(const Duration(seconds: 20));
+      expect(completed, isTrue);
+      expect(sends, 1);
+    });
   });
 }

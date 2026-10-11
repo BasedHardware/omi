@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<Memory?> createMemoryServer(
@@ -271,22 +273,39 @@ String buildLedgerHistoryUrl({
       .toString();
 }
 
-Future<void> _reportMemoriesFetchFailure(GetMemoriesResult result) async {
-  // Logger.error also sends a separate Crashlytics event through Talker.
-  // Use one explicit, contained non-fatal report with the existing properties.
-  Logger.debug(
-    'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}',
-  );
+@visibleForTesting
+Future<void> reportMemoriesFetchFailure(
+  GetMemoriesResult result, {
+  Future<void> Function(String)? supportLog,
+  void Function(Map<String, dynamic>)? productError,
+  Future<void> Function(Object, StackTrace, {required Map<String, String> userAttributes})? nonFatal,
+}) async {
+  final message = 'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason?.name}';
+  Logger.debug(message); // Avoid Talker's second Crashlytics event.
+  try {
+    await (supportLog ?? (message) => DebugLogManager.logError(message))(message);
+  } catch (_) {
+    // Support logging must not turn a handled fetch into an uncaught error.
+  }
+  final attributes = {
+    'response_status_code': result.statusCode?.toString() ?? '',
+    'failure_reason': result.failureReason?.name ?? '',
+  };
+  try {
+    (productError ?? (properties) => AnalyticsManager().track('Product Error', properties: properties))({
+      'error': message, // Bounded status/reason only, never response bodies or exception text.
+      'error_kind': 'memories_fetch',
+      'diagnostic_source': 'memories_fetch',
+      ...attributes,
+    });
+  } catch (_) {
+    // Analytics is supplemental to the primary non-fatal record.
+  }
   if (result.failureReason == MemoriesFetchFailureReason.noResponse) return;
-  await PlatformManager.instance.crashReporter.reportNonFatal(
-    Exception(
-      'Failed to fetch memories: ${result.statusCode} ${result.failureReason}',
-    ),
+  await (nonFatal ?? PlatformManager.instance.crashReporter.reportNonFatal)(
+    Exception(message),
     StackTrace.current,
-    userAttributes: {
-      'response_status_code': result.statusCode?.toString() ?? '',
-      'failure_reason': result.failureReason?.name ?? '',
-    },
+    userAttributes: attributes,
   );
 }
 
@@ -310,7 +329,10 @@ Future<GetMemoriesResult> getMemoriesResult({
   Future<http.Response?> Function(String url, Map<String, String> headers)? send,
   ReadRetry? retry,
   Future<void> Function(GetMemoriesResult)? reportFailure,
+  DateTime? deadline,
 }) async {
+  final policy = retry ?? ReadRetry();
+  final end = deadline ?? policy.now().add(ReadRetry.callerWindow);
   // Probe once per owner/environment before sending temporal query params.
   // The response header becomes the source of truth for later beta requests.
   final beliefCapability = memoryBeliefCapability;
@@ -324,12 +346,24 @@ Future<GetMemoriesResult> getMemoriesResult({
     thisDeviceOnly: thisDeviceOnly,
     view: requestedView,
   );
-  final report = reportFailure ?? _reportMemoriesFetchFailure;
-  final response = await (retry ?? ReadRetry()).run(
-    () => send != null
+  final report = reportFailure ?? reportMemoriesFetchFailure;
+  http.Response? reportedResponse;
+  final response = await policy.run(
+    (timeout) => send != null
         ? send(url, memoryBeliefBetaHeaders)
-        : makeApiCall(url: url, headers: memoryBeliefBetaHeaders, method: 'GET', body: '', retries: 0),
-    onRetry: (response) => report(memoriesResultFromHttp(statusCode: response.statusCode)),
+        : makeApiCall(
+            url: url,
+            headers: memoryBeliefBetaHeaders,
+            method: 'GET',
+            body: '',
+            retries: 0,
+            timeout: timeout,
+            canSend: () => !policy.isClosed && policy.now().isBefore(end)),
+    deadline: end,
+    onRetry: (response) async {
+      reportedResponse = response;
+      await report(memoriesResultFromHttp(statusCode: response.statusCode));
+    },
   );
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
@@ -342,7 +376,8 @@ Future<GetMemoriesResult> getMemoriesResult({
       view: view,
       forceView: forceView,
       send: send,
-      retry: retry,
+      retry: policy,
+      deadline: end,
       reportFailure: reportFailure,
     );
     return GetMemoriesResult(
@@ -368,7 +403,7 @@ Future<GetMemoriesResult> getMemoriesResult({
     beliefEnabled: _memoryBeliefCapabilityFromResponse(response),
   );
   _rememberMemoryBeliefCapability(result.beliefEnabled);
-  if (!result.ok) {
+  if (!result.ok && (response == null || !identical(response, reportedResponse))) {
     await report(result);
   }
   return result;
