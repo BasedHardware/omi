@@ -68,24 +68,26 @@ def test_review_cooldowns_use_one_bounded_batch():
     assert dream_history.last_reviewed('synthetic', [], firestore_client=db) == {}
 
 
-def test_uniform_sample_includes_every_collection_and_rank(monkeypatch):
+def test_count_weighted_sample_includes_every_collection(monkeypatch):
     counts = dict(zip(dream_history.COLLECTIONS, [2, 1, 3, 2]))
     monkeypatch.setattr(dream_history, 'history_count', lambda uid, col: counts[col])
-    monkeypatch.setattr(dream_history, 'history_at_rank', lambda uid, col, rank: str(rank))
+    monkeypatch.setattr(dream_history, 'history_from_key', lambda uid, col, key: 'picked')
     refs = []
     for rank in range(8):
         rng = Mock()
         rng.randrange.return_value = rank
+        rng.getrandbits.return_value = 0
+        rng.choice.return_value = '0'
         refs.append(cleanup.uniform_ref('synthetic', rng))
     assert refs == [
-        'conversations/0',
-        'conversations/1',
-        'action_items/0',
-        'people/0',
-        'people/1',
-        'people/2',
-        'memory_items/0',
-        'memory_items/1',
+        'conversations/picked',
+        'conversations/picked',
+        'action_items/picked',
+        'people/picked',
+        'people/picked',
+        'people/picked',
+        'memory_items/picked',
+        'memory_items/picked',
     ]
 
 
@@ -198,3 +200,75 @@ def test_duplicate_seed_preserves_existing_dirty_partner_source(monkeypatch):
     )
     assert records.targets == {'people/a', 'people/b'}
     assert records.target_sources == {'people/a': 'seeded', 'people/b': 'dirty'}
+
+
+def test_idle_coin_and_empty_selection_stamp_attempt_without_run_history(monkeypatch):
+    uid = 'synthetic-idle'
+    db = DreamFirestore()
+    db.rows[('users', uid)] = {}
+    db.rows[('dream_users', uid)] = {'score': 0, 'watermark': OLD}
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0.1')
+    monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
+    rng = Mock()
+    rng.random.return_value = 0.9
+    assert dream_store.acquire(uid, Caps(), now=NOW, rng=rng, firestore_client=db) is None
+    assert db.rows[('dream_users', uid)]['last_attempt_at'] == NOW
+    assert not any('dream_runs' in key for key in db.rows)
+    assert ('dream_spend', NOW.date().isoformat()) not in db.rows
+    rng.random.return_value = 0
+    assert dream_store.acquire(uid, Caps(), now=NOW + timedelta(minutes=30), rng=rng, firestore_client=db) is None
+    lease = dream_store.acquire(uid, Caps(), now=NOW + timedelta(hours=1), rng=rng, firestore_client=db)
+    dream_store.finish(uid, lease, {'reason': 'idle'}, success=True, refund=True, firestore_client=db)
+    assert db.rows[('dream_users', uid)]['passes'] == 0
+    assert not any('dream_runs' in key for key in db.rows)
+    assert (
+        dream_store.acquire(uid, Caps(), now=NOW + timedelta(hours=1, minutes=10), rng=rng, firestore_client=db) is None
+    )
+
+
+def test_random_key_queries_are_bounded_and_wrap_without_offsets():
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    db = RecordingFirestore()
+    db.queue_results([])
+    db.queue_results([db.snapshot('users/synthetic/people/first', {})])
+    assert dream_history.history_from_key('synthetic', 'people', 'ffffffff', firestore_client=db) == 'first'
+    assert len(db.shapes) == 2
+    assert all(shape.limit == 1 and shape.offset in (None, 0) for shape in db.shapes)
+
+
+def test_weighted_cooldown_precedes_hydration_and_seed_errors_keep_dirty(monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
+    monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['a', 'b'])
+    monkeypatch.setattr(dream_history, 'last_reviewed', lambda uid, refs: {'action_items/a': NOW})
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'action_items'
+    rng.choices.return_value = ['action_items/b']
+    loaded = []
+
+    def read(uid, ref):
+        loaded.append(ref)
+        return {'created_at': OLD}
+
+    cleanup.add_seed(
+        'synthetic',
+        EvidenceRecords(),
+        {'started_at': NOW, 'cleanup_selected': True},
+        Caps(),
+        [],
+        read_record=read,
+        rng=rng,
+    )
+    assert loaded == ['action_items/b']
+    records = EvidenceRecords({'people/dirty': {'name': 'Synthetic'}})
+
+    def outage(*a, **k):
+        raise RuntimeError('synthetic seed outage')
+
+    monkeypatch.setattr(cleanup, 'add_seed', outage)
+    assert cleanup.add_seed_safely('synthetic', records, {}, Caps(), [], read_record=read) is records
+    assert records.seed_errors == 1 and records.targets == {'people/dirty'}

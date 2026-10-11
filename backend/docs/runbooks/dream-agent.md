@@ -446,7 +446,7 @@ folder's README for the verified dev tunnel procedure.
 
 ## Tiered apply policy
 
-When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
+When mode is `on`, only `title`, `overview` and grounded `spelling` edits
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
 become `agent_proposal` items in the existing Review queue, exposed through
@@ -494,3 +494,7 @@ The drain rotates bounded 100-owner document-ID pages using an atomic cursor, th
 `DREAM_AGENT_CONCURRENCY` defaults to 2, bounded 1–8. Redis slots share this bound across replicas, have 240-second TTLs and compare-token release. All replicas should use the same setting. Admission requires exactly one active Flash reservation in the existing reservation evidence store, configured Redis and no dedicated-429 cooldown (120 seconds). Reasoning rechecks status after triage; a race is stopped by reserved-only gateway routing. Capacity failures cannot use Dream's provider or LKG fallback. Gemini never uses shared capacity. Unknown status/store outage waits; there is no measured GSU utilization percentage, so active status plus cooldown and slots is a conservative proxy, not guaranteed headroom.
 
 Global model USD reservation and per-user daily pass caps are unchanged. The owner can continue hourly testing with `DREAM_AGENT_PASSES_PER_DAY=24`; this PR changes no deployment configuration. Waiting before admission reserves no Firestore budget. A capacity rejection after paid triage retains its billed reservation and dirty versions without incrementing poison failures.
+Epsilon sampling picks a collection proportional to count and a random-key successor with wraparound, bounded to two limit(1) queries. This avoids billed skipped reads. It is approximately uniform only for well-distributed IDs; opaque prefixes and unequal ID gaps introduce bias. Counts and random-source outcomes measure this approximate sample, not unbiased precision.
+
+Idle owners have an hourly attempt clock. Acquire draws the backfill coin before creating a lease or reserving spend; a declined idle coin writes only the clock, no dream_runs doc. Selected but empty seed attempts also leave no run-history doc. Weighted pages batch-check review cooldowns before hydrating eligible records; seed failures emit telemetry/counts and preserve dirty work.
+Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.

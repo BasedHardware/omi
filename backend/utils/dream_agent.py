@@ -187,6 +187,7 @@ async def _run_admitted_pass(
     consumed = []
     reviewed = set()
     cleanup_cursor = None
+    deferred = set()
     refund = False
     success = False
     release = True
@@ -202,6 +203,7 @@ async def _run_admitted_pass(
             report['target_source_counts'] = dict(
                 Counter(getattr(records, 'target_sources', {ref: 'dirty' for ref in reviewed}).values())
             )
+            report['seed_errors'] = getattr(records, 'seed_errors', 0)
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
             report['role_counts'] = {
@@ -319,6 +321,8 @@ async def _run_admitted_pass(
                             )
                             if is_question and status in {'suggestion_cap', 'already_suggested', 'suppressed'}:
                                 remaining += 1
+                            if is_question and status == 'suggestion_cap':
+                                deferred.add(edit.target)
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
@@ -389,10 +393,10 @@ async def _run_admitted_pass(
         lease,
         report,
         success=success,
-        consumed=consumed,
+        consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
         release=release,
         refund=refund,
-        reviewed=reviewed,
+        reviewed=reviewed - deferred,
         cleanup_cursor=cleanup_cursor,
         count_failure=report['status'] != 'waiting'
         and not success

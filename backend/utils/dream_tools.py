@@ -517,7 +517,9 @@ def vocabulary_key(term):
     )
 
 
-def apply_vocabulary(uid, terms, *, expected_records=None):
+def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False):
+    if not user_accepted:
+        raise ValueError('dream_vocabulary_requires_acceptance')
     status = 'unchanged'
     for term in terms:
         if vocabulary_rejection(term):
@@ -533,7 +535,7 @@ def apply_vocabulary(uid, terms, *, expected_records=None):
         # This policy owns additions; never overwrite an existing user term.
         if term.spelling.casefold() in merged:
             continue
-        merged[term.spelling.casefold()] = term.model_dump()
+        merged[term.spelling.casefold()] = {**term.model_dump(), 'authorship': 'user_accepted'}
         change = ReviewChange(
             change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
             kind='other',
@@ -598,7 +600,7 @@ def answer_proposal(uid, proposal, source, decision):
         status = (
             apply_edit(uid, proposal.edit, records, expected_records=source.get('fences'))
             if proposal.edit
-            else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'))
+            else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'), user_accepted=True)
         )
     except ValueError as exc:
         raise review_store.ReviewConflict('Dream proposal no longer valid') from exc

@@ -438,7 +438,7 @@ def test_tier_policy_defaults_and_override(monkeypatch, caplog):
     from utils.dream_metrics import POLICY_WARNINGS
 
     monkeypatch.delenv('DREAM_AGENT_AUTO_APPLY_KINDS', raising=False)
-    assert auto_apply_kinds() == {'title', 'overview', 'spelling', 'vocabulary'}
+    assert auto_apply_kinds() == {'title', 'overview', 'spelling'}
     assert SUGGEST == {'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
     assert all(apply_policy(kind, AUTO) == 'auto' for kind in AUTO)
     assert all(apply_policy(kind, AUTO) == 'suggest' for kind in SUGGEST)

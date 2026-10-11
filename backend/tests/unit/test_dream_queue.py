@@ -39,7 +39,7 @@ def queue(monkeypatch):
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
     monkeypatch.setattr(
-        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic record ' * 100}}
+        dream_reads, 'read_record', lambda uid, ref, **kwargs: {'structured': {'title': 'Synthetic record ' * 100}}
     )
     return db
 
@@ -114,7 +114,7 @@ def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypat
         'structured': {'title': 'Synthetic robot', 'overview': 'Invented engineering discussion'},
         'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + words * 2000 + ' TAIL'}],
     }
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: row)
     caps = Caps(tokens=16000)
     lease = dream_store.acquire(UID, caps, now=NOW)
     records, consumed = dream_reads.read_changes(UID, lease, caps)
@@ -148,7 +148,7 @@ def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypat
 def test_single_huge_conversation_is_admitted_and_acknowledged(queue, monkeypatch):
     seed(queue, 1)
     row = {'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + 'Synthetic words ' * 100000 + ' TAIL'}]}
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: row)
     caps = Caps(tokens=16000)
     lease = dream_store.acquire(UID, caps, now=NOW)
     records, consumed = dream_reads.read_changes(UID, lease, caps)
@@ -193,7 +193,7 @@ def test_arrivals_after_admission_are_not_read(queue):
 
 def test_idle_pass_refunds_and_can_admit_again(queue, monkeypatch):
     seed(queue, 1)
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: None)
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
     turn = AsyncMock(side_effect=AssertionError('idle called model'))
     report = asyncio.run(dream_agent.run_pass(UID, turn=turn))
     assert report['status'] == 'not_admitted' and report['reason'] == 'idle'
@@ -519,7 +519,7 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
         'evidence': [ref],
     }
     monkeypatch.setattr(
-        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetik record ' * 100}}
+        dream_reads, 'read_record', lambda uid, ref, **kwargs: {'structured': {'title': 'Synthetik record ' * 100}}
     )
     payloads = [
         {'clusters': [{'refs': [], 'problem': 'spelling'}, {'refs': [ref], 'problem': 'spelling'}]},

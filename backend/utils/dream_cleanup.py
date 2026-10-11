@@ -1,6 +1,8 @@
 """Stochastic, age-weighted cleanup seeds; neighbourhoods remain read-only."""
 
 import random
+from uuid import UUID
+from utils.observability.fallback import record_fallback
 from datetime import timedelta
 from difflib import SequenceMatcher
 
@@ -98,7 +100,16 @@ def uniform_ref(uid, rng):
     rank = rng.randrange(size)
     for collection, count in counts:
         if rank < count:
-            key = dream_history.history_at_rank(uid, collection, rank)
+            # UUID owner IDs; memory IDs also include content hashes and opaque prefixes.
+            # A random-key successor has gap bias, unlike an offset/rank sample.
+            key = (
+                str(UUID(int=rng.getrandbits(128)))
+                if collection != 'memory_items'
+                else ''.join(
+                    rng.choice('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-') for _ in range(20)
+                )
+            )
+            key = dream_history.history_from_key(uid, collection, key)
             return collection + '/' + key if key else None
         rank -= count
     return None
@@ -109,7 +120,7 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
     cursor = dict(lease.get('cleanup_cursor') or {})
     records.target_sources = dict(getattr(records, 'target_sources', {ref: 'dirty' for ref in records.targets}))
     records.cleanup_cursor = cursor
-    if lease.get('canary') or rng.random() >= backfill_share():
+    if lease.get('canary') or not lease.get('cleanup_selected', rng.random() < backfill_share()):
         return records
     source = 'random' if rng.random() < random_seed_share() else 'seeded'
     if source == 'random':
@@ -124,13 +135,19 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
         collection = rng.choice(dream_history.COLLECTIONS)
         ids = dream_history.history_page(uid, collection, after=cursor.get(collection))
         cursor[collection] = ids[-1] if ids else None
+        refs = [collection + '/' + key for key in ids]
+        reviewed = dream_history.last_reviewed(uid, refs)
         pool = {}
         for key in ids:
             ref = collection + '/' + key
+            previous = timestamp(reviewed.get(ref))
+            if reviewed.get(ref) is not None and (
+                previous is None or previous > lease['started_at'] - timedelta(days=REVIEW_DAYS)
+            ):
+                continue
             row = read_record(uid, ref)
             if row:
                 pool[ref] = row
-        reviewed = dream_history.last_reviewed(uid, pool)
         ref = choose_weighted(pool, reviewed, lease['started_at'], rng)
     if ref and ref not in records and related_to_targets(pool[ref], records):
         seeds = [ref]
@@ -155,3 +172,12 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
             candidate.cleanup_cursor = cursor
             return candidate
     return records
+
+
+def add_seed_safely(uid, records, lease, caps, vocabulary, *, read_record):
+    try:
+        return add_seed(uid, records, lease, caps, vocabulary, read_record=read_record)
+    except Exception:
+        records.seed_errors = getattr(records, 'seed_errors', 0) + 1
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+        return records
