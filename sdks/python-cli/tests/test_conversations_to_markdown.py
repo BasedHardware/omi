@@ -10,6 +10,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 # Load conversations_to_markdown example script dynamically
 script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_markdown.py"
@@ -279,6 +280,79 @@ class TestConversationsToMarkdown(unittest.TestCase):
             self.assertEqual(len(exported), 1)
             text = exported[0].read_text(encoding="utf-8")
             self.assertIn("hello  world", text)
+
+    def test_concurrent_export_does_not_clobber_existing_or_racing_files(self):
+        """Concurrent exports of identically-named conversations must never overwrite each other."""
+        import concurrent.futures
+
+        num_threads = 5
+        convs = [
+            {
+                "id": f"12345678-race-{i}",
+                "started_at": "2026-10-11T10:00:00Z",
+                "structured": {"title": "Concurrent Standup", "overview": f"Unique content thread {i}"},
+            }
+            for i in range(num_threads)
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+
+            def export_single(conv_item):
+                return c2m.export_conversations([conv_item], output_dir=out_dir, overwrite=False)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+                results = list(executor.map(export_single, convs))
+
+            all_exported = [p for sub in results for p in sub]
+            self.assertEqual(len(all_exported), num_threads)
+
+            # Ensure all paths exist on disk and each is unique
+            unique_paths = set(all_exported)
+            self.assertEqual(len(unique_paths), num_threads)
+
+            # Ensure all unique content was written without truncation or clobbering
+            contents = [p.read_text(encoding="utf-8") for p in all_exported]
+            for i in range(num_threads):
+                self.assertTrue(any(f"Unique content thread {i}" in c for c in contents))
+
+    def test_file_exists_error_race_recovery(self):
+        """Simulate TOCTOU: file created between exists() check and open('x')."""
+        conv = {
+            "id": "12345678-toctou",
+            "started_at": "2026-10-11T10:00:00Z",
+            "structured": {"title": "TOCTOU Test", "overview": "Incoming content"},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            target = out_dir / "2026-10-11_toctou_test_12345678.md"
+
+            orig_open = Path.open
+            first_attempt = True
+
+            def simulated_open(self, *args, **kwargs):
+                nonlocal first_attempt
+                if self == target and first_attempt:
+                    first_attempt = False
+                    with orig_open(target, "w", encoding="utf-8") as f:
+                        f.write("Pre-existing racing content")
+                    raise FileExistsError(f"File exists: {target}")
+                return orig_open(self, *args, **kwargs)
+
+            try:
+                Path.open = simulated_open
+                exported = c2m.export_conversations([conv], output_dir=out_dir, overwrite=False)
+            finally:
+                Path.open = orig_open
+
+            self.assertEqual(len(exported), 1)
+            # The original target must still have its racing content intact
+            self.assertEqual(target.read_text(encoding="utf-8"), "Pre-existing racing content")
+            # The exported file must be disambiguated with _2
+            disambiguated = out_dir / "2026-10-11_toctou_test_12345678_2.md"
+            self.assertEqual(exported[0], disambiguated)
+            self.assertIn("Incoming content", disambiguated.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

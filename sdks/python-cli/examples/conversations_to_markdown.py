@@ -205,17 +205,27 @@ def export_conversations(
 
         base_name = f"{date_prefix}_{slug}_{short_id}"
         filepath = output_dir / f"{base_name}.md"
+        md_content = conversation_to_markdown(conv)
 
         if not overwrite:
             counter = 1
-            while filepath in used_paths or filepath.exists():
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.md"
+            while True:
+                while filepath in used_paths or filepath.exists():
+                    counter += 1
+                    filepath = output_dir / f"{base_name}_{counter}.md"
 
-        used_paths.add(filepath)
+                try:
+                    with filepath.open("x", encoding="utf-8") as f:
+                        f.write(md_content)
+                    used_paths.add(filepath)
+                    break
+                except FileExistsError:
+                    counter += 1
+                    filepath = output_dir / f"{base_name}_{counter}.md"
+        else:
+            used_paths.add(filepath)
+            filepath.write_text(md_content, encoding="utf-8")
 
-        md_content = conversation_to_markdown(conv)
-        filepath.write_text(md_content, encoding="utf-8")
         print(f"Exported: {filepath}")
         exported_paths.append(filepath)
 
