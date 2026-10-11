@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Sparkles, LogIn } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { t } from '@/lib/i18n';
 
 const STORAGE_KEY = 'omi-promo-dismissed';
 
@@ -49,7 +50,7 @@ export function PromoCard() {
       <button
         onClick={handleDismiss}
         className="absolute right-3 top-3 rounded-full p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-        aria-label="Dismiss"
+        aria-label={t('Dismiss')}
       >
         <X className="h-4 w-4" />
       </button>
@@ -60,9 +61,9 @@ export function PromoCard() {
           <Sparkles className="h-5 w-5 text-text-primary" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-white">Try the New Web Experience</h3>
+          <h3 className="font-semibold text-white">{t('Try the New Web Experience')}</h3>
           <p className="mt-1 text-sm text-gray-400">
-            Access your conversations, memories, and apps from any browser.
+            {t('Access your conversations, memories, and apps from any browser.')}
           </p>
         </div>
       </div>
@@ -73,7 +74,7 @@ export function PromoCard() {
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black transition-all hover:bg-white/90 hover:shadow-lg hover:shadow-white/20"
       >
         <LogIn className="h-4 w-4" />
-        Sign In
+        {t('Sign In')}
       </button>
 
       {/* Decorative glow */}

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { stepFrameIndex } from '@/lib/screenFrames';
 import type { ConversationScreenFrame } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface ScreenFrameLightboxProps {
   open: boolean;
@@ -88,7 +89,9 @@ export function ScreenFrameLightbox({
             className,
           )}
         >
-          <DialogTitle className="sr-only">{frame.caption || 'Screenshot'}</DialogTitle>
+          <DialogTitle className="sr-only">
+            {frame.caption || t('Screenshot')}
+          </DialogTitle>
 
           <div className="relative flex flex-col gap-3">
             <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-bg-tertiary bg-bg-primary">
@@ -104,7 +107,7 @@ export function ScreenFrameLightbox({
                   <button
                     type="button"
                     onClick={() => goTo(-1)}
-                    aria-label="Previous screenshot"
+                    aria-label={t('Previous screenshot')}
                     className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
                   >
                     <ChevronLeft className="h-5 w-5" />
@@ -112,7 +115,7 @@ export function ScreenFrameLightbox({
                   <button
                     type="button"
                     onClick={() => goTo(1)}
-                    aria-label="Next screenshot"
+                    aria-label={t('Next screenshot')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
                   >
                     <ChevronRight className="h-5 w-5" />
@@ -144,7 +147,7 @@ export function ScreenFrameLightbox({
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                {isDeleting ? 'Deleting…' : 'Delete'}
+                {isDeleting ? t('Deleting…') : t('Delete')}
               </Button>
             </div>
           </div>

@@ -15,6 +15,7 @@ import { Calendar, User, FolderOpen, Puzzle, ArrowRight, DollarSign } from 'luci
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t, tn, formatLocale } from '@/lib/i18n';
 
 /**
  * moonshine emits its own `<head>` and has no per-route metadata hook — its own
@@ -124,7 +125,7 @@ function formatDate(dateString: string | null | undefined): string | null {
   const date = new Date(dateString);
   // Check for invalid date or Unix epoch (which indicates null/invalid data)
   if (isNaN(date.getTime()) || date.getTime() === 0) return null;
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -179,13 +180,15 @@ export default function PluginDetailPage() {
         data-testid="app-not-found"
         className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0B0F17] px-6 text-center"
       >
-        <h1 className="text-3xl font-bold text-white">App not found</h1>
-        <p className="text-gray-400">We couldn&apos;t find an app with the id “{id}”.</p>
+        <h1 className="text-3xl font-bold text-white">{t('App not found')}</h1>
+        <p className="text-gray-400">
+          {t('We couldn\'t find an app with the id “{id}”.', { id })}
+        </p>
         <Link
           href="/apps"
           className="rounded-xl bg-[#6C8EEF] px-6 py-3 text-base font-medium text-white transition-all hover:bg-[#5A7DE8]"
         >
-          Browse the App Store
+          {t('Browse the App Store')}
         </Link>
       </div>
     );
@@ -255,7 +258,7 @@ export default function PluginDetailPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-xl text-gray-400">by {plugin.author}</p>
+                  <p className="mt-2 text-xl text-gray-400">{t('by {author}', { author: plugin.author })}</p>
 
                   {/* Stats Section */}
                   <div className="mt-8 flex items-center gap-4">
@@ -266,16 +269,16 @@ export default function PluginDetailPage() {
                       <div className="ml-2 flex flex-col">
                         <span className="text-yellow-400">★</span>
                         <span className="text-sm text-gray-400">
-                          ({plugin.rating_count} reviews)
+                          {tn(plugin.rating_count, '({count} review)', '({count} reviews)')}
                         </span>
                       </div>
                     </div>
                     <div className="h-8 w-px bg-white/5" />
                     <div className="flex items-center">
                       <span className="text-3xl font-bold text-[#6C8EEF]">
-                        {plugin.installs.toLocaleString()}
+                        {plugin.installs.toLocaleString(formatLocale())}
                       </span>
-                      <span className="ml-2 text-sm text-gray-400">downloads</span>
+                      <span className="ml-2 text-sm text-gray-400">{t('downloads')}</span>
                     </div>
                   </div>
 
@@ -288,8 +291,7 @@ export default function PluginDetailPage() {
                       className="group inline-flex items-center justify-center rounded-xl bg-[#6C8EEF] px-6 py-3 text-base font-medium text-white transition-all hover:bg-[#5A7DE8]"
                     >
                       <span className="flex items-center">
-                        Try it now
-                        <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                        {t('Try it now')}<ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                       </span>
                     </Link>
                     <div className="mt-4 flex items-center gap-4">
@@ -301,7 +303,7 @@ export default function PluginDetailPage() {
                       >
                         <Image
                           src="/app-store-badge.svg"
-                          alt="Download on the App Store"
+                          alt={t('Download on the App Store')}
                           className="h-10"
                           width={120}
                           height={40}
@@ -315,7 +317,7 @@ export default function PluginDetailPage() {
                       >
                         <Image
                           src="/google-play-badge.png"
-                          alt="Get it on Google Play"
+                          alt={t('Get it on Google Play')}
                           className="h-[60px] w-auto"
                           width={646}
                           height={250}
@@ -330,7 +332,7 @@ export default function PluginDetailPage() {
 
           {/* About Section */}
           <section className="mt-16">
-            <h2 className="text-2xl font-bold text-white">About</h2>
+            <h2 className="text-2xl font-bold text-white">{t('About')}</h2>
             <div className="mt-4">
               <p className="text-lg leading-relaxed text-gray-300">
                 {plugin.description}
@@ -340,25 +342,25 @@ export default function PluginDetailPage() {
 
           {/* Additional Details Section */}
           <section className="mt-16">
-            <h2 className="mb-6 text-2xl font-bold text-white">Additional Details</h2>
+            <h2 className="mb-6 text-2xl font-bold text-white">{t('Additional Details')}</h2>
             <div className="grid gap-8 sm:grid-cols-2">
               {plugin.is_paid && (
                 <div>
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-5 w-5 text-amber-400" />
-                    <div className="text-sm font-medium text-gray-400">Pricing</div>
+                    <div className="text-sm font-medium text-gray-400">{t('Pricing')}</div>
                   </div>
                   <div className="mt-1 pl-7">
                     <span className="text-base font-semibold text-amber-400">
                       ${plugin.price?.toFixed(2)}
-                      {plugin.payment_plan === 'monthly_recurring' ? '/month' : ''}
+                      {plugin.payment_plan === 'monthly_recurring' ? t('/month') : ''}
                     </span>
                     <span className="ml-2 text-sm text-gray-400">
                       {plugin.payment_plan === 'monthly_recurring'
-                        ? '(Monthly subscription)'
+                        ? t('(Monthly subscription)')
                         : plugin.payment_plan === 'one_time'
-                          ? '(One-time purchase)'
-                          : '(Paid)'}
+                          ? t('(One-time purchase)')
+                          : t('(Paid)')}
                     </span>
                   </div>
                 </div>
@@ -367,7 +369,7 @@ export default function PluginDetailPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-5 w-5 text-gray-400" />
-                    <div className="text-sm font-medium text-gray-400">Created</div>
+                    <div className="text-sm font-medium text-gray-400">{t('Created')}</div>
                   </div>
                   <div className="mt-1 pl-7 text-base text-white">
                     {formatDate(plugin.created_at)}
@@ -377,21 +379,21 @@ export default function PluginDetailPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <User className="h-5 w-5 text-gray-400" />
-                  <div className="text-sm font-medium text-gray-400">Creator</div>
+                  <div className="text-sm font-medium text-gray-400">{t('Creator')}</div>
                 </div>
                 <div className="mt-1 pl-7 text-base text-white">{plugin.author}</div>
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <FolderOpen className="h-5 w-5 text-gray-400" />
-                  <div className="text-sm font-medium text-gray-400">Category</div>
+                  <div className="text-sm font-medium text-gray-400">{t('Category')}</div>
                 </div>
                 <div className="mt-1 pl-7 text-base text-white">{categoryName}</div>
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <Puzzle className="h-5 w-5 text-gray-400" />
-                  <div className="text-sm font-medium text-gray-400">Capabilities</div>
+                  <div className="text-sm font-medium text-gray-400">{t('Capabilities')}</div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 pl-7">
                   {capabilities.map((cap) => (
@@ -411,7 +413,7 @@ export default function PluginDetailPage() {
           {relatedApps.length > 0 && (
             <section className="mt-16 pb-12">
               <h2 className="mb-8 text-2xl font-bold text-white">
-                More {categoryName} Apps
+                {t('More {category} Apps', { category: categoryName })}
               </h2>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {relatedApps.map((app, index) => (

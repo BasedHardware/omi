@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { GanttChartSquare, House, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
+import { t } from '@/lib/i18n';
 
 interface BottomNavigationProps {
   onOpenSidebar: () => void;
@@ -14,10 +15,34 @@ interface BottomNavigationProps {
 // Core navigation items (excluding More). Labels match the rail, so the same
 // destination is not named two different things on one device.
 const navItems = [
-  { label: 'Home', href: '/home', icon: House },
-  { label: 'Conversations', href: '/conversations', icon: GanttChartSquare },
-  { label: 'Record', href: '/record', icon: Mic },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare },
+  {
+    get label() {
+      return t('Home');
+    },
+    href: '/home',
+    icon: House,
+  },
+  {
+    get label() {
+      return t('Conversations');
+    },
+    href: '/conversations',
+    icon: GanttChartSquare,
+  },
+  {
+    get label() {
+      return t('Record');
+    },
+    href: '/record',
+    icon: Mic,
+  },
+  {
+    get label() {
+      return t('Tasks');
+    },
+    href: '/tasks',
+    icon: CheckSquare,
+  },
 ];
 
 /**
@@ -68,7 +93,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         'border-t border-white/[0.06]',
         'pb-safe', // Safe area inset for devices with home indicators
       )}
-      aria-label="Primary navigation"
+      aria-label={t('Primary navigation')}
     >
       <div className="flex items-stretch justify-around gap-0.5 px-2">
         {navItems.map((item) => {
@@ -110,12 +135,12 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         <button
           onClick={onOpenSidebar}
           className={tabClasses(false)}
-          aria-label="More options"
+          aria-label={t('More options')}
         >
           <span className={tabIconClasses(false)}>
             <Menu className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
           </span>
-          <span className="text-[10px] font-medium leading-none">More</span>
+          <span className="text-[10px] font-medium leading-none">{t('More')}</span>
         </button>
       </div>
     </motion.nav>

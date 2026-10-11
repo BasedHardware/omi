@@ -12,6 +12,7 @@ import { Play, Pause, Volume2, VolumeX, Loader2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getConversationAudioUrlsWithPoll } from '@/lib/api';
 import type { AudioFileUrlInfo } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 interface AudioPlayerProps {
   conversationId: string;
@@ -352,7 +353,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             'text-text-secondary hover:text-text-primary transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
-          title="Download audio"
+          title={t('Download audio')}
         >
           <Download className="w-4 h-4" />
         </button>

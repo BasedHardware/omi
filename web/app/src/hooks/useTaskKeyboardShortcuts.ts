@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { t } from '@/lib/i18n';
 
 interface UseTaskKeyboardShortcutsProps {
   enabled: boolean;
@@ -177,13 +178,31 @@ export function useTaskKeyboardShortcuts({
 
 // Keyboard shortcut definitions for help display
 export const KEYBOARD_SHORTCUTS = [
-  { key: 't', description: 'Set due today', requiresSelection: true },
-  { key: 'n', description: 'Set due tomorrow', requiresSelection: true },
-  { key: 'd', description: 'Delete selected', requiresSelection: true },
-  { key: 'e', description: 'Edit description', requiresSelection: true, singleOnly: true },
-  { key: '⌘/Ctrl + A', description: 'Select all', requiresSelection: false },
-  { key: 'Enter', description: 'Toggle complete', requiresSelection: true },
-  { key: 'Escape', description: 'Deselect all', requiresSelection: false },
-  { key: '↑ / ↓', description: 'Navigate', requiresSelection: false },
-  { key: 'Space', description: 'Toggle select', requiresSelection: false },
+  { key: 't', get description() {
+    return t('Set due today');
+  }, requiresSelection: true },
+  { key: 'n', get description() {
+    return t('Set due tomorrow');
+  }, requiresSelection: true },
+  { key: 'd', get description() {
+    return t('Delete selected');
+  }, requiresSelection: true },
+  { key: 'e', get description() {
+    return t('Edit description');
+  }, requiresSelection: true, singleOnly: true },
+  { key: '⌘/Ctrl + A', get description() {
+    return t('Select all');
+  }, requiresSelection: false },
+  { key: 'Enter', get description() {
+    return t('Toggle complete');
+  }, requiresSelection: true },
+  { key: 'Escape', get description() {
+    return t('Deselect all');
+  }, requiresSelection: false },
+  { key: '↑ / ↓', get description() {
+    return t('Navigate');
+  }, requiresSelection: false },
+  { key: 'Space', get description() {
+    return t('Toggle select');
+  }, requiresSelection: false },
 ] as const;

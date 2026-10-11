@@ -2,6 +2,7 @@
 
 import { sparklinePoints } from '@/lib/goals';
 import type { GoalHistoryEntry } from '@/types/goals';
+import { t } from '@/lib/i18n';
 
 const WIDTH = 280;
 const HEIGHT = 56;
@@ -17,7 +18,9 @@ export function GoalSparkline({ history, label }: GoalSparklineProps) {
 
   if (points.length < 2) {
     return (
-      <p className="text-sm text-text-quaternary">Not enough history to chart yet.</p>
+      <p className="text-sm text-text-quaternary">
+        {t('Not enough history to chart yet.')}
+      </p>
     );
   }
 
@@ -34,7 +37,7 @@ export function GoalSparkline({ history, label }: GoalSparklineProps) {
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       className="h-14 w-full"
       role="img"
-      aria-label={`${label} progress over time`}
+      aria-label={t('{label} progress over time', { label })}
       preserveAspectRatio="none"
     >
       <path

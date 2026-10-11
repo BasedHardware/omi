@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import debounce from 'lodash/debounce';
 import type { Plugin } from './types';
 import { CompactPluginCard } from './plugin-card/CompactPluginCard';
+import { t } from '@/lib/i18n';
 
 interface SearchBarProps {
   className?: string;
@@ -108,7 +109,7 @@ export const SearchBar = memo(function SearchBar({
             }}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder="Search apps, categories, or capabilities..."
+            placeholder={t('Search apps, categories, or capabilities...')}
             className="h-12 w-full rounded-full bg-[#1A1F2E] pl-11 pr-11 text-sm text-white placeholder-gray-400 outline-none ring-1 ring-white/5 transition-all hover:ring-white/10 focus:bg-[#242938] focus:ring-[#6C8EEF]/50"
           />
           {searchQuery && (
@@ -128,12 +129,12 @@ export const SearchBar = memo(function SearchBar({
           <div className="space-y-4">
             {searchFailed ? (
               <p role="alert" className="text-white/70">
-                Search is unavailable right now. Please try again.
+                {t('Search is unavailable right now. Please try again.')}
               </p>
             ) : (
               <>
                 <h2 className="text-xl font-semibold text-white">
-                  Search Results ({searchResults.length})
+                  {t('Search Results ({count})', { count: searchResults.length })}
                 </h2>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {searchResults.map((plugin, index) => (

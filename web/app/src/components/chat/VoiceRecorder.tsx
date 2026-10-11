@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Mic, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { transcribeVoiceMessage } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 type RecordingState = 'idle' | 'recording' | 'transcribing';
 
@@ -188,7 +189,7 @@ export function InlineVoiceRecorder({
 
       {/* Transcribing indicator */}
       {state === 'transcribing' && (
-        <span className="text-xs text-text-tertiary">Transcribing...</span>
+        <span className="text-xs text-text-tertiary">{t('Transcribing...')}</span>
       )}
 
       {/* Mic button */}
@@ -206,10 +207,10 @@ export function InlineVoiceRecorder({
         )}
         title={
           state === 'idle'
-            ? 'Click to start recording'
+            ? t('Click to start recording')
             : state === 'recording'
-              ? 'Click to stop and transcribe'
-              : 'Transcribing...'
+              ? t('Click to stop and transcribe')
+              : t('Transcribing...')
         }
       >
         {state === 'transcribing' ? (

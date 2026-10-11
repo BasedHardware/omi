@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, Mic, Zap, X, Rocket } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 interface Feature {
   icon: React.ReactNode;
@@ -15,18 +16,30 @@ interface Feature {
 const CURRENT_FEATURES: Feature[] = [
   {
     icon: <Mic className="h-4 w-4 text-text-primary" />,
-    title: 'Microphone Recording',
-    description: 'Record conversations directly from your browser',
+    get title() {
+      return t('Microphone Recording');
+    },
+    get description() {
+      return t('Record conversations directly from your browser');
+    },
   },
   {
     icon: <Zap className="h-4 w-4 text-text-primary" />,
-    title: 'Performance Improvements',
-    description: 'Faster loading times and smoother experience',
+    get title() {
+      return t('Performance Improvements');
+    },
+    get description() {
+      return t('Faster loading times and smoother experience');
+    },
   },
   {
     icon: <Sparkles className="h-4 w-4 text-text-primary" />,
-    title: 'Enhanced UI',
-    description: 'Refined interface with better responsiveness',
+    get title() {
+      return t('Enhanced UI');
+    },
+    get description() {
+      return t('Refined interface with better responsiveness');
+    },
   },
 ];
 
@@ -88,7 +101,7 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
         {/* Close button */}
         <button
           onClick={handleClose}
-          aria-label="Close"
+          aria-label={t('Close')}
           className="absolute right-3 top-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
           <X className="h-5 w-5" />
@@ -102,9 +115,9 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
               <Rocket className="h-8 w-8 text-text-primary" />
             </div>
             <h2 className="mb-2 text-2xl font-semibold text-text-primary">
-              What&apos;s New
+              {t("What's New")}
             </h2>
-            <p className="text-text-tertiary">Check out the latest updates</p>
+            <p className="text-text-tertiary">{t('Check out the latest updates')}</p>
           </div>
         </div>
 
@@ -144,7 +157,7 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
               onClick={handleClose}
               className="block w-full rounded-xl bg-text-primary px-4 py-3 text-center font-medium text-bg-primary transition-colors hover:bg-text-primary/90"
             >
-              Got it!
+              {t('Got it!')}
             </button>
           </div>
         </div>

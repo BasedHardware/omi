@@ -3,6 +3,7 @@
 import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import Image from '@tschk/moonshine-next/image';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 interface FilePreviewItem {
   file: File;
@@ -78,7 +79,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
           {/* Uploaded indicator */}
           {item.uploadedId && !item.uploading && (
             <div className="absolute bottom-0 left-0 right-0 bg-green-500/80 py-0.5">
-              <span className="text-[8px] text-white text-center block">Ready</span>
+              <span className="text-[8px] text-white text-center block">{t('Ready')}</span>
             </div>
           )}
         </div>

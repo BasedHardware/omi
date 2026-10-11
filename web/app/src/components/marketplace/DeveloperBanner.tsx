@@ -3,6 +3,7 @@
 import Link from '@tschk/moonshine-next/link';
 import { Sparkles, Zap, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { t } from '@/lib/i18n';
 
 // Static background pattern - hoisted to prevent recreation on every render
 const BackgroundPattern = (
@@ -54,11 +55,12 @@ export function DeveloperBanner() {
             {/* Left content */}
             <div className="flex flex-col sm:max-w-xs md:max-w-sm">
               <h3 className="text-xl font-bold text-white sm:text-2xl md:text-2xl">
-                Start Building Your Own Apps
+                {t('Start Building Your Own Apps')}
               </h3>
               <p className="mt-2 text-sm text-text-secondary sm:text-base">
-                Create powerful AI-powered apps for Omi and start earning. Join our
-                developer community today!
+                {t(
+                  'Create powerful AI-powered apps for Omi and start earning. Join our developer community today!',
+                )}
               </p>
             </div>
 
@@ -90,7 +92,7 @@ export function DeveloperBanner() {
             <div className="mt-4 flex items-center sm:ml-4 sm:mt-0">
               <div className="flex items-center gap-1.5 rounded-full bg-black/80 px-4 py-2 text-sm font-medium text-text-secondary shadow-sm transition-all duration-300 group-hover:bg-black group-hover:shadow-md group-hover:shadow-black/40">
                 <Zap className="h-3.5 w-3.5" />
-                <span>Start Building</span>
+                <span>{t('Start Building')}</span>
                 <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               </div>
             </div>

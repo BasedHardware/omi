@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Circle, CheckCircle, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItemSummary } from '@/types/recap';
+import { t } from '@/lib/i18n';
 
 interface TasksSectionProps {
   tasks: ActionItemSummary[];
@@ -89,7 +90,7 @@ export function TasksSection({ tasks, onConversationClick }: TasksSectionProps) 
                       'text-text-tertiary hover:text-text-primary',
                       'hover:bg-white/[0.14] transition-colors',
                     )}
-                    title="View source conversation"
+                    title={t('View source conversation')}
                   >
                     <MessageSquare className="w-3 h-3" />
                   </button>
@@ -113,12 +114,12 @@ export function TasksSection({ tasks, onConversationClick }: TasksSectionProps) 
           {isExpanded ? (
             <>
               <ChevronUp className="w-3.5 h-3.5" />
-              Show less
+              {t('Show less')}
             </>
           ) : (
             <>
               <ChevronDown className="w-3.5 h-3.5" />
-              Show {hiddenCount} more
+              {t('Show {count} more', { count: hiddenCount })}
             </>
           )}
         </button>

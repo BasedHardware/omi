@@ -5,6 +5,7 @@ import { createMoonshineRouter, MoonshineRouter } from '@tschk/moonshine/router'
 import AuthenticatedLayout from '@/app/(authenticated)/layout';
 import PublicLayout from '@/app/(public)/layout';
 import RootLayout from '@/app/layout';
+import { installUiLanguageSync, loadUiCatalog, uiLanguage } from '@/lib/i18n';
 
 type RouteKind = 'root' | 'authenticated' | 'public';
 
@@ -31,7 +32,14 @@ async function mountClientRoutes(): Promise<void> {
   if (typeof document === 'undefined') return;
   const host = document.getElementById('moonshine-app');
   if (!host) return;
-  const { createRoot } = await import('react-dom/client');
+  // The interface language is fixed per page load; fetch its catalog (a lazy chunk,
+  // nothing for English) before the first render so no screen flashes English.
+  document.documentElement.lang = uiLanguage();
+  installUiLanguageSync();
+  const [, { createRoot }] = await Promise.all([
+    loadUiCatalog(),
+    import('react-dom/client'),
+  ]);
   // The query is part of the initial location, not decoration: a deep link to
   // `/conversations?recap=…`, `/settings?section=…` or an OAuth callback opens
   // on the default view if the router starts from the pathname alone.

@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OpenSurface } from '@/components/ui/OpenSurface';
+import { t } from '@/lib/i18n';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -60,7 +61,7 @@ export function ConfirmDialog({
             <Dialog.Close asChild>
               <button
                 className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
-                aria-label="Close"
+                aria-label={t('Close')}
               >
                 <X className="w-4 h-4 text-text-quaternary" />
               </button>
@@ -121,7 +122,7 @@ export function ConfirmDialog({
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Clearing...</span>
+                    <span>{t('Clearing...')}</span>
                   </span>
                 ) : (
                   confirmLabel

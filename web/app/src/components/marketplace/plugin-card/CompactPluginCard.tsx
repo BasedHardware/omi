@@ -7,6 +7,7 @@ import Link from '@tschk/moonshine-next/link';
 import type { Plugin } from '../types';
 import { NewBadge } from '../NewBadge';
 import { formatInstalls } from '../utils/format';
+import { t } from '@/lib/i18n';
 
 export interface CompactPluginCardProps {
   plugin: Plugin;
@@ -59,7 +60,9 @@ export const CompactPluginCard = memo(function CompactPluginCard({
 
         {/* Author and Stats Row */}
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-gray-400">by {plugin.author}</span>
+          <span className="truncate text-xs text-gray-400">
+            {t('by {author}', { author: plugin.author })}
+          </span>
           <div className="flex shrink-0 items-center gap-2.5 text-xs text-gray-400">
             {plugin.rating_count > 0 && (
               <div className="flex items-center">

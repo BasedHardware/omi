@@ -13,6 +13,7 @@ import {
 import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
+import { t, formatLocale } from '@/lib/i18n';
 
 /**
  * Check if a date is today
@@ -371,8 +372,8 @@ export function useActionItems(): UseActionItemsReturn {
         date,
         dayName:
           i === 0
-            ? 'TODAY'
-            : date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+            ? t('Today').toUpperCase()
+            : date.toLocaleDateString(formatLocale(), { weekday: 'short' }).toUpperCase(),
         dayNumber: date.getDate(),
         isToday: i === 0,
         pending: counts.pending,

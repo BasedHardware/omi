@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { updateConversationTitle } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 interface EditableTitleProps {
   conversationId: string;
@@ -96,7 +97,7 @@ export function EditableTitle({
           'disabled:opacity-50',
           className,
         )}
-        placeholder="Enter title..."
+        placeholder={t('Enter title...')}
       />
     );
   }
@@ -104,7 +105,7 @@ export function EditableTitle({
   return (
     <h1
       onDoubleClick={handleDoubleClick}
-      title="Double-click to edit"
+      title={t('Double-click to edit')}
       className={cn(
         'cursor-text select-none',
         'hover:bg-bg-tertiary/50 rounded-lg transition-colors',
@@ -112,7 +113,7 @@ export function EditableTitle({
         className,
       )}
     >
-      {title || 'Untitled Conversation'}
+      {title || t('Untitled Conversation')}
     </h1>
   );
 }

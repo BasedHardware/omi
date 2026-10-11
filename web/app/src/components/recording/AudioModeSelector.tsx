@@ -6,6 +6,7 @@ import { Mic, Headphones, Volume2, ChevronDown, ChevronUp, X } from 'lucide-reac
 import { cn } from '@/lib/utils';
 import { AudioMode } from './RecordingContext';
 import { isSystemAudioSupported } from '@/lib/audioCapture';
+import { t } from '@/lib/i18n';
 
 interface AudioModeSelectorProps {
   selectedMode: AudioMode;
@@ -32,7 +33,7 @@ export function AudioModeSelector({
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold text-text-primary">Choose Audio Source</h2>
+        <h2 className="text-lg font-semibold text-text-primary">{t('Choose Audio Source')}</h2>
         <button
           onClick={onCancel}
           className="p-1.5 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary transition-colors"
@@ -66,16 +67,15 @@ export function AudioModeSelector({
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-text-primary">Microphone Only</span>
+                <span className="font-medium text-text-primary">{t('Microphone Only')}</span>
                 {selectedMode === 'mic-only' && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-bg-quaternary text-text-secondary">
-                    Selected
+                    {t('Selected')}
                   </span>
                 )}
               </div>
               <p className="text-sm text-text-tertiary mt-1">
-                Best for speaker setups. Mic picks up your voice and any audio from
-                speakers.
+                {t('Best for speaker setups. Mic picks up your voice and any audio from speakers.')}
               </p>
             </div>
           </div>
@@ -106,18 +106,18 @@ export function AudioModeSelector({
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-text-primary">Mic + System Audio</span>
+                <span className="font-medium text-text-primary">{t('Mic + System Audio')}</span>
                 {selectedMode === 'mic-and-system' && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-bg-quaternary text-text-secondary">
-                    Selected
+                    {t('Selected')}
                   </span>
                 )}
               </div>
               <p className="text-sm text-text-tertiary mt-1">
-                Best for headphone users. Captures your voice and computer audio directly.
+                {t('Best for headphone users. Captures your voice and computer audio directly.')}
               </p>
               {!systemAudioSupported && (
-                <p className="text-sm text-error mt-1">Not supported in this browser</p>
+                <p className="text-sm text-error mt-1">{t('Not supported in this browser')}</p>
               )}
             </div>
           </div>
@@ -129,7 +129,7 @@ export function AudioModeSelector({
         onClick={() => setShowDetails(!showDetails)}
         className="w-full flex items-center justify-center gap-2 text-sm text-text-tertiary hover:text-text-secondary transition-colors mb-4"
       >
-        <span>When to use each option</span>
+        <span>{t('When to use each option')}</span>
         {showDetails ? (
           <ChevronUp className="w-4 h-4" />
         ) : (
@@ -150,15 +150,12 @@ export function AudioModeSelector({
                 <div>
                   <div className="flex items-center gap-2 text-text-primary font-medium mb-1">
                     <Volume2 className="w-4 h-4" />
-                    <span>Using Speakers</span>
+                    <span>{t('Using Speakers')}</span>
                   </div>
                   <p className="text-text-tertiary pl-6">
-                    Your microphone will pick up both your voice AND sound from your
-                    speakers. In a video call, both sides of the conversation will be
-                    captured.
-                    <strong className="text-text-secondary">
+                    {t('Your microphone will pick up both your voice AND sound from your speakers. In a video call, both sides of the conversation will be captured.')}<strong className="text-text-secondary">
                       {' '}
-                      Use &quot;Mic Only&quot;.
+                      {t('Use "Mic Only".')}
                     </strong>
                   </p>
                 </div>
@@ -166,23 +163,19 @@ export function AudioModeSelector({
                 <div>
                   <div className="flex items-center gap-2 text-text-primary font-medium mb-1">
                     <Headphones className="w-4 h-4" />
-                    <span>Using Headphones</span>
+                    <span>{t('Using Headphones')}</span>
                   </div>
                   <p className="text-text-tertiary pl-6">
-                    Headphones send audio directly to your ears, so your mic only captures
-                    your voice. To capture the other person in a call, you need system
-                    audio.
-                    <strong className="text-text-secondary">
+                    {t('Headphones send audio directly to your ears, so your mic only captures your voice. To capture the other person in a call, you need system audio.')}<strong className="text-text-secondary">
                       {' '}
-                      Use &quot;Mic + System&quot;.
+                      {t('Use "Mic + System".')}
                     </strong>
                   </p>
                 </div>
 
                 <div className="pt-2 border-t border-bg-quaternary">
                   <p className="text-text-quaternary text-xs">
-                    System audio requires sharing a browser tab or window. You&apos;ll be
-                    prompted to select what to share when recording starts.
+                    {t('System audio requires sharing a browser tab or window. You\'ll be prompted to select what to share when recording starts.')}
                   </p>
                 </div>
               </div>
@@ -201,7 +194,7 @@ export function AudioModeSelector({
         )}
       >
         <Mic className="w-5 h-5" />
-        <span>Start Recording</span>
+        <span>{t('Start Recording')}</span>
       </button>
     </motion.div>
   );

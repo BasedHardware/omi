@@ -3,6 +3,7 @@
 import { getScores } from '@/lib/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
 import type { Scores } from '@/types/scores';
+import { t } from '@/lib/i18n';
 
 export interface UseScoresReturn {
   scores: Scores | null;
@@ -13,7 +14,7 @@ export interface UseScoresReturn {
 
 export function useScores(): UseScoresReturn {
   const { data, loading, error, refresh } = useAsyncResource('scores', getScores, {
-    fallbackMessage: 'Failed to load scores',
+    fallbackMessage: t('Failed to load scores'),
   });
 
   return { scores: data ?? null, loading, error, refresh };

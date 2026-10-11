@@ -15,6 +15,7 @@ import {
 } from '@/lib/firebase';
 import { registerFCMToken, unregisterFCMToken } from '@/lib/api';
 import type { MessagePayload } from 'firebase/messaging';
+import { t } from '@/lib/i18n';
 
 // Constants
 const STORAGE_KEY = 'omi-notifications';
@@ -375,8 +376,8 @@ export function useNotifications(): UseNotificationsReturn {
     const testNotification: OmiNotification = {
       id: `test-${Date.now()}`,
       type: 'announcement',
-      title: 'Test Notification',
-      body: 'This is a test notification to verify the UI is working correctly.',
+      title: t('Test Notification'),
+      body: t('This is a test notification to verify the UI is working correctly.'),
       timestamp: new Date().toISOString(),
       read: false,
     };

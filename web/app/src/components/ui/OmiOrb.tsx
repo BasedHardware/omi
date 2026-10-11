@@ -11,6 +11,7 @@ import {
   type OmiOrbMotion,
   type OmiOrbState,
 } from '@/lib/omiOrb';
+import { t } from '@/lib/i18n';
 
 interface OmiOrbProps {
   state?: OmiOrbState;
@@ -165,7 +166,7 @@ export function OmiOrb({
       viewBox={`0 0 ${size} ${size}`}
       className={className}
       role="img"
-      aria-label="Omi"
+      aria-label={t('Omi')}
     >
       {restFrame.map((dot, i) => {
         const opacity = Math.max(0, Math.min(1, dot.alpha));

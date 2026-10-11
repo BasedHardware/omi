@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AppCategory, AppCapability, AppsFilters, SortOption } from '@/types/apps';
+import { t } from '@/lib/i18n';
 
 interface FilterSheetProps {
   open: boolean;
@@ -16,16 +17,30 @@ interface FilterSheetProps {
 }
 
 const RATING_OPTIONS = [
-  { value: 4, label: '4+ Stars' },
-  { value: 3, label: '3+ Stars' },
-  { value: 2, label: '2+ Stars' },
-  { value: 1, label: '1+ Stars' },
+  { value: 4, get label() {
+    return t('4+ Stars')
+  } },
+  { value: 3, get label() {
+    return t('3+ Stars')
+  } },
+  { value: 2, get label() {
+    return t('2+ Stars')
+  } },
+  { value: 1, get label() {
+    return t('1+ Stars')
+  } },
 ];
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'installs_desc', label: 'Most Installs' },
-  { value: 'rating_desc', label: 'Highest Rated' },
-  { value: 'rating_asc', label: 'Lowest Rated' },
+  { value: 'installs_desc', get label() {
+    return t('Most Installs')
+  } },
+  { value: 'rating_desc', get label() {
+    return t('Highest Rated')
+  } },
+  { value: 'rating_asc', get label() {
+    return t('Lowest Rated')
+  } },
   { value: 'name_asc', label: 'A-Z' },
   { value: 'name_desc', label: 'Z-A' },
 ];
@@ -113,7 +128,7 @@ export function FilterSheet({
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
-              <h2 className="text-lg font-semibold text-text-primary">Filters</h2>
+              <h2 className="text-lg font-semibold text-text-primary">{t('Filters')}</h2>
               <button
                 onClick={onClose}
                 className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
@@ -125,7 +140,7 @@ export function FilterSheet({
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               {/* Categories */}
-              <FilterSection title="Category">
+              <FilterSection title={t('Category')}>
                 <div className="flex flex-wrap gap-2">
                   {categories.map((category) => (
                     <FilterChip
@@ -139,7 +154,7 @@ export function FilterSheet({
               </FilterSection>
 
               {/* Capabilities */}
-              <FilterSection title="Capability">
+              <FilterSection title={t('Capability')}>
                 <div className="flex flex-wrap gap-2">
                   {capabilities.map((capability) => (
                     <FilterChip
@@ -153,7 +168,7 @@ export function FilterSheet({
               </FilterSection>
 
               {/* Rating */}
-              <FilterSection title="Minimum Rating">
+              <FilterSection title={t('Minimum Rating')}>
                 <div className="flex flex-wrap gap-2">
                   {RATING_OPTIONS.map((option) => (
                     <FilterChip
@@ -168,7 +183,7 @@ export function FilterSheet({
               </FilterSection>
 
               {/* Sort */}
-              <FilterSection title="Sort By">
+              <FilterSection title={t('Sort By')}>
                 <div className="flex flex-wrap gap-2">
                   {SORT_OPTIONS.map((option) => (
                     <FilterChip
@@ -193,7 +208,7 @@ export function FilterSheet({
                   'transition-colors',
                 )}
               >
-                Reset
+                {t('Reset')}
               </button>
               <button
                 onClick={handleApply}
@@ -204,7 +219,7 @@ export function FilterSheet({
                   'transition-colors',
                 )}
               >
-                Apply Filters
+                {t('Apply Filters')}
               </button>
             </div>
           </motion.div>

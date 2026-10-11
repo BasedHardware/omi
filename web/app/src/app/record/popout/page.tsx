@@ -12,6 +12,7 @@ import {
 } from '@/lib/recordingBroadcast';
 import type { RecordingState, AudioMode } from '@/components/recording/RecordingContext';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t } from '@/lib/i18n';
 
 // Extended message type for start command with audio mode
 type ExtendedBroadcastMessage =
@@ -198,7 +199,7 @@ export default function RecordingPopoutPage() {
             ) : (
               <Monitor className="w-3 h-3" />
             )}
-            <span>{selectedMode === 'mic-only' ? 'Mic' : 'Mic + System'}</span>
+            <span>{selectedMode === 'mic-only' ? t('Mic') : t('Mic + System')}</span>
             <ChevronDown
               className={cn(
                 'w-3 h-3 transition-transform',
@@ -224,7 +225,7 @@ export default function RecordingPopoutPage() {
           <button
             onClick={handleStop}
             className="w-7 h-7 rounded-full bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center transition-colors"
-            title="Stop"
+            title={t('Stop')}
           >
             <Square className="w-3 h-3 text-red-400 fill-red-400" />
           </button>
@@ -244,7 +245,7 @@ export default function RecordingPopoutPage() {
             )}
           >
             <Mic className="w-3 h-3" />
-            <span>Mic Only</span>
+            <span>{t('Mic Only')}</span>
           </button>
           <button
             onClick={() => handleModeSelect('mic-and-system')}
@@ -256,7 +257,7 @@ export default function RecordingPopoutPage() {
             )}
           >
             <Monitor className="w-3 h-3" />
-            <span>Mic + System</span>
+            <span>{t('Mic + System')}</span>
           </button>
         </div>
       )}

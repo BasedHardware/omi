@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { MessageSquare, Clock, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DailySummary } from '@/types/recap';
+import { t } from '@/lib/i18n';
 
 interface OverviewSectionProps {
   recap: DailySummary;
@@ -41,7 +42,7 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
           <span className="text-lg font-semibold text-text-primary">
             {recap.stats.total_conversations}
           </span>
-          <span className="text-[10px] text-text-tertiary">Conversations</span>
+          <span className="text-[10px] text-text-tertiary">{t('Conversations')}</span>
         </div>
 
         {/* Duration */}
@@ -56,7 +57,7 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
           <span className="text-lg font-semibold text-text-primary">
             {formatDuration(recap.stats.total_duration_minutes)}
           </span>
-          <span className="text-[10px] text-text-tertiary">Recorded</span>
+          <span className="text-[10px] text-text-tertiary">{t('Recorded')}</span>
         </div>
 
         {/* Action Items */}
@@ -71,7 +72,7 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
           <span className="text-lg font-semibold text-text-primary">
             {recap.stats.action_items_count}
           </span>
-          <span className="text-[10px] text-text-tertiary">Action Items</span>
+          <span className="text-[10px] text-text-tertiary">{t('Action Items')}</span>
         </div>
       </div>
 

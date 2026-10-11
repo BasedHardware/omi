@@ -24,6 +24,7 @@ import { connectorTabFromParam, type ConnectorTab } from '@/lib/connectors';
 import { AppGridSection } from './AppGridSection';
 import { ConnectedServices } from './ConnectedServices';
 import { PageToolbar } from '@/components/layout/PageToolbar';
+import { t, tn } from '@/lib/i18n';
 
 // Module-level cache for apps data
 interface AppsCache {
@@ -100,7 +101,7 @@ function FilterDropdown({
                 !value ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
-              {placeholder || `All ${label}s`}
+              {placeholder || t('All {label}s', { label })}
             </button>
             {options.map((option) => (
               <button
@@ -147,7 +148,7 @@ function RatingFilter({
         )}
       >
         <Star className="w-4 h-4" />
-        <span>{value ? `${value}+` : 'Rating'}</span>
+        <span>{value ? `${value}+` : t('Rating')}</span>
         <ChevronDown
           className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
         />
@@ -167,7 +168,7 @@ function RatingFilter({
                 !value ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
-              Any rating
+              {t('Any rating')}
             </button>
             {ratings.map((rating) => (
               <button
@@ -201,8 +202,8 @@ function SortDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const sortOptions: { id: SortOption; label: string }[] = [
-    { id: 'installs_desc', label: 'Most popular' },
-    { id: 'rating_desc', label: 'Highest rated' },
+    { id: 'installs_desc', label: t('Most popular') },
+    { id: 'rating_desc', label: t('Highest rated') },
     { id: 'name_asc', label: 'A-Z' },
     { id: 'name_desc', label: 'Z-A' },
   ];
@@ -219,7 +220,7 @@ function SortDropdown({
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent',
         )}
       >
-        <span>{selected?.label || 'Sort'}</span>
+        <span>{selected?.label || t('Sort')}</span>
         <ChevronDown
           className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
         />
@@ -519,14 +520,14 @@ export function AppsExplorer() {
   const getEmptyMessage = () => {
     if (activeTab === 'installed') {
       return {
-        title: 'No installed apps yet',
-        subtitle: 'Explore and install apps to enhance your Omi experience',
+        title: t('No installed apps yet'),
+        subtitle: t('Explore and install apps to enhance your Omi experience'),
       };
     }
     if (activeTab === 'my-apps') {
       return {
-        title: 'No apps created yet',
-        subtitle: 'Create your own apps to customize your Omi experience',
+        title: t('No apps created yet'),
+        subtitle: t('Create your own apps to customize your Omi experience'),
       };
     }
     return { title: '', subtitle: '' };
@@ -542,7 +543,7 @@ export function AppsExplorer() {
             : {
                 value: searchQuery,
                 onChange: setSearchQuery,
-                placeholder: 'Search apps...',
+                placeholder: t('Search apps...'),
               }
         }
         controls={
@@ -557,7 +558,7 @@ export function AppsExplorer() {
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
-              Explore
+              {t('Explore')}
             </button>
             <button
               onClick={() => setActiveTab('installed')}
@@ -568,7 +569,7 @@ export function AppsExplorer() {
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
-              Installed
+              {t('Installed')}
             </button>
             <button
               onClick={() => setActiveTab('my-apps')}
@@ -579,7 +580,7 @@ export function AppsExplorer() {
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
-              My Apps
+              {t('My Apps')}
             </button>
             <button
               onClick={() => setActiveTab('services')}
@@ -590,7 +591,7 @@ export function AppsExplorer() {
                   : 'text-text-secondary hover:bg-bg-tertiary',
               )}
             >
-              Services
+              {t('Services')}
             </button>
           </div>
         }
@@ -604,25 +605,25 @@ export function AppsExplorer() {
             )}
           >
             <Plus className="w-5 h-5" />
-            <span className="hidden sm:inline">Create App</span>
+            <span className="hidden sm:inline">{t('Create App')}</span>
           </button>
         }
         below={
           activeTab !== 'services' && (
             <div className="flex flex-wrap items-center gap-2">
               <FilterDropdown
-                label="Category"
+                label={t('Category')}
                 value={filters.category}
                 options={categories}
                 onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
-                placeholder="All categories"
+                placeholder={t('All categories')}
               />
               <FilterDropdown
-                label="Capability"
+                label={t('Capability')}
                 value={filters.capability}
                 options={capabilities}
                 onChange={(v) => setFilters((f) => ({ ...f, capability: v }))}
-                placeholder="All capabilities"
+                placeholder={t('All capabilities')}
               />
               <RatingFilter
                 value={filters.rating}
@@ -637,7 +638,7 @@ export function AppsExplorer() {
                   onClick={clearFilters}
                   className="text-sm text-text-primary hover:underline ml-2"
                 >
-                  Clear all
+                  {t('Clear all')}
                 </button>
               )}
             </div>
@@ -664,12 +665,11 @@ export function AppsExplorer() {
               // Search results within tab
               <>
                 <p className="text-sm text-text-tertiary mb-4">
-                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'}{' '}
-                  found
+                  {tn(searchResults.length, '{count} app found', '{count} apps found')}
                 </p>
                 {searchResults.length === 0 ? (
                   <div className="text-center py-12">
-                    <p className="text-text-tertiary">No apps match your search</p>
+                    <p className="text-text-tertiary">{t('No apps match your search')}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -698,13 +698,13 @@ export function AppsExplorer() {
           // Search results view (explore tab)
           <div>
             <p className="text-sm text-text-tertiary mb-4">
-              {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
+              {tn(searchResults.length, '{count} app found', '{count} apps found')}
             </p>
             {searchResults.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-text-tertiary">No apps match your search</p>
+                <p className="text-text-tertiary">{t('No apps match your search')}</p>
                 <p className="text-sm text-text-quaternary mt-1">
-                  Try different keywords or adjust your filters
+                  {t('Try different keywords or adjust your filters')}
                 </p>
               </div>
             ) : (
@@ -721,7 +721,7 @@ export function AppsExplorer() {
             {/* Popular apps section */}
             {popularApps.length > 0 && (
               <AppGridSection
-                title="Popular"
+                title={t('Popular')}
                 apps={popularApps.slice(0, 6)}
                 onUpdate={handleAppUpdate}
               />

@@ -26,6 +26,7 @@ import {
   getRecordControlRightOffset,
   RECORD_CONTROL_EDGE_OFFSET,
 } from '@/lib/desktopChrome';
+import { t } from '@/lib/i18n';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -123,7 +124,7 @@ export function HeaderRecordingIndicator() {
               )}
             >
               <Mic className="w-4 h-4 text-text-primary" />
-              <span className="text-text-primary">Record</span>
+              <span className="text-text-primary">{t('Record')}</span>
               <ChevronDown
                 className={cn(
                   'w-3.5 h-3.5 text-text-tertiary transition-transform',
@@ -148,7 +149,7 @@ export function HeaderRecordingIndicator() {
                   )}
                 >
                   <h3 className="text-sm font-medium text-text-primary mb-3">
-                    Start Recording
+                    {t('Start Recording')}
                   </h3>
 
                   {/* Audio mode options */}
@@ -188,10 +189,10 @@ export function HeaderRecordingIndicator() {
                               : 'text-text-primary',
                           )}
                         >
-                          Microphone Only
+                          {t('Microphone Only')}
                         </p>
                         <p className="text-xs text-text-tertiary">
-                          Record from your microphone
+                          {t('Record from your microphone')}
                         </p>
                       </div>
                     </button>
@@ -231,10 +232,10 @@ export function HeaderRecordingIndicator() {
                               : 'text-text-primary',
                           )}
                         >
-                          Mic + System Audio
+                          {t('Mic + System Audio')}
                         </p>
                         <p className="text-xs text-text-tertiary">
-                          Record both mic and system audio
+                          {t('Record both mic and system audio')}
                         </p>
                       </div>
                     </button>
@@ -250,7 +251,7 @@ export function HeaderRecordingIndicator() {
                     )}
                   >
                     <Mic className="w-4 h-4" />
-                    <span>Start Recording</span>
+                    <span>{t('Start Recording')}</span>
                   </button>
                 </motion.div>
               )}
@@ -272,7 +273,7 @@ export function HeaderRecordingIndicator() {
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
-            <span className="text-text-secondary">Starting...</span>
+            <span className="text-text-secondary">{t('Starting...')}</span>
           </div>
         )}
 
@@ -341,7 +342,7 @@ export function HeaderRecordingIndicator() {
                         <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
                       )}
                       <span className="text-sm font-medium text-text-primary">
-                        {isRecording ? 'Recording' : 'Paused'}
+                        {isRecording ? t('Recording') : t('Paused')}
                       </span>
                     </div>
                     <span className="text-lg font-mono tabular-nums text-text-primary">
@@ -379,7 +380,7 @@ export function HeaderRecordingIndicator() {
                           'p-2 rounded-lg transition-colors',
                           'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
                         )}
-                        title={isPaused ? 'Resume' : 'Pause'}
+                        title={isPaused ? t('Resume') : t('Pause')}
                       >
                         {isPaused ? (
                           <Play className="w-4 h-4" />
@@ -398,7 +399,7 @@ export function HeaderRecordingIndicator() {
                           'p-2 rounded-lg transition-colors',
                           'bg-error/10 text-error hover:bg-error/20',
                         )}
-                        title="Stop recording"
+                        title={t('Stop recording')}
                       >
                         <Square className="w-4 h-4 fill-current" />
                       </button>
@@ -416,7 +417,7 @@ export function HeaderRecordingIndicator() {
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
-                        title="Pop-out widget"
+                        title={t('Pop-out widget')}
                       >
                         <PanelTop className="w-4 h-4" />
                       </button>
@@ -431,7 +432,7 @@ export function HeaderRecordingIndicator() {
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
-                        title="Pop-out transcript"
+                        title={t('Pop-out transcript')}
                       >
                         <FileText className="w-4 h-4" />
                       </button>
@@ -445,7 +446,7 @@ export function HeaderRecordingIndicator() {
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
-                        title="View full page"
+                        title={t('View full page')}
                       >
                         <ExternalLink className="w-4 h-4" />
                       </Link>

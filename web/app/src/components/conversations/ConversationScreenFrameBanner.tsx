@@ -4,6 +4,7 @@ import Image from '@tschk/moonshine-next/image';
 import { Code2, FileText, Globe, Package, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationScreenFrame } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 /**
  * Presentational-only label/icon union for the source badge. There is no
@@ -39,11 +40,36 @@ const SOURCE_BADGE_META: Record<
   ScreenFrameSourceBadge,
   { label: string; icon: typeof Code2 }
 > = {
-  code: { label: 'Code', icon: Code2 },
-  browser: { label: 'Browser', icon: Globe },
-  document: { label: 'Document', icon: FileText },
-  slides: { label: 'Slides', icon: Presentation },
-  product: { label: 'Product', icon: Package },
+  code: {
+    get label() {
+      return t('Code');
+    },
+    icon: Code2,
+  },
+  browser: {
+    get label() {
+      return t('Browser');
+    },
+    icon: Globe,
+  },
+  document: {
+    get label() {
+      return t('Document');
+    },
+    icon: FileText,
+  },
+  slides: {
+    get label() {
+      return t('Slides');
+    },
+    icon: Presentation,
+  },
+  product: {
+    get label() {
+      return t('Product');
+    },
+    icon: Package,
+  },
 };
 
 /**

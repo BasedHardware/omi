@@ -26,6 +26,7 @@ import type { App } from '@/types/apps';
 import { AppDisabledNotice } from '@/components/apps/AppDisabledNotice';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { PostHogManager } from '@/lib/analytics/posthog';
+import { t, tn } from '@/lib/i18n';
 
 interface AppDetailProps {
   appId: string;
@@ -38,27 +39,37 @@ const CAPABILITY_INFO: Record<
 > = {
   chat: {
     icon: <MessageSquare className="h-4 w-4" />,
-    label: 'Chat',
+    get label() {
+      return t('Chat');
+    },
     color: 'text-blue-400',
   },
   persona: {
     icon: <Brain className="h-4 w-4" />,
-    label: 'Persona',
+    get label() {
+      return t('Persona');
+    },
     color: 'text-text-secondary',
   },
   memories: {
     icon: <Brain className="h-4 w-4" />,
-    label: 'Conversations',
+    get label() {
+      return t('Conversations');
+    },
     color: 'text-green-400',
   },
   external_integration: {
     icon: <ExternalLink className="h-4 w-4" />,
-    label: 'External Integration',
+    get label() {
+      return t('External Integration');
+    },
     color: 'text-orange-400',
   },
   proactive_notification: {
     icon: <Zap className="h-4 w-4" />,
-    label: 'Proactive Notifications',
+    get label() {
+      return t('Proactive Notifications');
+    },
     color: 'text-yellow-400',
   },
 };
@@ -132,7 +143,7 @@ export function AppDetail({ appId }: AppDetailProps) {
       });
     } catch (err) {
       setReEnableError(
-        err instanceof Error ? err.message : 'Failed to re-enable this app',
+        err instanceof Error ? err.message : t('Failed to re-enable this app'),
       );
     } finally {
       setIsReEnabling(false);
@@ -193,12 +204,12 @@ export function AppDetail({ appId }: AppDetailProps) {
   if (error || !app) {
     return (
       <div className="py-12 text-center">
-        <p className="text-text-tertiary">{error || 'App not found'}</p>
+        <p className="text-text-tertiary">{error || t('App not found')}</p>
         <Link
           href="/connectors"
           className="mt-2 inline-block text-text-primary hover:underline"
         >
-          Back to Apps
+          {t('Back to Apps')}
         </Link>
       </div>
     );
@@ -207,7 +218,7 @@ export function AppDetail({ appId }: AppDetailProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Page Header */}
-      <PageHeader title="App Details" icon={LayoutGrid} showBackButton />
+      <PageHeader title={t('App Details')} icon={LayoutGrid} showBackButton />
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
@@ -246,7 +257,9 @@ export function AppDetail({ appId }: AppDetailProps) {
                 {app.name}
                 {app.private && <Lock className="h-5 w-5 text-text-quaternary" />}
               </h1>
-              <p className="mt-1 text-text-secondary">{app.author || 'Unknown author'}</p>
+              <p className="mt-1 text-text-secondary">
+                {app.author || t('Unknown author')}
+              </p>
 
               {/* Stats */}
               <div className="mt-3 flex items-center justify-center gap-4 text-sm text-text-tertiary sm:justify-start">
@@ -254,12 +267,20 @@ export function AppDetail({ appId }: AppDetailProps) {
                   <span className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     {app.rating_avg.toFixed(1)}
-                    {app.rating_count ? ` (${app.rating_count} reviews)` : ''}
+                    {app.rating_count
+                      ? ` ${tn(
+                          app.rating_count,
+                          '({count} review)',
+                          '({count} reviews)',
+                        )}`
+                      : ''}
                   </span>
                 )}
                 <span className="flex items-center gap-1">
                   <Download className="h-4 w-4" />
-                  {formatInstalls(app.installs)} installs
+                  {tn(app.installs ?? 0, '{count} install', '{count} installs', {
+                    count: formatInstalls(app.installs),
+                  })}
                 </span>
               </div>
 
@@ -272,7 +293,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                   }
                   title={
                     app.disabled && !app.enabled
-                      ? 'This app is disabled and cannot be installed'
+                      ? t('This app is disabled and cannot be installed')
                       : undefined
                   }
                   className={cn(
@@ -287,11 +308,11 @@ export function AppDetail({ appId }: AppDetailProps) {
                   {isToggling ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : app.enabled ? (
-                    <>Uninstall</>
+                    <>{t('Uninstall')}</>
                   ) : (
                     <>
                       <Download className="h-5 w-5" />
-                      Install
+                      {t('Install')}
                     </>
                   )}
                 </button>
@@ -319,7 +340,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                     )}
                   >
                     <Pencil className="h-4 w-4" />
-                    Edit
+                    {t('Edit')}
                   </button>
                 )}
 
@@ -336,7 +357,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                     )}
                   >
                     <ExternalLink className="h-4 w-4" />
-                    Open App
+                    {t('Open App')}
                   </a>
                 )}
               </div>
@@ -346,13 +367,13 @@ export function AppDetail({ appId }: AppDetailProps) {
           {/* Content sections */}
           <div className="space-y-8">
             {/* About */}
-            <Section title="About">
+            <Section title={t('About')}>
               <p className="whitespace-pre-wrap text-text-secondary">{app.description}</p>
             </Section>
 
             {/* Thumbnails */}
             {app.thumbnail_urls && app.thumbnail_urls.length > 0 && (
-              <Section title="Preview">
+              <Section title={t('Preview')}>
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {app.thumbnail_urls.map((url, index) => (
                     <div
@@ -361,7 +382,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                     >
                       <Image
                         src={url}
-                        alt={`Preview ${index + 1}`}
+                        alt={t('Preview {value}', { value: index + 1 })}
                         width={192}
                         height={128}
                         className="h-full w-full object-cover"
@@ -374,7 +395,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* Capabilities */}
             {app.capabilities && app.capabilities.length > 0 && (
-              <Section title="Capabilities">
+              <Section title={t('Capabilities')}>
                 <div className="flex flex-wrap gap-2">
                   {app.capabilities.map((cap) => {
                     const info = CAPABILITY_INFO[cap] || {
@@ -404,7 +425,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* Chat prompt */}
             {app.chat_prompt && (
-              <Section title="Chat Personality">
+              <Section title={t('Chat Personality')}>
                 <div className="rounded-lg bg-bg-tertiary p-4">
                   <p className="whitespace-pre-wrap text-sm text-text-secondary">
                     {app.chat_prompt}
@@ -415,7 +436,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* Memory prompt */}
             {app.memory_prompt && (
-              <Section title="Summary Prompt">
+              <Section title={t('Summary Prompt')}>
                 <div className="rounded-lg bg-bg-tertiary p-4">
                   <p className="whitespace-pre-wrap text-sm text-text-secondary">
                     {app.memory_prompt}
@@ -426,14 +447,16 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* External integration info */}
             {app.external_integration && (
-              <Section title="Integration">
+              <Section title={t('Integration')}>
                 <div className="space-y-3">
                   {app.external_integration.triggers_on && (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-text-tertiary">Triggers on:</span>
+                      <span className="text-sm text-text-tertiary">
+                        {t('Triggers on:')}
+                      </span>
                       <span className="text-sm text-text-secondary">
                         {app.external_integration.triggers_on === 'memory_creation'
-                          ? 'Conversation Creation'
+                          ? t('Conversation Creation')
                           : app.external_integration.triggers_on}
                       </span>
                     </div>
@@ -441,7 +464,9 @@ export function AppDetail({ appId }: AppDetailProps) {
                   {app.external_integration.auth_steps &&
                     app.external_integration.auth_steps.length > 0 && (
                       <div>
-                        <p className="mb-2 text-sm text-text-tertiary">Setup Steps:</p>
+                        <p className="mb-2 text-sm text-text-tertiary">
+                          {t('Setup Steps:')}
+                        </p>
                         <div className="space-y-2">
                           {app.external_integration.auth_steps.map((step, index) => (
                             <a
@@ -471,7 +496,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* Reviews */}
             {app.reviews && app.reviews.length > 0 && (
-              <Section title={`Reviews (${app.reviews.length})`}>
+              <Section title={t('Reviews ({length})', { length: app.reviews.length })}>
                 <div className="space-y-4">
                   {app.reviews.slice(0, 5).map((review, index) => (
                     <div
@@ -493,7 +518,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                           ))}
                         </div>
                         <span className="text-sm text-text-tertiary">
-                          {review.username || 'Anonymous'}
+                          {review.username || t('Anonymous')}
                         </span>
                       </div>
                       {review.review && (
@@ -502,7 +527,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                       {review.response && (
                         <div className="mt-2 border-l-2 border-white/30 pl-4">
                           <p className="mb-1 text-xs text-text-tertiary">
-                            Developer response:
+                            {t('Developer response:')}
                           </p>
                           <p className="text-sm text-text-secondary">{review.response}</p>
                         </div>
@@ -515,7 +540,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* Pricing */}
             {app.is_paid && app.price !== undefined && (
-              <Section title="Pricing">
+              <Section title={t('Pricing')}>
                 <div className="rounded-lg bg-bg-tertiary p-4">
                   <p className="text-lg font-medium text-text-primary">
                     ${(app.price / 100).toFixed(2)}
@@ -524,7 +549,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                   {app.is_user_paid && (
                     <p className="mt-1 flex items-center gap-1 text-sm text-green-400">
                       <Check className="h-4 w-4" />
-                      Subscribed
+                      {t('Subscribed')}
                     </p>
                   )}
                 </div>

@@ -1,3 +1,5 @@
+import { t, tn, formatLocale } from '@/lib/i18n';
+
 export interface TaskDueStatus {
   text: string;
   isOverdue: boolean;
@@ -26,23 +28,31 @@ export function formatDueStatus(dueAt: string, now: Date = new Date()): TaskDueS
   if (diffDays < 0) {
     const daysLate = Math.abs(diffDays);
     return {
-      text: daysLate === 1 ? '1 day late' : `${daysLate} days late`,
+      text: tn(daysLate, '{count} day late', '{count} days late'),
       isOverdue: true,
       isToday: false,
     };
   } else if (diffDays === 0) {
-    return { text: 'Due today', isOverdue: false, isToday: true };
+    return { text: t('Due today'), isOverdue: false, isToday: true };
   } else if (diffDays === 1) {
-    return { text: 'Due tomorrow', isOverdue: false, isToday: false };
+    return { text: t('Due tomorrow'), isOverdue: false, isToday: false };
   } else if (diffDays <= 7) {
     return {
-      text: `Due ${due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+      text: t('Due {date}', {
+        date: due.toLocaleDateString(formatLocale(), {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        }),
+      }),
       isOverdue: false,
       isToday: false,
     };
   } else {
     return {
-      text: `Due ${due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      text: t('Due {date}', {
+        date: due.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric' }),
+      }),
       isOverdue: false,
       isToday: false,
     };
@@ -60,19 +70,19 @@ export function formatDueBadge(
   const due = new Date(dueAt);
 
   if (diffDays < 0) {
-    return { text: `${Math.abs(diffDays)}d late`, isOverdue: true };
+    return { text: t('{count}d late', { count: Math.abs(diffDays) }), isOverdue: true };
   } else if (diffDays === 0) {
-    return { text: 'Today', isOverdue: false };
+    return { text: t('Today'), isOverdue: false };
   } else if (diffDays === 1) {
-    return { text: 'Tomorrow', isOverdue: false };
+    return { text: t('Tomorrow'), isOverdue: false };
   } else if (diffDays <= 7) {
     return {
-      text: due.toLocaleDateString('en-US', { weekday: 'short' }),
+      text: due.toLocaleDateString(formatLocale(), { weekday: 'short' }),
       isOverdue: false,
     };
   } else {
     return {
-      text: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      text: due.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric' }),
       isOverdue: false,
     };
   }

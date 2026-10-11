@@ -5,6 +5,7 @@ import { getGoalAdvice, getGoalHistory } from '@/lib/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
 import { useRequestOwner } from '@/hooks/useRequestOwner';
 import type { GoalHistoryEntry } from '@/types/goals';
+import { t } from '@/lib/i18n';
 
 export interface UseGoalDetailReturn {
   history: GoalHistoryEntry[];
@@ -29,7 +30,7 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
   const history = useAsyncResource(
     goalId,
     useCallback(() => getGoalHistory(goalId as string), [goalId]),
-    { fallbackMessage: 'Failed to load history' },
+    { fallbackMessage: t('Failed to load history') },
   );
 
   const [advice, setAdvice] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to load goal advice:', err);
-      setAdviceError(err instanceof Error ? err.message : 'Failed to load advice');
+      setAdviceError(err instanceof Error ? err.message : t('Failed to load advice'));
     } finally {
       if (isCurrent()) setAdviceLoading(false);
     }

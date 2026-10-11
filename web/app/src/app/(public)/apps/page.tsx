@@ -6,6 +6,7 @@ import AppList from '@/components/marketplace/AppList';
 import { PromoCard } from '@/components/marketplace/PromoCard';
 import { CollectionPageJsonLd } from '@/components/seo/JsonLd';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t } from '@/lib/i18n';
 
 export default function AppsMarketplacePage() {
   const [plugins, setPlugins] = useState<ReturnType<typeof transformToPlugin>[]>([]);
@@ -45,7 +46,9 @@ export default function AppsMarketplacePage() {
     <div className="min-h-screen bg-[#0B0F17]">
       <CollectionPageJsonLd
         name="Omi App Store"
-        description="Explore and install AI-powered apps for Omi. Enhance your experience with productivity tools, conversation insights, and more."
+        description={t(
+          'Explore and install AI-powered apps for Omi. Enhance your experience with productivity tools, conversation insights, and more.',
+        )}
         url="/apps"
       />
       <AppList initialPlugins={plugins} initialStats={[]} />

@@ -26,6 +26,7 @@ import type {
 } from '@/types/apps';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LayoutGrid } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 // Icons
 function ImageIcon({ className }: { className?: string }) {
@@ -514,7 +515,7 @@ export function AppForm({ mode, app }: AppFormProps) {
     <div className="flex flex-col h-full">
       {/* Page Header */}
       <PageHeader
-        title={mode === 'create' ? 'Create App' : 'Edit App'}
+        title={mode === 'create' ? t('Create App') : t('Edit App')}
         icon={LayoutGrid}
         showBackButton
       />
@@ -535,7 +536,7 @@ export function AppForm({ mode, app }: AppFormProps) {
               )}
             >
               <TrashIcon className="w-4 h-4" />
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              {isDeleting ? t('Deleting...') : t('Delete')}
             </button>
           )}
           <button
@@ -550,10 +551,10 @@ export function AppForm({ mode, app }: AppFormProps) {
             )}
           >
             {isSubmitting
-              ? 'Saving...'
+              ? t('Saving...')
               : mode === 'create'
-                ? 'Create App'
-                : 'Save Changes'}
+                ? t('Create App')
+                : t('Save Changes')}
           </button>
         </div>
       </div>
@@ -569,11 +570,11 @@ export function AppForm({ mode, app }: AppFormProps) {
 
           {/* Metadata Section */}
           <section className={cn(sectionCardClass, 'space-y-5')}>
-            <h2 className="text-lg font-medium text-text-primary">Basic Info</h2>
+            <h2 className="text-lg font-medium text-text-primary">{t('Basic Info')}</h2>
 
             {/* Logo */}
             <div>
-              <label className="block text-sm text-text-secondary mb-2">App Logo *</label>
+              <label className="block text-sm text-text-secondary mb-2">{t('App Logo *')}</label>
               <div className="flex items-center gap-4">
                 <button
                   type="button"
@@ -587,7 +588,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                   {logoPreview ? (
                     <Image
                       src={logoPreview}
-                      alt="App logo"
+                      alt={t('App logo')}
                       width={80}
                       height={80}
                       className="rounded-2xl object-cover"
@@ -604,19 +605,19 @@ export function AppForm({ mode, app }: AppFormProps) {
                   className="hidden"
                 />
                 <span className="text-sm text-text-tertiary">
-                  Click to upload logo image
+                  {t('Click to upload logo image')}
                 </span>
               </div>
             </div>
 
             {/* Name */}
             <div>
-              <label className="block text-sm text-text-secondary mb-2">App Name *</label>
+              <label className="block text-sm text-text-secondary mb-2">{t('App Name *')}</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Awesome App"
+                placeholder={t('My Awesome App')}
                 className={inputClass}
               />
             </div>
@@ -624,7 +625,7 @@ export function AppForm({ mode, app }: AppFormProps) {
             {/* Description */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm text-text-secondary">Description *</label>
+                <label className="text-sm text-text-secondary">{t('Description *')}</label>
                 <button
                   type="button"
                   onClick={handleGenerateDescription}
@@ -637,13 +638,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                   )}
                 >
                   <SparklesIcon className="w-4 h-4" />
-                  {isGeneratingDescription ? 'Generating...' : 'Generate with AI'}
+                  {isGeneratingDescription ? t('Generating...') : t('Generate with AI')}
                 </button>
               </div>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe what your app does..."
+                placeholder={t('Describe what your app does...')}
                 rows={4}
                 className={textareaClass}
               />
@@ -651,7 +652,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
             {/* Category */}
             <div>
-              <label className="block text-sm text-text-secondary mb-2">Category *</label>
+              <label className="block text-sm text-text-secondary mb-2">{t('Category *')}</label>
               <div className="relative" ref={categoryDropdownRef}>
                 <button
                   type="button"
@@ -667,8 +668,8 @@ export function AppForm({ mode, app }: AppFormProps) {
                 >
                   {category
                     ? categories.find((c) => c.id === category)?.title ||
-                      'Select a category'
-                    : 'Select a category'}
+                      t('Select a category')
+                    : t('Select a category')}
                 </button>
                 <ChevronDownIcon
                   className={cn(
@@ -725,7 +726,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
           {/* Screenshots Section */}
           <section className={cn(sectionCardClass, 'space-y-4')}>
-            <h2 className="text-lg font-medium text-text-primary">Screenshots</h2>
+            <h2 className="text-lg font-medium text-text-primary">{t('Screenshots')}</h2>
             <div className="flex gap-3 overflow-x-auto pb-2">
               {thumbnails.map((thumb, index) => (
                 <div
@@ -734,7 +735,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 >
                   <Image
                     src={thumb.url}
-                    alt="Screenshot"
+                    alt={t('Screenshot')}
                     width={120}
                     height={180}
                     className="rounded-xl object-cover"
@@ -778,10 +779,9 @@ export function AppForm({ mode, app }: AppFormProps) {
 
           {/* Capabilities Section */}
           <section className={cn(sectionCardClass, 'space-y-4')}>
-            <h2 className="text-lg font-medium text-text-primary">Capabilities *</h2>
+            <h2 className="text-lg font-medium text-text-primary">{t('Capabilities *')}</h2>
             <p className="text-sm text-text-tertiary">
-              Select what your app can do. Persona is exclusive and cannot be combined
-              with other capabilities.
+              {t('Select what your app can do. Persona is exclusive and cannot be combined with other capabilities.')}
             </p>
             <div className="grid grid-cols-2 gap-3">
               {capabilities.map((cap) => {
@@ -840,11 +840,11 @@ export function AppForm({ mode, app }: AppFormProps) {
           {/* Chat Prompt Section */}
           {hasChat && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
-              <h2 className="text-lg font-medium text-text-primary">Chat Prompt *</h2>
+              <h2 className="text-lg font-medium text-text-primary">{t('Chat Prompt *')}</h2>
               <textarea
                 value={chatPrompt}
                 onChange={(e) => setChatPrompt(e.target.value)}
-                placeholder="You are an awesome app, your job is to respond to the user queries..."
+                placeholder={t('You are an awesome app, your job is to respond to the user queries...')}
                 rows={4}
                 className={textareaClass}
               />
@@ -854,11 +854,11 @@ export function AppForm({ mode, app }: AppFormProps) {
           {/* Memory Prompt Section */}
           {hasMemories && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
-              <h2 className="text-lg font-medium text-text-primary">Memory Prompt *</h2>
+              <h2 className="text-lg font-medium text-text-primary">{t('Memory Prompt *')}</h2>
               <textarea
                 value={memoryPrompt}
                 onChange={(e) => setMemoryPrompt(e.target.value)}
-                placeholder="You are an awesome app, you will be given transcript and summary..."
+                placeholder={t('You are an awesome app, you will be given transcript and summary...')}
                 rows={4}
                 className={textareaClass}
               />
@@ -868,11 +868,11 @@ export function AppForm({ mode, app }: AppFormProps) {
           {/* Persona Prompt Section */}
           {hasPersona && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
-              <h2 className="text-lg font-medium text-text-primary">Persona Prompt</h2>
+              <h2 className="text-lg font-medium text-text-primary">{t('Persona Prompt')}</h2>
               <textarea
                 value={personaPrompt}
                 onChange={(e) => setPersonaPrompt(e.target.value)}
-                placeholder="Define the personality and behavior of your persona..."
+                placeholder={t('Define the personality and behavior of your persona...')}
                 rows={4}
                 className={textareaClass}
               />
@@ -883,13 +883,13 @@ export function AppForm({ mode, app }: AppFormProps) {
           {hasExternalIntegration && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
               <h2 className="text-lg font-medium text-text-primary">
-                External Integration
+                {t('External Integration')}
               </h2>
 
               {/* Trigger Event */}
               <div>
                 <label className="block text-sm text-text-secondary mb-2">
-                  Trigger Event
+                  {t('Trigger Event')}
                 </label>
                 <div className="relative">
                   <select
@@ -902,12 +902,12 @@ export function AppForm({ mode, app }: AppFormProps) {
                       'focus:outline-none focus:ring-2 focus:ring-white/50',
                     )}
                   >
-                    <option value="">Select a trigger</option>
-                    <option value="memory_creation">Memory Creation</option>
+                    <option value="">{t('Select a trigger')}</option>
+                    <option value="memory_creation">{t('Memory Creation')}</option>
                     <option value="transcript_processed">
-                      Transcript Segment Processed
+                      {t('Transcript Segment Processed')}
                     </option>
-                    <option value="audio_bytes">Audio Bytes Streamed</option>
+                    <option value="audio_bytes">{t('Audio Bytes Streamed')}</option>
                   </select>
                   <ChevronDownIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
                 </div>
@@ -916,7 +916,7 @@ export function AppForm({ mode, app }: AppFormProps) {
               {/* Webhook URL */}
               <div>
                 <label className="block text-sm text-text-secondary mb-2">
-                  Webhook URL *
+                  {t('Webhook URL *')}
                 </label>
                 <input
                   type="url"
@@ -930,7 +930,7 @@ export function AppForm({ mode, app }: AppFormProps) {
               {/* Setup Completed URL */}
               <div>
                 <label className="block text-sm text-text-secondary mb-2">
-                  Setup Completed URL
+                  {t('Setup Completed URL')}
                 </label>
                 <input
                   type="url"
@@ -944,7 +944,7 @@ export function AppForm({ mode, app }: AppFormProps) {
               {/* App Home URL */}
               <div>
                 <label className="block text-sm text-text-secondary mb-2">
-                  App Home URL
+                  {t('App Home URL')}
                 </label>
                 <input
                   type="url"
@@ -961,7 +961,7 @@ export function AppForm({ mode, app }: AppFormProps) {
           {hasProactiveNotification && notificationScopes.length > 0 && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
               <h2 className="text-lg font-medium text-text-primary">
-                Notification Scopes *
+                {t('Notification Scopes *')}
               </h2>
               <div className="grid grid-cols-2 gap-3">
                 {notificationScopes.map((scope) => {
@@ -1028,11 +1028,10 @@ export function AppForm({ mode, app }: AppFormProps) {
           {(hasExternalIntegration || hasProactiveNotification) && (
             <section className={cn(sectionCardClass, 'space-y-4')}>
               <h2 className="text-lg font-medium text-text-primary">
-                GitHub Repository *
+                {t('GitHub Repository *')}
               </h2>
               <p className="text-sm text-text-tertiary">
-                Link to your app&apos;s source code repository. Required for external
-                integration and notification apps.
+                {t('Link to your app\'s source code repository. Required for external integration and notification apps.')}
               </p>
               <input
                 type="url"
@@ -1046,7 +1045,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
           {/* Privacy & Payment Section */}
           <section className={cn(sectionCardClass, 'space-y-4')}>
-            <h2 className="text-lg font-medium text-text-primary">Settings</h2>
+            <h2 className="text-lg font-medium text-text-primary">{t('Settings')}</h2>
 
             {/* Privacy Toggle */}
             <div
@@ -1056,11 +1055,11 @@ export function AppForm({ mode, app }: AppFormProps) {
               )}
             >
               <div>
-                <p className="text-text-primary font-medium">Make Public</p>
+                <p className="text-text-primary font-medium">{t('Make Public')}</p>
                 <p className="text-sm text-text-tertiary">
                   {isPrivate
-                    ? 'Only you can use this app'
-                    : 'Anyone can discover your app'}
+                    ? t('Only you can use this app')
+                    : t('Anyone can discover your app')}
                 </p>
               </div>
               <button
@@ -1091,9 +1090,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                   )}
                 >
                   <div>
-                    <p className="text-text-primary font-medium">Paid App</p>
+                    <p className="text-text-primary font-medium">{t('Paid App')}</p>
                     <p className="text-sm text-text-tertiary">
-                      Charge users for your app
+                      {t('Charge users for your app')}
                     </p>
                   </div>
                   <button
@@ -1119,7 +1118,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                     {/* Price */}
                     <div>
                       <label className="block text-sm text-text-secondary mb-2">
-                        Price (USD) *
+                        {t('Price (USD) *')}
                       </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary">
@@ -1145,7 +1144,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                     {/* Payment Plan */}
                     <div>
                       <label className="block text-sm text-text-secondary mb-2">
-                        Payment Plan *
+                        {t('Payment Plan *')}
                       </label>
                       <div className="flex gap-2">
                         {paymentPlans.map((plan) => {

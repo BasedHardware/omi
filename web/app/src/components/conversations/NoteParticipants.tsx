@@ -8,6 +8,7 @@ import {
   sortNoteParticipants,
   type NoteParticipantLike,
 } from '@/lib/meetingNotes';
+import { t } from '@/lib/i18n';
 
 const AVATAR_TONES = [
   'bg-blue-500/15 text-blue-300',
@@ -27,7 +28,7 @@ export function NoteParticipants({ participants }: NoteParticipantsProps) {
   if (sorted.length === 0) return null;
 
   return (
-    <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Participants">
+    <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={t('Participants')}>
       {sorted.map((participant, index) => {
         const name = noteParticipantName(participant);
         const role = typeof participant.role === 'string' ? participant.role.trim() : '';
@@ -51,7 +52,7 @@ export function NoteParticipants({ participants }: NoteParticipantsProps) {
                 {name}
                 {participant.is_ai_agent ? (
                   <span className="rounded border border-bg-quaternary px-1 text-[9px] font-semibold leading-4 text-text-tertiary">
-                    AI
+                    {t('AI')}
                   </span>
                 ) : null}
               </span>

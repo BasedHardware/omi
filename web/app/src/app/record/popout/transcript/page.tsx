@@ -16,6 +16,7 @@ import type {
   TranscriptSegment,
 } from '@/components/recording/RecordingContext';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t, tn } from '@/lib/i18n';
 
 // Extended message type for start command
 type ExtendedBroadcastMessage =
@@ -207,7 +208,7 @@ export default function TranscriptPopoutPage() {
             {/* Audio mode badge */}
             {isActive && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-bg-tertiary text-text-tertiary">
-                {audioMode === 'mic-only' ? 'Mic' : 'Mic + System'}
+                {audioMode === 'mic-only' ? t('Mic') : t('Mic + System')}
               </span>
             )}
           </div>
@@ -218,7 +219,7 @@ export default function TranscriptPopoutPage() {
               <button
                 onClick={handleStart}
                 className="p-2 rounded-lg bg-text-primary hover:bg-text-primary/90 text-bg-primary transition-colors"
-                title="Start Recording"
+                title={t('Start Recording')}
               >
                 <Play className="w-4 h-4" />
               </button>
@@ -244,7 +245,7 @@ export default function TranscriptPopoutPage() {
                       ? 'bg-text-primary hover:bg-text-primary/90 text-bg-primary'
                       : 'bg-bg-tertiary hover:bg-bg-secondary text-text-primary',
                   )}
-                  title={isPaused ? 'Resume' : 'Pause'}
+                  title={isPaused ? t('Resume') : t('Pause')}
                 >
                   {isPaused ? (
                     <Play className="w-4 h-4" />
@@ -256,7 +257,7 @@ export default function TranscriptPopoutPage() {
                 <button
                   onClick={handleStop}
                   className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
-                  title="Stop"
+                  title={t('Stop')}
                 >
                   <Square className="w-4 h-4" />
                 </button>
@@ -290,17 +291,17 @@ export default function TranscriptPopoutPage() {
             </div>
             <p className="text-sm text-text-tertiary">
               {isActive
-                ? 'Listening for speech...'
+                ? t('Listening for speech...')
                 : isInitializing
-                  ? 'Starting...'
-                  : 'No active recording'}
+                  ? t('Starting...')
+                  : t('No active recording')}
             </p>
             {isIdle && (
               <button
                 onClick={handleStart}
                 className="mt-4 px-4 py-2 rounded-lg bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-medium transition-colors"
               >
-                Start Recording
+                {t('Start Recording')}
               </button>
             )}
           </div>
@@ -350,7 +351,7 @@ export default function TranscriptPopoutPage() {
       {/* Footer with segment count */}
       <footer className="flex-shrink-0 border-t border-white/[0.04] px-4 py-2 bg-bg-secondary">
         <p className="text-xs text-text-quaternary text-center">
-          {segments.length} segment{segments.length !== 1 ? 's' : ''}
+          {tn(segments.length, '{count} segment', '{count} segments')}
         </p>
       </footer>
     </div>

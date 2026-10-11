@@ -7,6 +7,7 @@ import { useReducedMotion } from 'framer-motion';
 import { useChat } from './ChatContext';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 const fabClass =
   'flex h-14 w-14 items-center justify-center rounded-full bg-transparent text-bg-primary';
@@ -26,7 +27,7 @@ function ChatIconButton({
       type="button"
       onClick={onClick}
       className={cn(fabClass, 'pointer-events-auto')}
-      aria-label={isOpen ? 'Close chat' : 'Open chat'}
+      aria-label={isOpen ? t('Close chat') : t('Open chat')}
     >
       <span className="t-icon-swap" data-state={isOpen ? 'b' : 'a'}>
         <span className="t-icon" data-icon="a">
@@ -67,7 +68,7 @@ function NotificationIconButton({
         variant === 'plain' &&
           'bg-text-primary shadow-lg shadow-black/40 hover:bg-text-primary/80',
       )}
-      aria-label="Notifications"
+      aria-label={t('Notifications')}
       aria-hidden={!available}
       inert={!available}
       tabIndex={available ? 0 : -1}

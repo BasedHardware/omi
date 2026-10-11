@@ -88,6 +88,14 @@ import type {
   PricingOption,
 } from '@/types/user';
 import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
+import {
+  readUiLanguagePreference,
+  setUiLanguagePreference,
+  t,
+  UI_LANGUAGES,
+  type UiLanguagePreference,
+  formatLocale,
+} from '@/lib/i18n';
 
 // ============================================================================
 // Types
@@ -227,7 +235,7 @@ function HourPicker({
       value={value.toString()}
       options={hours}
       onChange={(v) => onChange(parseInt(v))}
-      placeholder="Select time"
+      placeholder={t('Select time')}
     />
   );
 }
@@ -287,7 +295,7 @@ function ConfirmDialog({
               'disabled:opacity-50',
             )}
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -337,6 +345,9 @@ function ProfileSection({
   onDailySummaryHourChange: (hour: number) => void;
 }) {
   const [copiedUserId, setCopiedUserId] = useState(false);
+  const [uiLanguagePreference, setUiLanguagePreferenceState] = useState(
+    readUiLanguagePreference,
+  );
   const [newWord, setNewWord] = useState('');
 
   const handleCopy = () => {
@@ -364,7 +375,7 @@ function ProfileSection({
       {/* Account Info */}
       <div id="account-info" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Account
+          {t('Account')}
         </h3>
         <Card>
           <div className="flex items-center gap-5">
@@ -372,7 +383,7 @@ function ProfileSection({
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
-                  alt={user.displayName || 'User'}
+                  alt={user.displayName || t('User')}
                   width={80}
                   height={80}
                   className="h-full w-full object-cover"
@@ -385,7 +396,7 @@ function ProfileSection({
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-lg font-semibold text-text-primary">
-                {user?.displayName || 'User'}
+                {user?.displayName || t('User')}
               </h3>
               <p className="truncate text-text-tertiary">{user?.email}</p>
             </div>
@@ -393,7 +404,7 @@ function ProfileSection({
         </Card>
 
         <Card>
-          <SettingRow label="User ID" description="Your unique identifier">
+          <SettingRow label={t('User ID')} description={t('Your unique identifier')}>
             <div className="flex items-center gap-2">
               <code className="rounded-lg bg-bg-tertiary px-3 py-1.5 font-mono text-sm text-text-tertiary">
                 {user?.uid?.slice(0, 8)}...{user?.uid?.slice(-4)}
@@ -421,17 +432,35 @@ function ProfileSection({
       {/* Language & Transcription */}
       <div id="language" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Language & Transcription
+          {t('Language & Transcription')}
         </h3>
         <Card>
           <SettingRow
-            label="Primary Language"
-            description="Default language for transcription"
+            label={t('Primary Language')}
+            description={t('Default language for transcription')}
           >
             <Dropdown
               value={language}
               options={languageOptions}
               onChange={onLanguageChange}
+            />
+          </SettingRow>
+          <SettingRow
+            label={t('App language')}
+            description={t(
+              'The language of menus and buttons. Transcription language is set separately.',
+            )}
+          >
+            <Dropdown
+              value={uiLanguagePreference}
+              options={UI_LANGUAGES.map((l) => ({
+                value: l.code,
+                label: l.code === 'system' ? t('System default') : l.label,
+              }))}
+              onChange={(value) => {
+                setUiLanguagePreferenceState(value as UiLanguagePreference);
+                setUiLanguagePreference(value as UiLanguagePreference);
+              }}
             />
           </SettingRow>
         </Card>
@@ -440,12 +469,12 @@ function ProfileSection({
       {/* Custom Vocabulary */}
       <div id="vocabulary" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Custom Vocabulary
+          {t('Custom Vocabulary')}
         </h3>
         <Card>
           <div className="space-y-4">
             <p className="text-sm text-text-tertiary">
-              Add words or phrases to improve transcription accuracy
+              {t('Add words or phrases to improve transcription accuracy')}
             </p>
 
             <div className="flex gap-2">
@@ -454,7 +483,7 @@ function ProfileSection({
                 value={newWord}
                 onChange={(e) => setNewWord(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddWord()}
-                placeholder="Enter a word or phrase"
+                placeholder={t('Enter a word or phrase')}
                 className={cn(
                   'flex-1 rounded-xl px-4 py-2.5',
                   'border border-white/[0.06] bg-bg-tertiary',
@@ -497,12 +526,12 @@ function ProfileSection({
 
             {vocabulary !== null && words.length === 0 && (
               <p className="py-4 text-center text-sm text-text-quaternary">
-                No custom vocabulary added yet
+                {t('No custom vocabulary added yet')}
               </p>
             )}
             {vocabulary === null && (
               <p className="py-4 text-center text-sm text-text-quaternary">
-                Could not load your vocabulary
+                {t('Could not load your vocabulary')}
               </p>
             )}
           </div>
@@ -512,29 +541,29 @@ function ProfileSection({
       {/* Notifications */}
       <div id="notifications" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Notifications
+          {t('Notifications')}
         </h3>
         <Card>
           <SettingRow
-            label="Daily Summary"
+            label={t('Daily Summary')}
             description={
               dailySummary === null
-                ? 'Could not load your daily summary settings'
-                : 'Receive a daily digest of your action items'
+                ? t('Could not load your daily summary settings')
+                : t('Receive a daily digest of your action items')
             }
           >
             <Toggle
               enabled={dailySummary?.enabled ?? false}
               onChange={onDailySummaryToggle}
               disabled={dailySummary === null}
-              label="Daily Summary"
+              label={t('Daily Summary')}
             />
           </SettingRow>
 
           {dailySummary?.enabled && (
             <SettingRow
-              label="Delivery Time"
-              description="When to receive your daily summary"
+              label={t('Delivery Time')}
+              description={t('When to receive your daily summary')}
             >
               <HourPicker value={dailySummary.hour} onChange={onDailySummaryHourChange} />
             </SettingRow>
@@ -564,25 +593,25 @@ function PrivacySection({
     <div className="space-y-6">
       <Card>
         <SettingRow
-          label="Store Recordings"
-          description="Allow storing audio recordings for improved accuracy"
+          label={t('Store Recordings')}
+          description={t('Allow storing audio recordings for improved accuracy')}
         >
           <Toggle
             enabled={recordingPermission}
             onChange={onRecordingChange}
-            label="Store Recordings"
+            label={t('Store Recordings')}
           />
         </SettingRow>
 
         <SettingRow
-          label="Training Data"
-          description="Help improve Omi by contributing anonymous usage data"
+          label={t('Training Data')}
+          description={t('Help improve Omi by contributing anonymous usage data')}
         >
           <Toggle
             enabled={trainingDataOptIn}
             onChange={onTrainingDataChange}
             disabled={trainingDataOptIn}
-            label="Training Data"
+            label={t('Training Data')}
           />
         </SettingRow>
       </Card>
@@ -593,10 +622,11 @@ function PrivacySection({
             <Shield className="h-5 w-5 text-text-secondary" />
           </div>
           <div>
-            <h3 className="font-medium text-text-primary">Your Privacy Matters</h3>
+            <h3 className="font-medium text-text-primary">{t('Your Privacy Matters')}</h3>
             <p className="mt-1 text-sm text-text-tertiary">
-              Your data is encrypted and never shared with third parties. You have full
-              control over what data is collected and stored.
+              {t(
+                'Your data is encrypted and never shared with third parties. You have full control over what data is collected and stored.',
+              )}
             </p>
             <a
               href="https://omi.me/privacy"
@@ -604,7 +634,7 @@ function PrivacySection({
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-sm text-text-secondary hover:underline"
             >
-              Learn more about our privacy policy
+              {t('Learn more about our privacy policy')}
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -641,7 +671,7 @@ function UsageChart({
   if (!history || history.length === 0) {
     return (
       <Card className="flex h-48 items-center justify-center">
-        <p className="text-text-quaternary">No activity data available</p>
+        <p className="text-text-quaternary">{t('No activity data available')}</p>
       </Card>
     );
   }
@@ -753,10 +783,10 @@ function UsageChart({
   const maxValue = Math.max(...processedData.map((d) => getValue(d)), 1);
 
   const metricConfig = [
-    { key: 'listening' as const, color: 'rgb(96, 165, 250)', label: 'Listening' },
-    { key: 'words' as const, color: 'rgb(74, 222, 128)', label: 'Words' },
-    { key: 'insights' as const, color: 'rgb(251, 146, 60)', label: 'Insights' },
-    { key: 'memories' as const, color: 'rgb(192, 132, 252)', label: 'Memories' },
+    { key: 'listening' as const, color: 'rgb(96, 165, 250)', label: t('Listening') },
+    { key: 'words' as const, color: 'rgb(74, 222, 128)', label: t('Words') },
+    { key: 'insights' as const, color: 'rgb(251, 146, 60)', label: t('Insights') },
+    { key: 'memories' as const, color: 'rgb(192, 132, 252)', label: t('Memories') },
   ];
 
   const currentMetric = metricConfig.find((m) => m.key === selectedMetric)!;
@@ -765,7 +795,9 @@ function UsageChart({
     <Card>
       {/* Header with metric selector */}
       <div className="mb-4 flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-text-secondary">Activity Over Time</h4>
+        <h4 className="text-sm font-semibold text-text-secondary">
+          {t('Activity Over Time')}
+        </h4>
         <div className="flex gap-1">
           {metricConfig.map((metric) => (
             <button
@@ -840,10 +872,13 @@ function UnknownPlanCard() {
           <AlertTriangle className="h-5 w-5 text-text-secondary" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-text-primary">Plan unavailable</h3>
+          <h3 className="text-lg font-semibold text-text-primary">
+            {t('Plan unavailable')}
+          </h3>
           <p className="mt-1 text-sm text-text-tertiary">
-            This account uses a plan that this version of Omi does not recognize yet. Plan
-            features are unavailable until the plan can be identified.
+            {t(
+              'This account uses a plan that this version of Omi does not recognize yet. Plan features are unavailable until the plan can be identified.',
+            )}
           </p>
         </div>
       </div>
@@ -903,7 +938,7 @@ function UsageSectionContent({
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+    return new Date(timestamp * 1000).toLocaleDateString(formatLocale(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1045,7 +1080,7 @@ function UsageSectionContent({
               : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
           )}
         >
-          Plan
+          {t('Plan')}
         </button>
         <button
           onClick={() => setActiveTab('usage')}
@@ -1056,7 +1091,7 @@ function UsageSectionContent({
               : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
           )}
         >
-          Usage
+          {t('Usage')}
         </button>
       </div>
 
@@ -1079,9 +1114,9 @@ function UsageSectionContent({
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
-                        Basic Plan
+                        {t('Basic Plan')}
                       </h3>
-                      <p className="text-sm text-text-tertiary">Free tier</p>
+                      <p className="text-sm text-text-tertiary">{t('Free tier')}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1089,7 +1124,7 @@ function UsageSectionContent({
                       onClick={() => setShowUpgradeOptions(true)}
                       className="rounded-xl bg-text-primary px-5 py-2.5 text-sm font-semibold text-bg-primary shadow-lg shadow-black/40 transition-all hover:bg-text-primary/90"
                     >
-                      Upgrade to Unlimited
+                      {t('Upgrade to Unlimited')}
                     </button>
                     {subscription?.stripe_subscription_id && (
                       <button
@@ -1097,7 +1132,7 @@ function UsageSectionContent({
                         disabled={isLoading}
                         className="rounded-xl border border-bg-quaternary px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
                       >
-                        Billing &amp; Invoices
+                        {t('Billing & Invoices')}
                       </button>
                     )}
                   </div>
@@ -1108,7 +1143,7 @@ function UsageSectionContent({
                   <div className="mb-3 flex items-center gap-2">
                     <Clock className="h-4 w-4 text-amber-400" />
                     <span className="text-sm font-semibold text-amber-400">
-                      Monthly Listening Limit
+                      {t('Monthly Listening Limit')}
                     </span>
                   </div>
                   <div className="mb-2 flex items-baseline justify-between">
@@ -1117,14 +1152,15 @@ function UsageSectionContent({
                         ? Math.round(monthlyUsage.transcription_seconds / 60)
                         : 0}
                       <span className="ml-1 text-sm font-normal text-text-tertiary">
-                        / 1,200 min
+                        {t('/ 1,200 min')}
                       </span>
                     </span>
                     <span className="text-sm text-text-tertiary">
-                      {monthlyUsage
-                        ? 1200 - Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 1200}{' '}
-                      min left
+                      {t('{count} min left', {
+                        count: monthlyUsage
+                          ? 1200 - Math.round(monthlyUsage.transcription_seconds / 60)
+                          : 1200,
+                      })}
                     </span>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-bg-quaternary">
@@ -1147,7 +1183,7 @@ function UsageSectionContent({
                 {/* What's Included - Checklist */}
                 <div>
                   <h4 className="mb-3 text-sm font-semibold text-text-secondary">
-                    What&apos;s included
+                    {t("What's included")}
                   </h4>
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -1156,10 +1192,12 @@ function UsageSectionContent({
                       </div>
                       <span className="text-sm text-text-secondary">
                         <span className="font-medium text-text-primary">
-                          1,200 minutes
+                          {t('1,200 minutes')}
                         </span>{' '}
-                        of listening per month
-                        <span className="ml-1 text-xs text-amber-400">(limited)</span>
+                        {t('of listening per month')}
+                        <span className="ml-1 text-xs text-amber-400">
+                          {t('(limited)')}
+                        </span>
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1167,8 +1205,10 @@ function UsageSectionContent({
                         <Check className="h-3 w-3 text-green-400" />
                       </div>
                       <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        words transcribed
+                        <span className="font-medium text-text-primary">
+                          {t('Unlimited')}
+                        </span>{' '}
+                        {t('words transcribed')}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1176,8 +1216,10 @@ function UsageSectionContent({
                         <Check className="h-3 w-3 text-green-400" />
                       </div>
                       <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        insights
+                        <span className="font-medium text-text-primary">
+                          {t('Unlimited')}
+                        </span>{' '}
+                        {t('insights')}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1185,8 +1227,10 @@ function UsageSectionContent({
                         <Check className="h-3 w-3 text-green-400" />
                       </div>
                       <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        memories
+                        <span className="font-medium text-text-primary">
+                          {t('Unlimited')}
+                        </span>{' '}
+                        {t('memories')}
                       </span>
                     </div>
                   </div>
@@ -1207,10 +1251,10 @@ function UsageSectionContent({
                   <div className="mb-5 flex items-center justify-between">
                     <div>
                       <h4 className="text-lg font-semibold text-text-primary">
-                        Choose a Plan
+                        {t('Choose a Plan')}
                       </h4>
                       <p className="text-sm text-text-tertiary">
-                        Unlock unlimited listening time
+                        {t('Unlock unlimited listening time')}
                       </p>
                     </div>
                     <button
@@ -1243,7 +1287,7 @@ function UsageSectionContent({
                           >
                             {isAnnual && (
                               <span className="absolute -top-2.5 right-3 rounded-full bg-text-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-bg-primary">
-                                Best Value
+                                {t('Best Value')}
                               </span>
                             )}
                             <h4 className="mb-1 font-semibold text-text-primary">
@@ -1289,10 +1333,10 @@ function UsageSectionContent({
                     {isLoading ? (
                       <span className="flex items-center justify-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing...
+                        {t('Processing...')}
                       </span>
                     ) : (
-                      'Continue to Payment'
+                      t('Continue to Payment')
                     )}
                   </button>
                 </Card>
@@ -1301,7 +1345,7 @@ function UsageSectionContent({
               {/* This Month Stats - Compact Single Row */}
               <Card>
                 <h4 className="mb-4 text-sm font-semibold text-text-secondary">
-                  This month
+                  {t('This month')}
                 </h4>
                 <div className="grid grid-cols-4 gap-3">
                   <div className="text-center">
@@ -1313,7 +1357,7 @@ function UsageSectionContent({
                         ? formatDuration(monthlyUsage.transcription_seconds)
                         : '0m'}
                     </p>
-                    <p className="text-xs text-text-quaternary">Listening</p>
+                    <p className="text-xs text-text-quaternary">{t('Listening')}</p>
                   </div>
                   <div className="text-center">
                     <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
@@ -1322,7 +1366,7 @@ function UsageSectionContent({
                     <p className="text-xl font-bold text-green-400">
                       {monthlyUsage ? formatNumber(monthlyUsage.words_transcribed) : '0'}
                     </p>
-                    <p className="text-xs text-text-quaternary">Words</p>
+                    <p className="text-xs text-text-quaternary">{t('Words')}</p>
                   </div>
                   <div className="text-center">
                     <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
@@ -1331,7 +1375,7 @@ function UsageSectionContent({
                     <p className="text-xl font-bold text-orange-400">
                       {monthlyUsage?.insights_gained || 0}
                     </p>
-                    <p className="text-xs text-text-quaternary">Insights</p>
+                    <p className="text-xs text-text-quaternary">{t('Insights')}</p>
                   </div>
                   <div className="text-center">
                     <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08]">
@@ -1340,7 +1384,7 @@ function UsageSectionContent({
                     <p className="text-xl font-bold text-text-secondary">
                       {monthlyUsage?.memories_created || 0}
                     </p>
-                    <p className="text-xs text-text-quaternary">Memories</p>
+                    <p className="text-xs text-text-quaternary">{t('Memories')}</p>
                   </div>
                 </div>
               </Card>
@@ -1355,13 +1399,17 @@ function UsageSectionContent({
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
+                    {isCancelingSubscription ? t('Your Plan') : t('Manage Your Plan')}
                   </h3>
                   {subscription?.current_period_end && (
                     <p className="text-xs text-text-quaternary">
                       {isCancelingSubscription
-                        ? `Cancels on ${formatDate(subscription.current_period_end)}`
-                        : `Renews ${formatDate(subscription.current_period_end)}`}
+                        ? t('Cancels on {value}', {
+                            value: formatDate(subscription.current_period_end),
+                          })
+                        : t('Renews {value}', {
+                            value: formatDate(subscription.current_period_end),
+                          })}
                     </p>
                   )}
                 </div>
@@ -1395,7 +1443,7 @@ function UsageSectionContent({
                       >
                         {isAnnual && (
                           <span className="absolute -top-2 right-2 rounded-full bg-text-primary px-2 py-0.5 text-[10px] font-medium text-bg-primary">
-                            POPULAR
+                            {t('POPULAR')}
                           </span>
                         )}
 
@@ -1414,7 +1462,7 @@ function UsageSectionContent({
                         {isCurrent && (
                           <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs text-green-400">
                             <Check className="h-3 w-3" />
-                            Current
+                            {t('Current')}
                           </span>
                         )}
                       </button>
@@ -1429,14 +1477,18 @@ function UsageSectionContent({
 
               {isCancelingSubscription && subscription?.current_period_end && (
                 <p className="text-sm text-text-tertiary">
-                  You can reactivate your current plan now. Plan changes are available
-                  after {formatDate(subscription.current_period_end)}.
+                  {t(
+                    'You can reactivate your current plan now. Plan changes are available after',
+                  )}{' '}
+                  {formatDate(subscription.current_period_end)}.
                 </p>
               )}
 
               {/* Features List */}
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-text-secondary">Features:</h4>
+                <h4 className="text-sm font-medium text-text-secondary">
+                  {t('Features:')}
+                </h4>
                 <ul className="space-y-2">
                   {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-2">
@@ -1477,15 +1529,15 @@ function UsageSectionContent({
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
+                    {t('Processing...')}
                   </span>
                 ) : isCancelingSubscription ? (
-                  'Reactivate Subscription'
+                  t('Reactivate Subscription')
                 ) : selectedOption?.is_active ||
                   selectedOption?.id === subscription?.current_price_id ? (
-                  'Current Plan'
+                  t('Current Plan')
                 ) : (
-                  'Change Plan'
+                  t('Change Plan')
                 )}
               </button>
 
@@ -1497,7 +1549,7 @@ function UsageSectionContent({
                   className="flex w-full items-center justify-center gap-2 py-2.5 text-text-secondary transition-colors hover:text-text-primary"
                 >
                   <CreditCard className="h-4 w-4" />
-                  <span className="text-sm">Manage Billing &amp; Invoices</span>
+                  <span className="text-sm">{t('Manage Billing & Invoices')}</span>
                 </button>
 
                 {!isCancelingSubscription && (
@@ -1506,7 +1558,7 @@ function UsageSectionContent({
                     disabled={isLoading}
                     className="w-full py-2.5 text-sm text-red-400/70 transition-colors hover:text-red-400"
                   >
-                    Cancel Subscription
+                    {t('Cancel Subscription')}
                   </button>
                 )}
               </div>
@@ -1544,7 +1596,7 @@ function UsageSectionContent({
                 <p className="text-xl font-bold text-blue-400">
                   {usage ? formatDuration(usage.transcription_seconds) : '0m'}
                 </p>
-                <p className="text-xs text-text-quaternary">Listening</p>
+                <p className="text-xs text-text-quaternary">{t('Listening')}</p>
               </div>
               <div className="text-center">
                 <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
@@ -1553,7 +1605,7 @@ function UsageSectionContent({
                 <p className="text-xl font-bold text-green-400">
                   {usage ? formatNumber(usage.words_transcribed) : '0'}
                 </p>
-                <p className="text-xs text-text-quaternary">Words</p>
+                <p className="text-xs text-text-quaternary">{t('Words')}</p>
               </div>
               <div className="text-center">
                 <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
@@ -1562,7 +1614,7 @@ function UsageSectionContent({
                 <p className="text-xl font-bold text-orange-400">
                   {usage?.insights_gained || 0}
                 </p>
-                <p className="text-xs text-text-quaternary">Insights</p>
+                <p className="text-xs text-text-quaternary">{t('Insights')}</p>
               </div>
               <div className="text-center">
                 <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08]">
@@ -1571,7 +1623,7 @@ function UsageSectionContent({
                 <p className="text-xl font-bold text-text-secondary">
                   {usage?.memories_created || 0}
                 </p>
-                <p className="text-xs text-text-quaternary">Memories</p>
+                <p className="text-xs text-text-quaternary">{t('Memories')}</p>
               </div>
             </div>
           </Card>
@@ -1584,15 +1636,18 @@ function UsageSectionContent({
       {/* Cancel Subscription Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showCancelConfirm}
-        title="Cancel Subscription?"
+        title={t('Cancel Subscription?')}
         message={
           subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(
-                subscription.current_period_end,
-              )}. After that, you'll be moved to the Free plan.`
-            : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
+            ? t(
+                "Your subscription will remain active until {value}. After that, you'll be moved to the Free plan.",
+                { value: formatDate(subscription.current_period_end) },
+              )
+            : t(
+                "Are you sure you want to cancel your subscription? You'll lose access to unlimited features.",
+              )
         }
-        confirmLabel="Cancel Subscription"
+        confirmLabel={t('Cancel Subscription')}
         onConfirm={handleCancelSubscription}
         onCancel={() => setShowCancelConfirm(false)}
         isDestructive={true}
@@ -1647,9 +1702,9 @@ function AccountSection({
             <div className="flex items-center gap-3">
               <Scale className="h-5 w-5 text-text-tertiary" />
               <div>
-                <span className="font-medium">Fair Use</span>
+                <span className="font-medium">{t('Fair Use')}</span>
                 <p className="text-sm text-text-quaternary">
-                  View speech usage and policy status
+                  {t('View speech usage and policy status')}
                 </p>
               </div>
             </div>
@@ -1661,7 +1716,7 @@ function AccountSection({
       {/* Account Actions */}
       <div id="actions" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Account Actions
+          {t('Account Actions')}
         </h3>
         <Card>
           <button
@@ -1669,7 +1724,7 @@ function AccountSection({
             className="flex w-full items-center gap-3 py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
             <LogOut className="h-5 w-5" />
-            <span className="font-medium">Sign Out</span>
+            <span className="font-medium">{t('Sign Out')}</span>
           </button>
         </Card>
 
@@ -1680,9 +1735,9 @@ function AccountSection({
           >
             <Trash2 className="h-5 w-5" />
             <div className="text-left">
-              <span className="block font-medium">Delete Account</span>
+              <span className="block font-medium">{t('Delete Account')}</span>
               <span className="text-sm text-red-400/70">
-                Permanently delete your account and all data
+                {t('Permanently delete your account and all data')}
               </span>
             </div>
           </button>
@@ -1692,7 +1747,7 @@ function AccountSection({
       {/* Support */}
       <div id="support" className="scroll-mt-4 space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
-          Support
+          {t('Support')}
         </h3>
         <Card>
           <a
@@ -1701,7 +1756,7 @@ function AccountSection({
             rel="noopener noreferrer"
             className="flex items-center justify-between border-b border-white/[0.06] py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
-            <span>Feedback & Bug Reports</span>
+            <span>{t('Feedback & Bug Reports')}</span>
             <ExternalLink className="h-4 w-4" />
           </a>
           <a
@@ -1710,7 +1765,7 @@ function AccountSection({
             rel="noopener noreferrer"
             className="flex items-center justify-between py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
-            <span>Help Center</span>
+            <span>{t('Help Center')}</span>
             <ExternalLink className="h-4 w-4" />
           </a>
         </Card>
@@ -2202,21 +2257,21 @@ export function SettingsPage() {
     switch (activeSection) {
       case 'account':
         return [
-          { id: 'account-info', label: 'Account' },
-          { id: 'language', label: 'Language' },
-          { id: 'vocabulary', label: 'Vocabulary' },
-          { id: 'notifications', label: 'Notifications' },
-          { id: 'plan-usage', label: 'Plan & Usage' },
-          { id: 'fair-use', label: 'Fair Use' },
-          { id: 'actions', label: 'Actions' },
-          { id: 'support', label: 'Support' },
+          { id: 'account-info', label: t('Account') },
+          { id: 'language', label: t('Language') },
+          { id: 'vocabulary', label: t('Vocabulary') },
+          { id: 'notifications', label: t('Notifications') },
+          { id: 'plan-usage', label: t('Plan & Usage') },
+          { id: 'fair-use', label: t('Fair Use') },
+          { id: 'actions', label: t('Actions') },
+          { id: 'support', label: t('Support') },
         ];
       case 'developer':
         return [
-          { id: 'api-keys', label: 'API Keys' },
+          { id: 'api-keys', label: t('API Keys') },
           { id: 'mcp', label: 'MCP' },
-          { id: 'webhooks', label: 'Webhooks' },
-          { id: 'data-management', label: 'Data' },
+          { id: 'webhooks', label: t('Webhooks') },
+          { id: 'data-management', label: t('Data') },
         ];
       default:
         return [];
@@ -2238,16 +2293,18 @@ export function SettingsPage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">
-                  Exporting Your Data
+                  {t('Exporting Your Data')}
                 </h3>
                 <p className="mt-2 text-sm text-text-secondary">
-                  This may take a moment depending on the amount of data in your account.
+                  {t(
+                    'This may take a moment depending on the amount of data in your account.',
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-yellow-500/10 px-4 py-2">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
                 <span className="text-xs text-yellow-400">
-                  Please don&apos;t close this tab
+                  {t("Please don't close this tab")}
                 </span>
               </div>
             </div>
@@ -2270,7 +2327,7 @@ export function SettingsPage() {
               <div className="hidden w-32 flex-shrink-0 lg:block">
                 <div className="sticky top-4">
                   <p className="mb-3 text-xs font-medium uppercase tracking-wider text-text-quaternary">
-                    On this page
+                    {t('On this page')}
                   </p>
                   <nav className="space-y-1">
                     {quickNavSections.map((section) => (
@@ -2293,18 +2350,20 @@ export function SettingsPage() {
       {/* Dialogs */}
       <ConfirmDialog
         isOpen={showSignOutDialog}
-        title="Sign Out"
-        message="Are you sure you want to sign out?"
-        confirmLabel="Sign Out"
+        title={t('Sign Out')}
+        message={t('Are you sure you want to sign out?')}
+        confirmLabel={t('Sign Out')}
         onConfirm={handleSignOut}
         onCancel={() => setShowSignOutDialog(false)}
       />
 
       <ConfirmDialog
         isOpen={showDeleteDialog}
-        title="Delete Account"
-        message="This action cannot be undone. All your data, conversations, and settings will be permanently deleted."
-        confirmLabel="Delete Account"
+        title={t('Delete Account')}
+        message={t(
+          'This action cannot be undone. All your data, conversations, and settings will be permanently deleted.',
+        )}
+        confirmLabel={t('Delete Account')}
         onConfirm={handleDeleteAccount}
         onCancel={() => setShowDeleteDialog(false)}
         isDestructive

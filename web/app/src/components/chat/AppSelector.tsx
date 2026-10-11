@@ -6,6 +6,7 @@ import Image from '@tschk/moonshine-next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { getChatApps, type App } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 interface AppSelectorProps {
   selectedAppId: string | null;
@@ -87,7 +88,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
         )}
 
         <span className="text-sm text-text-primary max-w-[120px] truncate">
-          {selectedApp ? selectedApp.name : 'Omi'}
+          {selectedApp ? selectedApp.name : t('Omi')}
         </span>
 
         <ChevronDown className={cn(
@@ -133,8 +134,8 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                     <Sparkles className="w-4 h-4 text-text-primary" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-text-primary">Omi</p>
-                    <p className="text-xs text-text-tertiary">Default assistant</p>
+                    <p className="text-sm font-medium text-text-primary">{t('Omi')}</p>
+                    <p className="text-xs text-text-tertiary">{t('Default assistant')}</p>
                   </div>
                   {!selectedAppId && (
                     <Check className="w-4 h-4 text-text-primary flex-shrink-0" />
@@ -195,10 +196,10 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                 {apps.length === 0 && (
                   <div className="px-4 py-3 text-center">
                     <p className="text-sm text-text-tertiary">
-                      No chat apps enabled
+                      {t('No chat apps enabled')}
                     </p>
                     <p className="text-xs text-text-quaternary mt-1">
-                      Enable apps in the Apps section
+                      {t('Enable apps in the Apps section')}
                     </p>
                   </div>
                 )}

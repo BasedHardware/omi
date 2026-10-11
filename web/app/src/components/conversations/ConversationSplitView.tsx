@@ -53,6 +53,7 @@ import {
   MIN_CONVERSATION_GALLERY_WIDTH,
   resizeConversationDetailPanel,
 } from '@/lib/conversationPanelSizing';
+import { t, tn } from '@/lib/i18n';
 
 // Detail pane width constraints
 const DEFAULT_PANEL_WIDTH = 480;
@@ -197,7 +198,9 @@ export function ConversationSplitView() {
       setContext({
         type: 'recap',
         id: selectedRecap.id,
-        title: selectedRecap.headline || `Daily Recap - ${selectedRecap.date}`,
+        title:
+          selectedRecap.headline ||
+          t('Daily Recap - {date}', { date: selectedRecap.date }),
         summary: selectedRecap.overview,
       });
     } else {
@@ -678,7 +681,7 @@ export function ConversationSplitView() {
           value: searchQuery,
           onChange: handleSearchQueryChange,
           onSubmit: handleSearch,
-          placeholder: 'Search conversations...',
+          placeholder: t('Search conversations...'),
         }}
         controls={
           <div className="min-w-0 flex-1">
@@ -720,7 +723,7 @@ export function ConversationSplitView() {
                   <X className="h-4 w-4" />
                 </span>
               </span>
-              <TextSwap text={isSelectionMode ? 'Cancel' : 'Select'} />
+              <TextSwap text={isSelectionMode ? t('Cancel') : t('Select')} />
             </button>
           </>
         }
@@ -736,17 +739,17 @@ export function ConversationSplitView() {
                   {isSearching && (
                     <span className="flex items-center gap-1 rounded-chip bg-bg-tertiary px-2 py-0.5">
                       <SearchIcon className="h-3 w-3" />
-                      {searchResults.length} results
+                      {tn(searchResults.length, '{count} result', '{count} results')}
                     </span>
                   )}
                   {filterDate && (
                     <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
-                      Filtered by date
+                      {t('Filtered by date')}
                     </span>
                   )}
                   {selectedFolderId === FOLDER_STARRED && (
                     <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
-                      Showing starred only
+                      {t('Showing starred only')}
                     </span>
                   )}
                 </div>
@@ -807,14 +810,14 @@ export function ConversationSplitView() {
               </div>
               <p className="text-sm text-text-tertiary">
                 {isSearching
-                  ? 'No conversations found'
+                  ? t('No conversations found')
                   : filterDate
-                  ? 'Nothing on this date'
+                  ? t('Nothing on this date')
                   : selectedFolderId === FOLDER_STARRED
-                  ? 'No starred conversations'
+                  ? t('No starred conversations')
                   : selectedFolderId !== FOLDER_ALL
-                  ? 'No conversations in this folder'
-                  : 'Your timeline is empty'}
+                  ? t('No conversations in this folder')
+                  : t('Your timeline is empty')}
               </p>
             </div>
           )}

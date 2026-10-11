@@ -7,6 +7,7 @@ import Image from '@tschk/moonshine-next/image';
 import type { Plugin } from '../types';
 import { NewBadge } from '../NewBadge';
 import { formatInstalls } from '../utils/format';
+import { t } from '@/lib/i18n';
 
 export interface FeaturedPluginCardProps {
   plugin: Plugin;
@@ -57,7 +58,7 @@ export const FeaturedPluginCard = memo(function FeaturedPluginCard({
         {/* Author Row */}
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs text-gray-400 sm:text-sm">
-            by {plugin.author}
+            {t('by {author}', { author: plugin.author })}
           </span>
           {!hideStats && (
             <div className="flex shrink-0 items-center gap-3 text-xs text-gray-400 sm:gap-4 sm:text-sm">

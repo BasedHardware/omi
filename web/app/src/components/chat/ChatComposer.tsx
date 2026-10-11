@@ -9,6 +9,7 @@ import { uploadChatFiles } from '@/lib/api';
 import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
 import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
+import { t } from '@/lib/i18n';
 
 /**
  * The ask bar: one pill that carries the text and every control that acts on
@@ -251,9 +252,11 @@ export function ChatComposer({
           }
           className={iconButton}
           title={
-            selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'
+            selectedFiles.length >= MAX_FILES
+              ? t('Max {MAX_FILES} files', { MAX_FILES })
+              : t('Attach file')
           }
-          aria-label="Attach file"
+          aria-label={t('Attach file')}
         >
           <Paperclip className="h-[18px] w-[18px]" />
         </button>
@@ -286,9 +289,11 @@ export function ChatComposer({
               recording.isActive &&
                 'bg-white/[0.10] text-text-primary hover:bg-white/[0.16]',
             )}
-            title={recording.isActive ? 'Stop conversation' : 'Start a live conversation'}
+            title={
+              recording.isActive ? t('Stop conversation') : t('Start a live conversation')
+            }
             aria-label={
-              recording.isActive ? 'Stop conversation' : 'Start a live conversation'
+              recording.isActive ? t('Stop conversation') : t('Start a live conversation')
             }
           >
             <OmiPulseMark
@@ -309,7 +314,7 @@ export function ChatComposer({
             'bg-text-primary text-bg-primary transition-opacity hover:opacity-90',
             'disabled:cursor-not-allowed disabled:opacity-25',
           )}
-          aria-label="Send message"
+          aria-label={t('Send message')}
         >
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
         </button>

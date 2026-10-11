@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { t, formatLocale } from '@/lib/i18n';
 
 interface DateFilterProps {
   selectedDate: Date | null;
@@ -17,9 +18,13 @@ type QuickFilter = {
 };
 
 const quickFilters: QuickFilter[] = [
-  { label: 'Today', getDate: () => new Date() },
+  { get label() {
+    return t('Today')
+  }, getDate: () => new Date() },
   {
-    label: 'Yesterday',
+    get label() {
+      return t('Yesterday');
+    },
     getDate: () => {
       const d = new Date();
       d.setDate(d.getDate() - 1);
@@ -27,7 +32,9 @@ const quickFilters: QuickFilter[] = [
     },
   },
   {
-    label: 'Last 7 days',
+    get label() {
+      return t('Last 7 days');
+    },
     getDate: () => {
       const d = new Date();
       d.setDate(d.getDate() - 7);
@@ -35,7 +42,9 @@ const quickFilters: QuickFilter[] = [
     },
   },
   {
-    label: 'This week',
+    get label() {
+      return t('This week');
+    },
     getDate: () => {
       const d = new Date();
       const day = d.getDay();
@@ -45,21 +54,20 @@ const quickFilters: QuickFilter[] = [
   },
 ];
 
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Two-letter weekday headings starting on Sunday (Su Mo … / Do Lu …), in the UI language.
+function weekdayNames(): string[] {
+  return Array.from({ length: 7 }, (_, i) =>
+    capitalize(
+      new Date(2023, 0, 1 + i).toLocaleDateString(formatLocale(), { weekday: 'short' }).slice(0, 2),
+    ),
+  );
+}
+
+function monthName(month: number): string {
+  return capitalize(new Date(2023, month, 1).toLocaleDateString(formatLocale(), { month: 'long' }));
+}
 
 function isSameDay(d1: Date, d2: Date): boolean {
   return (
@@ -77,13 +85,13 @@ function formatButtonLabel(date: Date | null): string {
   if (!date) return 'All dates';
 
   const today = new Date();
-  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, today)) return t('Today');
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (isSameDay(date, yesterday)) return 'Yesterday';
+  if (isSameDay(date, yesterday)) return t('Yesterday');
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(formatLocale(), { month: 'short', day: 'numeric' });
 }
 
 function getDaysInMonth(year: number, month: number): Date[] {
@@ -207,7 +215,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
               }
             }}
             className="p-0.5 rounded hover:bg-bg-quaternary cursor-pointer"
-            aria-label="Clear date filter"
+            aria-label={t('Clear date filter')}
           >
             <X className="w-3 h-3" />
           </span>
@@ -231,7 +239,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
           >
             {/* Quick filters */}
             <div className="mb-3">
-              <p className="text-xs text-text-quaternary mb-2">Quick filters</p>
+              <p className="text-xs text-text-quaternary mb-2">{t('Quick filters')}</p>
               <div className="flex flex-wrap gap-1.5">
                 {quickFilters.map((filter) => (
                   <button
@@ -256,17 +264,17 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
               <button
                 onClick={handlePrevMonth}
                 className="p-1 rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-                aria-label="Previous month"
+                aria-label={t('Previous month')}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-medium text-text-primary">
-                {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
+                {monthName(viewDate.getMonth())} {viewDate.getFullYear()}
               </span>
               <button
                 onClick={handleNextMonth}
                 className="p-1 rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-                aria-label="Next month"
+                aria-label={t('Next month')}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -274,7 +282,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
 
             {/* Day names */}
             <div className="grid grid-cols-7 gap-1 mb-1">
-              {DAYS.map((day) => (
+              {weekdayNames().map((day) => (
                 <div key={day} className="text-center text-xs text-text-quaternary py-1">
                   {day}
                 </div>
@@ -322,7 +330,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                   'hover:bg-bg-tertiary transition-colors',
                 )}
               >
-                Clear filter
+                {t('Clear filter')}
               </button>
             )}
           </motion.div>

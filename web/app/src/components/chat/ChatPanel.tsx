@@ -16,6 +16,7 @@ import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
 import { PanelReveal } from '@/components/ui/PanelReveal';
+import { t } from '@/lib/i18n';
 
 interface FilePreviewItem {
   file: File;
@@ -29,23 +30,27 @@ function getQuickPrompts(contextType: string | undefined): string[] {
   switch (contextType) {
     case 'conversation':
       return [
-        'Summarize this conversation',
-        'What action items came from this?',
-        'What were the key decisions?',
+        t('Summarize this conversation'),
+        t('What action items came from this?'),
+        t('What were the key decisions?'),
       ];
     case 'task':
       return [
-        'Help me complete this task',
-        'Break this down into steps',
-        'Set a reminder for this',
+        t('Help me complete this task'),
+        t('Break this down into steps'),
+        t('Set a reminder for this'),
       ];
     case 'memory':
-      return ['Tell me more about this', 'When did I mention this?', 'Related memories'];
+      return [
+        t('Tell me more about this'),
+        t('When did I mention this?'),
+        t('Related memories'),
+      ];
     default:
       return [
-        'What did I talk about today?',
-        'Show my pending tasks',
-        'What should I remember?',
+        t('What did I talk about today?'),
+        t('Show my pending tasks'),
+        t('What should I remember?'),
       ];
   }
 }
@@ -262,8 +267,8 @@ export function ChatPanel() {
                     <button
                       onClick={clearAppContext}
                       className="p-1.5 -ml-1 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Back to Omi chat"
-                      title="Back to Omi"
+                      aria-label={t('Back to Omi chat')}
+                      title={t('Back to Omi')}
                     >
                       <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                     </button>
@@ -273,11 +278,11 @@ export function ChatPanel() {
                   </div>
                   <div>
                     <h2 className="font-semibold text-text-primary">
-                      {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Omi'}
+                      {selectedApp ? t('Chat with {name}', { name: selectedApp.name }) : t('Chat with Omi')}
                     </h2>
                     {currentContext?.title && !selectedAppId && (
                       <p className="text-xs text-text-tertiary truncate max-w-[250px]">
-                        Context: {currentContext.title}
+                        {t('Context: {title}', { title: currentContext.title })}
                       </p>
                     )}
                   </div>
@@ -287,8 +292,8 @@ export function ChatPanel() {
                     <button
                       onClick={() => setShowClearDialog(true)}
                       className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Clear chat"
-                      title="Clear chat history"
+                      aria-label={t('Clear chat')}
+                      title={t('Clear chat history')}
                     >
                       <Trash2 className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
                     </button>
@@ -296,7 +301,7 @@ export function ChatPanel() {
                   <button
                     onClick={closeChat}
                     className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                    aria-label="Close chat"
+                    aria-label={t('Close chat')}
                   >
                     <X className="w-5 h-5 text-text-secondary" />
                   </button>
@@ -313,7 +318,7 @@ export function ChatPanel() {
               {/* Quick prompts (shown when no messages) */}
               {messages.length === 0 && !isLoading && (
                 <div className="p-4 border-b border-bg-tertiary">
-                  <p className="text-xs text-text-quaternary mb-2">Quick prompts:</p>
+                  <p className="text-xs text-text-quaternary mb-2">{t('Quick prompts:')}</p>
                   <div className="flex flex-wrap gap-2">
                     {quickPrompts.map((prompt, i) => (
                       <button
@@ -343,10 +348,10 @@ export function ChatPanel() {
                       <Sparkles className="w-8 h-8 text-text-primary" />
                     </div>
                     <h3 className="text-lg font-medium text-text-primary mb-2">
-                      Hi! I&apos;m Omi
+                      {t('Hi! I\'m Omi')}
                     </h3>
                     <p className="text-text-tertiary max-w-[280px]">
-                      Ask me anything about your conversations, tasks, or memories.
+                      {t('Ask me anything about your conversations, tasks, or memories.')}
                     </p>
                   </div>
                 ) : (
@@ -383,7 +388,7 @@ export function ChatPanel() {
                         <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary/50 border border-white/20">
                           <div className="flex items-center gap-2 text-text-primary mb-1">
                             <Brain className="w-3 h-3" />
-                            <span className="text-xs font-medium">Thinking...</span>
+                            <span className="text-xs font-medium">{t('Thinking...')}</span>
                           </div>
                           <p className="text-xs text-text-quaternary whitespace-pre-wrap line-clamp-3">
                             {currentThinking}
@@ -475,8 +480,8 @@ export function ChatPanel() {
                       )}
                       title={
                         selectedFiles.length >= MAX_FILES
-                          ? `Max ${MAX_FILES} files`
-                          : 'Attach file'
+                          ? t('Max {MAX_FILES} files', { MAX_FILES })
+                          : t('Attach file')
                       }
                     >
                       <Paperclip className="w-5 h-5" />
@@ -497,7 +502,7 @@ export function ChatPanel() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="Ask anything..."
+                      placeholder={t('Ask anything...')}
                       disabled={isLoading || isStreaming}
                       className={cn(
                         'flex-1 px-4 py-3 rounded-xl',
@@ -525,7 +530,7 @@ export function ChatPanel() {
                         'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
-                      aria-label="Send message"
+                      aria-label={t('Send message')}
                     >
                       <Send className="w-5 h-5 text-white" />
                     </button>
@@ -539,10 +544,10 @@ export function ChatPanel() {
           <ConfirmDialog
             open={showClearDialog}
             onOpenChange={setShowClearDialog}
-            title="Clear chat history?"
-            description="This will permanently delete all messages in this conversation. This action cannot be undone."
-            confirmLabel="Clear history"
-            cancelLabel="Cancel"
+            title={t('Clear chat history?')}
+            description={t('This will permanently delete all messages in this conversation. This action cannot be undone.')}
+            confirmLabel={t('Clear history')}
+            cancelLabel={t('Cancel')}
             variant="danger"
             onConfirm={handleClear}
             isLoading={isClearing}

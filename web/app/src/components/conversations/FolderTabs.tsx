@@ -5,6 +5,7 @@ import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'luci
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
 import { OpenSurface } from '@/components/ui/OpenSurface';
+import { t } from '@/lib/i18n';
 
 // Special folder IDs for built-in tabs
 export const FOLDER_ALL = 'all';
@@ -55,7 +56,7 @@ export function FolderTabs({
       >
         {/* All tab - always first */}
         <TabButton
-          label="All"
+          label={t('All')}
           icon={<Inbox className="h-3.5 w-3.5" />}
           isSelected={selectedFolderId === FOLDER_ALL}
           onClick={() => onSelectFolder(FOLDER_ALL)}
@@ -63,7 +64,7 @@ export function FolderTabs({
 
         {/* Starred tab - always second */}
         <TabButton
-          label="Starred"
+          label={t('Starred')}
           icon={<Star className="h-3.5 w-3.5" />}
           isSelected={selectedFolderId === FOLDER_STARRED}
           onClick={() => onSelectFolder(FOLDER_STARRED)}
@@ -94,7 +95,7 @@ export function FolderTabs({
             'transition-colors duration-150',
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
-          title="Create folder"
+          title={t('Create folder')}
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -129,7 +130,7 @@ export function FolderTabs({
             )}
           >
             <Pencil className="h-4 w-4" />
-            <span>Edit folder</span>
+            <span>{t('Edit folder')}</span>
           </button>
           <button
             onClick={() => {
@@ -143,7 +144,7 @@ export function FolderTabs({
             )}
           >
             <Trash2 className="h-4 w-4" />
-            <span>Delete folder</span>
+            <span>{t('Delete folder')}</span>
           </button>
         </OpenSurface>
       )}

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 // User Settings Types
 
 export interface UserProfile {
@@ -300,14 +301,62 @@ export interface DeveloperApiKey {
 
 // Available scopes for Developer API keys
 export const API_KEY_SCOPES = [
-  { id: 'conversations:read', label: 'Conversations', type: 'read' },
-  { id: 'conversations:write', label: 'Conversations', type: 'write' },
-  { id: 'memories:read', label: 'Memories', type: 'read' },
-  { id: 'memories:write', label: 'Memories', type: 'write' },
-  { id: 'action_items:read', label: 'Action Items', type: 'read' },
-  { id: 'action_items:write', label: 'Action Items', type: 'write' },
-  { id: 'goals:read', label: 'Goals', type: 'read' },
-  { id: 'goals:write', label: 'Goals', type: 'write' },
+  {
+    id: 'conversations:read',
+    get label() {
+      return t('Conversations');
+    },
+    type: 'read',
+  },
+  {
+    id: 'conversations:write',
+    get label() {
+      return t('Conversations');
+    },
+    type: 'write',
+  },
+  {
+    id: 'memories:read',
+    get label() {
+      return t('Memories');
+    },
+    type: 'read',
+  },
+  {
+    id: 'memories:write',
+    get label() {
+      return t('Memories');
+    },
+    type: 'write',
+  },
+  {
+    id: 'action_items:read',
+    get label() {
+      return t('Action Items');
+    },
+    type: 'read',
+  },
+  {
+    id: 'action_items:write',
+    get label() {
+      return t('Action Items');
+    },
+    type: 'write',
+  },
+  {
+    id: 'goals:read',
+    get label() {
+      return t('Goals');
+    },
+    type: 'read',
+  },
+  {
+    id: 'goals:write',
+    get label() {
+      return t('Goals');
+    },
+    type: 'write',
+  },
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];

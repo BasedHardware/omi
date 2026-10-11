@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
 import type { MemoryUseAction } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 interface MemoryListProps {
   memories: Memory[];
@@ -99,9 +100,13 @@ export function MemoryList({
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bg-tertiary">
           <Brain className="h-8 w-8 text-text-quaternary" />
         </div>
-        <h3 className="mb-2 text-lg font-medium text-text-primary">No memories yet</h3>
+        <h3 className="mb-2 text-lg font-medium text-text-primary">
+          {t('No memories yet')}
+        </h3>
         <p className="max-w-sm text-sm text-text-tertiary">
-          Memories will appear from your conversations, or you can add one manually above.
+          {t(
+            'Memories will appear from your conversations, or you can add one manually above.',
+          )}
         </p>
       </div>
     );
@@ -113,7 +118,7 @@ export function MemoryList({
     <div
       ref={containerRef}
       role="region"
-      aria-label="Memories list"
+      aria-label={t('Memories list')}
       className="flex max-h-[calc(100dvh-350px)] flex-col overflow-y-auto pr-2 [scrollbar-color:rgba(255,255,255,0.12)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] lg:max-h-none lg:min-h-0 lg:flex-1 [&::-webkit-scrollbar-thumb:hover]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5"
     >
       {/* Virtual scrolling container */}
@@ -165,14 +170,16 @@ export function MemoryList({
       {(loading || loadingMore) && (
         <div className="flex items-center justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-white" />
-          <span className="ml-2 text-sm text-text-tertiary">Loading memories...</span>
+          <span className="ml-2 text-sm text-text-tertiary">
+            {t('Loading memories...')}
+          </span>
         </div>
       )}
 
       {/* End of list indicator */}
       {!loading && !loadingMore && !hasMore && memories.length > 0 && (
         <p className="py-4 text-center text-sm text-text-quaternary">
-          You&apos;ve reached the end
+          {t("You've reached the end")}
         </p>
       )}
     </div>

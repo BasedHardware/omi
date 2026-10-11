@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import { useAuth } from './AuthProvider';
+import { t } from '@/lib/i18n';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -26,7 +27,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         <div className="w-16 h-16 relative">
           <Image
             src="/logo.png"
-            alt="Omi"
+            alt={t('Omi')}
             fill
             sizes="64px"
             priority
