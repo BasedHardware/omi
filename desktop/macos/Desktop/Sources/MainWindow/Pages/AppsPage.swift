@@ -1016,7 +1016,7 @@ struct ImportConnector: Identifiable {
       id: "apple-notes",
       title: "Apple Notes",
       subtitle: "Private notes",
-      description: "Import notes and private written context.",
+      description: "Import your notes.",
       brand: .appleNotes,
       statusText: "Not connected",
       metricText: nil,
@@ -1835,7 +1835,7 @@ struct ImportConnectorSheet: View {
       }
 
       if connector.id == "local-files" {
-        Text("Local files are indexed on-device and used to build your memory graph.")
+        Text("Omi reads files on this Mac to learn about your work. Nothing is uploaded.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       }
@@ -1937,7 +1937,7 @@ struct ImportConnectorSheet: View {
     case "calendar":
       startRun(
         title: "Connecting to Calendar",
-        detail: "Reading past events and upcoming commitments for memory extraction."
+        detail: "Reading your past and upcoming events."
       ) { progress in
         await ConnectorImportOperations.importCalendar(progress: progress)
       }

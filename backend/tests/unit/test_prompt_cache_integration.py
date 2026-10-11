@@ -132,9 +132,12 @@ for submodule in [
     "mem_db",
     "notifications",
     "auth",
+    "messaging",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
+
+sys.modules["database.messaging"].MessagingStore = MagicMock()
 
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
@@ -204,9 +207,6 @@ gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gatew
 gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
-
-gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
-gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)
 
 gateway_serving_mod = _stub_module("utils.llm.gateway_serving")
 
@@ -440,6 +440,11 @@ def _get_agentic_module():
     sys.modules.pop("utils.retrieval.agentic", None)
 
     # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    _load_module_from_file("utils.retrieval.chat_mount", BACKEND_DIR / "utils" / "retrieval" / "chat_mount.py")
+    _load_module_from_file(
+        "database.firestore_transaction_retry",
+        BACKEND_DIR / "database" / "firestore_transaction_retry.py",
+    )
     chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
     if not hasattr(chat_scope_mod, "build_chat_scope"):
         chat_scope_mod.build_chat_scope = MagicMock(return_value=None)

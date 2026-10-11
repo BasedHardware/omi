@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat failing with a generic error for BYOK users despite validated API keys — the desktop backend now actually reads the keys instead of silently ignoring them."
-}

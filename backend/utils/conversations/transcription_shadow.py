@@ -327,7 +327,12 @@ def _make_pass(
         )
         if resolution is not None:
             apply_speaker_resolution(
-                conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
+                conversation,
+                resolution.speaker_ids,
+                resolution.voice_identities,
+                resolution.voice_identity_statuses,
+                owner_voiceprint_available=resolution.owner_voiceprint_available,
+                contradicted_segment_ids=resolution.contradicted_segment_ids,
             )
             conversation.speaker_resolution = ConversationSpeakers(
                 status='resolved' if resolution.coverage >= 0.9 else 'unavailable',

@@ -362,22 +362,58 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
     }
 
 
-DEVICE_HEALTH_PATH = "/api/omi/stats/device-health?days=14"
-PENDANT_DRAIN_TITLE = "Pendant battery drain (%/h, p50 by firmware)"
-PHONE_DRAIN_TITLE = "Phone battery drain (%/h, p50 by build)"
+PENDANT_HEALTH_PATH = "/api/omi/stats/device-health?days=7"
+PHONE_HEALTH_PATH = "/api/omi/stats/device-health?days=14"
+PENDANT_DRAIN_TITLE = "Pendant battery drain %/h — p50 by firmware × platform (7d)"
+PHONE_DRAIN_TITLE = "Phone battery drain %/h — p50 by build (14d)"
 MOBILE_BATTERY_TITLES = {PENDANT_DRAIN_TITLE, PHONE_DRAIN_TITLE}
 
 
+def _drain_bar_overrides(p90_text: str) -> list[dict]:
+    """p90 is a lighter second bar. users stays in the frame for the tooltip
+    and is hidden from the axis so a headcount cannot dwarf %/h."""
+    return [
+        {
+            "matcher": {"id": "byName", "options": p90_text},
+            "properties": [
+                {"id": "custom.fillOpacity", "value": 28},
+                {"id": "custom.lineWidth", "value": 2},
+                {"id": "custom.barWidthFactor", "value": 0.35},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#93c5fd"}},
+            ],
+        },
+        {
+            "matcher": {"id": "byName", "options": "users"},
+            "properties": [
+                {"id": "decimals", "value": 0},
+                {
+                    "id": "custom.hideFrom",
+                    "value": {"tooltip": False, "viz": True, "legend": True},
+                },
+            ],
+        },
+    ]
+
+
 def _battery_bar(panel_id: int, title: str, description: str, root: str,
-                  columns: list[dict], no_value: str | None = None) -> dict:
-    """Categorical bar for one device-health series. One string column is the
-    category; one number column is the bar, so a count series cannot dwarf it."""
+                  columns: list[dict], path: str, p90_text: str,
+                  no_value: str | None = None) -> dict:
+    """Categorical bar for one device-health series. The string column is the
+    category. p50 is the bar; p90 is a thinner companion. users is tooltip-only."""
     defaults: dict = {
         "unit": "none",
         "decimals": 2,
         "min": 0,
         "color": {"mode": "fixed", "fixedColor": "#3b82f6"},
-        "custom": {"axisPlacement": "auto", "fillOpacity": 80, "lineWidth": 0},
+        "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            # Schema 39 reads options.barWidth; this copy is the field the
+            # panel contract asks for. max stays unset so the axis autoscales
+            # to the rows the query already filtered.
+            "barWidth": 0.62,
+        },
     }
     if no_value:
         defaults["noValue"] = no_value
@@ -387,14 +423,16 @@ def _battery_bar(panel_id: int, title: str, description: str, root: str,
         "title": title,
         "description": description,
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
-        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
-        "fieldConfig": {"defaults": defaults, "overrides": []},
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 12},
+        "fieldConfig": {"defaults": defaults, "overrides": _drain_bar_overrides(p90_text)},
         "options": {
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": False},
-            "orientation": "auto",
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": True},
+            "orientation": "horizontal",
             "showValue": "never",
             "stacking": "none",
-            "tooltip": {"mode": "single", "sort": "none"},
+            "tooltip": {"mode": "multi", "sort": "none"},
+            "barWidth": 0.62,
+            "groupWidth": 0.75,
             "xTickLabelRotation": 0,
         },
         "targets": [{
@@ -404,7 +442,7 @@ def _battery_bar(panel_id: int, title: str, description: str, root: str,
             "source": "url",
             "parser": "backend",
             "format": "table",
-            "url": f"{PROXY}{DEVICE_HEALTH_PATH}",
+            "url": f"{PROXY}{path}",
             "url_options": {"method": "GET", "data": ""},
             "root_selector": root,
             "columns": columns,
@@ -417,28 +455,38 @@ def device_health_panels() -> list[dict]:
         _battery_bar(
             1101,
             PENDANT_DRAIN_TITLE,
-            "Median pendant battery drain in percent per hour, by firmware, "
-            "over the last 14 days. The median uses only samples whose drain is "
-            "between 0.1 and 100; an unfiltered median is 0 because most daily "
-            "events report no drain.",
+            "Median and 90th-percentile pendant battery drain in percent per hour, "
+            "by firmware and phone platform, over the last 7 days. Rows need at "
+            "least 20 people. Empty, Unknown, and watchOS firmware (a two-digit "
+            "major such as 26.6) are omitted. Original Friend hardware (1.0.4) "
+            "stays, labeled Friend v1. The median uses only samples whose drain "
+            "is between 0.1 and 100. Hover a bar for the number of people.",
             "pendant_health",
             [
-                {"selector": "firmware", "text": "Firmware", "type": "string"},
+                {"selector": "firmware_label", "text": "Firmware", "type": "string"},
                 {"selector": "p50_drain_valid", "text": "p50 drain %/h", "type": "number"},
+                {"selector": "p90_drain_valid", "text": "p90 drain %/h", "type": "number"},
+                {"selector": "users", "text": "users", "type": "number"},
             ],
+            PENDANT_HEALTH_PATH,
+            "p90 drain %/h",
             "n/a",
         ),
         _battery_bar(
             1102,
             PHONE_DRAIN_TITLE,
-            "Median phone battery drain in percent per hour, by OS and app build, "
-            "over the last 14 days. Empty until Phone Battery Sample events exist "
-            "(shipping in a parallel app PR).",
+            "Median and 90th-percentile phone battery drain in percent per hour, "
+            "by OS, app version, and build, over the last 14 days. Hover a bar "
+            "for the number of people. Empty until Phone Battery Sample events exist.",
             "phone_health.series",
             [
                 {"selector": "label", "text": "OS / build", "type": "string"},
                 {"selector": "p50_drain_per_hour", "text": "p50 drain %/h", "type": "number"},
+                {"selector": "p90_drain_per_hour", "text": "p90 drain %/h", "type": "number"},
+                {"selector": "users", "text": "users", "type": "number"},
             ],
+            PHONE_HEALTH_PATH,
+            "p90 drain %/h",
             "awaiting instrumentation",
         ),
     ]

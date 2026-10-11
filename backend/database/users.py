@@ -1407,7 +1407,7 @@ def delete_user_data(uid: str):
     # Firestore permits immediate children to survive a parent deletion; an
     # early "User not found" return would falsely mark the deletion complete.
     # This picks up
-    # everything the user has written (conversations, memories, action_items,
+    # everything the user has written (conversations, deleted_conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
     # messages, and any future additions).
@@ -1785,10 +1785,13 @@ def is_backend_onboarding_admitted(uid: str, *, firestore_client: Any = None) ->
     return get_backend_onboarding_admission(uid, firestore_client=firestore_client) is not None
 
 
-def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
-    """Update the user's onboarding state in Firestore (merge with existing)."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'onboarding': onboarding_data}, merge=True)
+def set_user_onboarding_state(uid: str, onboarding_data: dict, *, firestore_client: Any = None) -> None:
+    """Merge only submitted fields; concurrent updates must not replay stale state."""
+    if not onboarding_data:
+        return
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    user_ref.set({'onboarding': onboarding_data}, merge=[f'onboarding.{field}' for field in onboarding_data])
 
 
 def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:

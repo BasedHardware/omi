@@ -1,5 +1,4 @@
 """Repository-owned Firestore query and index requirements.
-
 The Firebase manifest is generated from this registry.  Query specs are added
 incrementally: a registered query spec both builds its production query and
 declares the exact composite index that query needs.  Existing index-only
@@ -9,7 +8,7 @@ requirements remain explicit here until their callers are migrated.
 from __future__ import annotations
 
 from typing import Any
-
+from database.review_queries import REVIEW_QUERY_SPECS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -1884,6 +1883,7 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,

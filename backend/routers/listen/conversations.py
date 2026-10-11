@@ -533,6 +533,7 @@ class LiveConversationController:
             geolocation=request.geolocation,
         )
         carry = {}
+        automatic_donor = None
         if carry_from:
             try:
                 previous = await self.host.persistence.call(
@@ -552,6 +553,7 @@ class LiveConversationController:
                 and self._active_speaker_scope() == carry_from[1]
             ):
                 carry = carried_receipt(previous, carry_from[1])
+                automatic_donor = previous
         # The modeled field's None default is omitted, never stamped:
         # persist is merge=True, so a dumped None would become an
         # explicit Firestore key on every fresh recording.
@@ -594,7 +596,11 @@ class LiveConversationController:
             note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
             if note_carry is not None:
                 note_carry(carried_ids)
-        await self.host.speakers.refresh_for_conversation(conversation_id)
+        await self.host.speakers.refresh_for_conversation(
+            conversation_id,
+            owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
+            owner_carry_donor=automatic_donor,
+        )
         self.send_conversation_session(binding, self.host.recording_session_id)
 
     async def prepare(self) -> Optional[str]:

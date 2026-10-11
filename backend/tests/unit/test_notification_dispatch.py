@@ -179,10 +179,15 @@ async def test_async_dispatch_uses_async_transport() -> None:
 def test_refresh_reminder_uses_existing_silent_transport():
     calls = []
     transport = ModuleType('utils.notifications')
-    transport.send_action_item_data_message = lambda *args: calls.append(args)
+    transport.send_action_item_data_message = lambda *args, **kwargs: calls.append((args, kwargs))
     with stub_modules({'utils.notifications': transport}):
         result = dispatch_action_item_reminder(
             user_id='synthetic', action_item_id='task', description='Synthetic task', due_at='2026-10-03T00:00:00+00:00'
         )
     assert result.status == NotificationDispatchStatus.DISPATCHED
-    assert calls == [('synthetic', 'task', 'Synthetic task', '2026-10-03T00:00:00+00:00')]
+    assert calls == [
+        (
+            ('synthetic', 'task', 'Synthetic task', '2026-10-03T00:00:00+00:00'),
+            {'completed': False, 'status': None, 'deleted': False},
+        )
+    ]

@@ -22,6 +22,7 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.model_config import LUNA_MODEL
 from config.vertex_reservations import State
 from utils.llm.vertex_reservation_state import reservation_state, effective_states
 from utils.llm.vertex_reservation_probe import probe_reservation
@@ -43,7 +44,6 @@ from utils.llm.desktop_llm_stub import (
     stub_gemini_proxy_stream_chunks,
 )
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
-from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
 from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
@@ -56,14 +56,11 @@ router = APIRouter(route_class=DesktopGeminiProxyRoute)
 
 _reservation_snapshot: ContextVar[dict[str, State]] = ContextVar('vertex_reservations', default={})
 
-_VERTEX_MODELS = _ALLOWED_MODELS
-# Vertex batch embedding is not wire-compatible with the AI Studio batch method.
-# Keep the provider decision explicit instead of silently trying one API shape on
-# another provider.
+_DESKTOP_ALLOWED_MODELS = _ALLOWED_MODELS | {LUNA_MODEL}
+_VERTEX_MODELS = _ALLOWED_MODELS - {LUNA_MODEL}
 _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent'})
-# Company-paid Flash text is reserved on Vertex PT. Changing this pin without
-# updating the matching tests and backend/docs/vertex-pt-flash.md is the
-# 2026-08-04 AI Studio double-pay regression.
+# Legacy Gemini aliases stay accepted at the BFF for older desktop clients;
+# company-paid text calls map to Luna before direct provider routing.
 VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
 # The declared migration target; see backend/docs/vertex-pt-flash.md.
 VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
@@ -83,22 +80,13 @@ _PT_PROBE_TTL_SECONDS = 600.0
 VERTEX_PT_LOCATION = 'us-central1'
 VERTEX_PT_EXPIRES = '~2027-05-28'
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
-# Over-quota Pro demotes to Flash-Lite (`shared`, on-demand), never to the PT
-# model: demoting to `gemini-2.5-flash` silently dumped the Insight tool loop
-# (~11% of the reservation) onto the saturated PT lane. Evidence:
-# omi-knowledge-base vertex-pt-flash-spend 2026-08-17 workload value ranking.
-_QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 # Absolute ceiling; also the default for BYOK traffic, which keeps its
 # historical behavior.
 _MAX_OUTPUT_TOKENS = desktop_gemini_gateway._MAX_OUTPUT_TOKENS  # pyright: ignore[reportPrivateUsage]
-# Server-paid requests get a smaller default and clamp. No shipped desktop
-# client can emit maxOutputTokens (macOS GenerationConfig has no such field;
-# Windows sends none), so every request used to take the 8192 default while the
-# largest realistic per-lane budget is ~1024 visible tokens plus a thinking
-# budget of up to 1024 (thinking counts toward the output limit on 2.5 models).
-# Mean measured output is ~241 tokens — this bounds the paid tail, it does not
-# change the mean.
+# Omi-paid requests use a 2048-token ceiling. No shipped desktop client emits
+# maxOutputTokens; this bounds the paid Luna tail while preserving smaller
+# explicit client values.
 _SERVER_PAID_MAX_OUTPUT_TOKENS = 2048
 _DEFAULT_THINKING_BUDGET = desktop_gemini_gateway._DEFAULT_THINKING_BUDGET  # pyright: ignore[reportPrivateUsage]
 _MAX_CONTENT_ITEMS = desktop_gemini_gateway._MAX_CONTENT_ITEMS  # pyright: ignore[reportPrivateUsage]
@@ -166,15 +154,19 @@ def _path_parts(path: str) -> tuple[str, str, str]:
     path = path.replace('gemini-3-flash-preview', VERTEX_PT_MODEL)
     prefix, separator, action = path.partition(':')
     model = prefix.removeprefix('models/') if separator and prefix.startswith('models/') else ''
-    if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
+    embedding_model = model == ptr.DESKTOP_EMBEDDING_MODEL
+    valid_actions = (
+        {'embedContent', 'batchEmbedContents'} if embedding_model else {'generateContent', 'streamGenerateContent'}
+    )
+    if action not in _ALLOWED_ACTIONS or model not in _DESKTOP_ALLOWED_MODELS or action not in valid_actions:
         raise HTTPException(status_code=403, detail='Gemini model or action is not allowed')
     return path, model, action
 
 
-def _output_token_cap() -> int:
-    """BYOK traffic keeps its historical 8192 ceiling; server-paid requests are
-    bounded at 2048 because output burns the PT reservation down at 9x."""
-    return _MAX_OUTPUT_TOKENS if get_byok_key('gemini') else _SERVER_PAID_MAX_OUTPUT_TOKENS
+def _output_token_cap(model: str | None = None) -> int:
+    """BYOK keeps its historical 8192 ceiling; Omi-paid Luna output is bounded at 2048."""
+    is_gemini_byok = get_byok_key('gemini') and model != LUNA_MODEL
+    return _MAX_OUTPUT_TOKENS if is_gemini_byok else _SERVER_PAID_MAX_OUTPUT_TOKENS
 
 
 def _use_vertex_ai() -> bool:
@@ -413,6 +405,12 @@ async def _upstream(
 ) -> UpstreamRoute:
     query = _safe_provider_query(query)
     byok_key = get_byok_key('gemini')
+    if model == LUNA_MODEL or not byok_key:
+        raise RoutingFailure(
+            code='routing_gateway_required',
+            message='Company-paid desktop inference must use the LLM gateway',
+            phase='routing',
+        )
     if byok_key:
         return UpstreamRoute(_studio_url(path), {}, {**query, 'key': byok_key}, 'ai_studio_byok', 'byok', 'global')
     vertex_url = _vertex_url(model, action)
@@ -535,7 +533,7 @@ def _overflow_triggered(status: int, message: str) -> bool:
 
 
 async def _meter_server_request(uid: str, path: str, model: str, action: str) -> str:
-    if get_byok_key('gemini'):
+    if get_byok_key('gemini') and model != LUNA_MODEL:
         return path
     try:
         burst_allowed, _, burst_retry_after = await run_blocking(
@@ -545,7 +543,7 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
             raise _GeminiRateLimitExceeded(
                 'Gemini request rate limit exceeded', retryable=True, retry_after=burst_retry_after
             )
-        daily_allowed, daily_remaining, daily_retry_after = await run_blocking(
+        daily_allowed, _, daily_retry_after = await run_blocking(
             critical_executor,
             redis_db.check_rate_limit,
             uid,
@@ -561,23 +559,11 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         raise _GeminiRateLimitExceeded(
             'Gemini daily request limit exceeded', retryable=False, retry_after=daily_retry_after
         )
-    daily_used = _DAILY_HARD_LIMIT - int(daily_remaining)
-    soft_limit = 300 if os.getenv('OMI_MODEL_TIER', '').strip().lower() == 'max' else 30
-    if daily_used > soft_limit and action not in {'embedContent', 'batchEmbedContents'} and model == 'gemini-2.5-pro':
-        record_fallback(
-            component='gemini_model',
-            from_mode='pro',
-            to_mode='flash_lite',
-            reason='quota',
-            outcome='degraded',
-        )
-        return f'models/{_QUOTA_DEMOTION_MODEL}:{action}'
     return path
 
 
-# gemini-embedding-001 single embed uses Vertex :predict when a project is
-# configured (~$278/30d). batchEmbedContents stays on AI Studio because the
-# Vertex batch wire shape is not compatible.
+# BYOK embedding remains on AI Studio; company-paid single and batch embeddings
+# are translated to the gateway embeddings contract above.
 def _vertex_embedding_request(body: bytes) -> bytes:
     payload = json.loads(body)
     try:
@@ -1076,6 +1062,7 @@ def _gateway_envelope() -> desktop_gemini_gateway.ProxyEnvelope:
         timeout_phase=_timeout_phase,
         client_disconnected=ClientDisconnected,
         provider_unavailable_retry_after=_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
+        stream_observation_factory=_DesktopProactivityStreamOutcome,
     )
 
 
@@ -1172,6 +1159,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
         path, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
+        telemetry.payer = 'omi' if model == LUNA_MODEL else ('byok' if get_byok_key('gemini') else 'omi')
         if llm_stub_enabled():
             body_text = body.decode('utf-8', errors='replace')
             telemetry.provider = 'offline_stub'
@@ -1194,7 +1182,12 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 media_type='application/json',
                 headers=_response_headers(telemetry),
             )
-        if await should_refuse(
+        gateway_required = _company_paid_via_gateway(model, action)
+        if gateway_required:
+            # The gateway ignores provider-specific query parameters. Reject
+            # credential overrides here instead of silently accepting them.
+            _safe_provider_query(dict(request.query_params))
+        if model != LUNA_MODEL and await should_refuse(
             model, action, body, request.headers, byok=bool(get_byok_key('gemini')), refresh=_refresh_reservations
         ):
             telemetry.provider = 'reservation_policy'
@@ -1205,11 +1198,11 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
-        if _company_paid_via_gateway(model, action):
-            # The gateway owns pin/overflow/host policy for company-paid
-            # traffic; the requested model (post quota-demotion) picks the
-            # lane and this proxy keeps only its BFF limits.
-            body = _sanitize(body, action, max_output_tokens=_output_token_cap())
+        if gateway_required:
+            # Company-paid desktop text and embeddings must use the gateway.
+            # The model path remains a compatibility alias; the gateway route
+            # owns provider selection and there is no direct Gemini fallback.
+            body = _sanitize(body, action, max_output_tokens=_output_token_cap(model))
             telemetry.shape = _payload_shape(body)
             return await _proxy_via_gateway(
                 request, body, model=model, action=action, streaming=streaming, uid=uid, telemetry=telemetry
@@ -1218,7 +1211,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
         _, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
-        body = _sanitize(body, action, max_output_tokens=_output_token_cap())
+        body = _sanitize(body, action, max_output_tokens=_output_token_cap(model))
         telemetry.shape = _payload_shape(body)
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
@@ -1411,13 +1404,19 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
     )
 
 
-async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
+async def _authorized_desktop_user(request: Request, uid: str = Depends(get_current_user_uid)) -> str:
+    try:
+        _, requested_model, _ = _path_parts(request.path_params.get('path', ''))
+    except HTTPException:
+        requested_model = ''
+    managed_luna = requested_model == LUNA_MODEL
     if await run_blocking(
         db_executor,
         is_desktop_trial_paywalled,
         uid,
         'desktop',
-        required_byok_provider='gemini',
+        required_byok_provider=None if managed_luna else 'gemini',
+        byok_exempt=not managed_luna,
     ):
         raise HTTPException(status_code=402, detail='trial_expired')
     return uid
@@ -1447,7 +1446,7 @@ def _plan_gate_detail(decision: Decision) -> dict[str, str]:
 
 async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
     try:
-        _, _, action = _path_parts(path)
+        _, model, action = _path_parts(path)
     except HTTPException:
         return
     if action in _PLAN_GATED_PROXY_EMBED_ACTIONS:
@@ -1461,7 +1460,7 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
     # 9cbe134a3c / #12839: `gemini_proxy: HTTP 402 (untyped)`).
     if uid == RELEASE_PROBE_UID:
         return
-    funding_owner = 'byok' if get_byok_key('gemini') else 'omi'
+    funding_owner = 'byok' if get_byok_key('gemini') and model != LUNA_MODEL else 'omi'
     decision = await run_blocking(
         db_executor,
         authorize_managed_compute,

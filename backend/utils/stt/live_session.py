@@ -13,6 +13,7 @@ from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLag
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt import streaming as st
+from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
@@ -91,7 +92,7 @@ class LiveChainSession:
         language = host.stt_language
         uid = host.request.uid
         models = [m.strip() for m in st.stt_service_models]
-        keywords: list[str] = host.vocabulary[:100] if host.vocabulary else []
+        keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
         window_eligible = (
             window_allocation(uid)

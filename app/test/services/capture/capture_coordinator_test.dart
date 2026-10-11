@@ -834,6 +834,11 @@ void main() {
       steps: [16, 26, 4],
       phase: CapturePhase.phoneBatchPaused,
     ),
+    (
+      name: 'closing onboarding over a live pendant with batch mode off does not turn batch on',
+      steps: [0, 20, 21],
+      phase: CapturePhase.pendantLive,
+    ),
   ]) {
     test(episode.name, () async {
       final model = SequenceModel();

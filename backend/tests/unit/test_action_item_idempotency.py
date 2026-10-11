@@ -361,7 +361,9 @@ def test_router_replay_effects_use_persisted_state(monkeypatch, completed, has_d
     assert response.completed == completed
     vector.assert_called_once_with('user-1', 'task-1', 'Edited task')
     if has_due_date and not completed:
-        reminder.assert_called_once_with('user-1', 'task-1', 'Edited task', due)
+        reminder.assert_called_once_with(
+            'user-1', 'task-1', 'Edited task', due, completed=response.completed, status=response.status, deleted=False
+        )
     else:
         reminder.assert_not_called()
     if completed:

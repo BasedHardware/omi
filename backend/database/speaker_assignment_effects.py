@@ -72,7 +72,17 @@ def persist_assignment_effects(
 ) -> tuple[list[str], list[Mapping[str, Any]]]:
     """Return the removed sample paths and the relabeled previous segments."""
     # Read before writes; fence profiles and evidence atomically with the label.
-    relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
+    relabeled = [
+        s
+        for i, s in enumerate(before)
+        if segments[i]['id'] in resolved
+        and not (
+            (rejection or {}).get('kind') == 'not_me'
+            and ((receipt.get('segments') or {}).get(segments[i]['id']) or {}).get('segment_only')
+            and s.get('person_id') == segments[i].get('person_id')
+            and s.get('is_user') == segments[i].get('is_user')
+        )
+    ]
     rejected_person_id = (rejection or {}).get('person_id')
     source = user_ref.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict() or {}
     user_doc = user_ref.get(transaction=transaction).to_dict() or {}

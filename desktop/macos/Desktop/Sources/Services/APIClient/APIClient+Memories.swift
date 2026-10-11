@@ -83,10 +83,10 @@ enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
     switch self {
     case .shortTerm:
       return
-        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+        "Recent things Omi noticed. They move to Long-term if they keep coming up, or fade if they don't."
     case .longTerm:
       return
-        "Durable facts Omi keeps long-term - stable details about you, your preferences, and your life."
+        "Lasting facts about you, your preferences, and your life."
     case .archive:
       return "Aged-out long-term memories. Hidden by default; search Archive to find them."
     }

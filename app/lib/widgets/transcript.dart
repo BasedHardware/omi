@@ -72,6 +72,11 @@ class TranscriptWidget extends StatefulWidget {
   final void Function(TranscriptSegment segment)? onConfirmSpeakerLabel;
   final void Function(TranscriptSegment segment)? onRejectSpeakerLabel;
 
+  /// Selection mode of a saved conversation's lines: non-null [selectedSegmentIds] shows a check on
+  /// every line, and a tap anywhere on a line toggles it instead of playing, naming or selecting text.
+  final Set<String>? selectedSegmentIds;
+  final ValueChanged<TranscriptSegment>? onToggleSegmentSelection;
+
   /// When the conversation started. A saved conversation's lines show their clock time
   /// ("12:40 PM") from it; without it they show the offset into the recording.
   final DateTime? startedAt;
@@ -111,6 +116,8 @@ class TranscriptWidget extends StatefulWidget {
     this.playbackFollowRequest = 0,
     this.onUserScroll,
     this.onTopVisibleSegmentChanged,
+    this.selectedSegmentIds,
+    this.onToggleSegmentSelection,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -872,8 +879,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 Widget child = customSegment == null
                     ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
                     : Container(key: _segmentKeys[segment.id], child: customSegment);
+                // Padding, not a Column: a Column centers by default and hands its child loose
+                // width, so a line narrower than the list (a short reply without a name row)
+                // rendered centered instead of at the start like every other line.
                 if (widget.separator && segmentIndex > 0) {
-                  child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
+                  child = Padding(padding: const EdgeInsets.only(top: 4), child: child);
                 }
                 return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
               },
@@ -1172,10 +1182,17 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
         (data.speakerId == omiSpeakerId && !data.isUser);
+    final selected = widget.selectedSegmentIds;
+    final toggle = widget.onToggleSegmentSelection;
+    final selecting = selected != null && toggle != null;
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
-    final asksToConfirm =
-        person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
+    final asksToConfirm = !selecting &&
+        person != null &&
+        confirm != null &&
+        reject != null &&
+        !isTagging &&
+        askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
     final isCurrent = data.id == widget.currentSegmentId;
     final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
@@ -1235,49 +1252,52 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ],
           );
 
-    // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
-    // on the words over the line's. A long press still selects.
-    final words = SelectionArea(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: seek == null ? null : play,
-        onDoubleTap: widget.onEditSegmentText == null
-            ? null
-            : () {
-                HapticFeedback.mediumImpact();
-                widget.onEditSegmentText!(segmentIdx);
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSegmentText(
-              data,
-              segmentIdx,
-              data.isUser,
-              style: OmiType.body.copyWith(
-                color: data.isUser || isCurrent ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
-                letterSpacing: 0.0,
-                height: 1.5,
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSegmentText(
+          data,
+          segmentIdx,
+          data.isUser,
+          style: OmiType.body.copyWith(
+            color: data.isUser || isCurrent ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+            letterSpacing: 0.0,
+            height: 1.5,
+          ),
+        ),
+        if (data.translations.isNotEmpty) ...[
+          for (final translation in data.translations)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _getDecodedText(translation.text),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
+                textAlign: TextAlign.left,
               ),
             ),
-            if (data.translations.isNotEmpty) ...[
-              for (final translation in data.translations)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _getDecodedText(translation.text),
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
-                    textAlign: TextAlign.left,
-                  ),
-                ),
-              const SizedBox(height: 4),
-              _buildTranslationNotice(),
-            ],
-          ],
-        ),
-      ),
+          const SizedBox(height: 4),
+          _buildTranslationNotice(),
+        ],
+      ],
     );
+    // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
+    // on the words over the line's. A long press still selects.
+    final words = selecting
+        ? text
+        : SelectionArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: seek == null ? null : play,
+              onDoubleTap: widget.onEditSegmentText == null
+                  ? null
+                  : () {
+                      HapticFeedback.mediumImpact();
+                      widget.onEditSegmentText!(segmentIdx);
+                    },
+              child: text,
+            ),
+          );
 
     // 8 above and below, plus the list's 4 between segments: the design's 20 between lines.
     Widget line = Padding(
@@ -1295,7 +1315,36 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         ],
       ),
     );
-    if (seek != null) {
+    if (selected != null && toggle != null) {
+      final isSelected = selected.contains(data.id);
+      // The line's own targets (the name, the words) stand down: a tap anywhere toggles the check.
+      line = Semantics(
+        button: true,
+        selected: isSelected,
+        child: GestureDetector(
+          key: ValueKey('transcript_select_${data.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            OmiHaptics.selection();
+            toggle(data);
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 8, right: OmiSpacing.sm),
+                child: Icon(
+                  isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 22,
+                  color: isSelected ? OmiColors.accent : OmiColors.textTertiary,
+                ),
+              ),
+              Expanded(child: IgnorePointer(child: line)),
+            ],
+          ),
+        ),
+      );
+    } else if (seek != null) {
       line = Semantics(
         hint: context.l10n.playFromHere,
         child: GestureDetector(

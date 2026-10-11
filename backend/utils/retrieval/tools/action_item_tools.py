@@ -9,6 +9,7 @@ import contextvars
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
+from utils.messaging.undo import record_write
 import database.action_items as action_items_db
 import database.notifications as notification_db
 from utils.notifications import (
@@ -478,6 +479,7 @@ def create_action_item_tool(
         # Build concise confirmation message
         task_desc = created_item.get('description', 'Task')
         result = f"✅ Added: {task_desc}"
+        result += record_write(uid, 'task', action_item_id, None, created_item)
 
         if created_item.get('due_at'):
             due = created_item['due_at']
@@ -490,6 +492,9 @@ def create_action_item_tool(
                     action_item_id=action_item_id,
                     description=task_desc,
                     due_at=due.isoformat(),
+                    completed=bool(created_item.get('completed')),
+                    status=created_item.get('status'),
+                    deleted=bool(created_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to send notification: {notif_error}")
@@ -640,6 +645,7 @@ def update_action_item_tool(
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
+        result += record_write(uid, 'task', action_item_id, existing_item, updated_item)
 
         # Send notification if item was marked as completed
         if completed is True:
@@ -659,6 +665,8 @@ def update_action_item_tool(
                     updated_item.get('description', ''),
                     bool(updated_item.get('completed')),
                     updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to sync action item reminder: {notif_error}")

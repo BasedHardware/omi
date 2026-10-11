@@ -72,7 +72,7 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
 
     def package(name: str) -> types.ModuleType:
         module = types.ModuleType(name)
-        module.__path__ = []  # type: ignore[attr-defined]
+        module.__path__ = [str(BACKEND_DIR / name.replace('.', '/'))] if name.startswith('utils') else []  # type: ignore[attr-defined]
         install(name, module)
         return module
 

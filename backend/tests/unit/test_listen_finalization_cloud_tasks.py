@@ -69,7 +69,8 @@ def prod_backend_sync_runtime_env(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolate_optional_capture_metadata(monkeypatch):
-    """Keyframe and overlap behavior have focused service/transaction tests."""
+    """External effects have focused service/transaction tests."""
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     monkeypatch.setattr(persisted_finalizer.conversations_db, "get_conversations_finished_after", lambda *a, **kw: [])
 
     async def disabled(*_args, **_kwargs):
@@ -2170,3 +2171,136 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     )
     # The failure is still owned by webhook health, which disables the app after 72h.
     record_failure.assert_called_once_with('omi-google-drive-integration', 401, 'HTTP 401')
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'claim_status,deleted,discarded,structured,emits',
+    [
+        ('claimed', False, False, True, True),
+        ('claimed', True, False, True, False),
+        ('claimed', False, True, True, False),
+        ('claimed', False, False, False, False),
+        ('fenced', False, False, True, False),
+        ('completed', False, False, True, True),
+        ('completed', True, False, True, False),
+        ('completed', False, True, True, False),
+        ('completed', False, False, False, False),
+    ],
+)
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable'])
+async def test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
+    monkeypatch, claim_status, deleted, discarded, structured, emits, vector_case, caplog, terminal
+):
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.completed,
+        discarded=discarded,
+        structured=SimpleNamespace(title='Meeting') if structured else None,
+    )
+    events = []
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    def claim(*args):
+        events.append('claim')
+        return {'status': claim_status, 'fanout_key': 'fixture'}
+
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as counter
+    import utils.conversations.process_conversation as process
+
+    outcome = 'skipped_stale' if vector_case == 'stale' else 'error'
+    before = counter.labels(outcome=outcome)._value.get()
+    before_error = counter.labels(outcome='error')._value.get()
+    latest = SimpleNamespace(**vars(conversation))
+    if vector_case == 'stale' and structured:
+        latest.structured = SimpleNamespace(title='New summary revision')
+    reads = []
+
+    def deserialize(value):
+        reads.append(value)
+        return conversation if len(reads) == 1 else latest
+
+    def write(*args):
+        events.append('vector')
+        if vector_case == 'embedding_error':
+            return process.save_structured_vector(*args)
+        if vector_case == 'index_unavailable':
+            counter.labels(outcome='error').inc()
+            return False
+        return True
+
+    vector = MagicMock(side_effect=write)
+    if vector_case == 'embedding_error':
+        monkeypatch.setattr(process, 'generate_embedding', MagicMock(side_effect=ValueError('private provider detail')))
+
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {
+            'id': conversation.id,
+            'status': 'completed',
+            'deleted': deleted,
+            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal,
+        },
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', deserialize)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
+    monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim)
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', MagicMock(return_value=True)
+    )
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        conversation.id,
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == (
+        ConversationFinalizationDisposition.fenced
+        if claim_status == 'fenced'
+        else ConversationFinalizationDisposition.completed
+    )
+    if claim_status == 'completed':
+        # Re-finalization path: guards only (no stale compare). The fail-soft
+        # wrapper swallows embedding failures, so vector_case='stale' (unpatched
+        # real embedding under the hermetic stub) ends in outcome='error' with
+        # no vector call, and the disposition still completes.
+        if emits and vector_case != 'stale':
+            vector.assert_called_once_with('uid-1', latest)
+            if vector_case != 'success':
+                assert counter.labels(outcome='error')._value.get() == before_error + 1
+        else:
+            vector.assert_not_called()
+    elif emits and vector_case != 'stale':
+        vector.assert_called_once_with('uid-1', latest)
+        assert events == ['claim', 'vector']
+    else:
+        vector.assert_not_called()
+
+    if emits and vector_case != 'success' and not (claim_status == 'completed' and vector_case == 'stale'):
+        assert counter.labels(outcome=outcome)._value.get() == before + 1
+    assert 'processing_failed' not in caplog.text
+    assert 'private provider detail' not in caplog.text
+    if emits and vector_case in {'embedding_error', 'index_unavailable'}:
+        assert 'exception_type=' in caplog.text
+    if claim_status == 'claimed':
+        persisted_finalizer.lifecycle_service.complete_finalization_fanout.assert_called_once()
+        if not discarded and not terminal:
+            persisted_finalizer.extract_memories.assert_called_once()
+        else:
+            persisted_finalizer.extract_memories.assert_not_called()
+        persisted_finalizer.record_finalized_meeting_receipt.assert_called_once()

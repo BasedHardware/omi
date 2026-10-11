@@ -376,10 +376,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                                 const SizedBox(width: OmiSpacing.xs),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: OmiColors.surface2,
-                                    borderRadius: OmiRadius.smAll,
-                                  ),
+                                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                                   child: Text(
                                     context.l10n.comingSoon,
                                     style: OmiType.caption.copyWith(
@@ -406,9 +403,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                               width: 30,
                               height: 30,
                               decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.smAll),
-                              child: Center(
-                                child: FaIcon(FontAwesomeIcons.plus, color: OmiColors.onAccent, size: 16),
-                              ),
+                              child: Center(child: FaIcon(FontAwesomeIcons.plus, color: OmiColors.onAccent, size: 16)),
                             )
                     else
                       Icon(Icons.lock_outline, color: OmiColors.textTertiary, size: 20),
@@ -536,7 +531,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(statusText, style: OmiType.subhead.copyWith(color: statusColor, fontWeight: FontWeight.w600)),
+                    Text(
+                      statusText,
+                      style: OmiType.subhead.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+                    ),
                     if (dateTimeStr.isNotEmpty && job.status == ImportJobStatus.completed)
                       Text(dateTimeStr, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                   ],

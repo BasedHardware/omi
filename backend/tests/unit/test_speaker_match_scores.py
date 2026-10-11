@@ -705,17 +705,22 @@ def test_malformed_cache_evidence_keeps_embeddings():
     np.testing.assert_array_equal(decoded['s'][1], cache['s'][1])
 
 
-def test_bad_embedding_seconds_does_not_change_resolved_voice():
+@pytest.mark.parametrize('bad_seconds', ['invalid', None, -1.0, float('nan'), float('inf')])
+def test_bad_embedding_seconds_preserves_grouping_but_cannot_authorize_owner(bad_seconds):
     import tests.unit.test_conversation_speakers as fixture
     import utils.stt.conversation_speakers as resolver
 
     segments, embeddings, voices = fixture._fragmented([0] * 4)
     before = resolver.resolve_conversation_speakers(segments, embeddings, voiceprints={'user': voices[0]})
     after = resolver.resolve_conversation_speakers(
-        segments, embeddings, voiceprints={'user': voices[0]}, embedding_seconds={s['id']: 'invalid' for s in segments}
+        segments,
+        embeddings,
+        voiceprints={'user': voices[0]},
+        embedding_seconds={s['id']: bad_seconds for s in segments},
     )
     assert after.speaker_ids == before.speaker_ids
-    assert after.voice_identities == before.voice_identities
+    assert before.voice_identities
+    assert not after.voice_identities
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])

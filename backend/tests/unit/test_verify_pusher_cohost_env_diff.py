@@ -125,14 +125,15 @@ def test_missing_required_flag_on_pusher_fails(gate: SimpleNamespace, chart_fixt
     values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
     replace_once(
         values,
-        '  - name: CONVERSATION_NOTES_V2_ENABLED\n    value: "true"\n',
+        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
         "",
     )
 
     errors = gate.validate_preflight(chart_fixture)
 
     assert any(
-        "required identical flag CONVERSATION_NOTES_V2_ENABLED is missing on pusher" in error for error in errors
+        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED is missing on pusher" in error
+        for error in errors
     )
 
 
@@ -177,13 +178,15 @@ def test_required_flag_value_disagreement_fails(gate: SimpleNamespace, chart_fix
     values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
     replace_once(
         values,
-        '  - name: CONVERSATION_NOTES_V2_ENABLED\n    value: "true"\n',
-        '  - name: CONVERSATION_NOTES_V2_ENABLED\n    value: "false"\n',
+        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
+        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "false"\n',
     )
 
     errors = gate.validate_preflight(chart_fixture)
 
-    assert any("required identical flag CONVERSATION_NOTES_V2_ENABLED disagrees" in error for error in errors)
+    assert any(
+        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees" in error for error in errors
+    )
 
 
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:

@@ -16,6 +16,10 @@ class NotesRun:
         self.tier = 'none'
         self.route_reason = 'none'
         self.tier_fallback = False
+        self.escalated = False
+        self.escalation_reason = 'below_threshold'
+        self.words = 0
+        self.screen_count = 0
         self.writer_deadline = 0
         self.configured_deadline = 0
         self.repair_disabled = False
@@ -119,7 +123,8 @@ class NotesRun:
             'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s '
             'selection_effort=%s selection_timeout_seconds=%s model_errors=%s requested_effort=%s '
             'thinking_max_input_bytes=%s estimated_input_bytes=%s tier=%s route_reason=%s tier_fallback=%s '
-            'jev_calls=%s jev_cost=%s writer_deadline_seconds=%s configured_deadline_seconds=%s actual_selection=%s jev_threshold=%s',
+            'jev_calls=%s jev_cost=%s writer_deadline_seconds=%s configured_deadline_seconds=%s actual_selection=%s jev_threshold=%s '
+            'escalated=%s escalation_reason=%s words=%s screen_count=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
@@ -148,6 +153,10 @@ class NotesRun:
             self.configured_deadline,
             self.actual_selection,
             self.jev_threshold,
+            'true' if self.escalated else 'false',
+            self.escalation_reason,
+            self.words,
+            self.screen_count,
         )
 
 

@@ -1577,3 +1577,41 @@ def test_accepting_a_task_candidate_with_a_due_date_arms_its_reminder(fake_db, m
 
     assert receipt.task_id
     assert [call['action_item_id'] for call in scheduled] == [receipt.task_id]
+
+
+@pytest.mark.parametrize(
+    'status,completed,deleted',
+    [
+        ('active', False, False),
+        ('cancelled', False, False),
+        ('superseded', False, False),
+        ('completed', True, False),
+        ('active', False, True),
+    ],
+)
+def test_candidate_reminder_uses_saved_task_lifecycle(monkeypatch, status, completed, deleted):
+    due_at = datetime(2099, 10, 9, 17, tzinfo=timezone.utc)
+    saved = {
+        'description': 'Saved task',
+        'completed': completed,
+        'due_at': due_at,
+        'status': status,
+        'deleted': deleted,
+    }
+    calls = []
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: saved)
+    monkeypatch.setattr(candidate_service, 'sync_action_item_reminder', lambda **kwargs: calls.append(kwargs))
+
+    candidate_service._sync_task_reminder('user-1', 'task-1')
+
+    assert calls == [
+        {
+            'user_id': 'user-1',
+            'action_item_id': 'task-1',
+            'description': 'Saved task',
+            'completed': completed,
+            'due_at': due_at,
+            'status': status,
+            'deleted': deleted,
+        }
+    ]

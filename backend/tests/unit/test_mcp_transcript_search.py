@@ -195,22 +195,18 @@ def test_merge_prefers_transcript_ids_then_summary():
     assert merge_summary_and_transcript_ids(["t1", "t2"], ["s1", "t1", "s2"], limit=3) == ["t1", "t2", "s1"]
 
 
-def test_resolve_merges_chunk_hits_ahead_of_summary_vectors():
+def test_resolve_uses_summary_vectors_without_chunk_index():
     ids = resolve_mcp_conversation_search_ids(
         "uid",
         "budget",
         limit=5,
         query_vectors=lambda *a, **k: ["summary-only", "shared"],
-        search_transcript_chunks=lambda *a, **k: [
-            {"conversation_id": "transcript-hit", "chunk_index": 0, "score": 0.9},
-            {"conversation_id": "shared", "chunk_index": 1, "score": 0.8},
-        ],
     )
-    assert ids == ["transcript-hit", "shared", "summary-only"]
+    assert ids == ["summary-only", "shared"]
 
 
-def test_resolve_shares_one_query_vector_across_searches():
-    captured = {"embed_calls": 0, "summary_vector": None, "chunk_vector": None}
+def test_resolve_embeds_once_for_summary_vector_search():
+    captured = {"embed_calls": 0, "summary_vector": None}
     shared = [0.11, 0.22]
 
     def _embed(q):
@@ -222,47 +218,12 @@ def test_resolve_shares_one_query_vector_across_searches():
         captured["summary_vector"] = query_vector
         return ["s1"]
 
-    def _chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-        captured["chunk_vector"] = query_vector
-        return []
-
     ids = resolve_mcp_conversation_search_ids(
-        "uid",
-        "budget",
-        limit=5,
-        query_vectors=_query_vectors,
-        search_transcript_chunks=_chunks,
-        embed_query=_embed,
+        "uid", "budget", limit=5, query_vectors=_query_vectors, embed_query=_embed
     )
     assert ids == ["s1"]
     assert captured["embed_calls"] == 1
     assert captured["summary_vector"] is shared
-    assert captured["chunk_vector"] is shared
-
-
-def test_resolve_fail_open_when_chunk_search_raises():
-    def _boom(*a, **k):
-        raise RuntimeError("pinecone down")
-
-    ids = resolve_mcp_conversation_search_ids(
-        "uid",
-        "budget",
-        limit=5,
-        query_vectors=lambda *a, **k: ["only-summary"],
-        search_transcript_chunks=_boom,
-    )
-    assert ids == ["only-summary"]
-
-
-def test_resolve_ignores_non_list_chunk_results():
-    ids = resolve_mcp_conversation_search_ids(
-        "uid",
-        "budget",
-        limit=5,
-        query_vectors=lambda *a, **k: ["v1"],
-        search_transcript_chunks=lambda *a, **k: "not-a-list",  # type: ignore[arg-type,return-value]
-    )
-    assert ids == ["v1"]
 
 
 def test_attach_snippets_to_conversations():

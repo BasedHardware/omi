@@ -23,7 +23,8 @@ NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def clear_in_flight():
+def clear_in_flight(monkeypatch):
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     jobs._in_flight_retries.clear()
     yield
     jobs._in_flight_retries.clear()
@@ -342,7 +343,9 @@ def test_deadline_finishes_in_flight_job_as_timeout(world, monkeypatch):
         await asyncio.sleep(60)
 
     world.extract.side_effect = slow
-    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 0.05)
+    # Leave room for the claim and executor handoff on a busy CI host; the
+    # sleeping extractor still has to be cancelled by the deadline.
+    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 1.0)
     asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
     assert world.finished and world.finished[0][4] == 'timeout'
     assert world.extract.await_count == 1

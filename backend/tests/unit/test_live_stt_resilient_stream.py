@@ -479,6 +479,7 @@ def test_whitespace_text_and_stale_candidate_tokens_never_release_the_episode():
 
 @pytest.mark.asyncio
 async def test_transient_soniox_reentry_replays_newest_twenty_second_prefix(monkeypatch):
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
     listener = receiver(monkeypatch)
     ring = listener._resilient_audio
     assert ring is not None
@@ -507,6 +508,7 @@ async def test_transient_soniox_reentry_replays_newest_twenty_second_prefix(monk
 
 @pytest.mark.asyncio
 async def test_consumed_reentry_blocks_a_second_repeat_and_next_provider_serves(monkeypatch):
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
     listener = receiver(monkeypatch)
     listener.recovery.mark_attempted('soniox')
     listener.stt_socket = Socket(dead=True, reason='soniox_rotation')

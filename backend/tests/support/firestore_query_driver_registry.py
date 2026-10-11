@@ -36,7 +36,8 @@ from tests.support.firestore_conversation_profiles import (
     SCAN_PROFILES,
     WITHOUT_PHOTOS_PROFILES,
 )
-from tests.support import firestore_outside_query_drivers as outside_drivers
+from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
+from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -136,7 +137,7 @@ BODY_DIGEST = {
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
-    'database.smart_merge.absorb_conversation': '56123c7f51757edce7c7f0ed8b61fc718e080b542ce5a153bb5b83e6a1a84ca5',
+    'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -2473,7 +2474,14 @@ _add(
     )
 )
 
-for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+for entry in (
+    *outside_drivers.DRIVERS.values(),
+    *outside_drivers.COVERED_BY.values(),
+    *outside_drivers.SKIPS.values(),
+    *dream_drivers.DRIVERS.values(),
+    *dream_drivers.COVERED_BY.values(),
+    *dream_drivers.SKIPS.values(),
+):
     _add(entry)
 
 
@@ -2597,5 +2605,47 @@ _add(
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
+    )
+)
+
+
+# Messaging queries use only collection scans or document-id order; no composite indexes.
+def _messaging_cleanup(client):
+    return unittest.mock.patch.object(client, 'recursive_delete', lambda ref: None, create=True)
+
+
+def _messaging_identity(client, combo, trial):
+    client.documents['channel_identities/link'] = {'uid': UID, 'active': True}
+
+
+def _messaging_visibility(client):
+    return unittest.mock.patch.dict('os.environ', {'OMI_MESSAGING_CHANNELS': 'on', 'OMI_MESSAGING_CHANNELS_UIDS': UID})
+
+
+from database.messaging import MessagingStore
+
+_messaging_store = MessagingStore()
+for method, base, setup in (
+    ('links', {'uid': UID}, None),
+    ('events', {'uid': UID, 'session_id': 'session'}, None),
+    ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
+    ('delete_account', {'uid': UID}, None),
+):
+    _add(
+        DriverEntry(
+            'database.messaging.MessagingStore.' + method,
+            base={'self': _messaging_store, **base},
+            setup=setup,
+            patchers=(_messaging_cleanup,),
+        )
+    )
+_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.pending_jobs',
+        base={'self': _messaging_store, 'channel': 'loopback', 'provider': 'fake'},
+        domains={'limit': [1, 100]},
     )
 )

@@ -117,8 +117,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100)); // t = 1200: prompt
     await tester.pump(_transition);
     expect(find.byType(CupertinoAlertDialog), findsOneWidget, reason: 'native-style alert on iOS');
-    expect(find.text('While you wait, has Omi been nice to use?'), findsOneWidget);
-    expect(find.text('Rating us 5 stars really helps us out ❤️'), findsOneWidget);
+    expect(find.text('Are you enjoying Omi?'), findsOneWidget);
+    expect(find.text('Yes'), findsOneWidget);
+    expect(find.text('No'), findsOneWidget);
+    expect(find.text('Rating us 5 stars really helps us out ❤️'), findsNothing);
     expect(find.byKey(const Key('onboarding_rating_yes')), findsOneWidget);
     expect(find.byKey(const Key('onboarding_rating_no')), findsOneWidget);
 

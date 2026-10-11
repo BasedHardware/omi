@@ -1,20 +1,16 @@
-"""Exercise completed reservation evidence through both serving transports."""
+"""Exercise completed reservation evidence through the gateway Vertex provider."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
-from starlette.requests import Request
 
 from config.vertex_reservations import State
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.providers import VertexGeminiProvider
-from llm_gateway.gateway.schemas import ProviderRef
-from routers import desktop_proxy as proxy
-from utils.llm import desktop_gemini_telemetry
+from llm_gateway.gateway.providers import VertexGeminiProvider, ProviderFailure
+from llm_gateway.gateway.schemas import ProviderRef, FailureClass
 from utils.llm.vertex_reservation_state import ReservationState
 
 TARGET = 'gemini-3.8-flash'
@@ -53,25 +49,7 @@ def wire(case, stream):
     return b'data: ' + encoded + b'\n\n'
 
 
-def request():
-    sent = False
-
-    async def receive():
-        nonlocal sent
-        if not sent:
-            sent = True
-            return {
-                'type': 'http.request',
-                'body': b'{"contents":[{"parts":[{"text":"synthetic"}]}]}',
-                'more_body': False,
-            }
-        await asyncio.Event().wait()
-
-    return Request({'type': 'http', 'method': 'POST', 'path': '/', 'query_string': b'', 'headers': []}, receive)
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize('transport', ['gateway', 'direct'])
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize(
     'case',
@@ -88,7 +66,7 @@ def request():
         'invalid_finish',
     ],
 )
-async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, stream, case):
+async def test_completed_explicit_pt_evidence_matrix(monkeypatch, stream, case):
     if not stream and case in {'unterminated', 'contradictory'}:
         pytest.skip('SSE framing only')
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
@@ -100,67 +78,33 @@ async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, str
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, content=wire(case, stream)))
     ) as client:
-        if transport == 'gateway':
-            provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
-            provider._reservations = store
-            # Exercise dedicated response processing without supplying positive evidence.
-            monkeypatch.setattr(provider, '_attempt_plan', lambda *a, **k: [(TARGET, 'dedicated')])
-            kwargs = dict(
-                provider_ref=ProviderRef(provider='gemini', model=TARGET),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=10000,
-            )
-            try:
-                if stream:
-                    _ = [
-                        c
-                        async for c in provider.stream_chat_completion(
-                            {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
-                        )
-                    ]
-                else:
-                    await provider.create_chat_completion(
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        provider._reservations = store
+        # Exercise dedicated response processing without supplying positive evidence.
+        monkeypatch.setattr(provider, '_attempt_plan', lambda *a, **k: [(TARGET, 'dedicated')])
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=10000,
+        )
+        try:
+            if stream:
+                _ = [
+                    c
+                    async for c in provider.stream_chat_completion(
                         {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
                     )
-            except Exception:
-                assert case != 'valid'
-        else:
-
-            async def connected(_):
-                await asyncio.Event().wait()
-
-            monkeypatch.setattr(proxy, '_wait_for_disconnect', connected)
-            monkeypatch.setattr(desktop_gemini_telemetry, 'schedule_managed_attempt', lambda _: False)
-            monkeypatch.setattr(proxy, 'reservation_state', store)
-            proxy._reservation_snapshot.set({})
-            monkeypatch.setattr(proxy, 'get_byok_key', lambda _: None)
-            monkeypatch.setattr(proxy, 'llm_stub_enabled', lambda: False)
-            monkeypatch.setattr(proxy, '_company_paid_via_gateway', lambda *a: False)
-            monkeypatch.setattr(proxy, '_refresh_reservations', AsyncMock(return_value={}))
-            monkeypatch.setattr(proxy, '_meter_server_request', AsyncMock(side_effect=lambda uid, path, *a: path))
-            route = proxy.UpstreamRoute(
-                'https://synthetic.invalid',
-                {'X-Vertex-AI-LLM-Request-Type': 'dedicated'},
-                {},
-                'vertex_ai',
-                'application_default_credentials',
-                'us',
-            )
-            monkeypatch.setattr(proxy, '_upstream', AsyncMock(return_value=route))
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_client', lambda: client)
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_stream_client', lambda: client)
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
-            action = 'streamGenerateContent' if stream else 'generateContent'
-            response = await asyncio.wait_for(
-                proxy._proxy(request(), f'models/{TARGET}:{action}', stream, 'synthetic'), 2
-            )
-            if stream:
-                _ = [c async for c in response.body_iterator]
+                ]
+            else:
+                await provider.create_chat_completion(
+                    {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                )
+        except Exception:
+            assert case != 'valid'
         assert (TARGET in store._positive) == (case == 'valid')
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('transport', ['gateway', 'direct'])
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize('active', [False, True])
 @pytest.mark.parametrize(
@@ -183,7 +127,7 @@ async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, str
         'shared_backpressure',
     ],
 )
-async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch, transport, stream, active, case):
+async def test_shared_recovery_policy_matrix_through_gateway(monkeypatch, stream, active, case):
     from llm_gateway.gateway.provider_types import ProviderFailure
     from utils.llm import vertex_pt_routing as ptr
 
@@ -249,67 +193,30 @@ async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch
     monkeypatch.setattr(store, 'transact', AsyncMock(return_value=(states, None)))
     token = AsyncMock(return_value='synthetic-token')
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        if transport == 'gateway':
-            provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
-            provider._reservations = store
-            kwargs = dict(
-                provider_ref=ProviderRef(provider='gemini', model=TARGET),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=10000,
-            )
-            try:
-                if stream:
-                    _ = [
-                        chunk
-                        async for chunk in provider.stream_chat_completion(
-                            {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
-                        )
-                    ]
-                else:
-                    await provider.create_chat_completion(
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        provider._reservations = store
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=10000,
+        )
+        try:
+            if stream:
+                _ = [
+                    chunk
+                    async for chunk in provider.stream_chat_completion(
                         {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
                     )
-            except ProviderFailure:
-                assert case in statuses or case in {'empty', 'malformed', 'timeout', 'connection'}
-        else:
-
-            async def connected(_):
-                await asyncio.Event().wait()
-
-            async def refresh():
-                proxy._reservation_snapshot.set(states)
-                return states
-
-            monkeypatch.setattr(proxy, '_wait_for_disconnect', connected)
-            monkeypatch.setattr(desktop_gemini_telemetry, 'schedule_managed_attempt', lambda _: False)
-            monkeypatch.setattr(proxy, 'reservation_state', store)
-            proxy._reservation_snapshot.set({})
-            monkeypatch.setattr(proxy, '_model_unavailable_at', {})
-            monkeypatch.setattr(proxy, 'get_byok_key', lambda _: None)
-            monkeypatch.setattr(proxy, 'llm_stub_enabled', lambda: False)
-            monkeypatch.setattr(proxy, '_company_paid_via_gateway', lambda *a: False)
-            monkeypatch.setattr(proxy, '_refresh_reservations', refresh)
-            monkeypatch.setattr(proxy, '_meter_server_request', AsyncMock(side_effect=lambda uid, path, *a: path))
-            monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', token)
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_client', lambda: client)
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_stream_client', lambda: client)
-            monkeypatch.setattr(proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
-            action = 'streamGenerateContent' if stream else 'generateContent'
-            response = await asyncio.wait_for(
-                proxy._proxy(request(), f'models/{TARGET}:{action}', stream, 'synthetic'), 2
-            )
-            if stream:
-                _ = [chunk async for chunk in response.body_iterator]
-        expected = ['dedicated' if active else 'shared']
-        if active and case in {'capacity', 'absent', 'unavailable', 'shared_unavailable', 'shared_backpressure'}:
-            expected.append('shared')
-        fallback = (case == 'unavailable' and not active) or (case == 'shared_unavailable' and active)
-        if fallback:
-            expected.append('shared')
+                ]
+            else:
+                await provider.create_chat_completion(
+                    {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                )
+        except ProviderFailure:
+            assert not active or case in statuses or case in {'empty', 'malformed', 'timeout', 'connection'}
+        expected = ['dedicated'] if active else []
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == expected
         assert note_request.call_count == len(seen)
         assert [call.args[1] for call in note_request.call_args_list] == expected
-        assert all(f'/models/{TARGET}:' in str(r.url) for r in (seen[:-1] if fallback else seen))
-        if fallback:
-            assert '/models/gemini-3.1-flash-lite:' in str(seen[-1].url)
+        assert all(f'/models/{TARGET}:' in str(r.url) for r in seen)
         assert (TARGET in store._positive) == (active and case == 'valid')

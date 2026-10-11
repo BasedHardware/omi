@@ -6,11 +6,10 @@ retried as transient failures; the healthy batch TDT model was not a live leg.
 This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 `parakeet-window` token. No language parameter is sent to the batch endpoint.
 
-## Controls and default darkness
+## Controls
 
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
-| `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
 | `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
@@ -666,5 +665,4 @@ notification validation in this PR.
 
 Rollback: `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` withdraws TDT only (the
 configured chain, account cooldown, and last-resort remain).
-`STT_CONNECT_ORDER_FROM_CONFIG=false` restores the complete legacy chain.
-Allocation 0 with the flag on is **not** a no-op.
+Configured provider order remains active; allocation 0 does not disable the account cooldown or last-resort leg.

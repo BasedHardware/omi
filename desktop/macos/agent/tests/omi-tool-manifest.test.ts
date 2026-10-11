@@ -116,6 +116,7 @@ describe("omi tool manifest", () => {
       "capture_screen",
       "check_permission_status",
       "request_permission",
+      "get_product_kb",
       "web_search",
       "screenshot",
       "search_contacts",

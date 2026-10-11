@@ -129,3 +129,32 @@ Timezone/preference writes atomically materialize absent enabled/hour defaults
 cutover; `DAILY_SUMMARY_SELECTION_MODE` and legacy/shadow selectors have since
 been retired. This change requires no production user-document inspection or
 mutation.
+
+## Daily recap outage visibility
+
+`071ff86cdc` abandons any saved cohort older than 7200 seconds, regardless of
+its health (tradeoff: `FC-failed-resume-renews-its-own-staleness-ttl`). The Oct 3
+outage resumed `cohort_utc=2026-10-03T20:03` for six days while one recipient
+persistently failed. The underlying token/provider mechanism was not established.
+
+The summary log retains its original fields and appends `cursor_age_seconds`
+and `resumed`. Age is measured before age-out, so an abandonment tick retains
+the diagnostic age even though its current-cohort pass has `resumed=False`.
+The no-label age gauge records that same tick-start observation; a fresh tick
+sets it to zero. Recipient counters use only bounded outcomes: selected,
+generated, generated_retry, failed, timed_out, skipped_budget, suppressed_existing.
+Generation counts current-day records, including generation during a retry;
+existing-record suppression excludes backfill records. Generation and failure
+can both occur for a recipient when persistence succeeds but delivery fails.
+These counters describe cohort passes, not unique owners across multiple ticks.
+
+The notifications production deploy idempotently provisions
+`daily_summary_cohort_incomplete` (15-minute aligned rate > 0 for three hours)
+and `daily_summary_job_heartbeat_missing` (summary absent for 60 minutes).
+The heartbeat expects continuous operation of the 15-minute Scheduler; verify
+at least one summary after provisioning. Investigate job errors and Scheduler
+state when heartbeat is missing; investigate retry recipients, cohort age,
+query errors and budget skips when cohorts stay incomplete. Inspect the
+"Daily recaps — delivery job health" row in the Core Features dashboard.
+Dashboard ingestion setup and post-deploy checks:
+[Cloud Run metrics ingestion](cloud-run-metrics-ingestion.md#notifications-job-metrics).

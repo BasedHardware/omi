@@ -1,3 +1,5 @@
+import os
+
 """Tests for conversation title/summary timezone correctness (issue #4773).
 
 The two structuring functions used to hand the LLM a raw UTC timestamp and ask it to convert to the
@@ -16,6 +18,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
 
 conv_proc = None
 
@@ -133,109 +144,14 @@ def _capture_structure(fn, **kwargs):
     return {"invoke": mock_chain.invoke.call_args[0][0], "system_text": system_text}
 
 
-class TestStructureFunctionsTimezone:
-    def test_get_transcript_structure_passes_local_time(self):
-        result = _capture_structure(
-            conv_proc.get_transcript_structure,
-            transcript="Lunch meeting about the project",
-            started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
-            language_code="en",
-            tz="Pacific/Honolulu",
-            uid="u1",
-        )
-        # 1:48 PM local, not 23:48 UTC — this is the value the model sees.
-        assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
-        assert result["invoke"]["tz"] == "Pacific/Honolulu"
-
-    def test_get_transcript_structure_none_tz_labels_utc(self):
-        result = _capture_structure(
-            conv_proc.get_transcript_structure,
-            transcript="Lunch meeting about the project",
-            started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
-            language_code="en",
-            tz=None,
-            uid="u1",
-        )
-        assert result["invoke"]["started_at"] == "2025-01-01T23:48:00"
-        # The prompt must never say the timezone is "None".
-        assert result["invoke"]["tz"] == "UTC"
-
-    def test_get_transcript_structure_dst_offset(self):
-        # America/New_York in July is EDT (UTC-4): 12:00 UTC -> 08:00 local end to end.
-        result = _capture_structure(
-            conv_proc.get_transcript_structure,
-            transcript="Morning standup",
-            started_at=datetime(2025, 7, 1, 12, 0, tzinfo=timezone.utc),
-            language_code="en",
-            tz="America/New_York",
-            uid="u1",
-        )
-        assert result["invoke"]["started_at"] == "2025-07-01T08:00:00"
-        assert result["invoke"]["tz"] == "America/New_York"
-
-    def test_get_reprocess_transcript_structure_passes_local_time(self):
-        result = _capture_structure(
-            conv_proc.get_reprocess_transcript_structure,
-            transcript="Lunch meeting about the project",
-            started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
-            language_code="en",
-            tz="Pacific/Honolulu",
-        )
-        assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
-        assert result["invoke"]["tz"] == "Pacific/Honolulu"
-
-    def test_reprocess_regenerates_title_and_emoji_from_current_content(self):
-        result = _capture_structure(
-            conv_proc.get_reprocess_transcript_structure,
-            transcript="The corrected transcript is about a product launch",
-            started_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
-            language_code="en",
-            tz="UTC",
-        )
-
-        assert "generate a concise title from the current content" in result["system_text"]
-        assert "select a single emoji" in result["system_text"]
-        assert "For the title, use" not in result["system_text"]
-        assert "title" not in result["invoke"]
-
-    def test_both_prompts_state_local_and_drop_convert_instruction(self):
-        # The semantic core of the fix is the prompt wording; pin it so a revert can't pass silently.
-        for fn, kwargs in [
-            (
-                conv_proc.get_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu", uid="u1"),
-            ),
-            (
-                conv_proc.get_reprocess_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu"),
-            ),
-        ]:
-            result = _capture_structure(fn, started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), **kwargs)
-            text = result["system_text"]
-            assert "already the user's local time" in text
-            assert "do not re-interpret this timestamp as UTC" in text
-            # The old buggy instruction asking the model to convert must be gone.
-            assert "respond in user local timezone" not in text
-
-
 def test_gpt56_cache_keys_are_stable_versioned_and_never_include_request_content():
-    assert conv_proc.TRANSCRIPT_STRUCTURE_CACHE_KEY == 'omi-transcript-structure-v1'
-    assert conv_proc.ACTION_ITEMS_CACHE_KEY == 'omi-extract-actions-v1'
     assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
     assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')
 
 
-def test_gpt56_explicit_cache_defaults_on_in_gateway_and_honors_kill_switch(monkeypatch):
+def test_gpt56_explicit_cache_follows_gateway_route(monkeypatch):
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
-    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     assert conv_proc._gpt56_explicit_cache_enabled()
-
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
-    assert not conv_proc._gpt56_explicit_cache_enabled()
-
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
-    assert conv_proc._gpt56_explicit_cache_enabled()
-
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
     assert not conv_proc._gpt56_explicit_cache_enabled()
 
@@ -243,14 +159,11 @@ def test_gpt56_explicit_cache_defaults_on_in_gateway_and_honors_kill_switch(monk
 def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(monkeypatch):
     """Regression (cubic review): the None/legacy cache_key split keys on gateway mode.
 
-    get_reprocess_transcript_structure and get_app_result have no cacheable
-    static prefix. With the gateway on they must still pass cache_key=None: a legacy
+    get_app_result has no cacheable static prefix. With the gateway on they must still pass cache_key=None: a legacy
     prompt_cache_key would opt these unique-prompt requests back into
-    implicit, billable cache writes. The explicit cache kill switch is set
-    below to verify the old fully-disabled behavior remains available.
+    implicit, billable cache writes.
     """
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
 
     captured: dict = {}
 
@@ -278,24 +191,14 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
 
     with patch.object(conv_proc, 'get_llm', side_effect=_fake_get_llm), patch.object(
         conv_proc, 'ChatPromptTemplate'
-    ) as mock_prompt_cls, patch.object(conv_proc, '_build_conversation_context', return_value='ctx'):
+    ) as mock_prompt_cls:
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=_Chain(_LLM()))
         mock_prompt_cls.from_messages.return_value = mock_prompt
-        conv_proc.get_reprocess_transcript_structure(
-            transcript='Lunch meeting',
-            started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
-            language_code='en',
-            tz='UTC',
-        )
-        assert captured['cache_key'] is None
-        assert captured['prompt_cache_options'] is None
-
-        captured.clear()
         app = MagicMock()
         app.name = 'Test App'
         app.description = 'desc'
         app.memory_prompt = 'memory prompt'
         conv_proc.get_app_result(transcript='Lunch meeting', photos=[], app=app, language_code='en')
         assert captured['cache_key'] is None
-        assert captured['prompt_cache_options'] is None
+        assert captured['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}

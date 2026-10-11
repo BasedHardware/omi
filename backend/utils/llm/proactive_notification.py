@@ -18,13 +18,6 @@ logger = logging.getLogger(__name__)
 
 Record = Mapping[str, object]
 
-# Kill switch for the gate's explicit prompt cache. Default on: the gate is the
-# single largest paid-tier OpenAI line and the whole point of the split prompt
-# below is that its prefix becomes readable. Set to a falsey value to fall back
-# to an unmarked (uncached, plain-input-rate) request without a deploy.
-MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV = 'MENTOR_GATE_PROMPT_CACHE_ENABLED'
-
-
 # ---------------------------------------------------------------------------
 # Step 1: Relevance Gate — is this conversation worth evaluating?
 # ---------------------------------------------------------------------------
@@ -364,13 +357,6 @@ def format_recent_notifications(notifications: Sequence[Record]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _env_flag_enabled(name: str, *, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
 def gate_cache_supported() -> bool:
     """True only when the gate request reaches a model on the explicit-cache contract.
 
@@ -391,7 +377,7 @@ def gate_cache_supported() -> bool:
 
 
 def gate_cache_enabled() -> bool:
-    return gate_cache_supported() and _env_flag_enabled(MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, default=True)
+    return gate_cache_supported()
 
 
 def gate_cache_key(uid: str) -> str:

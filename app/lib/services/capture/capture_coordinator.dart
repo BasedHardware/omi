@@ -1745,7 +1745,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       BatchModeSetRequested() => _reduceBatchMode(state, event, env),
       TranscriptionSettingsChanged() => CaptureTransition(state, const [RunStage(TranscriptionSettingsStage())]),
       RecordProfileChanged() => CaptureTransition(state, const [RunStage(RecordProfileStage())]),
-      OnboardingBatchChanged() => _reduceOnboardingBatch(state, event),
+      OnboardingBatchChanged() => _reduceOnboardingBatch(state, event, env),
       LaunchRecovery() => _reduceLaunchRecovery(state, event, env),
     };
 
@@ -2851,8 +2851,19 @@ CaptureTransition _reduceBatchMode(CaptureCoordinatorState state, BatchModeSetRe
   return CaptureTransition(state.copyWith(phase: phase, active: () => active, sessionSeq: seq), effects);
 }
 
-CaptureTransition _reduceOnboardingBatch(CaptureCoordinatorState state, OnboardingBatchChanged event) {
-  // Suspending flips batchMode off (pendant -> live), restoring flips it on.
+CaptureTransition _reduceOnboardingBatch(
+  CaptureCoordinatorState state,
+  OnboardingBatchChanged event,
+  CaptureEnvironment env,
+) {
+  // Suspending flips batchMode off (pendant -> live), restoring flips it back on only if
+  // something was actually suspended — batch mode may already have been off, in which case
+  // restoring must leave the phase alone instead of turning batch mode on.
+  if (!event.suspended && !env.batchModeSuspendedForOnboarding) {
+    return CaptureTransition(state, [
+      RunStage(OnboardingBatchStage(suspended: event.suspended)),
+    ]);
+  }
   var phase = state.phase;
   var active = state.active;
   final toBatch = !event.suspended;

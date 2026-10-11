@@ -98,9 +98,31 @@ def _base_resolution(monkeypatch, base_stage, conversation, session):
     return old, store, diarizer
 
 
+def _assert_base_identity_projection(candidate, baseline, *, rejected_owner=False):
+    # The pinned stage predates optional score instrumentation. Validate that
+    # metadata separately; it must never alter the client identity projection.
+    assert baseline.speaker_match_scores is None
+    if stage.match_scores.enabled() and rejected_owner:
+        assert len(candidate.speaker_match_scores) == 1
+        row = candidate.speaker_match_scores[0]
+        assert row['stage'] == 'resolution'
+        assert row['decision'] == 'no_match' and row['accepted_person_id'] is None
+        assert row['evidence_seconds'] == 6.0
+        assert not any(s.is_user for s in candidate.transcript_segments)
+    else:
+        assert candidate.speaker_match_scores == ([] if stage.match_scores.enabled() else None)
+    assert candidate.model_dump(exclude={'speaker_match_scores'}) == baseline.model_dump(
+        exclude={'speaker_match_scores'}
+    )
+
+
+@pytest.mark.parametrize('scores_enabled', [False, True])
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 @pytest.mark.parametrize('seed', range(64))
-def test_randomized_base_embedding_is_byte_identical(env, verified_audio, base_stage, monkeypatch, scope, seed):
+def test_randomized_base_embedding_is_byte_identical(
+    env, verified_audio, base_stage, monkeypatch, scope, seed, scores_enabled
+):
+    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
     rng = random.Random(seed)
     extents = []
@@ -129,15 +151,22 @@ def test_randomized_base_embedding_is_byte_identical(env, verified_audio, base_s
     stage.resolve_speakers_for_processing('offline', conversation)
     assert len(candidate.clips) == len(diarizer.clips)
     assert all(a == b for a, b in zip(candidate.clips, diarizer.clips))
-    assert env[0] == store  # durations, vectors, bare/span keys and format
-    assert conversation.model_dump() == old.model_dump()
+    # Evidence duration was already an optional v1 header field. It now serves
+    # identity policy even with score instrumentation off; all embedding bytes,
+    # durations, keys and cache version must remain identical to the base.
+    assert {key: stage.encode_cache(stage.decode_cache(value)) for key, value in env[0].items()} == {
+        key: base_stage.encode_cache(base_stage.decode_cache(value)) for key, value in store.items()
+    }
+    _assert_base_identity_projection(conversation, old)
 
 
+@pytest.mark.parametrize('scores_enabled', [False, True])
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 @pytest.mark.parametrize('extents', [[(0, 1.3), (1.3005, 2.4)], [(0, 6), (6, 12)]])
-def test_base_resolved_identity_survives_cache_hit_and_miss(
-    env, verified_audio, base_stage, monkeypatch, scope, extents
+def test_base_resolved_identity_survives_legacy_evidence_refresh_and_cache_miss(
+    env, verified_audio, base_stage, monkeypatch, scope, extents, scores_enabled
 ):
+    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
     conversation = _scoped_input(scope, extents[-1][1])
     session = verified_audio(conversation, extents)
@@ -161,14 +190,23 @@ def test_base_resolved_identity_survives_cache_hit_and_miss(
     env[0].update(store)
     cached = old.model_copy(deep=True)
     stage.resolve_speakers_for_processing('offline', cached)
-    assert not candidate.clips
-    assert cached.model_dump() == old.model_dump()
+    # Legacy grouping vectors have no measured identity evidence. Refresh the
+    # exact original clip, never replace it with the concatenated bystander.
+    assert candidate.clips == diarizer.clips
+    _assert_base_identity_projection(cached, old, rejected_owner=extents[-1][1] == 12)
+    stage.resolve_speakers_for_processing('offline', cached)
+    assert candidate.clips == diarizer.clips  # measured warm hit needs no refresh
+    _assert_base_identity_projection(cached, old, rejected_owner=extents[-1][1] == 12)
     env[0].clear()  # download returns no bytes: ordinary miss, no invalidation
     stage.resolve_speakers_for_processing('offline', cached)
-    assert len(candidate.clips) == len(diarizer.clips)
-    assert all(a == b for a, b in zip(candidate.clips, diarizer.clips))
-    assert cached.model_dump() == old.model_dump()
-    assert env[0] == store
+    assert candidate.clips == diarizer.clips * 2
+    _assert_base_identity_projection(cached, old, rejected_owner=extents[-1][1] == 12)
+    # Evidence duration was already an optional v1 header field. It now serves
+    # identity policy even with score instrumentation off; all embedding bytes,
+    # durations, keys and cache version must remain identical to the base.
+    assert {key: stage.encode_cache(stage.decode_cache(value)) for key, value in env[0].items()} == {
+        key: base_stage.encode_cache(base_stage.decode_cache(value)) for key, value in store.items()
+    }
 
 
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])

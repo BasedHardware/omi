@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 # Boolean rollout flag only. Plan quotas and allowlists never come from the env.
 FREE_TIER_LOCAL_PROCESSING = os.getenv('FREE_TIER_LOCAL_PROCESSING', 'false').lower() == 'true'
 
-# Coordinator structure spend: ``_get_structured`` → ``get_conversation_notes`` /
-# ``get_transcript_structure`` → ``get_llm('conv_structure')``. Provider: openai.
+# Coordinator structure spend: ``_get_structured`` → ``get_conversation_notes``.
+# The notes writer routes through the conv_structure feature.
 STRUCTURE_FEATURE = 'conv_structure'
 
 DESKTOP_SOURCE = 'desktop'

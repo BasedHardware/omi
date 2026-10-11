@@ -1220,6 +1220,7 @@ def _load_sync_router_for_fast_path():
         'utils.speaker_identification',
         'utils.speaker_learning_jobs',
         'utils.stt.speaker_embedding',
+        'utils.stt.owner_profile',
         'python_multipart',
         'python_multipart.multipart',
     ]
@@ -1241,6 +1242,10 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # These tests exercise Cloud Tasks dispatch, not voiceprint acquisition.
+    # Register the new shared dependency under the existing non-package stubs.
+    sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+    sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
     # Register pipeline submodules explicitly: MagicMock parents cannot resolve them.
     sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)

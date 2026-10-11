@@ -171,7 +171,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
     assert 'MEMORY_MODE=' not in memory_env
-    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED' not in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
     rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
@@ -596,7 +596,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
             assert flag not in sync_flags, flag
 
 
-VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
 
 
 @pytest.mark.parametrize(
@@ -620,7 +620,7 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
     )
     assert _MODULE['_render_secrets'](desktop['secrets']) == expected_secrets
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
-    assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
+    assert VERTEX_PT_CONTRACT in docs.read_text(encoding='utf-8')
 
 
 def test_state_output_carries_cloud_run_jobs(tmp_path, monkeypatch):
@@ -857,9 +857,9 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     }
 
 
-def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
-    # Main's declared mounts at cd3326b3a58d. Preserve the resource, env alias,
-    # and version together: a new alias can also introduce a startup dependency.
+def test_prod_cloud_run_secret_refs_match_approved_bindings():
+    # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
+    # Preserve resource, env alias and version: aliases can introduce startup dependencies.
     common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
     baseline = {
         'backend': common
@@ -871,8 +871,13 @@ def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
             'BETA_PROMOTION_TOKEN',
             'MCP_OAUTH_CLIENTS_JSON',
             'SCREEN_FRAME_SIGNING_SECRET',
+            'DREAM_AGENT_FEEDBACK_SALT',
+            'TELEGRAM_BOT_TOKEN',
+            'TELEGRAM_WEBHOOK_SECRET',
+            'LINQ_API_KEY',
+            'LINQ_WEBHOOK_SECRET',
         },
-        'backend-sync': common | {'GOOGLE_MAPS_API_KEY'},
+        'backend-sync': common | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }

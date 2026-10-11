@@ -242,9 +242,8 @@ def test_production_defaults_choose_c7_and_invalid_budget_fails_safe(monkeypatch
         assert episode_writer_settings().thinking_max_input_bytes == 0
 
 
-def test_locked_production_defaults_and_invalid_uid_fail_closed(monkeypatch):
+def test_locked_production_defaults(monkeypatch):
     import os
-    from config.episode_notes import episode_notes_cohort
 
     for key in list(os.environ):
         if key.startswith('MEETING_NOTES_EPISODE_'):
@@ -258,9 +257,6 @@ def test_locked_production_defaults_and_invalid_uid_fail_closed(monkeypatch):
     )
     assert (settings.tier_min_words, settings.tier_min_source_kinds) == (1500, 2)
     assert (settings.writer_timeout, settings.c6_timeout, settings.thinking_max_input_bytes) == (120, 180, 0)
-    assert not episode_notes_cohort('synthetic-owner')  # Zero percent default.
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', '100')
-    assert not episode_notes_cohort('\ud800')
 
 
 def test_budget_route_reuses_baseline_generation_and_both_judges(tmp_path):

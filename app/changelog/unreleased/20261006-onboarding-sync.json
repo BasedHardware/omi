@@ -1,0 +1,3 @@
+{
+  "change": "Setup progress now retries saving after connection problems, so you do not have to repeat onboarding on another device."
+}

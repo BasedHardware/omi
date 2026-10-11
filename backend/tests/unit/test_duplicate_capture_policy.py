@@ -77,6 +77,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(finalizer, 'process_conversation', process)
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'save_structured_vector', MagicMock())
     monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
     monkeypatch.setattr(finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(
@@ -259,6 +260,11 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
     monkeypatch.setattr(processor, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(processor, 'trigger_conversation_apps', MagicMock())
     monkeypatch.setattr(processor, 'submit_with_context', MagicMock())
+
+    def update_conversation(uid, conversation_id, updates):
+        harness.rows[path(conversation_id, uid)].update(updates)
+
+    monkeypatch.setattr(processor.conversations_db, 'update_conversation', update_conversation)
 
     def persist(uid, payload):
         if persisted:

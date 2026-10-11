@@ -228,12 +228,19 @@ import testing.episode_notes.eval
 
 def test_candidate_pin_matches_production_route_without_importing_clients():
     tree = ast.parse((ROOT / 'backend/utils/llm/model_config.py').read_text())
-    assignments = {
+    constants_tree = ast.parse((ROOT / 'backend/utils/llm/model_constants.py').read_text())
+    constants = {
         node.targets[0].id: node.value
-        for node in tree.body
+        for node in constants_tree.body
         if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
     }
-    assert CANDIDATE_MODEL == 'openai/' + ast.literal_eval(assignments['LUNA_MODEL'])
+    assert CANDIDATE_MODEL == 'openai/' + ast.literal_eval(constants['LUNA_MODEL'])
+    assert any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == 'utils.llm.model_constants'
+        and any(alias.name == 'LUNA_MODEL' for alias in node.names)
+        for node in tree.body
+    )
     profile = next(
         node.value
         for node in tree.body

@@ -140,7 +140,8 @@ def test_terminal_errors_are_warning_logs_with_only_bounded_failure_fields(monke
         'provider=none model=none credential_source=service_forwarded_byok outcome=error '
         'error_class=credential_failure route_serving_class=active failure_class=byok_auth '
         'fallback_used=false fallback_from=none fallback_to=none provider_rejection=none '
-        'budget_source=none output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none rejection_reason=none'
+        'budget_source=none output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none rejection_reason=none '
+        'upstream_http_status=none'
     ]
 
 

@@ -146,6 +146,7 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
 @pytest.mark.asyncio
 @pytest.mark.parametrize('primary', [STTService.modulate, STTService.soniox])
 async def test_control_late_rejection_continues_without_a_window_replay_ring(monkeypatch, caplog, primary):
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
     rejected_service = STTService.soniox if primary == STTService.modulate else STTService.modulate
     rejected = FakeSocket()
     healthy = FakeSocket()

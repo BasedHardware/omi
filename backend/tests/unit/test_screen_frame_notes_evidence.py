@@ -15,6 +15,7 @@ os.environ.setdefault(
 
 import io  # noqa: E402
 import json  # noqa: E402
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -358,7 +359,7 @@ class TestImagesReachTheProvider:
         captured: dict = {}
 
         class Model:
-            def invoke(self, messages):
+            async def ainvoke(self, messages):
                 captured['messages'] = messages
                 payload = {
                     'title': 'Sync',
@@ -371,6 +372,12 @@ class TestImagesReachTheProvider:
                 }
                 return SimpleNamespace(content=json.dumps(payload))
 
+        @asynccontextmanager
+        async def isolated_fake(model):
+            yield model
+
+        monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+        monkeypatch.setattr(conversation_processing, 'isolated_notes_model', isolated_fake)
         monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: Model())
         monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
         conversation_processing.get_conversation_notes(
@@ -392,10 +399,6 @@ class TestImagesReachTheProvider:
 
     def test_no_frames_means_no_extra_message(self, monkeypatch):
         messages = self._notes(monkeypatch, screen_frames=())
-        assert all(not _image_urls(message) for message in messages)
-
-    def test_the_legacy_prompt_never_carries_frames(self, monkeypatch):
-        messages = self._notes(monkeypatch, screen_frames=FRAMES, rich=False)
         assert all(not _image_urls(message) for message in messages)
 
     def _wire_messages(self, client) -> list[dict]:
@@ -422,12 +425,11 @@ class TestImagesReachTheProvider:
 
 
 class TestWiringFlags:
-    """Names/moments ride MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED; images need their own flag."""
+    """Screen text evidence is unconditional; image attachment keeps its own gate."""
 
     def _run(self, monkeypatch, *, screen_text, frames):
         from utils.conversations import meeting_notes_wiring as wiring
 
-        monkeypatch.setenv('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED', 'true' if screen_text else 'false')
         monkeypatch.setenv('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED', 'true' if frames else 'false')
         evidence = (_evidence('a', 2, ['Jordan Rivera'], 'Google Meet call'),)
         loaded: list[str] = []
@@ -459,9 +461,9 @@ class TestWiringFlags:
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
         return names, images, captured.get('screen_moments'), loaded
 
-    def test_everything_off_reads_no_frames(self, monkeypatch):
+    def test_screen_text_evidence_still_loads_without_images(self, monkeypatch):
         names, images, moments, loaded = self._run(monkeypatch, screen_text=False, frames=False)
-        assert (names, images, moments, loaded) == ([], (), (), [])
+        assert (names, images, moments, loaded) == (['Jordan Rivera'], (), (), ['conv-1'])
 
     def test_screen_text_flag_adds_names_and_moments_but_no_images(self, monkeypatch):
         names, images, moments, _loaded = self._run(monkeypatch, screen_text=True, frames=False)

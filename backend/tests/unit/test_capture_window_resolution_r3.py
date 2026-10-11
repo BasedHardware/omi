@@ -95,8 +95,15 @@ def test_continuous_sync_v2_edges_no_worse_than_base(
     assert len(clips) >= len(base_clips)
     if base_clips:
         assert conversation.speaker_resolution.status == base_conversation.speaker_resolution.status == 'resolved'
-        assert env[0]['c1'] == base_store['c1']
+        # The existing optional v1 duration header now serves identity policy.
+        # Preserve exact vector bytes, keys, transcript durations and version.
+        assert stage.encode_cache(stage.decode_cache(env[0]['c1'])) == base_stage.encode_cache(
+            base_stage.decode_cache(base_store['c1'])
+        )
         assert clips == base_clips
+        seconds = {}
+        stage.decode_cache(env[0]['c1'], seconds)
+        assert seconds['s0'] == pytest.approx(len(clips[0]) / (SR * 2), abs=0.00051)
     if clips:
         expected = base_clips[0] if base_clips else b''.join(session.cache[c['path']][0] for c in session.chunks)
         assert clips == [expected]

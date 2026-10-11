@@ -9,6 +9,10 @@ enum GoalType: String, Codable, CaseIterable {
   case scale = "scale"
   case numeric = "numeric"
 
+  static func normalizedRawValue(_ rawValue: String) -> String {
+    rawValue.split(separator: ".").last.map(String.init) ?? rawValue
+  }
+
   var displayName: String {
     switch self {
     case .boolean: return "Done/Not Done"
@@ -60,9 +64,8 @@ struct Goal: Codable, Identifiable {
     id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
     title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType =
-      GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "")
-      ?? .boolean
+    let rawGoalType = try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? ""
+    goalType = GoalType(rawValue: GoalType.normalizedRawValue(rawGoalType)) ?? .boolean
     targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
     currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
     minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0
