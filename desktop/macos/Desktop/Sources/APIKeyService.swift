@@ -458,6 +458,13 @@ final class APIKeyService: ObservableObject {
     let statuses = await BYOKValidator.validateAll(snapshot)
     guard Self.isCurrentReconciliation(generation) else { return }
     guard statuses[selectedProvider] == .ok else {
+      // A transient non-answer (transport failure, provider 5xx/429, offline)
+      // says nothing about the key. Keep the existing enrollment so the user
+      // keeps their free-plan capabilities until a validation with a real
+      // provider verdict re-runs; only a rejection deactivates.
+      if BYOKValidator.isTransient(statuses[selectedProvider] ?? .failed("missing")) {
+        return
+      }
       try? await APIClient.shared.deactivateBYOK()
       guard Self.isCurrentReconciliation(generation) else { return }
       Self.persistEnrolledFingerprints([:])

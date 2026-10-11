@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -67,6 +68,12 @@ class ConversationDetailHeader extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _whenChip(context, conversation),
+                  if (conversation.captureCoverage == 'incomplete')
+                    ConversationDetailChip(
+                      key: const Key('conversation_partial_recording'),
+                      icon: const Icon(Icons.mic_none_outlined),
+                      label: context.l10n.partialRecording,
+                    ),
                   // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
                   if (folder != null) _FolderChip(conversation: conversation, folder: folder),
                   if (peopleLabel != null)
@@ -91,6 +98,7 @@ class ConversationDetailHeader extends StatelessWidget {
               );
             },
           ),
+          ConversationEntityChips(conversationId: conversation.id),
         ],
       ),
     );

@@ -256,6 +256,50 @@ class AppOperationManifestItem:
         }
 
 
+def _has_generated_wire_consumer(path: Path, classes: list[str]) -> bool:
+    """Recognize display adapters fed by generated decoders at their REST call sites.
+
+    Every external fromJson call must receive a generated decoder's toJson,
+    directly or through a straight-line local final binding. A raw consumer stays manual.
+    """
+    if not classes or not path.is_relative_to(APP_SCHEMA_DIR):
+        return False
+    import_uri = 'package:omi/backend/schema/' + path.relative_to(APP_SCHEMA_DIR).as_posix()
+    calls = re.compile(r'\b(?:' + '|'.join(re.escape(name) for name in classes) + r')\.fromJson\s*\(')
+    wire_value = re.compile(r'wire\.Generated\w+\.fromJson\s*\(')
+    observed = False
+    for consumer in sorted(APP_API_DIR.glob('*.dart')):
+        text = _mask_dart_comments(consumer.read_text(encoding='utf-8'))
+        if import_uri not in text:
+            continue
+        for call in calls.finditer(text):
+            observed = True
+            close = _matching_delimiter_offset(text, call.end() - 1, '(', ')')
+            if close is None:
+                return False
+            argument = text[call.end() : close].strip()
+            if re.fullmatch(r'[A-Za-z_]\w*', argument):
+                bindings = list(re.finditer(r'\bfinal\s+' + re.escape(argument) + r'\s*=\s*', text[: call.start()]))
+                if not bindings:
+                    return False
+                value_start = bindings[-1].end()
+                value_end = text.find(';', value_start, call.start())
+                if value_end < 0:
+                    return False
+                # Refuse reassignment or a closed scope between the binding and consumer.
+                between = text[value_end + 1 : call.start()]
+                if '}' in between or re.search(r'\b' + re.escape(argument) + r'\s*=', between):
+                    return False
+                argument = text[value_start:value_end].strip()
+            wire_call = wire_value.match(argument)
+            if wire_call is None:
+                return False
+            wire_close = _matching_delimiter_offset(argument, wire_call.end() - 1, '(', ')')
+            if wire_close is None or argument[wire_close + 1 :].strip() != '.toJson()':
+                return False
+    return observed
+
+
 def scan_dart_schema_file(path: Path) -> DartSchemaFile:
     text = path.read_text(encoding='utf-8')
     return DartSchemaFile(
@@ -266,7 +310,10 @@ def scan_dart_schema_file(path: Path) -> DartSchemaFile:
         to_json_count=len(TO_JSON_RE.findall(text)),
         generated=any(marker in text[:500] for marker in GENERATED_MARKERS) or path.name.endswith('.g.dart'),
         generated_backed=bool(
-            GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text) or _WIRE_BACKED_DECODE_RE.search(text)
+            GENERATED_WIRE_RE.search(text)
+            or WIRE_DECODE_RE.search(text)
+            or _WIRE_BACKED_DECODE_RE.search(text)
+            or _has_generated_wire_consumer(path, CLASS_RE.findall(text))
         ),
     )
 

@@ -54,6 +54,32 @@ class TestCollectConversationAudioTimestamps:
 
 
 class TestTranscribeStoredConversationAudio:
+    @pytest.mark.parametrize('operation', ['list_audio_chunks', 'download_audio_chunks_and_merge'])
+    def test_storage_outage_is_not_missing_audio(self, operation):
+        conversation = SimpleNamespace(id='c1', audio_files=[], language='en')
+        with patch(
+            'utils.conversations.reprocess_transcription.list_audio_chunks', return_value=[{'timestamp': 1.0}]
+        ), patch(
+            f'utils.conversations.reprocess_transcription.{operation}',
+            side_effect=ConnectionError('storage unavailable'),
+        ), patch(
+            'utils.conversations.reprocess_transcription.prerecorded_from_bytes'
+        ) as stt:
+            with pytest.raises(StoredAudioTranscriptionFailedError):
+                transcribe_stored_conversation_audio('u1', conversation, 'en')
+        stt.assert_not_called()
+
+    @pytest.mark.parametrize('error', [FileNotFoundError('gone'), None])
+    def test_missing_or_empty_stored_audio_remains_no_audio(self, error):
+        conversation = SimpleNamespace(id='c1', audio_files=[{'chunk_timestamps': [1.0]}], language='en')
+        with patch(
+            'utils.conversations.reprocess_transcription.download_audio_chunks_and_merge',
+            side_effect=error,
+            return_value=b'',
+        ):
+            with pytest.raises(StoredAudioUnavailableError):
+                transcribe_stored_conversation_audio('u1', conversation, 'en')
+
     def test_raises_when_no_timestamps(self):
         conversation = SimpleNamespace(id='c1', audio_files=[], language='en')
         with patch(
@@ -136,7 +162,7 @@ class TestReprocessTranscriptionRoute:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
-        assert exc.value.detail == 'No stored audio available to retranscribe'
+        assert exc.value.detail == {'code': 'no_audio', 'message': 'No stored audio available to retranscribe'}
         process.assert_not_called()
 
     def test_returns_400_when_stt_produces_no_speech(self):
@@ -154,7 +180,7 @@ class TestReprocessTranscriptionRoute:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
-        assert exc.value.detail == 'Transcription produced no speech'
+        assert exc.value.detail == {'code': 'no_speech', 'message': 'Transcription produced no speech'}
         process.assert_not_called()
 
     def test_returns_502_when_stt_provider_fails(self):
@@ -172,6 +198,7 @@ class TestReprocessTranscriptionRoute:
             with pytest.raises(HTTPException) as exc:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 502
+        assert exc.value.detail['code'] == 'failed'
         process.assert_not_called()
 
     def test_replaces_segments_and_reuses_enrichment_path(self):

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-protocol-status-mapped-to-wrong-cause",
+  "violated_contract": "A diagnostic reason derived from a protocol status must agree with that status's specified meaning. Android HCI local-host termination (0x16), link-layer response timeout (0x22), and failed connection establishment (0x3e) must not be reported as another-phone pairing, a link-key mismatch, or an Instant Passed error; those claims misdirect users and contaminate support exports and health telemetry. The corrected native connection error must reach its pending connect caller with the original status reason, without a second unhandled error before the platform request returns.",
+  "canonical_prevention": "Centralize the production diagnostics and connection-error classifiers, use only causes established by the protocol definition, preserve the original numeric code when the existing reason vocabulary is less specific, and execute specification-backed regression vectors plus adjacent-status controls against those classifiers. Exercise the native-to-Dart pending-readiness error path without triggering a pairing-loss action for local termination. Observe the readiness future before awaiting the platform request so an early native disconnect preserves caller-visible failure without an unhandled asynchronous escape.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/BleDisconnectReason.kt",
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/DeviceDiagnosticsContractTest.kt",
+    "app/test/services/devices/transports/native_ble_transport_test.dart",
+    "app/lib/services/devices/transports/native_ble_transport.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/**",
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/**"
+  ],
+  "status": "open"
+}

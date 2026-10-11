@@ -23,7 +23,8 @@ NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def clear_in_flight():
+def clear_in_flight(monkeypatch):
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     jobs._in_flight_retries.clear()
     yield
     jobs._in_flight_retries.clear()
@@ -234,11 +235,10 @@ async def test_finalizer_completion_schedules_learning_retry(monkeypatch):
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
     monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', scheduled)
 
     async def disabled(*_args, **_kwargs):
@@ -299,11 +299,10 @@ async def test_finalizer_fenced_or_failed_fanout_never_schedules(monkeypatch, fa
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
     monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', scheduled)
 
     async def disabled(*_args, **_kwargs):
@@ -344,7 +343,9 @@ def test_deadline_finishes_in_flight_job_as_timeout(world, monkeypatch):
         await asyncio.sleep(60)
 
     world.extract.side_effect = slow
-    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 0.05)
+    # Leave room for the claim and executor handoff on a busy CI host; the
+    # sleeping extractor still has to be cancelled by the deadline.
+    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 1.0)
     asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
     assert world.finished and world.finished[0][4] == 'timeout'
     assert world.extract.await_count == 1

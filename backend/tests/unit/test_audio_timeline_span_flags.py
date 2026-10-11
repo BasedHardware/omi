@@ -41,12 +41,26 @@ def test_flags_truthy_parser(monkeypatch):
 SPANS_ON_SCOPES = {'prod/gke/backend-listen', 'prod/gke/pusher'}
 
 
+# Rollout step 3: the resolution consumer is on for every prod processing host.
+CONSUMER_ON_SCOPES = SPANS_ON_SCOPES | {
+    'prod/cloud_run/backend',
+    'prod/cloud_run/backend-sync',
+    'prod/cloud_run/backend-sync-backfill',
+    'prod/cloud_run/backend-integration',
+}
+
+
 def _expected(flag, scope):
-    return 'true' if flag == 'AUDIO_TIMELINE_SPANS' and scope in SPANS_ON_SCOPES else 'false'
+    if flag == 'AUDIO_TIMELINE_SPANS':
+        return 'true' if scope in SPANS_ON_SCOPES else 'false'
+    return 'true' if scope in CONSUMER_ON_SCOPES else 'false'
 
 
 def test_composed_declarations_pin_rollout_state():
-    composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    composed = yaml.load(
+        (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
 
     def _env_maps(environment):
         env = composed['environments'][environment]
@@ -94,5 +108,5 @@ def test_prod_helm_values_keep_v2_off_where_spans_are_on():
                 env[name] = stripped.split(':', 1)[1].strip().strip('"\'').lower()
                 name = None
         assert env.get('AUDIO_TIMELINE_SPANS') == 'true', f'{chart} prod must enable spans'
-        assert env.get('LIVE_SPEAKER_SPAN_RESOLUTION') == 'false', f'{chart} prod must keep the consumer off'
+        assert env.get('LIVE_SPEAKER_SPAN_RESOLUTION') == 'true', f'{chart} prod must enable the consumer'
         assert env.get('AUDIO_TIMELINE_V2') == 'false', f'{chart} prod must keep AUDIO_TIMELINE_V2 false'

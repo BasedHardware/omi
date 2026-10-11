@@ -282,55 +282,6 @@ class CalendarEventLink {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-/// A booked calendar event that has no recorded conversation (SCA-381).
-///
-/// The Conversations list renders these as an honest "Not captured" group
-/// beside the audio rows; they are calendar rows, never conversations.
-class CalendarCaptureGap {
-  final String eventId;
-  final String title;
-  final DateTime startTime;
-  final DateTime endTime;
-  final String status;
-  final String coverage;
-
-  CalendarCaptureGap({
-    required this.eventId,
-    required this.title,
-    required this.startTime,
-    required this.endTime,
-    this.status = 'confirmed',
-    this.coverage = 'not_captured',
-  });
-
-  factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
-    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
-  }
-
-  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
-    return CalendarCaptureGap(
-      eventId: generated.eventId,
-      title: generated.title,
-      startTime: generated.startTime,
-      endTime: generated.endTime,
-      status: generated.status,
-      coverage: generated.coverage,
-    );
-  }
-}
-
-/// Buckets capture gaps by the local day of their start, matching the
-/// conversation list's per-day grouping so a gap renders under its date header.
-Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
-  final byDay = <DateTime, List<CalendarCaptureGap>>{};
-  for (final gap in gaps) {
-    final local = gap.startTime.toLocal();
-    final day = DateTime(local.year, local.month, local.day);
-    (byDay[day] ??= <CalendarCaptureGap>[]).add(gap);
-  }
-  return byDay;
-}
-
 class AudioFile {
   final String id;
   final String uid;
@@ -463,6 +414,9 @@ class ServerConversation {
   /// model ran and found nothing to summarize.
   final bool summaryRetryable;
 
+  /// Coverage projected from the server capture receipt; absent on legacy rows.
+  final String? captureCoverage;
+
   // local label
   bool isNew = false;
 
@@ -495,10 +449,15 @@ class ServerConversation {
     this.captureGroup,
     this.speakerResolution,
     this.summaryRetryable = false,
+    this.captureCoverage,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
+    final captureEvidence = json['capture_evidence'];
+    if (captureEvidence is Map && captureEvidence['coverage'] is String) {
+      normalized['capture_coverage'] = captureEvidence['coverage'];
+    }
     final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
@@ -581,6 +540,7 @@ class ServerConversation {
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
       summaryRetryable: generated.summaryRetryable == true,
+      captureCoverage: generated.captureCoverage,
     );
   }
 
@@ -616,6 +576,7 @@ class ServerConversation {
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
+      if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }
 
@@ -648,6 +609,7 @@ class ServerConversation {
       captureGroup: captureGroup?.toGenerated(),
       speakerResolution: speakerResolution?.toGenerated(),
       summaryRetryable: summaryRetryable ? true : null,
+      captureCoverage: captureCoverage,
     );
   }
 

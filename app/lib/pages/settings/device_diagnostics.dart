@@ -93,13 +93,18 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
+  int _recentWindowStart(int countersSinceMs) {
+    final cutoff = clock.now().millisecondsSinceEpoch - const Duration(days: 7).inMilliseconds;
+    return countersSinceMs > cutoff ? countersSinceMs : cutoff;
+  }
+
   /// The connection summary the page shows, over the window since [_countersSinceMs] (bounded by
   /// the native history's 7-day retention). Its window counts mirror `reconnection_count_window`
   /// and `fail_to_connect_count_window` in [_buildBundle].
   DiagnosticsSummary get _summary => summarizeDiagnostics(
         _diagnostics?.disconnectHistory ?? const [],
         nowMs: clock.now().millisecondsSinceEpoch,
-        sinceMs: _countersSinceMs,
+        sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
       );
 
   Future<void> _loadBatteryHistory() async {
@@ -138,6 +143,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    final windowStart = _recentWindowStart(sinceMs);
     return {
       'schema_version': 2,
       'device_id': widget.deviceId,
@@ -158,10 +164,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
           .length,
       'fail_to_connect_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && e['eventType'] == 'fail_to_connect')
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
       'battery_history': extended['battery_history_v2'] ??

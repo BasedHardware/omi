@@ -161,7 +161,7 @@ class _ContainmentRejected(Exception):
 
 
 def _field(row: Any, name: str) -> Any:
-    return row.get(name) if isinstance(row, Mapping) else getattr(row, name, None)
+    return row.get(name) if isinstance(row, dict) or isinstance(row, Mapping) else getattr(row, name, None)
 
 
 def _window(row: Any) -> tuple[datetime, datetime, str, Any] | None:

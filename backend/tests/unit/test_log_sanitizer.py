@@ -1,6 +1,7 @@
 """Tests for utils.log_sanitizer — masks sensitive tokens while preserving searchability."""
 
 import asyncio
+import importlib.util
 import io
 import json
 import logging
@@ -599,7 +600,7 @@ async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(monkeypatch, 
 
 
 def test_soniox_persistent_rate_limit_log_redacts_payload(monkeypatch, caplog):
-    monkeypatch.setattr(soniox, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(soniox, '_last_rate_limit_error_log', float('-inf'))
     monkeypatch.setattr(soniox, '_rate_limit_events', [])
     with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
         soniox._rate_limit_persistent_error(f'429 limit_exceeded {SENTINEL} {SENTINEL_URL}', force=True)
@@ -609,6 +610,18 @@ def test_soniox_persistent_rate_limit_log_redacts_payload(monkeypatch, caplog):
     assert 'limit_exceeded' in errors[0].getMessage()
     assert SENTINEL not in _caplog_text(caplog)
     assert SENTINEL_URL not in _caplog_text(caplog)
+
+
+def test_soniox_first_rate_limit_escalation_logs_on_a_freshly_booted_host(monkeypatch, caplog):
+    # A pristine module copy exercises the real initial throttle state, which other
+    # tests overwrite; the monotonic clock is two minutes past boot, inside the window.
+    spec = importlib.util.find_spec('utils.stt.soniox')
+    fresh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh)
+    monkeypatch.setattr(fresh.time, 'monotonic', lambda: 120.0)
+    with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
+        fresh._rate_limit_persistent_error('429 limit_exceeded', force=True)
+    assert [r for r in caplog.records if 'rate limiting persists' in r.getMessage()]
 
 
 @pytest.mark.asyncio

@@ -147,7 +147,6 @@ _integration_base_mod.ensure_capped = lambda val, cap, msg: min(val, cap)
 _integration_base_mod.parse_iso_with_tz = MagicMock(return_value=(None, None))
 _integration_base_mod.prepare_access = MagicMock()
 
-
 def _load(module_name, rel_path):
     if module_name in sys.modules:
         return sys.modules[module_name]

@@ -24,17 +24,20 @@ from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
+from utils.conversations import relevance_rescue
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
 
 DecidedBy = Literal['policy', 'user', 'rule', 'model', 'jev', 'override']
 
-# Jev discards only when P(discard) = 1 - P(worth keeping) is above this. On the
-# owner's labels (2026-09-23) 0.95 lost none of 20 conversations he kept; on the
-# agent-labelled set the zero-loss point was 0.93, and calibration is poor, so
-# the margin is deliberately above it. Lowering it needs a re-measured set.
-JEV_DISCARD_THRESHOLD = 0.95
+# Jev discards only when P(discard) = 1 - P(worth keeping) is above this.
+# Re-measured 2026-10-05 on the owner's labels (EXP-004): tuned on 55 decided
+# 2026-10 labels, then checked once on 77 held-out 2026-09-23 labels, where 0.80
+# lost 3 of 20 kept conversations against 15-17 for the nano prompt, and kept
+# 10 of 57 noise. Its ranking is good (AUC ~0.85) but calibration is not, so
+# the cut is a measured cutoff, not a probability. Changing it needs a re-measure.
+JEV_DISCARD_THRESHOLD = 0.80
 
 
 @dataclass(frozen=True)
@@ -181,7 +184,14 @@ def decide_relevance(
         if verdict == 'keep':
             return keep('rule', rule)
         if verdict == 'discard':
-            return discard_unless_calendar('rule', rule)
+            decision = discard_unless_calendar('rule', rule)
+            mode = relevance_rescue.rescue_mode()
+            if decision.discard and mode != 'off' and relevance_rescue.should_rescue(texts, rule):
+                rescue = relevance_rescue.score_segments(texts)
+                relevance_rescue.record_rescue(mode=mode, rule=rule, outcome=rescue.outcome)
+                if mode == 'on' and rescue.rescued:
+                    return RelevanceDecision('keep', 'jev', f'rescue_{rule}', trigger, jev_p_discard=rescue.score)
+            return decision
 
     if model_discards is None:
         return keep('policy', 'model_withheld')

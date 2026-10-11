@@ -137,6 +137,34 @@ and background processing.
   processing budget can refuse the required refresh. Decisions are recorded as
   server-only `smart_merge_decision` before the absorb transaction.
   Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
+  `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off`/`shadow`/`on`, default
+  `off`) adds a second gap policy that applies only when both rows carry live
+  `external_data` stamps — nonempty `recording_session_id`, nonempty
+  `recording_origin_id`, equal origins (session ids name server rollover
+  generations and are never compared). The gate then uses the server wall
+  clock: `new.created_at - last.finished_at` within `0..MAX_GAP_SECONDS`,
+  where `last` is the ledger fragment with the maximum `finished_at`
+  (`smart_merge_policy.newest_wallclock_fragment`; `started_at` drifts on
+  rollover so it never selects). A newest fragment owned by a donor tombstone
+  is fetched as one bounded full row at decision time and re-read inside the
+  absorb transaction (reusing the flatten ancestry read when the id is already
+  in the union), so a concurrent mutation of origin, finish or status is
+  rechecked against the transaction's current row rather than trusted —
+  the policy is re-run on that fresh row, so a moved `finished_at` is
+  decided on the new value, and only absent or mismatched proof runs the
+  exact legacy policy including the speech-gap minimum. Wall-span caps use
+  `created_at`/`finished_at`; `wallclock_gap_negative` and
+  `wallclock_time_invalid` are the bounded new skip reasons. `shadow` runs the
+  corrected evaluation only when the legacy gate skipped a proven pair — one
+  extra Jev question with corrected timing, one bounded
+  `smart_merge_wallclock_shadow` log line and counter, no writes. Deployment
+  defaults to `shadow` on all six smart-merge hosts in dev and prod
+  (`backend`, `backend-sync`, `backend-sync-backfill`,
+  `backend-integration`, `backend-listen`, `pusher`). Timestamp
+  computation is unchanged: `started_at`, transcript rebasing and stored
+  ledger entries keep the drifted speech axis; only the decision record's
+  `gap_seconds` (wall) / `speech_gap_seconds` (`None`) and the Jev state's
+  endpoint starts (replaced by `created_at`) reflect wall time.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The
@@ -171,6 +199,10 @@ and background processing.
   removed only after this writer has baked (see the module runbook note).
 - `reprocess_transcription.py` is the user-initiated audio→transcript path for
   one conversation (`POST /v1/conversations/{id}/reprocess-transcription`).
+  Missing/empty audio returns HTTP 400 with `detail.code=no_audio`; empty STT
+  uses `no_speech`. Storage/list/merge outages and STT failures return HTTP 502
+  with `detail.code=failed`, preserving the previous transcript. The app reads
+  these codes independently of the human-readable `detail.message`.
   It merges stored chunks and runs the same prerecorded STT helper the sync
   pipeline uses, then the route hands the new segments to
   `process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)`. It is not a processing-queue

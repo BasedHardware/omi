@@ -30,7 +30,7 @@ class StoredAudioEmptyTranscriptError(Exception):
 
 
 class StoredAudioTranscriptionFailedError(Exception):
-    """The prerecorded STT provider failed."""
+    """Stored-audio infrastructure or the prerecorded STT provider failed."""
 
 
 def collect_conversation_audio_timestamps(uid: str, conversation: Any) -> List[float]:
@@ -81,12 +81,13 @@ def transcribe_stored_conversation_audio(
 ) -> List[TranscriptSegment]:
     """Run prerecorded STT on the conversation's stored audio and return segments."""
     conversation_id = getattr(conversation, 'id', '')
-    timestamps = collect_conversation_audio_timestamps(uid, conversation)
-    if not timestamps:
-        raise StoredAudioUnavailableError('No stored audio available to retranscribe')
-
     try:
+        timestamps = collect_conversation_audio_timestamps(uid, conversation)
+        if not timestamps:
+            raise StoredAudioUnavailableError('No stored audio available to retranscribe')
         pcm_bytes = download_audio_chunks_and_merge(uid, conversation_id, timestamps)
+    except StoredAudioUnavailableError:
+        raise
     except FileNotFoundError:
         raise StoredAudioUnavailableError('No stored audio available to retranscribe') from None
     except Exception as exc:
@@ -94,7 +95,7 @@ def transcribe_stored_conversation_audio(
             'event=reprocess_transcription outcome=audio_merge_failed exception_type=%s',
             type(exc).__name__,
         )
-        raise StoredAudioUnavailableError('No stored audio available to retranscribe') from exc
+        raise StoredAudioTranscriptionFailedError('Stored audio could not be loaded') from exc
 
     if not pcm_bytes:
         raise StoredAudioUnavailableError('No stored audio available to retranscribe')

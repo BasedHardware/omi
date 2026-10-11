@@ -147,6 +147,7 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
+            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -353,6 +354,7 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
+            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -512,6 +514,7 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
+            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -914,6 +917,7 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
+            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
 
@@ -2949,3 +2953,30 @@ workflows:
             --version "${PROMOTE_VERSION:-}" \
             --ios-build "${PROMOTE_IOS_BUILD:-}" \
             --android-build "${PROMOTE_ANDROID_BUILD:-}"
+
+  mobile-daily-train:
+    name: Daily Mobile Store Train (queue for human release)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        # "true" reads store state and prints the plan without submitting or drafting anything.
+        TRAIN_DRY_RUN: "false"
+    working_directory: app
+    scripts:
+      - name: Queue the newest internal builds for a human release
+        script: |
+          set -euo pipefail
+          # Dispatched daily by .github/workflows/mobile_daily_train.yml. iOS: submit the newest
+          # processed TestFlight build for review with release type MANUAL, one submission in flight
+          # at a time; an approved-but-unreleased version is replaced by a newer build. Android: write
+          # the newest internal/alpha build to production as a draft release. Nothing here releases.
+          DRY_RUN_FLAG=""
+          if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG

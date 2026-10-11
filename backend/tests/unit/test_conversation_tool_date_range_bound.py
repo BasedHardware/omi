@@ -88,6 +88,24 @@ for _name, _attrs in {
         setattr(_m, _a, MagicMock())
 
 
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+_transcript_search = sys.modules['utils.conversations.mcp_transcript_search']
+_transcript_search.ChatTranscriptSearch = _ChatTranscriptSearch
+_transcript_search.chat_transcript_coverage_note = MagicMock(return_value='Transcript coverage is partial.')
+_transcript_search.chat_transcript_excerpts = MagicMock(return_value={})
+_transcript_search.merge_chat_conversation_ids = MagicMock(return_value=[])
+_transcript_search.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
+
 def _apply_chat_scope_dates(scope, start_date, end_date):
     """Pass-through stub: date-range bound tests do not exercise hard-scope intersection."""
     return start_date, end_date, None
@@ -124,7 +142,9 @@ class TestExactConversationReference:
             return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]
         )
         ct.deserialize_conversation = MagicMock(
-            return_value=SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": conversation_id})
+            return_value=SimpleNamespace(
+                id=conversation_id, transcript_segments=[], model_dump=lambda: {"id": conversation_id}
+            )
         )
         ct.conversations_to_string = MagicMock(return_value="[formatted]")
         ct.notification_db.get_user_time_zone = MagicMock(return_value="UTC")

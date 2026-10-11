@@ -319,6 +319,29 @@ sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-li
 sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[15m])) / clamp_min(sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[15m])), 1)
 ```
 
+The bounded companion `omi_stt_routing_cohort_outcomes_total` uses labels
+`routing_arm`, `signal`, `outcome`. Arms are `on` (sticky selected UID),
+`shadow` (static session admitted in shadow mode), and `off` (off mode or an
+unassigned UID in on mode). Capture precedes initialization and is pinned
+through child tasks, replay, provider switches and flag changes. Terminal
+attempt outcomes mirror `omi_live_stt_terminal_total`, including pre-audio
+failure; transcript outcomes mirror the headline session counter for this
+managed subset. Session-end `fallback_exhausted=yes|no` counts whether the
+shared helper emitted any exhausted event for `stt_selection|stt_live_session`;
+`terminal_after_text=yes|no` uses the existing recovery-gated predicate.
+These booleans count each completed socket once, including too-short sessions.
+Existing metrics and serving behavior are unchanged.
+
+`omi_stt_routing_cohort_paid_audio_seconds_total{routing_arm,provider}` emits
+accepted paid-adapter PCM seconds at the same session-end seam. Soniox,
+Modulate and Deepgram admission includes replay, pre-roll and accepted idle
+reopens; rejected sends and idle buffering are excluded until transport
+acceptance. This is an admission proxy, not confirmed wire delivery or vendor
+billing. All bounded children exist from process start. Compare uniform on/off
+configuration, continuous scrapes and matched completion windows; never infer
+cohort from pod track or pool shadow with off silently. First-text latency and
+serving-owned disruption remain separate uninstrumented cohort gates.
+
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 
@@ -380,3 +403,82 @@ more than 1,000 matching keys and uses short Redis socket deadlines. It does
 not reset process-local circuits; those recover on their existing cooldown,
 or after an operator controlled listen restart. Never point the script at a
 different environment to clear a production alert.
+
+
+## Router-on readiness controls (default off)
+
+`STT_PAID_SPILLOVER_BUDGET_ENABLED=false` preserves existing selection. When
+true, router-on sessions encountering Parakeet capacity refusal must obtain a
+fleet admission before promoting a paid route. Redis TIME and one atomic Lua
+operation enforce a fixed UTC-minute budget across pods; all endpoints and credentials for
+the same provider share the budget; rotations do not reset it. Defaults are 30 promotions each
+for `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE`,
+`STT_PAID_SPILLOVER_MODULATE_PER_MINUTE`, and
+`STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` (range 0–10000). Zero refuses
+promotions. Malformed or out-of-range caps deny promotions before Redis access,
+log once per provider per process without the raw value, and report `unavailable`.
+Redis faults or budget denial restore the configured order and
+emit `omi_stt_paid_spillover_admissions_total{provider,outcome}` with outcomes
+`admitted`, `denied`, `unavailable`. This limits additional router promotions;
+the static chain may still require a paid dial. A minute boundary can admit
+two adjacent budgets in a short interval. Qualify paid concurrency, retry and
+billing headroom independently before enabling router traffic.
+
+`STT_NO_TEXT_RESCUE_ENABLED=false` preserves existing first-text handling.
+Enabling it also requires `STT_FAILOVER_RECOVERY_ENABLED=true`; the choice and
+`STT_NO_TEXT_RESCUE_SECONDS` are pinned when the managed session is created.
+The default 60-second lease (range 5–120) bounds paid audio admission by wall time and paid
+admitted audio, including replay and successor switches, for one ambiguous
+no-text interval per listen session. Capture-mapped successor text overlapping the stalled interval records
+evidence but does not renew the lease. Later or unmapped text is unproven. At expiry or audio-budget refusal, audio admission stops and the owner tries
+windowed Parakeet once, retaining unanswered capture and applying the normal
+replay/epoch fences. Transport cleanup uses the ordinary bounded abort; the admission deadline is
+not an exact provider billing or socket-close timestamp. This policy retirement
+never benches the paid provider.
+If cheap permission/capacity is unavailable, recovery terminates explicitly;
+it cannot quietly extend the paid lease. Returned cheap decoding suppresses
+further first-text/empty-streak rescues for the session. Normal transport
+failures still use the configured recovery path. Empty output does not establish
+that audio is noise. Before a lease is spent, the gated window deadline rearms
+after emitted text so later speech without progress can also trigger rescue.
+
+`omi_stt_no_text_rescue_audio_seconds_total{provider}` measures admitted paid
+rescue audio; `omi_stt_no_text_rescue_total{outcome}` counts starts and completed
+intervals, distinguishing `interval_text` from `unproven`. Overlap is evidence of some
+original-interval text, not a completeness or correctness claim. Starts from sessions
+that leave before lease completion remain censored; these metrics are not an
+invoice or a transcript-quality score. For a synthetic one-hour Soniox
+remainder, the declared $0.0754/audio-hour rate implies $0.0754 without a
+lease versus at most $0.001257 for 60 paid audio seconds, followed by cheap
+processing. Billing increments and costs of genuine later transport failures
+are separate. Existing production counters do not join deadline causes to
+successor duration; do not claim historical savings from them.
+
+The monitoring chart's `alerts/live-stt.json` and combined `alert-rules.json`
+contain independent terminal-after-text, mid-session terminal, paid-capacity,
+combined overflow/batch-pressure, POST-latency, replay-continuity, lifecycle,
+persistence, snapshot and stage-readiness rules. Any-text headline success
+remains its existing limited SLI. Deploy and test notification delivery through
+the monitoring release process before rollout; committing rules does not make
+them live. The live-STT import allowlist and coverage gate include these rules;
+the monitoring import must precede verification of their live coverage. Lifecycle/replay rules document their configured-chain/recovery
+prerequisites. The #20391 terminal-after-text emitter also requires the pinned
+recovery flag. Production recovery is now enabled across all listen traffic, so its
+dedicated alert scopes the volume floor, numerator and denominator to every
+`backend-listen-metrics` series, including stable and former-canary series. Both
+cohorts contribute to the 20-session floor and the terminal-after-text ratio. The
+independent mid-session terminal rule covers every path. Never pool lifecycle
+counters across instances or targets.
+
+Local limiter qualification (disposable Redis, no cloud data):
+
+```bash
+printf '%s\n' tests/integration/test_paid_spillover_redis.py > .local/redis-tests.txt
+OMI_OWNED_PID_FILE="$PWD/.local/owned-pids.txt" \
+BACKEND_PYTEST_MARK_EXPR=integration \
+BACKEND_UNIT_TEST_FILE_LIST="$PWD/.local/redis-tests.txt" bash backend/test.sh
+```
+
+Run from the repository root with `.local/` already created. The integration
+test records its Redis PID and terminates only that owned process. Fast router
+and receiver regressions remain in the normal hermetic unit suite.

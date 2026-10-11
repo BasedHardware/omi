@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+import pytest
+
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
 from models.structured import ActionItem, Structured
 from models.transcript_segment import TranscriptSegment
@@ -9,6 +11,7 @@ from utils.llm.memories import CanonicalL1MemoryCandidate
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
+    import utils.conversations.notes_task_context as notes_task_context_module
     import utils.conversations.process_conversation as process_module
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
@@ -36,10 +39,11 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "track_usage", lambda *args, **kwargs: _NoopContext())
     monkeypatch.setattr(process_module, "should_discard_conversation", lambda *args, **kwargs: False)
-    monkeypatch.setattr(process_module, "find_similar_action_items", lambda *args, **kwargs: [])
+    # Dedup similarity lookup moved to utils.conversations.notes_task_context;
+    # stub it where the production call now resolves.
+    monkeypatch.setattr(notes_task_context_module, "find_similar_action_items", lambda *args, **kwargs: [])
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
@@ -47,33 +51,20 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
-    monkeypatch.setattr(
-        process_module,
-        "get_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle",
+
+    def notes_result(prefix, **_kwargs):
+        reprocess = "Remember to ship" in prefix.context
+        return Structured(
+            title=("Hermetic Conversation Lifecycle Reprocessed" if reprocess else "Hermetic Conversation Lifecycle"),
             overview="A deterministic processing result created by the E2E harness.",
             emoji="🧪",
             category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "get_reprocess_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle Reprocessed",
-            overview="A deterministic reprocess result created by the E2E harness.",
-            emoji="🧪",
-            category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "extract_action_items",
-        lambda *args, **kwargs: [
-            ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
-        ],
-    )
+            action_items=[
+                ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
+            ],
+        )
+
+    monkeypatch.setattr(process_module, "get_conversation_notes", notes_result)
 
     def extract_canonical_candidates(_uid, _source_id, segments, **_kwargs):
         return [
@@ -261,7 +252,7 @@ def test_reprocess_transcription_route_replaces_segments_then_enriches(client, a
         lambda uid, conversation, language_code: [
             TranscriptSegment(
                 id="seg-new",
-                text="We should ship deterministic conversation lifecycle coverage.",
+                text="Remember to ship deterministic conversation lifecycle coverage.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
@@ -274,19 +265,20 @@ def test_reprocess_transcription_route_replaces_segments_then_enriches(client, a
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["id"] == conv_id
-    assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
+    assert body["transcript_segments"][0]["text"] == "Remember to ship deterministic conversation lifecycle coverage."
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
 
     persisted = client.get(f"/v1/conversations/{conv_id}", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
     persisted_body = persisted.json()
     assert persisted_body["transcript_segments"][0]["text"] == (
-        "We should ship deterministic conversation lifecycle coverage."
+        "Remember to ship deterministic conversation lifecycle coverage."
     )
     assert persisted_body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
 
 
-def test_reprocess_transcription_route_returns_400_without_audio(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize('storage_failure', [False, True])
+def test_reprocess_transcription_route_error_preserves_transcript(client, auth_headers, monkeypatch, storage_failure):
     _patch_process_conversation_boundaries(monkeypatch)
     conv_id = "deterministic-transcription-no-audio"
     seed_conversation(
@@ -324,16 +316,23 @@ def test_reprocess_transcription_route_returns_400_without_audio(client, auth_he
     )
 
     import routers.conversations as conv_router
-    from utils.conversations.reprocess_transcription import StoredAudioUnavailableError
+    from utils.conversations.reprocess_transcription import (
+        StoredAudioUnavailableError,
+        StoredAudioTranscriptionFailedError,
+    )
 
     def _no_audio(*_args, **_kwargs):
+        if storage_failure:
+            raise StoredAudioTranscriptionFailedError('Storage unavailable')
         raise StoredAudioUnavailableError("No stored audio available to retranscribe")
 
     monkeypatch.setattr(conv_router, "transcribe_stored_conversation_audio", _no_audio)
 
     response = client.post(f"/v1/conversations/{conv_id}/reprocess-transcription", headers=auth_headers)
-    assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "No stored audio available to retranscribe"
+    assert response.status_code == (502 if storage_failure else 400), response.text
+    assert response.json()["detail"]["code"] == ('failed' if storage_failure else 'no_audio')
+    persisted = read_conversation('123', conv_id)
+    assert persisted['transcript_segments'][0]['text'] == 'No stored audio exists for this conversation.'
 
 
 def test_seed_and_read_conversation(client, auth_headers, conversation_fixture):

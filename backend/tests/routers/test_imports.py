@@ -40,25 +40,33 @@ def _job(status, uid=UID, job_id="j1"):
 
 
 class TestCancelImportJob:
+    # The status check and the cancel write happen in one transaction
+    # (cancel_import_job_if_active), so the route only maps its answer.
     @pytest.mark.parametrize("status", ["pending", "processing"])
     def test_cancel_in_progress(self, status):
         with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "update_import_job"
-        ) as upd:
+            imports_mod.import_jobs_db, "cancel_import_job_if_active", return_value=True
+        ) as cancel:
             resp = imports_mod.cancel_import_job("j1", uid=UID)
         assert resp.status == ImportJobStatus.cancelled
-        upd.assert_called_once()
-        assert upd.call_args.args[1]["status"] == ImportJobStatus.cancelled.value
+        cancel.assert_called_once_with("j1")
 
     @pytest.mark.parametrize("status", ["completed", "failed", "cancelled"])
     def test_cancel_terminal_is_409(self, status):
         with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=_job(status)), patch.object(
-            imports_mod.import_jobs_db, "update_import_job"
-        ) as upd:
+            imports_mod.import_jobs_db, "cancel_import_job_if_active", return_value=False
+        ):
             with pytest.raises(HTTPException) as ei:
                 imports_mod.cancel_import_job("j1", uid=UID)
         assert ei.value.status_code == 409
-        upd.assert_not_called()
+
+    def test_cancel_of_a_job_deleted_meanwhile_is_404(self):
+        with patch.object(
+            imports_mod.import_jobs_db, "get_import_job", side_effect=[_job("pending"), None]
+        ), patch.object(imports_mod.import_jobs_db, "cancel_import_job_if_active", return_value=False):
+            with pytest.raises(HTTPException) as ei:
+                imports_mod.cancel_import_job("j1", uid=UID)
+        assert ei.value.status_code == 404
 
     def test_cancel_missing_is_404(self):
         with patch.object(imports_mod.import_jobs_db, "get_import_job", return_value=None):

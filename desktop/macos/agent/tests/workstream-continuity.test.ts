@@ -7,6 +7,8 @@ import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
+import { configureDefaultExecutionProfile, readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
+import { listJournalTurns, recordJournalTurn } from "../src/runtime/conversation-journal.js";
 import {
   buildWorkstreamOpenLoopSnapshot,
   deliverDesktopTaskCandidate,
@@ -31,6 +33,62 @@ afterEach(() => {
 });
 
 describe("workstream continuity", () => {
+  it("keeps the same task journal when an idle Claude thread explicitly migrates to Omi", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+    const previous = resolveWorkstreamSession(store, {
+      ownerId: "owner", workstreamId: "credit-recovery", defaultAdapterId: "acp",
+    });
+    const recorded = recordJournalTurn(store, {
+      ownerId: "owner", conversationId: previous.conversationId, turnId: "original-user-turn",
+      role: "user", surfaceKind: "workstream", origin: "workstream", status: "completed",
+      content: "Can you help me find a topic for this?", contentBlocks: [],
+    });
+    kernel.migrateSessionExecutionProfile({
+      ownerId: "owner", sessionId: previous.agentSessionId, expectedProfileGeneration: 1,
+      adapterId: "pi-mono", modelProfile: "omi-sonnet", reason: "user_requested",
+    });
+    const recovered = resolveWorkstreamSession(store, { ownerId: "owner", workstreamId: "credit-recovery" });
+    expect(recovered).toMatchObject({
+      agentSessionId: previous.agentSessionId, conversationId: previous.conversationId,
+    });
+    expect(readSessionExecutionProfile(store, recovered.agentSessionId)).toMatchObject({
+      generation: 2, adapterId: "pi-mono", credentialScope: "managed_cloud",
+    });
+    expect(listJournalTurns(store, {
+      ownerId: "owner", conversationId: recovered.conversationId, afterTurnSeq: 0, limit: 10,
+    }).turns).toEqual([recorded.turn]);
+    store.close();
+  });
+
+  it("uses managed Omi for an owner with no preference and preserves explicitly selected Claude threads", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const managed = resolveWorkstreamSession(store, { ownerId: "new-owner", workstreamId: "new-thread" });
+    expect(readSessionExecutionProfile(store, managed.agentSessionId)).toMatchObject({
+      adapterId: "pi-mono", credentialScope: "managed_cloud",
+    });
+    configureDefaultExecutionProfile(store, {
+      ownerId: "claude-owner", adapterId: "acp", modelProfile: "claude-sonnet-4-6", workingDirectory: "/tmp/claude",
+    }, 1);
+    const selected = resolveWorkstreamSession(store, { ownerId: "claude-owner", workstreamId: "selected-thread" });
+    expect(readSessionExecutionProfile(store, selected.agentSessionId)).toMatchObject({
+      adapterId: "acp", credentialScope: "local_user", modelProfile: "claude-sonnet-4-6", workingDirectory: "/tmp/claude",
+    });
+    configureDefaultExecutionProfile(store, {
+      ownerId: "claude-owner", adapterId: "pi-mono", modelProfile: "omi-sonnet", workingDirectory: "/tmp/omi",
+    }, 2);
+    expect(resolveWorkstreamSession(store, { ownerId: "claude-owner", workstreamId: "selected-thread" }))
+      .toMatchObject({ agentSessionId: selected.agentSessionId, conversationId: selected.conversationId });
+    expect(readSessionExecutionProfile(store, selected.agentSessionId)).toMatchObject({
+      generation: 1, adapterId: "acp", workingDirectory: "/tmp/claude",
+    });
+    const future = resolveWorkstreamSession(store, { ownerId: "claude-owner", workstreamId: "future-thread" });
+    expect(readSessionExecutionProfile(store, future.agentSessionId)).toMatchObject({
+      adapterId: "pi-mono", modelProfile: "omi-sonnet", workingDirectory: "/tmp/omi",
+    });
+    store.close();
+  });
+
   it("resolves one session and conversation per owner/workstream across store instances", () => {
     const path = newDatabasePath();
     const firstStore = new SqliteAgentStore({ databasePath: path, reconcileOnOpen: false });

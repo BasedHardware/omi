@@ -889,7 +889,7 @@ def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkey
     store.seed_conv('u1', 'donor', status='completed', transcript_segments=[])
     monkeypatch.setattr(smart_merge_db.audit_db, 'gate_skip', lambda *a, **k: smart_merge_db.audit_db.SKIPPED_ERROR)
 
-    plan = lambda survivor, s_segs, donor, d_segs, ancestor_rows: (
+    plan = lambda survivor, s_segs, donor, d_segs, ancestor_rows, last_fragment_row: (
         None,
         {'data_protection_level': 'standard', 'smart_merge': {'revision': 4}},
         {'deleted': True, 'smart_merge': {'role': 'donor', 'survivor_id': 'surv'}},

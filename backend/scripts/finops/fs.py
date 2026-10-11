@@ -7,7 +7,13 @@ so a long pull never dies on a 60-minute token expiry and no token is written to
 import json, os, ssl, sys, time, urllib.request, urllib.error, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gcpauth import TOKEN, PROJECT  # noqa: E402
+if os.environ.get("FINOPS_AUTH") == "cloudrun":
+    import cloudrun as gcpauth  # noqa: E402
+else:
+    import gcpauth  # noqa: E402
+
+PROJECT = gcpauth.PROJECT
+TOKEN = gcpauth.TOKEN
 
 BASE = f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents"
 

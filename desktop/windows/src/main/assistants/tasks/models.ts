@@ -1,25 +1,8 @@
-// The TaskAssistant's parse layer: the `extract_task` tool call's args → a
-// validated `ExtractedTask`, plus the `validateTaskTitle` specificity gate. Pure
-// — no network, no Electron, no DB. Modeled on `core/geminiTypes.ts`
-// (`parseProvideAdvice`) and ported 1:1 from Mac's `TaskAssistant.swift` /
-// `TaskModels.swift`.
-//
-// Fidelity notes (Mac is the reference implementation):
-//  - `extract_task` declares 19 tool params. Mac's `ExtractedTask` struct
-//    (TaskModels.swift:407) stores 18 of them, routing `context_summary`/
-//    `current_activity` to the extraction RESULT instead. On Windows the loop
-//    returns `ExtractedTask[]` with NO separate per-frame result object, so the
-//    two context strings are carried ON the task (they are still per-extract_task
-//    tool params, one pair per call) and flow into create.ts's staged metadata.
-//    `alreadyDone` is DERIVED (`capture_kind == "already_done"`), not a param.
-//  - Every non-title field has a Mac default (TA:1135–1163), so the only inputs
-//    that yield `null` are a non-object `args` and a title that fails
-//    `validateTaskTitle` (which includes an empty/missing title → "Title is
-//    empty"). The 0.75 confidence gate is NOT applied here — it runs later at
-//    save time (spec §5), so a low-confidence task still parses.
-//  - Word count is Swift's `title.split(separator: " ").count`, which OMITS empty
-//    subsequences — replicated as split-on-space + drop-empties (collapses runs of
-//    spaces; only the ASCII space is a separator, matching Swift).
+// Pure validation and mapping for one task object from screenTaskPipeline's
+// structured response. No network, Electron, or database access. The result
+// retains the canonical ExtractedTask fields used by the existing staging path.
+// Context summaries are response-level values copied onto each accepted task so
+// create.ts can preserve them in staged-task metadata.
 
 /** Mac `TaskPriority` raw values (TaskModels.swift). */
 export type TaskPriority = 'high' | 'medium' | 'low'
@@ -106,13 +89,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * `extract_task` args → `ExtractedTask`, or `null` when the args aren't an object
- * or the title fails `validateTaskTitle`. Every other field takes Mac's per-field
- * default (TA:1135–1163). `sourceApp` defaults to "" here (Mac defaults it to the
- * current app name, which lives in the loop, not the parser — the loop substitutes
- * when empty).
+ * A structured task object → `ExtractedTask`, or `null` when the input isn't an
+ * object or the title fails `validateTaskTitle`. Optional fields keep the defaults
+ * used by the canonical task model; the pipeline supplies the current source app.
  */
-export function parseExtractTask(args: unknown): ExtractedTask | null {
+export function parseStructuredTask(args: unknown): ExtractedTask | null {
   if (!isRecord(args)) return null
 
   const title = typeof args['title'] === 'string' ? (args['title'] as string) : ''

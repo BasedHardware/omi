@@ -1,3 +1,0 @@
-{
-  "change": "Pendant ring custody: WAL writes are fsynced and indexed before any device-side advance, and custody release is capability-gated on new firmware; pending copies are never evicted."
-}

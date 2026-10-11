@@ -2301,7 +2301,7 @@ private struct NotchAgentPillsRowView: View {
     .accessibilityHint(
       isVoiceListening
         ? ""
-        : "Hover to fan out subagents, click to keep them open"
+        : "Hover to show running agents. Click to keep them open."
     )
     .onAppear { syncPillStatusObservers() }
     .onChange(of: manager.pills.map(\.id)) { _, _ in

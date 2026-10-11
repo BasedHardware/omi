@@ -13,6 +13,8 @@ enum PipeProcessRunnerError: LocalizedError {
   case launchFailed(String)
   case timedOut(seconds: TimeInterval, stderr: String)
   case pipeDrainTimedOut(streams: String)
+  case outputLimitExceeded
+  case cancelled
 
   var errorDescription: String? {
     switch self {
@@ -23,6 +25,10 @@ enum PipeProcessRunnerError: LocalizedError {
       return "Helper process timed out after \(Int(seconds)) seconds.\(detail)"
     case .pipeDrainTimedOut(let streams):
       return "Helper process exited before \(streams) finished draining."
+    case .outputLimitExceeded:
+      return "Helper process output exceeded the capture limit."
+    case .cancelled:
+      return "Helper process was cancelled."
     }
   }
 }
@@ -34,7 +40,9 @@ enum PipeProcessRunner {
     environment: [String: String] = [:],
     stdinData: Data? = nil,
     timeoutSeconds: TimeInterval,
-    killGraceSeconds: TimeInterval = 2
+    killGraceSeconds: TimeInterval = 2,
+    maxOutputBytes: Int = 1_048_576,
+    cancellationCheck: @escaping @Sendable () -> Bool = { false }
   ) throws -> PipeProcessResult {
     let process = Process()
     process.executableURL = executableURL
@@ -60,14 +68,17 @@ enum PipeProcessRunner {
     let stderr = LockedData()
     let stdoutSem = DispatchSemaphore(value: 0)
     let stderrSem = DispatchSemaphore(value: 0)
+    let cancellationState = LockedBool(false)
+    let outputLimitState = LockedBool(false)
 
     stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
       let data = handle.availableData
       if data.isEmpty {
         handle.readabilityHandler = nil
         stdoutSem.signal()
-      } else {
-        stdout.append(data)
+      } else if !stdout.append(data, maxBytes: maxOutputBytes) {
+        outputLimitState.set(true)
+        process.terminate()
       }
     }
     stderrPipe.fileHandleForReading.readabilityHandler = { handle in
@@ -75,8 +86,9 @@ enum PipeProcessRunner {
       if data.isEmpty {
         handle.readabilityHandler = nil
         stderrSem.signal()
-      } else {
-        stderr.append(data)
+      } else if !stderr.append(data, maxBytes: maxOutputBytes) {
+        outputLimitState.set(true)
+        process.terminate()
       }
     }
 
@@ -109,6 +121,23 @@ enum PipeProcessRunner {
     // so a stalled child hung the caller forever with the timeout never armed.
     DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWork)
 
+    let cancellationWork = DispatchWorkItem {
+      while process.isRunning {
+        if cancellationCheck() {
+          cancellationState.set(true)
+          process.terminate()
+          DispatchQueue.global().asyncAfter(deadline: .now() + killGraceSeconds) {
+            if process.isRunning {
+              kill(process.processIdentifier, SIGKILL)
+            }
+          }
+          return
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+    }
+    DispatchQueue.global().async(execute: cancellationWork)
+
     if let stdinData {
       // Use the throwing write(contentsOf:) — the legacy write(_:) raises an
       // uncatchable NSFileHandleOperationException on EPIPE, which is exactly what
@@ -119,6 +148,7 @@ enum PipeProcessRunner {
 
     process.waitUntilExit()
     timeoutWork.cancel()
+    cancellationWork.cancel()
 
     let stdoutDrained = stdoutSem.wait(timeout: .now() + .seconds(5)) == .success
     let stderrDrained = stderrSem.wait(timeout: .now() + .seconds(5)) == .success
@@ -134,6 +164,12 @@ enum PipeProcessRunner {
     if result.timedOut {
       let stderrText = String(data: result.stderr, encoding: .utf8) ?? ""
       throw PipeProcessRunnerError.timedOut(seconds: timeoutSeconds, stderr: stderrText)
+    }
+    if cancellationState.get() {
+      throw PipeProcessRunnerError.cancelled
+    }
+    if outputLimitState.get() {
+      throw PipeProcessRunnerError.outputLimitExceeded
     }
     if !stdoutDrained || !stderrDrained {
       let streams = [
@@ -151,10 +187,17 @@ private final class LockedData: @unchecked Sendable {
   private var data = Data()
   private let lock = NSLock()
 
-  func append(_ chunk: Data) {
+  func append(_ chunk: Data, maxBytes: Int) -> Bool {
     lock.lock()
-    data.append(chunk)
+    guard data.count < maxBytes else {
+      lock.unlock()
+      return false
+    }
+    let remaining = maxBytes - data.count
+    data.append(chunk.prefix(remaining))
+    let complete = chunk.count <= remaining
     lock.unlock()
+    return complete
   }
 
   func snapshot() -> Data {

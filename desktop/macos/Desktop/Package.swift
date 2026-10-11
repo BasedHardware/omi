@@ -132,8 +132,9 @@ let package = Package(
         // signin_bg.png, provider-native VoicePhrases/*.wav, Resources/Fonts/*.ttf —
         // Geist / Geist Mono — and
         // Resources/Fonts/*.otf — Open Runde, the glass display face — and
-        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio, and
-        // Resources/three-doors.html, the onboarding ask-demo page).
+        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio,
+        // Resources/three-doors.html, the onboarding ask-demo page, and
+        // Resources/ProductKnowledge/, the shipped desktop product guide).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.

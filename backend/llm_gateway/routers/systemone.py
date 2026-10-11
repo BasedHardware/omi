@@ -121,6 +121,7 @@ async def create_systemone(
                     api_surface=API_SURFACE,
                     error_class=exc.code.value,
                     request_id=request_id,
+                    error=exc,
                 ),
                 request_id=request_id,
             )
