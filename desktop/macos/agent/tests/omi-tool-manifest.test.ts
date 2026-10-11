@@ -129,6 +129,20 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
 
+  it("keeps the Messages tools to Apple Messages and sends a named app to ui_snapshot", () => {
+    // A live test asked for "the draft in WhatsApp" and the model read Messages history first.
+    const guidance = (name: string) => {
+      const tool = omiToolManifest.find((entry) => entry.name === name);
+      return [tool?.description ?? "", ...(tool?.promptGuidelines ?? [])].join(" ");
+    };
+    for (const name of ["list_message_chats", "read_message_history", "send_message"]) {
+      expect(guidance(name)).toMatch(/Apple Messages only\. Never use it .*WhatsApp/);
+    }
+    expect(guidance("ui_snapshot")).toContain("When the person names an app (WhatsApp, Telegram, Slack...), act in that app.");
+    expect(guidance("ui_snapshot")).toContain("WhatsApp and other Catalyst apps have none.");
+    expect(guidance("ui_snapshot")).not.toContain("only for apps with no other route");
+  });
+
   it("keeps the realtime screenshot executor on the realtime voice surface and off the chat adapters", () => {
     // Realtime voice runs authorize it through their surface projection; a
     // chat adapter advertising it would hand typed chat an ungated capture.

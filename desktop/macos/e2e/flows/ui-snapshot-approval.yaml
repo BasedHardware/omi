@@ -67,6 +67,10 @@ steps:
     name: WhatsApp's invisible marks never show
     do: "With WhatsApp open and in the background, ask Omi what is in the WhatsApp window. The card's App row reads 'WhatsApp · net.whatsapp.WhatsApp' with no '⟨U+200E⟩' (WhatsApp's own name starts with U+200E). After Allow Once, the snapshot's labels read 'Send', 'Photo' and the like, with no invisible mark in front."
 
+  - id: S6e
+    name: A named app is read in that app
+    do: "With a draft typed in WhatsApp's message box, ask Omi 'What does my draft in WhatsApp say?'. Omi reads WhatsApp's window with a WhatsApp card. No Messages card or Messages history read appears, and Omi does not ask which app or chat you mean."
+
   - id: S7
     name: Deny never reads
     do: "Ask to read Notes and press Deny. The card reads 'Denied, not run', the model says it was denied, and the ledger row is failed with error_code approval_denied and no dispatched_at_ms."

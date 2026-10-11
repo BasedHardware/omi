@@ -231,6 +231,18 @@ method.
   `desktop.automation.act`: approving a read never approves acting. `bundle_id`
   is required because the kernel cannot scope a call by pid; `pid` only picks
   between running copies and must belong to the bundle.
+- **Which app.** When the person names an app, the model acts in that app.
+  The Messages tools (`send_message`, `read_message_history`,
+  `list_message_chats`) are for Apple Messages only, and their guidelines say
+  so; WhatsApp and other Catalyst apps have no dedicated tool, so the model
+  reads them with `ui_snapshot`.
+- **Invisible marks.** Snapshot lines drop control characters, the harmless
+  marks apps put around their own words (WhatsApp starts nearly every label
+  with U+200E) and the bidirectional controls. The card's App row drops only
+  U+200E and shows every other invisible or bidirectional character as its
+  code point. The right-to-left mark (U+200F) and the Arabic letter mark
+  (U+061C) count as bidirectional controls, because each moves the digits
+  and spaces beside it.
 - **Refusal floor.** One list, `agent/src/runtime/ui-automation-safety-floor.ts`,
   generated into `GeneratedUIAutomationSafetyFloor.swift`. The kernel refuses a
   malformed bundle id, every `com.omi.*` build, sign-in, SSO, authorization and
