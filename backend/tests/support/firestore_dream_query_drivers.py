@@ -30,6 +30,16 @@ def admission_state(client, args, trial):
 def entries():
     return (
         DriverEntry(
+            'database.dream_context_reads.temporal_neighbours',
+            base={
+                'uid': UID,
+                'start': datetime(2026, 10, 9, tzinfo=timezone.utc),
+                'anchor': datetime(2026, 10, 9, 1, tzinfo=timezone.utc),
+                'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
+            },
+            domains={'collection': ['conversations', 'screen_activity']},
+        ),
+        DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
             domains={
