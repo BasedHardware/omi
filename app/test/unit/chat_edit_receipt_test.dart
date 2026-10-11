@@ -138,6 +138,18 @@ void main() {
       expect(data.undoneAt, '2026-10-11T12:00:00.000Z');
     });
 
+    test('unavailable is not an undo', () {
+      final data = ChatReceiptsApi.decodeUndoResponse(
+        jsonEncode({
+          'status': 'unavailable',
+          'block': _receipt({'undoable': false}),
+        }),
+        now: DateTime.now,
+      );
+      expect(data.undoneAt, isNull);
+      expect(data.block?.canUndo, isFalse);
+    });
+
     test('a bare block body is accepted', () {
       final data = ChatReceiptsApi.decodeUndoResponse(
         jsonEncode(_receipt({'undoneAt': '2026-10-11T10:02:00Z'})),

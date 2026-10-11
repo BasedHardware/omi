@@ -73,7 +73,9 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
 
   bool get _isUndone => _undoneAt != null;
 
-  bool get _canUndo => _block.undoable && !_isUndone;
+  bool _undoUnavailable = false;
+
+  bool get _canUndo => _block.undoable && !_isUndone && !_undoUnavailable;
 
   /// Whether the target still exists to open: a deleted item is gone until its
   /// delete is undone, and an undone create removed what it made.
@@ -91,11 +93,22 @@ class _EditReceiptBlockState extends State<EditReceiptBlock> {
     final result = await undo(_block.receiptId);
     if (!mounted) return;
     switch (result) {
-      case ApiSuccess<EditReceiptUndoResult>(:final data):
-        EditReceiptBlock._undoneThisSession[_block.receiptId] = data.undoneAt;
+      case ApiSuccess<EditReceiptUndoResult>(:final data) when data.undoneAt != null:
+        EditReceiptBlock._undoneThisSession[_block.receiptId] = data.undoneAt!;
         setState(() => _isUndoing = false);
-      case ApiFailure<EditReceiptUndoResult>():
-        setState(() => _isUndoing = false);
+      case ApiSuccess<EditReceiptUndoResult>():
+        // `unavailable`: the undo window closed or the inverse is ambiguous. Retrying cannot help.
+        setState(() {
+          _isUndoing = false;
+          _undoUnavailable = true;
+        });
+        OmiFeedback.error(context, context.l10n.chatBlockUndoFailed);
+      case ApiFailure<EditReceiptUndoResult>(:final problem):
+        setState(() {
+          _isUndoing = false;
+          // 404 (not this owner's receipt) and 409 (no longer undoable) are terminal.
+          _undoUnavailable = problem.kind == ApiProblemKind.notFound || problem.statusCode == 409;
+        });
         OmiFeedback.error(context, context.l10n.chatBlockUndoFailed);
     }
   }

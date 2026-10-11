@@ -130,6 +130,24 @@ void main() {
     expect(find.text('Undone'), findsNothing);
   });
 
+  for (final outcome in <String, ApiResult<EditReceiptUndoResult>>{
+    'unavailable': const ApiSuccess(EditReceiptUndoResult(undoneAt: null)),
+    '409': const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
+    '404': const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404)),
+  }.entries) {
+    testWidgets('an undo the server refuses (${outcome.key}) drops Undo and says so', (tester) async {
+      await pump(tester, _block(), undo: (_) async => outcome.value);
+
+      await tester.tap(find.byKey(const Key('chat-block-editReceipt-b-1-undo')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text("Couldn't undo that change"), findsOneWidget);
+      expect(find.byKey(const Key('chat-block-editReceipt-b-1-undo')), findsNothing);
+      expect(find.text('Undone'), findsNothing);
+    });
+  }
+
   testWidgets('a receipt the server already undid shows Undone without a button', (tester) async {
     await pump(tester, _block(undoneAt: '2026-10-11T09:00:00Z'));
     expect(find.text('Undone'), findsOneWidget);

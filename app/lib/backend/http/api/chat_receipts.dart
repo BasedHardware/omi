@@ -8,9 +8,10 @@ import 'package:omi/env/env.dart';
 class EditReceiptUndoResult {
   const EditReceiptUndoResult({required this.undoneAt, this.alreadyUndone = false, this.block});
 
-  /// When the change was undone. The server's time when it sent one, otherwise
-  /// the local time the undo succeeded.
-  final String undoneAt;
+  /// When the change was undone: the server's time when it sent one, otherwise
+  /// the local time the undo succeeded. Null when the server answered
+  /// `unavailable` (the undo window closed or the inverse is ambiguous).
+  final String? undoneAt;
 
   /// The server had already undone this receipt (a repeat call is idempotent).
   final bool alreadyUndone;
@@ -41,8 +42,9 @@ class ChatReceiptsApi {
     );
   }
 
-  /// Accepts `{"status": …, "block": {…}}`, a bare `editReceipt` block, or an
-  /// empty body. Anything else that is not JSON is a decode failure.
+  /// Accepts the backend's `{"status": "undone|already_undone|unavailable",
+  /// "block": {…}}`, a bare `editReceipt` block, or an empty body. Anything else
+  /// that is not JSON is a decode failure.
   static EditReceiptUndoResult decodeUndoResponse(String body, {required DateTime Function() now}) {
     final fallbackTime = now().toUtc().toIso8601String();
     if (body.trim().isEmpty) return EditReceiptUndoResult(undoneAt: fallbackTime);
@@ -58,6 +60,9 @@ class ChatReceiptsApi {
     final rawBlock = row['block'] is Map ? Map<String, dynamic>.from(row['block'] as Map) : row;
     final decoded = rawBlock['type'] == null ? null : ChatContentBlock.tryDecode(rawBlock);
     final block = decoded is EditReceiptContentBlock ? decoded : null;
+    if (status == 'unavailable') {
+      return EditReceiptUndoResult(undoneAt: block?.undoneAt, block: block);
+    }
     return EditReceiptUndoResult(
       undoneAt: block?.undoneAt ?? (row['undoneAt'] ?? row['undone_at']) as String? ?? fallbackTime,
       alreadyUndone: status == 'already_undone',
