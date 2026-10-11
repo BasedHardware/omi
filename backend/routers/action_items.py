@@ -6,7 +6,7 @@ from utils.executors import postprocess_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from typing import Annotated, Optional, List
+from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
@@ -63,6 +63,21 @@ from utils.product_telemetry import emit_product_event
 from utils.observability.fallback import record_fallback
 
 router = APIRouter()
+
+
+def _completion_stamp(existing_item: Optional[Dict[str, Any]], completed: bool) -> Optional[datetime]:
+    """The ``completed_at`` a completion write should carry.
+
+    Completing an item that is already completed is an idempotent retry (a duplicated tap, a
+    client that resends the whole object, a sync replay), not a new completion: the original
+    timestamp stands. A first completion stamps now; un-completing clears it.
+    """
+    if not completed:
+        return None
+    if existing_item and existing_item.get('completed') is True and existing_item.get('completed_at'):
+        return existing_item['completed_at']
+    return datetime.now(timezone.utc)
+
 
 logger = logging.getLogger(__name__)
 
@@ -251,10 +266,13 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
-    # Pre-fetch items to skip locked ones
+    # Pre-fetch items to skip locked ones and to keep an existing completion time
     locked_ids = set()
+    existing_items: Dict[str, Dict[str, Any]] = {}
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
+        if existing:
+            existing_items[item.id] = existing
         if existing and existing.get('is_locked', False):
             locked_ids.add(item.id)
 
@@ -267,10 +285,7 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             update_data['description'] = item.description
         if item.completed is not None:
             update_data['completed'] = item.completed
-            if item.completed:
-                update_data['completed_at'] = datetime.now(timezone.utc)
-            else:
-                update_data['completed_at'] = None
+            update_data['completed_at'] = _completion_stamp(existing_items.get(item.id), item.completed)
         if 'due_at' in item.model_fields_set:
             update_data['due_at'] = item.due_at
         if item.exported is not None:
@@ -728,7 +743,7 @@ def update_action_item(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     update_data = request.storage_payload()
     if request.completed is True or request.status == 'completed':
-        update_data['completed_at'] = datetime.now(timezone.utc)
+        update_data['completed_at'] = _completion_stamp(existing_item, True)
     elif 'completed' in update_data or 'status' in update_data:
         update_data['completed_at'] = None
 
@@ -801,7 +816,11 @@ def toggle_action_item_completion(
         raise HTTPException(status_code=404, detail="Action item not found")
 
     # Update completion status
-    success = action_items_db.mark_action_item_completed(uid, action_item_id, completed)
+    if completed and _completion_stamp(existing_item, True) == existing_item.get('completed_at'):
+        # Already completed: an idempotent retry keeps the original completion time.
+        success = True
+    else:
+        success = action_items_db.mark_action_item_completed(uid, action_item_id, completed)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
