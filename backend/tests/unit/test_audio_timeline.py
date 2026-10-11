@@ -179,6 +179,30 @@ class TestSendMap:
         translated = second.translate([dict(seg)])
         assert translated and translated[0]['start'] == timeline.wall(1600 + int(0.05 * RATE))
 
+    def test_segment_starting_on_first_sample_after_vad_gap_keeps_its_audio_position(self):
+        """The first word after a VAD skip begins exactly where the post-gap send begins.
+
+        The provider clock is continuous across the skipped capture audio, so the
+        segment's start lands on the span boundary. It must map inside the
+        post-gap send instead of being kept unplaced as if it straddled the gap.
+        """
+        timeline = CaptureTimeline(sample_rate=RATE)
+        for index in range(50):
+            timeline.accept(_pcm(320), arrival_wall=100.0 + (index + 1) * 0.02, arrival_monotonic=(index + 1) * 0.02)
+        translator = ProviderEpochTranslator(timeline, RATE)
+        translator.note_accepted(0, 8000)  # provider 0.0-0.5 s
+        translator.note_accepted(11200, 4800)  # VAD skip of 0.2 s, then provider 0.5-0.8 s
+        boundary, inside = translator.translate(
+            [{'start': 0.5, 'end': 0.6, 'text': 'boundary'}, {'start': 0.505, 'end': 0.6, 'text': 'inside'}]
+        )
+        assert inside.get('_capture_unplaced') is not True
+        assert boundary.get('_capture_unplaced') is not True, boundary.get('_capture_window_reason')
+        assert boundary['_capture_start_sample'] == 11200
+        assert boundary['start'] == timeline.wall(11200)
+        assert boundary['start'] < boundary['end']
+        assert boundary['end'] == inside['end']
+        assert translator.rejected_segments == 0
+
     def test_provider_time_out_of_range_rejects(self):
         translator = ProviderEpochTranslator(CaptureTimeline(RATE), RATE)
         translated = translator.translate([{'start': 10.0, 'end': 11.0, 'text': 'late'}])
