@@ -1027,11 +1027,7 @@ class SpeakerMatcher:
                 [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
             )
             if not any(end > buffer_start and start < buffer_end for start, end in incoming_ranges):
-                # The window does not intersect the retained audio at all —
-                # e.g. a provider stream whose timestamps restarted at zero
-                # after a failover while the window was still computed from
-                # the first provider's clock. Name it; never fall through to
-                # an inverted-clamp "too short" that hides the real cause.
+                # Name an out-of-buffer provider window before any inverted clamp.
                 self._record_exit(
                     (
                         'segment_shorter_than_minimum'
@@ -1110,9 +1106,7 @@ class SpeakerMatcher:
             evidence.append((query, clip_seconds))
             evidence_seconds = sum(seconds for _, seconds in evidence)
             if evidence_seconds < evidence_floor:
-                # Accumulation, not a drop: this speaker's next clip reuses the
-                # evidence and reaches a decision, so it logs (below) but is not
-                # an exit reason.
+                # Pending evidence accumulates for the next clip; this is not an exit.
                 record_live_speaker_decision(
                     pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings),
                     'pending',
@@ -1136,9 +1130,7 @@ class SpeakerMatcher:
             if short_reconnect:
                 self.continuity.attempted.add(speaker_id)
                 record_owner_reconnect('attempted', 'acoustic')
-            # Keep the query row local through all receipt/authority awaits.
-            # Other voices may arbitrate while we wait; every shared distance
-            # row must already have its paired decision, even on cancellation.
+            # Keep the row local across authority awaits; shared rows require paired decisions.
             owner_reserved = False
             rejected: Dict[int, dict] = {}
             receipt: Mapping[str, Any] = {}
