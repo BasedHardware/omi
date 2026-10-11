@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.469",
+      "date": "2026-10-11",
+      "changes": [
+        "Marketplace MCP installs now open connection setup so you can finish signing in without finding the server again"
+      ]
+    },
+    {
       "version": "0.12.468",
       "date": "2026-10-11",
       "changes": [
