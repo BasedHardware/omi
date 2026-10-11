@@ -207,22 +207,19 @@ and background processing.
   outside this package: `database/conversation_finalization_jobs.py`,
   `services/conversation_finalization.py`, and their callers own those states.
 
-Segment-text PATCH commits the edit, then synchronously refreshes transcript-chunk
-vectors through `transcript_chunks.refresh_transcript_chunks_after_edit`. Replacement
-upserts the current windows and prunes obsolete ones; disabled indexing retracts
-old windows. Provider failures record shared degraded-fallback telemetry and do
-not misreport an already-committed edit as failed (FC-post-commit-index-maintenance-terminal).
-Offline deployments without Pinecone remain a no-op. The
-durable mutation also invokes the existing Typesense projection hook.
+Segment-text PATCH uses the existing transactional mutation and its revision and
+summary-reference invalidation. It performs no transcript-vector reembedding or
+extra Typesense sync: transcript segments are outside the Typesense projection,
+and `TRANSCRIPT_CHUNK_INDEXING_ENABLED` was retired on 2026-10-08 as never-run code
+(see `config/feature-flags.yaml`). A stale deployment value must not revive it.
+The edit response therefore adds no embedding-provider or vector-pruning work.
 
-This remains a synchronous FastAPI `def` route: the HTTP response waits for the
-projection even though the event loop is not blocked. With window 8 / stride 6,
-600 nonempty segments produce 100 embedding inputs on every edit, followed by
-vector replacement/pruning. Moving this into a background task alone would lose
-work on process exit and still permit older edits to overwrite newer vectors.
-A durable job with revision fencing/coalescing needs an explicit maintainer
-latency/cost decision; this PR does not claim that decision or a measured latency
-budget. Provider failures can leave stale search until a later successful refresh.
+Search still follows the existing server contract, including optional historical
+chunk hits and snippets hydrated from current transcript text. This does not
+promise newly edited words become fresh semantic candidates. Reintroducing a
+transcript index requires a maintainer-owned freshness/cost decision and a durable,
+revision-fenced refresh design; an ad hoc background task would neither survive
+process exit nor prevent older edits from overwriting newer vectors.
 
 ## Data and credential safety
 

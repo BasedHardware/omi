@@ -14,7 +14,6 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from database import conversations as conversations_db
 from routers import conversations as routes
-from utils.conversations import transcript_chunks
 
 UID = "test-user-segment-text-guard"
 CONV_LOCKED = "conv-locked-123"
@@ -57,7 +56,6 @@ def _setup_mock_db(monkeypatch):
         return mock_conversations.get(conversation_id)
 
     updated_calls = []
-    monkeypatch.setattr(transcript_chunks, "refresh_transcript_chunks_after_edit", lambda *_args: None)
 
     def mock_update_conversation_segment_text(uid, conversation_id, segment_id, text):
         if conversation_id not in mock_conversations:
@@ -139,18 +137,25 @@ def test_patch_conversation_segment_text_rejects_nonexistent_segment_with_404(mo
     assert updated_calls == []
 
 
-def test_successful_edit_refreshes_search_after_the_mutation(monkeypatch, client):
+def test_successful_edit_does_not_call_retired_transcript_index(monkeypatch, client):
+    from database import vector_db
+
     updated_calls = _setup_mock_db(monkeypatch)
-    refreshes = []
+    provider_calls = []
 
-    def refresh(uid, conversation_id):
-        assert updated_calls == [(CONV_VALID, "seg-3", "Updated text")]
-        refreshes.append((uid, conversation_id))
+    def unavailable_provider(*args, **kwargs):
+        provider_calls.append((args, kwargs))
+        raise RuntimeError("Vector provider must not run during a segment edit")
 
-    monkeypatch.setattr(transcript_chunks, "refresh_transcript_chunks_after_edit", refresh)
+    # A stale deployment value must not revive the writer retired by main.
+    monkeypatch.setenv("TRANSCRIPT_CHUNK_INDEXING_ENABLED", "true")
+    monkeypatch.setattr(vector_db, "index", object())
+    monkeypatch.setattr(vector_db, "upsert_transcript_chunk_vectors", unavailable_provider)
     response = client.patch(
         f"/v1/conversations/{CONV_VALID}/segments/text",
         json={"segment_id": "seg-3", "text": "Updated text"},
     )
     assert response.status_code == 200
-    assert refreshes == [(UID, CONV_VALID)]
+    assert response.json() == {"status": "Ok"}
+    assert updated_calls == [(CONV_VALID, "seg-3", "Updated text")]
+    assert provider_calls == []

@@ -1860,10 +1860,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
-    result = run_transactional(db, _update_segment_text)
-    if result == 'ok':
-        _sync_conversation_search_index(uid, conversation_id)
-    return result
+    return run_transactional(db, _update_segment_text)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:

@@ -364,6 +364,10 @@ def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
     ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
     monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    search_refreshes = []
+    monkeypatch.setattr(
+        conversations_db, '_sync_conversation_search_index', lambda *args: search_refreshes.append(args)
+    )
 
     result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text')
 
@@ -376,6 +380,9 @@ def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
 
     written = _json.loads(_zlib.decompress(ref.update_calls[0]['transcript_segments']).decode('utf-8'))
     assert {s['id']: s['text'] for s in written} == {'s1': 'new text', 's2': 'keep'}
+    # Transcript segments are not in the Typesense projection; keep this edit
+    # free of an extra synchronous provider round trip.
+    assert search_refreshes == []
 
 
 def test_segment_text_edit_missing_segment_does_not_write(monkeypatch):
