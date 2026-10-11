@@ -279,6 +279,50 @@ the analyzer ratchet passed. The final lane report records the full backend
 suite and committed-head preflight results, including comparison of any backend
 failures against a detached origin/main worktree with its own locked venv.
 
+## Full-app CI replay timing follow-up
+
+The CI merge checkout added main's empty-completion diagnostic test. Current
+main was merged into the lane before reproducing the four failures, so local
+verification includes that test and the full merged app suite.
+
+All four failures are timing artifacts, not stranded production terminal jobs:
+
+- The persisted/enqueued/acknowledged replay attempted both its processing poll
+  and completed poll at the upload's original timestamp. A queued upload
+  explicitly defers its first poll by its hint (20 seconds by default), and a
+  processing response starts another minimum interval. Advancing the replay
+  clock at both boundaries reaches `synced` without another upload.
+- The invalid-input replay attempted its terminal poll at the upload timestamp.
+  Advancing the upload deadline earns `unsupportedAudio`; every wake remains
+  unable to re-upload it, and deliberate retry still earns the same verdict
+  after that retry's deadline. All original retained-byte assertions remain.
+- The transient-failure replay attempted both failed-job verdicts before their
+  upload deadlines. It now observes each eligible verdict before the next
+  coordinator drain: retry count remains exactly one, then two, for two uploads.
+- The empty-completion diagnostic test had no upload deadline: its first poll
+  is immediate, but its second same-time pass cannot repoll. The injected clock
+  advances exactly 20 seconds for completion, preserving its original ACK
+  timestamp, file persistence, retry accounting and diagnostic assertions.
+
+All four use an injected job-status fetcher, which gives each WAL owner a
+private poller; global request-budget leakage did not cause these failures.
+Replay fixtures now clear the shared limiter, align its clock, reset singleton
+poller state on first boot, and restore both on teardown. Local-WAL fixtures
+also reset these shared test dependencies. Additional regression tests prove
+that restored jobs poll immediately, explicit upload hints defer first polls
+without being extended by skipped wakes, and the singleton reset clears
+budget, deadlines and confirmed-missing owner tombstones. Production admission
+and terminal handling are unchanged.
+
+The local CI command is taken from
+`.github/workflows/mobile-app-checks.yml` (`Dart Analyze & Tests`): Flutter
+3.44.5, `flutter pub get`, hermetic compile inputs, `dart run build_runner build
+--delete-conflicting-outputs`, `bash scripts/analyze_ratchet.sh`, then the full
+`bash test.sh --reporter expanded --file-reporter json:<results-file>` with
+pipefail and output capture. Plain `flutter analyze` is also run as requested.
+The final report records exact commands, analyzer diagnostics, full-suite totals,
+committed-head preflight and pushed-ref verification.
+
 ## Residual risk and production acceptance
 
 Budgets and transient cooldowns are process-local, as before; relaunch gets a

@@ -66,6 +66,55 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('first polls are immediate unless an upload explicitly supplies a poll deadline', () async {
+    final poller = SyncJobPoller(clock: () => now);
+    final seen = <String>[];
+    Future<SyncJobFetch> fetch(String id) async {
+      seen.add(id);
+      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed'));
+    }
+
+    await poller.fetch('restored-job', fetch);
+    expect(seen, ['restored-job'], reason: 'persisted jobs have no artificial initial delay');
+    poller.defer('new-upload', 90000);
+    await poller.fetch('new-upload', fetch);
+    now = now.add(const Duration(seconds: 89));
+    await poller.fetch('new-upload', fetch);
+    expect(seen, ['restored-job'], reason: 'wake triggers cannot bypass the server upload hint');
+    now = now.add(const Duration(seconds: 1));
+    await poller.fetch('new-upload', fetch);
+    expect(seen, ['restored-job', 'new-upload'], reason: 'skipped polls do not extend the deadline');
+  });
+
+  test('singleton reset removes request budget, per-job deadlines and confirmed-missing owners', () async {
+    final poller = SyncJobPoller.instance;
+    Future<SyncJobFetch> missing(String _) async => const SyncJobFetch(SyncJobFetchOutcome.notFound);
+    await poller.fetch('expired', missing);
+    now = now.add(SyncJobPoller.missingConfirmationInterval);
+    await poller.fetch('expired', missing);
+    expect(() => poller.validateOwner(UploadFilesResult.queued('expired')), throwsA(isA<SyncRateLimitedException>()));
+    var requests = 0;
+    Future<SyncJobFetch> fetch(String id) async {
+      requests++;
+      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+    }
+
+    for (var i = 0; i < 18; i++) {
+      await poller.fetch('job-$i', fetch);
+    }
+    expect(requests, 17, reason: 'the confirmed-missing request consumes one slot');
+    limiter.markLimited(retryAfterSeconds: 120, reason: RateLimitReason.edgeThrottle);
+    expect(poller.beginPass(), isFalse);
+    limiter.clear();
+    poller.resetForTesting(clock: () => now);
+    expect(limiter.isLimited, isFalse);
+    expect(poller.beginPass(), isTrue);
+    poller.endPass();
+    poller.validateOwner(UploadFilesResult.queued('expired'));
+    await poller.fetch('job-0', fetch);
+    expect(requests, 18, reason: 'a new test can poll the same job at the same time');
+  });
+
   test('50 pending jobs and five serial wakes cannot produce 250 polls', () async {
     var requests = 0;
     final sync = LocalWalSyncImpl(_Listener(),
