@@ -2607,3 +2607,44 @@ def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job
 
     release.assert_called_once_with(UID, 'byte', 'reservation')
     assert job.store.docs == {}
+
+
+@pytest.mark.parametrize(
+    ('preface', 'title'),
+    [
+        pytest.param('Meeting notes\n', 'Meeting notes', id='one-title-line'),
+        pytest.param('Weekly sync\n2024-01-15\n', 'Weekly sync 2024-01-15', id='title-and-date-lines'),
+    ],
+)
+def test_a_title_above_a_block_with_one_label_is_not_part_of_the_speaker(preface, title):
+    """A title joined in front of the block's only label line became the "name" ("Meeting notes Alice").
+
+    That phantom speaker never matched the owner, so the owner's first turn stayed
+    unbound while the rest bound. The title keeps its words as its own untimed cue.
+    """
+    text = preface + 'Alice: hi there\n\nBob: hello\nAlice: how are you\n'
+
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == [
+        (None, title),
+        ('Alice', 'hi there'),
+        ('Bob', 'hello'),
+        ('Alice', 'how are you'),
+    ]
+    segments = tf.segments_from_cues(parsed.cues, owner_name='Alice Smith', people={})
+    alice = [segment for segment in segments if segment.text in {'hi there', 'how are you'}]
+    assert [segment.is_user for segment in alice] == [True, True]
+    assert len({segment.speaker for segment in alice}) == 1
+    assert segments[0].text == title
+
+
+def test_a_one_off_label_after_prose_keeps_all_words_and_no_speaker():
+    text = 'Some prose here\nNote: remember the thing\nmore prose\n'
+
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [cue.speaker for cue in parsed.cues] == [None, None]
+    assert ' '.join(cue.text for cue in parsed.cues).split() == text.split()
