@@ -32503,6 +32503,43 @@
         "title": "TranscriptionPreferencesUpdate",
         "type": "object"
       },
+      "TranscriptionReprocessErrorDetail": {
+        "properties": {
+          "code": {
+            "description": "Stable reason: no_audio, no_speech, or failed. Clients tolerate future reasons.",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "TranscriptionReprocessErrorDetail",
+        "type": "object"
+      },
+      "TranscriptionReprocessErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TranscriptionReprocessErrorDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TranscriptionReprocessErrorResponse",
+        "type": "object"
+      },
       "Translation": {
         "properties": {
           "lang": {
@@ -47289,6 +47326,13 @@
             "description": "Successful Response"
           },
           "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionReprocessErrorResponse"
+                }
+              }
+            },
             "description": "No stored audio is available, or STT produced no speech"
           },
           "401": {
@@ -47308,6 +47352,13 @@
             "description": "Validation Error"
           },
           "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionReprocessErrorResponse"
+                }
+              }
+            },
             "description": "Stored audio could not be loaded or the transcription provider failed"
           }
         },

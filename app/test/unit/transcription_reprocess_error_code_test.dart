@@ -5,6 +5,7 @@ void main() {
   test('maps stable missing audio and empty speech codes regardless of wording', () {
     for (final code in ['no_audio', 'no_speech']) {
       expect(transcriptionReprocessErrorCode(400, '{"detail":{"code":"$code","message":"Changed copy"}}'), 'no_audio');
+      expect(transcriptionReprocessErrorCode(400, '{"detail":{"code":"$code"}}'), 'no_audio');
     }
   });
 
@@ -15,7 +16,19 @@ void main() {
   });
 
   test('malformed and unknown responses remain generic failures', () {
-    for (final body in ['', 'not json', 'null', '[]', '{"detail":[]}', '{"detail":{"code":"future_code"}}']) {
+    for (final body in [
+      '',
+      'not json',
+      'null',
+      '[]',
+      '{}',
+      '{"detail":null}',
+      '{"detail":[]}',
+      '{"detail":{}}',
+      '{"detail":{"code":42}}',
+      '{"detail":{"code":null}}',
+      '{"detail":{"code":"future_code"}}',
+    ]) {
       expect(transcriptionReprocessErrorCode(400, body), 'failed');
     }
     expect(transcriptionReprocessErrorCode(null, ''), 'failed');

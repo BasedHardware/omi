@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 import routers.conversations as conv_router
 from models.transcript_segment import TranscriptSegment
+from models.transcription_reprocess import TranscriptionReprocessErrorResponse
 from utils.conversations.process_conversation import AppUsageAttribution
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_transcription import (
@@ -199,6 +200,7 @@ class TestReprocessTranscriptionRoute:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
         assert exc.value.detail == {'code': 'no_audio', 'message': 'No stored audio available to retranscribe'}
+        assert TranscriptionReprocessErrorResponse(detail=exc.value.detail).detail.code == 'no_audio'
         process.assert_not_called()
 
     def test_returns_400_when_stt_produces_no_speech(self):
@@ -217,6 +219,7 @@ class TestReprocessTranscriptionRoute:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 400
         assert exc.value.detail == {'code': 'no_speech', 'message': 'Transcription produced no speech'}
+        assert TranscriptionReprocessErrorResponse(detail=exc.value.detail).detail.code == 'no_speech'
         process.assert_not_called()
 
     def test_returns_502_when_stt_provider_fails(self):
@@ -235,6 +238,7 @@ class TestReprocessTranscriptionRoute:
                 conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert exc.value.status_code == 502
         assert exc.value.detail['code'] == 'failed'
+        assert TranscriptionReprocessErrorResponse(detail=exc.value.detail).detail.code == 'failed'
         process.assert_not_called()
 
     def test_replaces_segments_and_reuses_enrichment_path(self):

@@ -1747,7 +1747,10 @@ rejects soft-deleted conversations. Before replacing segments, it requires a
 nonempty transcript. Missing/empty audio returns HTTP 400 with
 `detail.code=no_audio`; no detected speech returns `no_speech`. Storage listing,
 merge or download exceptions and STT failures return HTTP 502 with
-`detail.code=failed`, preserving the previous transcript. Replay opts into
+`detail.code=failed`, preserving the previous transcript. Both failure statuses
+use the shared OpenAPI `TranscriptionReprocessErrorResponse` contract; the
+Flutter discriminator reads its generated wire DTO and treats malformed or
+unknown reasons as generic failures. Replay opts into
 strict chunk-download failure propagation after submitted jobs settle, so a
 partial download outage cannot publish a partial transcript. Existing playback
 callers retain best-effort merging; missing chunks and decode fallbacks retain

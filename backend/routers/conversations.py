@@ -63,6 +63,7 @@ from models.geolocation import Geolocation
 from models.app import App
 from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
+from models.transcription_reprocess import TranscriptionReprocessErrorResponse
 from models.other import Person
 from models.shared import StatusResponse
 
@@ -828,9 +829,15 @@ def reprocess_conversation(
     '/v1/conversations/{conversation_id}/reprocess-transcription',
     response_model=Conversation,
     responses={
-        400: {'description': 'No stored audio is available, or STT produced no speech'},
+        400: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'No stored audio is available, or STT produced no speech',
+        },
         404: {'description': 'The conversation does not exist'},
-        502: {'description': 'Stored audio could not be loaded or the transcription provider failed'},
+        502: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'Stored audio could not be loaded or the transcription provider failed',
+        },
     },
     tags=['conversations'],
 )

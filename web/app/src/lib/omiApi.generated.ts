@@ -5333,6 +5333,15 @@ export interface TranscriptionPreferencesUpdate {
   vocabulary?: Array<string> | null;
 }
 
+export interface TranscriptionReprocessErrorDetail {
+  code: string;
+  message?: string | null;
+}
+
+export interface TranscriptionReprocessErrorResponse {
+  detail: TranscriptionReprocessErrorDetail;
+}
+
 export interface Translation {
   lang: string;
   text: string;
@@ -6558,6 +6567,8 @@ export interface OmiApiSchemas {
   "TranscriptionOutcome": TranscriptionOutcome;
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
+  "TranscriptionReprocessErrorDetail": TranscriptionReprocessErrorDetail;
+  "TranscriptionReprocessErrorResponse": TranscriptionReprocessErrorResponse;
   "Translation": Translation;
   "TriState": TriState;
   "TrialMetadata": TrialMetadata;
@@ -7885,11 +7896,11 @@ export interface OmiApiPaths {
       operationId: "reprocess_conversation_transcription_v1_conversations__conversation_id__reprocess_transcription_post";
       responses: {
         "200": Conversation;
-        "400": void;
+        "400": TranscriptionReprocessErrorResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
-        "502": void;
+        "502": TranscriptionReprocessErrorResponse;
       };
     };
   };

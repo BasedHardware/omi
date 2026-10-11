@@ -1582,6 +1582,50 @@ class GeneratedConversationTestPromptResponse {
   }
 }
 
+class GeneratedTranscriptionReprocessErrorDetail {
+  final String code;
+  final String? message;
+
+  const GeneratedTranscriptionReprocessErrorDetail({
+    required this.code,
+    this.message,
+  });
+
+  factory GeneratedTranscriptionReprocessErrorDetail.fromJson(Map<String, dynamic> json) {
+    return GeneratedTranscriptionReprocessErrorDetail(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'message': message,
+    };
+  }
+}
+
+class GeneratedTranscriptionReprocessErrorResponse {
+  final GeneratedTranscriptionReprocessErrorDetail detail;
+
+  const GeneratedTranscriptionReprocessErrorResponse({
+    required this.detail,
+  });
+
+  factory GeneratedTranscriptionReprocessErrorResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedTranscriptionReprocessErrorResponse(
+      detail: _required(_readFieldValue<GeneratedTranscriptionReprocessErrorDetail>(_readField(json, const ["detail"]), "detail", (value) => _readObject(value, GeneratedTranscriptionReprocessErrorDetail.fromJson), requiredField: true, nullable: false), "detail"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'detail': detail.toJson(),
+    };
+  }
+}
+
 class GeneratedMergeConversationsResponse {
   final List<String> conversationIds;
   final String message;

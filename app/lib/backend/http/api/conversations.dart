@@ -151,12 +151,13 @@ class TranscriptionReprocessResult {
 String transcriptionReprocessErrorCode(int? statusCode, String body) {
   if (statusCode != 400) return 'failed';
   try {
-    final payload = jsonDecode(body);
-    final detail = payload is Map<String, dynamic> ? payload['detail'] : null;
-    final code = detail is Map<String, dynamic> ? detail['code'] : null;
+    final error = wire.GeneratedTranscriptionReprocessErrorResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    final code = error.detail.code;
     if (code == 'no_audio' || code == 'no_speech') return 'no_audio';
   } on FormatException {
     // A proxy/non-JSON response is a generic failure, never evidence of missing audio.
+  } on TypeError {
+    // A JSON scalar or list is not the declared error envelope.
   }
   return 'failed';
 }
