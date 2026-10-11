@@ -12007,8 +12007,6 @@ class AppLocalizationsDa extends AppLocalizations {
         'likely': 'Sandsynlig',
         'soundsLike': 'Lyder som $name',
         'notPerson': 'Ikke $name',
-        'carried': 'Stadig $name. Overført fra din seneste samtale.',
-        'change': 'Skift',
         'alsoTitle': 'Er det også $name?',
         'alsoBody': 'Omi fandt den samme stemme i tidligere samtaler.',
         'confirmed': 'Du har bekræftet denne etiket',

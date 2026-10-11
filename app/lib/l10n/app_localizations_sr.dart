@@ -12031,8 +12031,6 @@ class AppLocalizationsSr extends AppLocalizations {
         'likely': 'Вероватно',
         'soundsLike': 'Звучи као $name',
         'notPerson': 'Није $name',
-        'carried': 'И даље $name. Пренето из вашег последњег разговора.',
-        'change': 'Промени',
         'alsoTitle': 'Да ли је ово такође $name?',
         'alsoBody': 'Omi је пронашао исти глас у ранијим разговорима.',
         'confirmed': 'Потврдили сте ову ознаку',

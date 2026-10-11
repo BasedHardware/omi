@@ -3720,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Ääni opittu} pending{Opitaan ääntä…} disabled{Äänen tallennus on pois päältä} other{Ääntä ei ole vielä opittu}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Löytyi 1 aiemmasta keskustelusta} other{Löytyi {count} aiemmasta keskustelusta}}",
-    "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
+    "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
     "speakerLabelTalkTime": "{duration} tästä äänestä",
     "findDeviceNoneTitle": "Omia ei löytynyt",
     "findDeviceNoneMessage": "Kytke se päälle ja pidä sitä puhelimesi lähellä.",

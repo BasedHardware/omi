@@ -3720,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Rösten är inlärd} pending{Lär sig rösten…} disabled{Sparande av röst är avstängt} other{Rösten är inte inlärd ännu}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi känner igen {name} nästa gång.} pending{Det tar några sekunder.} disabled{Aktivera sparande av röster i Inställningar så att Omi kan känna igen {name}.} other{Omi behöver mer tydligt tal från {name} och fortsätter försöka.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Hittades i 1 tidigare konversation} other{Hittades i {count} tidigare konversationer}}",
-    "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
+    "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
     "speakerLabelTalkTime": "{duration} av den här rösten",
     "findDeviceNoneTitle": "Ingen Omi hittades",
     "findDeviceNoneMessage": "Slå på den och håll den nära telefonen.",

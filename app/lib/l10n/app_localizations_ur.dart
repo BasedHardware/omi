@@ -12034,8 +12034,6 @@ class AppLocalizationsUr extends AppLocalizations {
         'likely': 'ممکنہ',
         'soundsLike': '$name جیسی لگتی ہے',
         'notPerson': '$name نہیں',
-        'carried': 'اب بھی $name۔ آپ کی پچھلی گفتگو سے جاری۔',
-        'change': 'تبدیل کریں',
         'alsoTitle': 'کیا یہ بھی $name ہیں؟',
         'alsoBody': 'Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔',
         'confirmed': 'آپ نے اس لیبل کی تصدیق کی',

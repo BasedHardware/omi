@@ -12080,8 +12080,6 @@ class AppLocalizationsMk extends AppLocalizations {
         'likely': 'Веројатно',
         'soundsLike': 'Звучи како $name',
         'notPerson': 'Не е $name',
-        'carried': 'Сѐ уште е $name. Пренесено од вашиот последен разговор.',
-        'change': 'Промени',
         'alsoTitle': 'Дали и ова е $name?',
         'alsoBody': 'Omi го најде истиот глас во претходни разговори.',
         'confirmed': 'Ја потврдивте оваа ознака',

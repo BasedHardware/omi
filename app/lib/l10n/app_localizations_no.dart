@@ -12022,8 +12022,6 @@ class AppLocalizationsNo extends AppLocalizations {
         'likely': 'Sannsynlig',
         'soundsLike': 'Høres ut som $name',
         'notPerson': 'Ikke $name',
-        'carried': 'Fortsatt $name. Videreført fra den siste samtalen din.',
-        'change': 'Endre',
         'alsoTitle': 'Er dette også $name?',
         'alsoBody': 'Omi fant den samme stemmen i tidligere samtaler.',
         'confirmed': 'Du har bekreftet denne etiketten',

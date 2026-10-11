@@ -12053,8 +12053,6 @@ class AppLocalizationsBe extends AppLocalizations {
         'likely': 'Магчыма',
         'soundsLike': 'Падобна на $name',
         'notPerson': 'Не $name',
-        'carried': 'Усё яшчэ $name. Перанесена з вашай апошняй размовы.',
-        'change': 'Змяніць',
         'alsoTitle': 'Гэта таксама $name?',
         'alsoBody': 'Omi знайшоў такі ж голас у ранейшых размовах.',
         'confirmed': 'Вы пацвердзілі гэту пазнаку',

@@ -11931,8 +11931,6 @@ class AppLocalizationsHe extends AppLocalizations {
         'likely': 'סביר',
         'soundsLike': 'נשמע כמו $name',
         'notPerson': 'לא $name',
-        'carried': 'עדיין $name. הועבר מהשיחה האחרונה שלך.',
-        'change': 'שינוי',
         'alsoTitle': 'האם זה גם $name?',
         'alsoBody': 'Omi מצא את אותו קול בשיחות קודמות.',
         'confirmed': 'אישרת את התווית הזו',

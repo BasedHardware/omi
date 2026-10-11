@@ -156,6 +156,47 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  for (final withPhotos in [false, true]) {
+    for (final source in ['manual', 'carried', 'auto']) {
+      testWidgets('$source live label (photos: $withPhotos) opens the existing speaker assignment sheet',
+          (tester) async {
+        final capture = _hermeticCapture();
+        addTearDown(capture.dispose);
+        capture.segments = [
+          TranscriptSegment(
+            id: 'label',
+            text: 'hello',
+            speaker: 'SPEAKER_0',
+            isUser: false,
+            personId: 'maya',
+            translations: [],
+            start: 0,
+            end: 6,
+            speakerLabelSource: source,
+          ),
+        ];
+        if (withPhotos) capture.photos = [ConversationPhoto(id: 'photo', base64: '', createdAt: DateTime(2026))];
+        await _pumpCapturingPage(
+          tester,
+          capture: capture,
+          connectivity: _StubConnectivityProvider(true),
+          people: [Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))],
+        );
+        final label = find.byKey(const ValueKey('edit_speaker_label_label'));
+        expect(label, findsOneWidget);
+        expect(tester.getSize(label).height, greaterThanOrEqualTo(44));
+        expect(find.byKey(Key(source == 'auto' ? 'speaker_label_likely' : 'speaker_label_confirmed')), findsOneWidget);
+        await tester.tap(label);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(NameSpeakerBottomSheet), findsOneWidget);
+        final sheet = tester.widget<NameSpeakerBottomSheet>(find.byType(NameSpeakerBottomSheet));
+        expect(sheet.speakerId, 0);
+        expect(sheet.segmentId, 'label');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
   testWidgets('Someone Else waits for the rejection receipt before opening naming', (tester) async {
     final capture = _hermeticCapture();
     addTearDown(capture.dispose);

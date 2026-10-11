@@ -12058,8 +12058,6 @@ class AppLocalizationsKn extends AppLocalizations {
         'likely': 'ಸಂಭವನೀಯ',
         'soundsLike': '$name ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ',
         'notPerson': '$name ಅಲ್ಲ',
-        'carried': 'ಇನ್ನೂ $name. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.',
-        'change': 'ಬದಲಿಸಿ',
         'alsoTitle': 'ಇದು ಕೂಡ $name ಅವರೇ?',
         'alsoBody': 'Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.',
         'confirmed': 'ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ',

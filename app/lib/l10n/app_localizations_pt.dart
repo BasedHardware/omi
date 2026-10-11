@@ -12040,8 +12040,6 @@ class AppLocalizationsPt extends AppLocalizations {
         'likely': 'Provável',
         'soundsLike': 'Soa como $name',
         'notPerson': 'Não é $name',
-        'carried': 'Continua sendo $name. Mantido da sua última conversa.',
-        'change': 'Alterar',
         'alsoTitle': 'Esta voz também é $name?',
         'alsoBody': 'O Omi encontrou a mesma voz em conversas anteriores.',
         'confirmed': 'Você confirmou este rótulo',

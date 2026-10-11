@@ -3720,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Voz aprendida} pending{Aprendiendo la voz…} disabled{El guardado de voz está desactivado} other{Voz aún no aprendida}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconocerá a {name} la próxima vez.} pending{Esto tarda unos segundos.} disabled{Activa el guardado de voces en Ajustes para que Omi pueda reconocer a {name}.} other{Omi necesita más habla clara de {name} y seguirá intentándolo.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Encontrada en 1 conversación anterior} other{Encontrada en {count} conversaciones anteriores}}",
-    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
     "speakerLabelTalkTime": "{duration} de esta voz",
     "findDeviceNoneTitle": "No se encontró ningún Omi",
     "findDeviceNoneMessage": "Enciéndelo y mantenlo cerca de tu teléfono.",

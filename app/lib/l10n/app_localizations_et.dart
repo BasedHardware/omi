@@ -12013,8 +12013,6 @@ class AppLocalizationsEt extends AppLocalizations {
         'likely': 'Tõenäoline',
         'soundsLike': 'Kõlab nagu $name',
         'notPerson': 'Pole $name',
-        'carried': 'Endiselt $name. Üle võetud sinu viimasest vestlusest.',
-        'change': 'Muuda',
         'alsoTitle': 'Kas see on ka $name?',
         'alsoBody': 'Omi leidis sama hääle varasematest vestlustest.',
         'confirmed': 'Kinnitasid selle sildi',

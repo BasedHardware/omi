@@ -12099,8 +12099,6 @@ class AppLocalizationsEl extends AppLocalizations {
         'likely': 'Πιθανό',
         'soundsLike': 'Ακούγεται σαν $name',
         'notPerson': 'Όχι $name',
-        'carried': 'Εξακολουθεί να είναι $name. Μεταφέρθηκε από την τελευταία σας συζήτηση.',
-        'change': 'Αλλαγή',
         'alsoTitle': 'Είναι και αυτό το άτομο $name;',
         'alsoBody': 'Το Omi βρήκε την ίδια φωνή σε προηγούμενες συζητήσεις.',
         'confirmed': 'Επιβεβαιώσατε αυτή την ετικέτα',

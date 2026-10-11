@@ -12065,8 +12065,6 @@ class AppLocalizationsBg extends AppLocalizations {
         'likely': 'Вероятно',
         'soundsLike': 'Звучи като $name',
         'notPerson': 'Не е $name',
-        'carried': 'Все още е $name. Пренесено от последния ви разговор.',
-        'change': 'Промяна',
         'alsoTitle': 'Това също ли е $name?',
         'alsoBody': 'Omi откри същия глас в предишни разговори.',
         'confirmed': 'Потвърдихте този етикет',

@@ -12063,8 +12063,6 @@ class AppLocalizationsRu extends AppLocalizations {
         'likely': 'Вероятно',
         'soundsLike': 'Похоже на $name',
         'notPerson': 'Не $name',
-        'carried': 'По-прежнему $name. Перенесено из вашего прошлого разговора.',
-        'change': 'Изменить',
         'alsoTitle': 'Это тоже $name?',
         'alsoBody': 'Omi нашёл такой же голос в прошлых разговорах.',
         'confirmed': 'Вы подтвердили эту метку',

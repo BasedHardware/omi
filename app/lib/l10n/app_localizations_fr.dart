@@ -12118,8 +12118,6 @@ class AppLocalizationsFr extends AppLocalizations {
         'likely': 'Probable',
         'soundsLike': 'Ressemble à $name',
         'notPerson': 'Pas $name',
-        'carried': 'Toujours $name. Repris de votre dernière conversation.',
-        'change': 'Modifier',
         'alsoTitle': 'Est-ce aussi $name ?',
         'alsoBody': 'Omi a retrouvé la même voix dans des conversations précédentes.',
         'confirmed': 'Vous avez confirmé cette étiquette',

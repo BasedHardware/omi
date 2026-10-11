@@ -12015,8 +12015,6 @@ class AppLocalizationsSk extends AppLocalizations {
         'likely': 'Pravdepodobne',
         'soundsLike': 'Znie ako $name',
         'notPerson': 'Nie je to $name',
-        'carried': 'Stále $name. Prevzaté z vášho posledného rozhovoru.',
-        'change': 'Zmeniť',
         'alsoTitle': 'Je to aj $name?',
         'alsoBody': 'Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.',
         'confirmed': 'Tento štítok ste potvrdili',

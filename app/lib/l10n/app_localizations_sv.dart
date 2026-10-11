@@ -12025,8 +12025,6 @@ class AppLocalizationsSv extends AppLocalizations {
         'likely': 'Troligen',
         'soundsLike': 'Låter som $name',
         'notPerson': 'Inte $name',
-        'carried': 'Fortfarande $name. Förd över från din senaste konversation.',
-        'change': 'Ändra',
         'alsoTitle': 'Är det också $name?',
         'alsoBody': 'Omi hittade samma röst i tidigare konversationer.',
         'confirmed': 'Du har bekräftat den här etiketten',

@@ -12024,8 +12024,6 @@ class AppLocalizationsFi extends AppLocalizations {
         'likely': 'Todennäköinen',
         'soundsLike': 'Kuulostaa henkilöltä $name',
         'notPerson': 'Ei $name',
-        'carried': 'Edelleen $name. Siirretty edellisestä keskustelustasi.',
-        'change': 'Vaihda',
         'alsoTitle': 'Onko tämä myös $name?',
         'alsoBody': 'Omi löysi saman äänen aiemmista keskusteluista.',
         'confirmed': 'Vahvistit tämän nimen',

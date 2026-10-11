@@ -12054,8 +12054,6 @@ class AppLocalizationsNl extends AppLocalizations {
         'likely': 'Waarschijnlijk',
         'soundsLike': 'Klinkt als $name',
         'notPerson': 'Niet $name',
-        'carried': 'Nog steeds $name. Overgenomen uit je laatste gesprek.',
-        'change': 'Wijzigen',
         'alsoTitle': 'Is dit ook $name?',
         'alsoBody': 'Omi heeft dezelfde stem in eerdere gesprekken gevonden.',
         'confirmed': 'Je hebt dit label bevestigd',

@@ -12031,8 +12031,6 @@ class AppLocalizationsTr extends AppLocalizations {
         'likely': 'Muhtemel',
         'soundsLike': '$name gibi duyuluyor',
         'notPerson': '$name değil',
-        'carried': 'Hâlâ $name. Son sohbetinizden aktarıldı.',
-        'change': 'Değiştir',
         'alsoTitle': 'Bu da $name mi?',
         'alsoBody': 'Omi aynı sesi önceki sohbetlerde buldu.',
         'confirmed': 'Bu etiketi onayladınız',

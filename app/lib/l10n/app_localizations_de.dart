@@ -12114,8 +12114,6 @@ class AppLocalizationsDe extends AppLocalizations {
         'likely': 'Wahrscheinlich',
         'soundsLike': 'Klingt wie $name',
         'notPerson': 'Nicht $name',
-        'carried': 'Weiterhin $name. Aus deinem letzten Gespräch übernommen.',
-        'change': 'Ändern',
         'alsoTitle': 'Ist das auch $name?',
         'alsoBody': 'Omi hat dieselbe Stimme in früheren Gesprächen gefunden.',
         'confirmed': 'Du hast dieses Label bestätigt',

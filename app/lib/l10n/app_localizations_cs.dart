@@ -12022,8 +12022,6 @@ class AppLocalizationsCs extends AppLocalizations {
         'likely': 'Pravděpodobně',
         'soundsLike': 'Zní jako $name',
         'notPerson': 'Není $name',
-        'carried': 'Stále $name. Převzato z vaší poslední konverzace.',
-        'change': 'Změnit',
         'alsoTitle': 'Je to také $name?',
         'alsoBody': 'Omi našel stejný hlas v dřívějších rozhovorech.',
         'confirmed': 'Tento štítek jste potvrdili',

@@ -14363,9 +14363,9 @@
             }
         }
     },
-    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
+    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
     "@speakerLabelText": {
-        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
+        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
         "placeholders": {
             "part": {
                 "type": "String"

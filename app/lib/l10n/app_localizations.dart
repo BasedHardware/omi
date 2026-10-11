@@ -21525,10 +21525,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Found in 1 earlier conversation} other{Found in {count} earlier conversations}}'**
   String speakerLabelEarlierMatches(int count);
 
-  /// Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)
+  /// Short speaker-label texts: likely badge, sounds-like question, reject button, earlier-voice card title and body, confirmed check label, and the Review button (other)
   ///
   /// In en, this message translates to:
-  /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
+  /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
   String speakerLabelText(String part, String name);
 
   /// How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)

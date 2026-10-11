@@ -12048,8 +12048,6 @@ class AppLocalizationsLv extends AppLocalizations {
         'likely': 'Iespējams',
         'soundsLike': 'Izklausās pēc $name',
         'notPerson': 'Nav $name',
-        'carried': 'Joprojām $name. Pārnests no jūsu pēdējās sarunas.',
-        'change': 'Mainīt',
         'alsoTitle': 'Vai šī ir arī $name?',
         'alsoBody': 'Omi atrada to pašu balsi iepriekšējās sarunās.',
         'confirmed': 'Jūs apstiprinājāt šo birku',

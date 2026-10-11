@@ -239,8 +239,10 @@ final speakerLabelScenarios = <AuditScenario>[
         ChangeNotifierProvider<DeviceProvider>.value(
             value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
       ]);
-      expect(find.byKey(const Key('carried_speaker_banner')), findsOneWidget);
-      await a.shot('A new conversation starts on the same recording: Maya is still Maya, with Change');
+      expect(find.byKey(const ValueKey('edit_speaker_label_s1')), findsOneWidget);
+      expect(find.byKey(const Key('speaker_label_confirmed')), findsWidgets);
+      await a
+          .shot('A new conversation starts on the same recording: Maya has a confirmed label with inline correction');
     },
   ),
 ];

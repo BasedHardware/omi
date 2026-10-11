@@ -11956,8 +11956,6 @@ class AppLocalizationsTh extends AppLocalizations {
         'likely': 'น่าจะเป็น',
         'soundsLike': 'เสียงคล้าย $name',
         'notPerson': 'ไม่ใช่ $name',
-        'carried': 'ยังคงเป็น $name ต่อจากการสนทนาครั้งล่าสุดของคุณ',
-        'change': 'เปลี่ยน',
         'alsoTitle': 'นี่คือ $name ด้วยหรือไม่',
         'alsoBody': 'Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า',
         'confirmed': 'คุณยืนยันป้ายชื่อนี้แล้ว',

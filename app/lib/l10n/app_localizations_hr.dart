@@ -12056,8 +12056,6 @@ class AppLocalizationsHr extends AppLocalizations {
         'likely': 'Vjerojatno',
         'soundsLike': 'Zvuči kao $name',
         'notPerson': 'Nije $name',
-        'carried': 'I dalje $name. Preneseno iz vašeg zadnjeg razgovora.',
-        'change': 'Promijeni',
         'alsoTitle': 'Je li ovo također $name?',
         'alsoBody': 'Omi je pronašao isti glas u ranijim razgovorima.',
         'confirmed': 'Potvrdili ste ovu oznaku',

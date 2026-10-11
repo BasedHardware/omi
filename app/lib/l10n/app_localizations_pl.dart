@@ -12057,8 +12057,6 @@ class AppLocalizationsPl extends AppLocalizations {
         'likely': 'Prawdopodobnie',
         'soundsLike': 'Brzmi jak $name',
         'notPerson': 'To nie $name',
-        'carried': 'Nadal $name. Przeniesiono z ostatniej rozmowy.',
-        'change': 'Zmień',
         'alsoTitle': 'Czy to też $name?',
         'alsoBody': 'Omi znalazł ten sam głos we wcześniejszych rozmowach.',
         'confirmed': 'Potwierdzono tę etykietę',

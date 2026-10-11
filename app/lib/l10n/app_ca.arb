@@ -3720,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Veu apresa} pending{Aprenent la veu…} disabled{El desament de veus està desactivat} other{Veu encara no apresa}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconeixerà {name} la propera vegada.} pending{Això triga uns segons.} disabled{Activa el desament de veus a Configuració perquè Omi pugui reconèixer {name}.} other{Omi necessita més parla clara de {name} i continuarà intentant-ho.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Trobada en 1 conversa anterior} other{Trobada en {count} converses anteriors}}",
-    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
     "speakerLabelTalkTime": "{duration} d’aquesta veu",
     "findDeviceNoneTitle": "No s'ha trobat cap Omi",
     "findDeviceNoneMessage": "Engega'l i mantén-lo a prop del telèfon.",
