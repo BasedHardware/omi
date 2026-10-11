@@ -4,7 +4,13 @@ import pytest
 from fastapi import HTTPException
 from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 
-from utils.memory.read_resilience import MemoryReadCircuitOpen, MemoryReadResilience, transient_store_error
+from utils.memory.read_resilience import (
+    MemoryReadCircuitOpen,
+    MemoryReadResilience,
+    RetryAllowance,
+    memory_store_read,
+    transient_store_error,
+)
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 
@@ -22,7 +28,9 @@ class Clock:
 @pytest.fixture
 def policy():
     clock = Clock()
-    return MemoryReadResilience(clock=clock, sleep=clock.sleep, jitter=lambda low, high: 0.05)
+    return MemoryReadResilience(
+        clock=clock, sleep=clock.sleep, jitter=lambda low, high: 0.05, allowance=RetryAllowance(clock=clock)
+    )
 
 
 def unavailable():
@@ -87,7 +95,7 @@ def test_memory_circuit_opens_then_single_probe_recovers(policy):
     def probe():
         with pytest.raises(MemoryReadCircuitOpen):
             policy.call('read', read)
-        return ['recovered']
+        return memory_store_read(lambda: ['recovered'])
 
     assert policy.call('read', probe) == ['recovered']
     assert policy.call('read', lambda: []) == []
@@ -117,8 +125,8 @@ def test_memory_slow_attempt_does_not_start_retry(policy):
     assert len(calls) == 1
 
 
-def test_memory_request_budget_is_not_reset_by_fallback(policy):
-    budget = ListReadBudget(deadline_monotonic=10.08, clock=policy.clock)
+def test_memory_request_attempts_are_shared_with_retry_eligible_fallback(policy):
+    budget = ListReadBudget(deadline_monotonic=12, clock=policy.clock)
     calls = []
 
     def read():
@@ -128,12 +136,9 @@ def test_memory_request_budget_is_not_reset_by_fallback(policy):
     for operation in ['read_page', 'read']:
         with pytest.raises(HTTPException):
             policy.call(operation, read, budget=budget)
+    # With TWO SECONDS headroom the original implementation issued four calls.
     assert len(calls) == 2
-    assert budget.remaining_seconds == pytest.approx(0.08)
-    policy.clock.sleep(1.1)
-    with pytest.raises(HTTPException):
-        policy.call('read', read, budget=budget)
-    assert len(calls) == 3
+    assert budget.remaining_seconds == pytest.approx(1.95)
 
 
 def test_memory_scan_exhaustion_and_validation_never_retry(policy):
@@ -154,3 +159,142 @@ def test_memory_pinecone_transient_status_only():
     assert transient_store_error(PineconeError())
     PineconeError.status = 401
     assert not transient_store_error(PineconeError())
+
+
+def test_memory_24_concurrent_failures_are_bounded_to_24_plus_8_retries(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '8')
+    clock = Clock()
+    policy = MemoryReadResilience(
+        clock=clock, sleep=lambda _: None, jitter=lambda *_: 0, allowance=RetryAllowance(clock=clock)
+    )
+    first_attempts = threading.Barrier(24)
+    release_retries = threading.Event()
+    eight_retries_started = threading.Event()
+    local = threading.local()
+    lock = threading.Lock()
+    calls = 0
+    retries = 0
+
+    def read():
+        nonlocal calls, retries
+        with lock:
+            calls += 1
+        if not getattr(local, 'attempted', False):
+            local.attempted = True
+            first_attempts.wait(timeout=10)
+        else:
+            with lock:
+                retries += 1
+                if retries == 8:
+                    eight_retries_started.set()
+            assert release_retries.wait(timeout=10)
+        unavailable()
+
+    def request():
+        with pytest.raises(HTTPException):
+            policy.call('read', read)
+
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        pending = [pool.submit(request) for _ in range(24)]
+        try:
+            assert eight_retries_started.wait(timeout=10)
+        finally:
+            release_retries.set()
+        for future in pending:
+            future.result(timeout=10)
+    assert calls == 24 + 8
+    assert retries == 8
+
+
+def test_memory_circuit_opening_during_backoff_admits_zero_post_open_retries(policy):
+    calls = 0
+
+    def read():
+        nonlocal calls
+        calls += 1
+        unavailable()
+
+    def open_during_backoff(_seconds):
+        # Other requests exhaust three failures while the original caller sleeps.
+        original_sleep = policy.sleep
+        policy.sleep = lambda _: None
+        try:
+            for _ in range(3):
+                with pytest.raises(HTTPException):
+                    policy.call('read', unavailable)
+        finally:
+            policy.sleep = original_sleep
+
+    policy.sleep = open_during_backoff
+    with pytest.raises(HTTPException):
+        policy.call('read', read)
+    assert calls == 1  # one primary, zero retries after the opening
+
+
+def test_memory_malformed_cursor_probe_keeps_circuit_open_until_store_success(policy):
+    for _ in range(3):
+        with pytest.raises(HTTPException):
+            policy.call('read_page', unavailable)
+    policy.clock.sleep(5)
+
+    def malformed_cursor():
+        raise HTTPException(400, 'invalid_or_stale_cursor:malformed_cursor')
+
+    with pytest.raises(HTTPException) as error:
+        policy.call('read_page', malformed_cursor)
+    assert error.value.status_code == 400
+    with pytest.raises(MemoryReadCircuitOpen):
+        policy.call('read_page', lambda: memory_store_read(lambda: []))
+    policy.clock.sleep(5)
+    assert policy.call('read_page', lambda: memory_store_read(lambda: [])) == []
+    assert policy.call('read_page', lambda: []) == []
+
+
+def test_memory_success_without_store_evidence_keeps_probe_open(policy):
+    for _ in range(3):
+        with pytest.raises(HTTPException):
+            policy.call('read_page', unavailable)
+    policy.clock.sleep(5)
+    assert policy.call('read_page', lambda: []) == []
+    with pytest.raises(MemoryReadCircuitOpen):
+        policy.call('read_page', lambda: [])
+
+
+def test_memory_process_retry_allowance_is_shared_configurable_and_refills(monkeypatch):
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '2')
+    clock = Clock()
+    bucket = RetryAllowance(clock=clock)
+    policies = [
+        MemoryReadResilience(clock=clock, sleep=lambda _: None, jitter=lambda *_: 0, allowance=bucket) for _ in range(3)
+    ]
+    calls = []
+
+    def read():
+        calls.append(True)
+        unavailable()
+
+    for policy in policies:
+        with pytest.raises(HTTPException):
+            policy.call('read', read)
+    assert len(calls) == 3 + 2
+    clock.sleep(1)
+    with pytest.raises(HTTPException):
+        policies[0].call('read', read)
+    assert len(calls) == 7  # one primary plus the one replenished retry
+
+
+def test_memory_retry_allowance_caps_inflight_even_after_tokens_refill(monkeypatch):
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '2')
+    clock = Clock()
+    bucket = RetryAllowance(clock=clock)
+    assert bucket.take()
+    assert bucket.take()
+    clock.sleep(3)
+    assert not bucket.take()  # replenishment cannot exceed two in-flight retries
+    bucket.release()
+    assert bucket.take()
+    bucket.release()
+    bucket.release()

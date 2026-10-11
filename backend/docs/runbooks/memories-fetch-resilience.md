@@ -34,7 +34,8 @@ severity>=ERROR query showed Firestore `get_all` DeadlineExceeded traces at
 
 **Conclusion:** Cloud Armor is a confirmed source of the 429 burst component.
 For backend 503/504s, expensive memory scans exhausting budgets and Firestore
-read deadlines are the strongest observed mechanism. This does not establish
+read deadlines are the strongest observed mechanism, but the entries do not
+prove that every 503 was caused by budget exhaustion. This does not establish
 Firestore capacity saturation, Pinecone failure, or deploy transients as the
 root cause: old logs lack per-failure structured attribution and request-correlated
 exception details. Multiple revisions alone are not evidence of rollout failure.
@@ -45,8 +46,15 @@ exhaustion detail; that case must never be retried as a transient provider fault
 
 MemoryService `read`, `read_page`, and `search` retry only typed transient
 Firestore/Pinecone exceptions, including typed causes under a 503. There are
-at most two attempts, with 25–75ms jitter. A one-second retry **admission** window
-is shared across cursor/offset fallback through the original list budget.
+at most two whole-operation attempts **total per request**, including both cursor
+and offset fallback, with 25–75ms jitter. Attempt state and the one-second retry
+**admission** deadline travel through the original shared list budget; an exhausted
+cursor attempt allowance prevents another offset-store call. Process-wide retry
+admission uses a nonblocking token bucket: `OMI_MEMORY_READ_RETRY_BURST` defaults
+to eight tokens (bounded to 0–64; zero disables retries), replenished at one token
+per second, with the same capacity limiting in-flight retries. The bucket
+is shared by all three operation circuits. A request without a token fails without
+retrying; the circuit and request headroom are rechecked after backoff.
 No retry starts without 50ms headroom or after document/time exhaustion.
 This does not preempt an in-flight SDK call: list RPCs still use the existing
 request deadline/document allowance, and SDK internal retry policies remain in
@@ -54,6 +62,11 @@ force. Search retains its existing provider timeouts. No writes are retried.
 
 Each operation has a thread-safe process-local circuit: three exhausted
 transient requests open it for five seconds; one half-open probe can recover.
+Only a successful backing-read seam with no failed provider read closes a probe.
+Validation/pre-store exceptions and successful returns without backing-read
+evidence keep it open and restart cooldown; no IO lock is held during provider
+execution. Calls admitted before an opening may finish, but no new retry is
+admitted after that opening.
 Peer calls fail fast with 503 and `Retry-After: 5`. Permanent errors retain their
 status and never open the circuit. The circuit has three fixed keys, no user
 registry, and is not a distributed capacity controller. Existing successful
@@ -68,9 +81,10 @@ Edge denials and middleware-generated failures still require edge/middleware log
 
 ## Operations recommendation
 
-Review rule 99's live enforcement key and scope; sampled rate-limit keys are
-IP addresses, so the documented Authorization budget must not be assumed to
-match this rule. Give sync polling a separate budget from memories/goals/chat,
+Review rule 99's live enforcement key and scope; the observed keys appeared to
+be IP addresses, but the committed evidence lacks a sanitized key sample or live
+rule configuration proving IP enforcement. Do not assume the documented
+Authorization budget matches this rule. Give sync polling a separate budget from memories/goals/chat,
 review burst allowance and retry feedback, and validate allow/deny logs before
 changing limits. This PR makes no Armor or other infrastructure changes.
 Track scan truncation and Firestore deadline rates alongside these new logs;

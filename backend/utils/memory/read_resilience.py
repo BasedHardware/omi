@@ -7,9 +7,12 @@ we never spawn abandoned threads or reset that budget. Writes are excluded.
 
 import json
 import logging
+import os
 import random
 import threading
 import time
+from contextvars import ContextVar
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
 
@@ -61,11 +64,90 @@ class MemoryReadCircuitOpen(HTTPException):
         super().__init__(503, 'Memory backing store temporarily unavailable', headers={'Retry-After': '5'})
 
 
-class MemoryReadResilience:
-    """One thread-safe process-local circuit per fixed read operation.
+class RetryAllowance:
+    """Process-wide burst and in-flight cap; one token/sec refill, no waiting."""
 
-    Three exhausted transient requests open for five seconds. After cooldown,
-    one caller probes while peers fail fast. Permanent errors never open it.
+    def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._tokens = 0.0
+        self._in_flight = 0
+        self._updated: float | None = None
+
+    def take(self) -> bool:
+        # Read mutable configuration at admission, not module import time.
+        try:
+            capacity = max(0, min(64, int(os.environ.get('OMI_MEMORY_READ_RETRY_BURST', '8'))))
+        except ValueError:
+            capacity = 8
+        with self._lock:
+            now = self._clock()
+            if self._updated is None:
+                self._tokens = float(capacity)
+            else:
+                self._tokens = min(float(capacity), self._tokens + max(0.0, now - self._updated))
+            self._updated = now
+            if self._tokens < 1 or self._in_flight >= capacity:
+                return False
+            self._tokens -= 1
+            self._in_flight += 1
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            self._in_flight -= 1
+
+
+# Shared across all three operation circuits; no user/operation-keyed bucket.
+_retry_allowance = RetryAllowance()
+_request_state_lock = threading.Lock()
+
+
+class MemoryReadAttempts:
+    """One request's two whole-operation attempts, including offset fallback."""
+
+    def __init__(self, deadline: float) -> None:
+        self.deadline = deadline
+        self.used = 0
+        self.error: Exception = HTTPException(503, 'Memory read attempts exhausted')
+        self._lock = threading.Lock()
+
+    def claim(self) -> bool:
+        with self._lock:
+            if self.used >= 2:
+                return False
+            self.used += 1
+            return True
+
+
+@dataclass
+class _StoreEvidence:
+    succeeded: bool = False
+    failed: bool = False
+
+
+_store_evidence: ContextVar[_StoreEvidence | None] = ContextVar('memory_store_evidence', default=None)
+
+
+def memory_store_read(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Record provider-read evidence even when the service heals/absorbs errors."""
+    evidence = _store_evidence.get()
+    try:
+        result = fn(*args, **kwargs)
+    except Exception:
+        if evidence is not None:
+            evidence.failed = True
+        raise
+    if evidence is not None:
+        evidence.succeeded = True
+    return result
+
+
+class MemoryReadResilience:
+    """Thread-safe operation circuit plus request and process retry admission.
+
+    Three exhausted transient requests open for five seconds. One caller probes
+    after cooldown; only a successful backing read can close the circuit.
     """
 
     def __init__(
@@ -74,10 +156,12 @@ class MemoryReadResilience:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[float, float], float] = random.uniform,
+        allowance: RetryAllowance | None = None,
     ) -> None:
         self.clock = clock
         self.sleep = sleep
         self.jitter = jitter
+        self.allowance = allowance
         self._lock = threading.Lock()
         self._failures = 0
         self._open_until = 0.0
@@ -95,53 +179,91 @@ class MemoryReadResilience:
         if denied:
             self._log(operation, 'circuit_open', 0, started, MemoryReadCircuitOpen())
             raise MemoryReadCircuitOpen()
-        # Share admission deadline across cursor->offset fallback for this request.
-        deadline = started + 1.0
-        if budget is not None:
-            deadline = getattr(budget, '_memory_retry_deadline', deadline)
-            budget._memory_retry_deadline = deadline
+        # Budget normally travels serially through the router; also preserve
+        # one state if internal callers fan out with the same request budget.
+        with _request_state_lock:
+            state = getattr(budget, '_memory_read_attempts', None) if budget is not None else None
+            if not isinstance(state, MemoryReadAttempts):
+                state = MemoryReadAttempts(started + 1.0)
+                if budget is not None:
+                    budget._memory_read_attempts = state
         attempts = 0
         transient = False
+        completed = False
+        retry_permit: RetryAllowance | None = None
+        evidence = _StoreEvidence()
+        token = _store_evidence.set(evidence)
         try:
+            if not state.claim():
+                self._log(operation, 'attempts_exhausted', 0, started, state.error)
+                raise state.error
             while True:
                 attempts += 1
+                evidence.succeeded = False
+                evidence.failed = False
                 try:
                     result = fn()
                 except Exception as exc:
+                    state.error = exc
                     transient = transient_store_error(exc)
                     delay = self.jitter(0.025, 0.075)
-                    remaining = deadline - self.clock()
-                    if budget is not None:
-                        remaining = min(remaining, budget.remaining_seconds)
-                        if budget.truncated or budget.remaining_documents <= 0:
-                            remaining = 0
-                    # Two attempts maximum, no retry on the half-open probe.
-                    if transient and attempts < 2 and not probing and remaining > delay + 0.05:
+                    # A retry needs headroom, request attempts, a global token,
+                    # and a still-closed circuit. Check again after backoff.
+                    if transient and state.used < 2 and not probing and self._headroom(state, budget) > delay + 0.05:
                         self.sleep(delay)
-                        if self.clock() < deadline and (budget is None or budget.remaining_seconds > 0.05):
+                        allowance = self.allowance or _retry_allowance
+                        with self._lock:
+                            admitted = (
+                                generation == self._generation
+                                and self._open_until == 0
+                                and self._headroom(state, budget) > 0.05
+                                and state.used < 2
+                                and allowance.take()
+                            )
+                            if admitted:
+                                retry_permit = allowance
+                                admitted = state.claim()
+                                if not admitted:
+                                    allowance.release()
+                                    retry_permit = None
+                        if admitted:
                             continue
                     if transient or (isinstance(exc, HTTPException) and exc.status_code == 503):
                         self._log(operation, 'exhausted' if transient else 'permanent', attempts, started, exc)
                     raise
                 else:
                     transient = False
+                    completed = True
                     if attempts > 1:
                         self._log(operation, 'recovered', attempts, started, None)
                     return result
         finally:
+            if retry_permit is not None:
+                retry_permit.release()
+            _store_evidence.reset(token)
             with self._lock:
-                # Completions from before an opening cannot close its circuit.
+                # Pre-opening completions cannot close a newer circuit.
                 if generation == self._generation:
                     if probing:
                         self._probe = False
-                    if transient:
-                        self._failures += 1
+                    healthy = completed and evidence.succeeded and not evidence.failed
+                    if transient or (probing and not healthy):
+                        if transient:
+                            self._failures += 1
                         if probing or self._failures >= 3:
                             self._open_until = self.clock() + 5.0
                             self._generation += 1
-                    elif probing or self._open_until == 0:
+                    elif healthy:
                         self._failures = 0
                         self._open_until = 0.0
+
+    def _headroom(self, state: MemoryReadAttempts, budget: Any) -> float:
+        remaining = state.deadline - self.clock()
+        if budget is not None:
+            if budget.truncated or budget.remaining_documents <= 0:
+                return 0.0
+            remaining = min(remaining, budget.remaining_seconds)
+        return remaining
 
     def _log(self, operation: str, outcome: str, attempts: int, started: float, exc: Exception | None) -> None:
         fields = {

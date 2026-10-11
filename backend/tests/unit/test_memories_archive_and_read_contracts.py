@@ -587,3 +587,63 @@ def test_get_memories_http_503_logs_cursor_offset_and_first_page_failure(params,
     assert len(records) == 1
     assert records[0].endpoint == '/v3/memories'
     assert records[0].uid_hashed != 'unknown'
+
+
+def test_memory_router_cursor_offset_fallback_uses_at_most_two_whole_operation_attempts(monkeypatch):
+    from fastapi import FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+    from google.api_core.exceptions import ServiceUnavailable
+    from utils.memory import read_resilience
+    from utils.other.list_budget import ListReadBudget
+
+    mem_mod = _load_memories_router()
+    calls = []
+    now = [10.0]
+    clock = lambda: now[0]
+    bucket = read_resilience.RetryAllowance(clock=clock)
+    policy_class = read_resilience.MemoryReadResilience
+    monkeypatch.setattr(
+        read_resilience,
+        'MemoryReadResilience',
+        lambda: policy_class(clock=clock, sleep=lambda seconds: now.__setitem__(0, now[0] + seconds), allowance=bucket),
+    )
+
+    class Unavailable(HTTPException):
+        stream = 'canonical'
+
+    def fail(operation):
+        calls.append(operation)
+        raise Unavailable(503, 'Canonical memory unavailable') from ServiceUnavailable('temporary')
+
+    class Service:
+        def __init__(self, **kwargs):
+            pass
+
+        @read_resilience.resilient_memory_read
+        def read_page(self, uid, **kwargs):
+            return fail('read_page')
+
+        @read_resilience.resilient_memory_read
+        def read(self, uid, **kwargs):
+            return fail('read')
+
+    app = FastAPI()
+    app.include_router(mem_mod.router)
+    route = next(r for r in app.routes if getattr(r, 'path', None) == '/v3/memories' and 'GET' in r.methods)
+    for dependency in route.dependant.dependencies:
+        app.dependency_overrides[dependency.call] = lambda: 'private-uid'
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    budget = ListReadBudget(deadline_monotonic=12, clock=clock)
+    with (
+        patch.object(mem_mod, 'MemoryService', Service),
+        patch.object(mem_mod, 'MemoryBackingStoreUnavailable', Unavailable),
+        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'list_read_budget_for_request', return_value=budget),
+        TestClient(app) as client,
+    ):
+        result = client.get('/v3/memories')
+    assert result.status_code == 503
+    assert calls == ['read_page', 'read_page']  # previously two page + two offset calls
+    assert budget.remaining_seconds > 1.8  # time budget alone WOULD admit offset retries
