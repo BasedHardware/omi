@@ -18,8 +18,12 @@ def test_pytz_only_zones_are_rejected():
 
 
 def test_real_zones_are_accepted():
-    for zone in ('America/New_York', 'America/Coyhaique', 'UTC', 'Europe/Berlin'):
+    for zone in ('America/New_York', 'UTC', 'Europe/Berlin'):
         assert is_schedulable_time_zone(zone) is True, zone
+    # America/Coyhaique arrived in tzdata 2025a; the pinned pytz==2024.1
+    # predates it, so admission rejects it until pytz is upgraded — exactly
+    # the divergence this change exists to stop.
+    assert is_schedulable_time_zone('America/Coyhaique') is False
 
 
 def test_garbage_and_empty_are_rejected():
