@@ -353,14 +353,20 @@ def finish(
             tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
+        for ref in sorted(deferred)[:8]:
+            # Seeded targets have no dirty entry. Share their daily deferral with
+            # both sampling paths without adding a second metadata read.
+            tx.set(state.collection('reviews').document(review_id(ref)), {'deferred_until': deferred_until}, merge=True)
         if success:
             if cleanup_cursor is not None:
                 patch['cleanup_cursor'] = cleanup_cursor
             if not refund:
                 patch['last_pass_at'] = lease['started_at']
-                for ref in sorted(set(reviewed))[:8]:
+                for ref in sorted(set(reviewed) - deferred)[:8]:
                     tx.set(
-                        state.collection('reviews').document(review_id(ref)), {'last_reviewed_at': lease['started_at']}
+                        state.collection('reviews').document(review_id(ref)),
+                        {'last_reviewed_at': lease['started_at']},
+                        merge=True,
                     )
         tx.update(state, patch)
         return settled

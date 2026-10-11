@@ -1,6 +1,7 @@
 """Stochastic, age-weighted cleanup seeds; neighbourhoods remain read-only."""
 
 import random
+import string
 from uuid import UUID
 from utils.observability.fallback import record_fallback
 from datetime import timedelta
@@ -24,6 +25,11 @@ def eligible_seed(row, last_reviewed_at, now):
         and created <= now - timedelta(days=SEED_MIN_DAYS)
         and (last_reviewed_at is None or (reviewed is not None and reviewed <= now - timedelta(days=REVIEW_DAYS)))
     )
+
+
+def is_deferred(state, now):
+    until = timestamp(state.get('deferred_until'))
+    return until is not None and now < until
 
 
 def problem_score(ref, row, pool, now):
@@ -100,15 +106,14 @@ def uniform_ref(uid, rng):
     rank = rng.randrange(size)
     for collection, count in counts:
         if rank < count:
-            # UUID owner IDs; memory IDs also include content hashes and opaque prefixes.
-            # A random-key successor has gap bias, unlike an offset/rank sample.
-            key = (
-                str(UUID(int=rng.getrandbits(128)))
-                if collection != 'memory_items'
-                else ''.join(
-                    rng.choice('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-') for _ in range(20)
-                )
-            )
+            # Match the writers' namespaces. A successor still has ID-gap bias,
+            # but its pivot must cover the same keyspace as stored records.
+            if collection == 'memory_items':
+                key = f'mem_{rng.getrandbits(128):032x}'
+            elif collection == 'action_items':
+                key = ''.join(rng.choice(string.ascii_letters + string.digits) for _ in range(20))
+            else:
+                key = str(UUID(int=rng.getrandbits(128), version=4))
             key = dream_history.history_from_key(uid, collection, key)
             return collection + '/' + key if key else None
         rank -= count
@@ -125,9 +130,10 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
     source = 'random' if rng.random() < random_seed_share() else 'seeded'
     if source == 'random':
         ref = uniform_ref(uid, rng)
-        pool = {ref: read_record(uid, ref)} if ref else {}
+        states = dream_history.review_states(uid, [ref] if ref else [])
+        pool = {ref: read_record(uid, ref)} if ref and not is_deferred(states.get(ref, {}), lease['started_at']) else {}
         pool = {ref: row for ref, row in pool.items() if row}
-        reviewed = dream_history.last_reviewed(uid, pool)
+        reviewed = {ref: state.get('last_reviewed_at') for ref, state in states.items()}
         ref = next(
             (ref for ref, row in pool.items() if eligible_seed(row, reviewed.get(ref), lease['started_at'])), None
         )
@@ -136,10 +142,13 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
         ids = dream_history.history_page(uid, collection, after=cursor.get(collection))
         cursor[collection] = ids[-1] if ids else None
         refs = [collection + '/' + key for key in ids]
-        reviewed = dream_history.last_reviewed(uid, refs)
+        states = dream_history.review_states(uid, refs)
+        reviewed = {ref: state.get('last_reviewed_at') for ref, state in states.items()}
         pool = {}
         for key in ids:
             ref = collection + '/' + key
+            if is_deferred(states.get(ref, {}), lease['started_at']):
+                continue
             previous = timestamp(reviewed.get(ref))
             if reviewed.get(ref) is not None and (
                 previous is None or previous > lease['started_at'] - timedelta(days=REVIEW_DAYS)

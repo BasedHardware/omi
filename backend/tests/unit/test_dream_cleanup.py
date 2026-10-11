@@ -3,6 +3,11 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 import random
+import string
+from bisect import bisect_left
+from collections import Counter
+from uuid import UUID
+import pytest
 
 from config.dream_agent import Caps
 from database import dream_history, dream_store
@@ -64,8 +69,11 @@ def test_review_cooldowns_use_one_bounded_batch():
 
     db = DreamFirestore()
     db.get_all = get_all
-    assert dream_history.last_reviewed('synthetic', refs, firestore_client=db) == {'people/a': None, 'people/b': NOW}
-    assert dream_history.last_reviewed('synthetic', [], firestore_client=db) == {}
+    assert dream_history.review_states('synthetic', refs, firestore_client=db) == {
+        'people/a': {},
+        'people/b': {'last_reviewed_at': NOW},
+    }
+    assert dream_history.review_states('synthetic', [], firestore_client=db) == {}
 
 
 def test_count_weighted_sample_includes_every_collection(monkeypatch):
@@ -91,11 +99,85 @@ def test_count_weighted_sample_includes_every_collection(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize('collection', ['memory_items', 'action_items', 'conversations', 'people'])
+def test_random_successor_distribution_covers_real_id_namespace(monkeypatch, collection):
+    if collection == 'action_items':
+        keys = sorted(char + 'm' * 19 for char in string.ascii_letters + string.digits)
+    elif collection == 'memory_items':
+        keys = [f'mem_{char}' + '8' * 31 for char in '0123456789abcdef']
+    else:
+        keys = [str(UUID(int=(i << 124) | int('8' * 31, 16), version=4)) for i in range(16)]
+    monkeypatch.setattr(dream_history, 'history_count', lambda uid, col: len(keys) if col == collection else 0)
+
+    def successor(uid, col, pivot):
+        assert col == collection
+        if col == 'memory_items':
+            assert pivot.startswith('mem_') and len(pivot) == 36
+            int(pivot[4:], 16)
+        elif col == 'action_items':
+            assert len(pivot) == 20 and set(pivot) <= set(string.ascii_letters + string.digits)
+        else:
+            assert UUID(pivot).version == 4
+        return keys[bisect_left(keys, pivot) % len(keys)]
+
+    monkeypatch.setattr(dream_history, 'history_from_key', successor)
+    rng = random.Random(827)
+    draws = 6200
+    counts = Counter(cleanup.uniform_ref('synthetic', rng).split('/', 1)[1] for _ in range(draws))
+    assert set(counts) == set(keys)
+    # Balanced synthetic gaps expose namespace collapse, without claiming that
+    # arbitrary real document gaps are an unbiased per-document sample.
+    expected = draws / len(keys)
+    assert all(0.5 * expected < count < 1.5 * expected for count in counts.values())
+
+
+@pytest.mark.parametrize('random_share', ['0', '1'])
+def test_cleanup_deferral_expires_at_utc_midnight_without_hydration(monkeypatch, random_share):
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', random_share)
+    monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['a'])
+    monkeypatch.setattr(cleanup, 'uniform_ref', lambda *a: 'action_items/a')
+    midnight = NOW + timedelta(days=1)
+    monkeypatch.setattr(dream_history, 'review_states', lambda *a: {'action_items/a': {'deferred_until': midnight}})
+    loaded = []
+
+    def read(uid, ref):
+        loaded.append(ref)
+        return {'created_at': OLD, 'description': 'Synthetic task'}
+
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'action_items'
+    rng.choices.return_value = ['action_items/a']
+    lease = {'started_at': midnight - timedelta(microseconds=1), 'cleanup_selected': True}
+    assert not cleanup.add_seed('synthetic', EvidenceRecords(), lease, Caps(), [], read_record=read, rng=rng)
+    assert loaded == []
+    lease['started_at'] = midnight
+    result = cleanup.add_seed('synthetic', EvidenceRecords(), lease, Caps(), [], read_record=read, rng=rng)
+    assert result.targets == {'action_items/a'} and loaded == ['action_items/a']
+
+
+def test_seeded_cap_deferral_is_persisted_without_review_stamp(monkeypatch):
+    uid = 'synthetic-seed-defer'
+    db = DreamFirestore()
+    db.rows[('users', uid)] = {}
+    db.rows[('dream_users', uid)] = {'score': 0, 'watermark': OLD}
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
+    monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
+    lease = dream_store.acquire(uid, Caps(), now=NOW, firestore_client=db)
+    dream_store.finish(
+        uid, lease, {}, success=True, deferred={'people/a'}, reviewed={'people/a'}, now=NOW, firestore_client=db
+    )
+    state = db.rows[('dream_users', uid, 'reviews', dream_history.review_id('people/a'))]
+    assert state == {'deferred_until': NOW + timedelta(days=1)}
+
+
 def test_seed_duplicate_operands_and_context_roles(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
     monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
     monkeypatch.setattr(dream_history, 'history_page', lambda *args, **kwargs: ['a', 'b'])
-    monkeypatch.setattr(dream_history, 'last_reviewed', lambda *args: {})
+    monkeypatch.setattr(dream_history, 'review_states', lambda *args: {})
     rng = Mock()
     rng.random.return_value = 0.5
     rng.choice.return_value = 'people'
@@ -122,7 +204,7 @@ def test_random_seed_rejected_without_resampling_and_budget_defers(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '1')
     pick = Mock(return_value='action_items/a')
     monkeypatch.setattr(cleanup, 'uniform_ref', pick)
-    monkeypatch.setattr(dream_history, 'last_reviewed', lambda *args: {'action_items/a': NOW})
+    monkeypatch.setattr(dream_history, 'review_states', lambda *args: {'action_items/a': {'last_reviewed_at': NOW}})
     records = EvidenceRecords()
     assert (
         cleanup.add_seed(
@@ -137,7 +219,7 @@ def test_random_seed_rejected_without_resampling_and_budget_defers(monkeypatch):
         is records
     )
     pick.assert_called_once()
-    monkeypatch.setattr(dream_history, 'last_reviewed', lambda *args: {})
+    monkeypatch.setattr(dream_history, 'review_states', lambda *args: {})
     monkeypatch.setattr(cleanup, 'fits_pass', lambda *args: False)
     assert (
         cleanup.add_seed(
@@ -183,7 +265,7 @@ def test_duplicate_seed_preserves_existing_dirty_partner_source(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
     monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
     monkeypatch.setattr(dream_history, 'history_page', lambda *args, **kwargs: ['a', 'b'])
-    monkeypatch.setattr(dream_history, 'last_reviewed', lambda *args: {})
+    monkeypatch.setattr(dream_history, 'review_states', lambda *args: {})
     rng = Mock()
     rng.random.return_value = 0.5
     rng.choice.return_value = 'people'
@@ -243,7 +325,7 @@ def test_weighted_cooldown_precedes_hydration_and_seed_errors_keep_dirty(monkeyp
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
     monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
     monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['a', 'b'])
-    monkeypatch.setattr(dream_history, 'last_reviewed', lambda uid, refs: {'action_items/a': NOW})
+    monkeypatch.setattr(dream_history, 'review_states', lambda uid, refs: {'action_items/a': {'last_reviewed_at': NOW}})
     rng = Mock()
     rng.random.return_value = 0.5
     rng.choice.return_value = 'action_items'
