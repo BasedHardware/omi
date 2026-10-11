@@ -30,8 +30,8 @@ def record_text(row):
     return '\n'.join(value for value in values if isinstance(value, str))
 
 
-def contains_spelling(value, spelling):
-    normalize = lambda text: unicodedata.normalize('NFC', text.casefold())
+def contains_spelling(value, spelling, *, exact_case=False):
+    normalize = lambda text: unicodedata.normalize('NFC', text if exact_case else text.casefold())
     return bool(re.search(r'(?<!\w)' + re.escape(normalize(spelling.strip())) + r'(?!\w)', normalize(value)))
 
 
@@ -49,17 +49,35 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
     if target is None or any(ref not in records for ref in edit.evidence):
         return 'invalid_evidence'
     sources = source_conversations(edit.target, target)
+    exact_case = edit.before.casefold() == edit.after.casefold()
+
+    def traces_target(row, visited=None):
+        visited = set() if visited is None else visited
+        if sources & source_conversations('', row):
+            return True
+        for ref in row.get('evidence') or []:
+            if not isinstance(ref, str):
+                continue
+            if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+                return True
+            if ref in records and ref not in visited:
+                visited.add(ref)
+                if traces_target(records[ref], visited):
+                    return True
+        return False
+
     for ref in edit.evidence:
         if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
             continue
         row = records[ref]
-        if sources & source_conversations(ref, row):
+        if sources & source_conversations(ref, row) or traces_target(row):
             continue
-        if contains_spelling(record_text(row), edit.after):
+        if contains_spelling(record_text(row), edit.after, exact_case=exact_case):
             return None
     if any(
-        contains_spelling(value, edit.after)
+        contains_spelling(value, edit.after, exact_case=exact_case)
         for row in vocabulary
+        if row.get('authorship') in {'user_authored', 'user_accepted'} and not traces_target(row)
         for value in [row.get('spelling', ''), *(row.get('aliases') or [])]
         if isinstance(value, str)
     ):

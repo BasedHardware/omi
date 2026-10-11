@@ -446,7 +446,7 @@ folder's README for the verified dev tunnel procedure.
 
 ## Tiered apply policy
 
-When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
+When mode is `on`, only `title`, `overview` and grounded `spelling` edits
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
 become `agent_proposal` items in the existing Review queue, exposed through
@@ -476,3 +476,6 @@ The OpenAPI schema and Review/Dream Dart DTOs are regenerated from source. Mobil
 rendering of `agent_proposal` is separate owner work, detailed in
 `backend/docs/review_surface.mdx`. This source change does not enable flags,
 change cohorts/schedules, or deploy anything.
+
+
+Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.

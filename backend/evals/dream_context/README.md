@@ -24,3 +24,5 @@ unsupported correction automatically: **ungrounded auto-applies 1 → 0**;
 vocabulary still permit automatic correction. Derived facts and substring or
 accent-insensitive matches cannot authorize it. These are deterministic scripted
 model-response comparisons, not measured live-model accuracy.
+
+Vocabulary laundering and case-only changes have synthetic regressions. Only user-authored or accepted vocabulary with independent evidence may support automatic spelling; all new vocabulary is Review-only.
