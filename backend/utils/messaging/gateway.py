@@ -253,7 +253,7 @@ class Gateway:
                 if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
                     raise
                 await stop_typing()
-                if token is not None:
+                if token is not None and session is not None:
                     await self._settle_failure(sink, uid, session['surface'], token)
                 raise
             else:
