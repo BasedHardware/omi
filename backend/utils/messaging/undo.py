@@ -1,6 +1,7 @@
 """Five-minute surface-scoped inverse receipts. Never replay ambiguous inverses."""
 
 import json
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -8,11 +9,12 @@ from database.firestore_transaction_retry import run_with_transaction_contention
 from google.cloud import firestore
 from database.messaging import MessagingStore
 from utils import encryption
-from utils.messaging.projection import surface_runtime
+from utils.messaging.projection import surface_runtime, chat_write_runtime
 from utils.messaging.contracts import ActionReceipt, UndoResult
 from models.chat import EditReceiptBlock, UndoChatReceiptResponse
 
 UNDO_MINUTES = 5
+APP_RECEIPT_SCOPE = '__app_receipts__'
 
 
 class UndoStore:
@@ -20,6 +22,8 @@ class UndoStore:
         self.store = store or MessagingStore()
 
     def ref(self, uid, session, receipt_id="last"):
+        if session == APP_RECEIPT_SCOPE:
+            return self.store.user(uid).collection('chat_receipt_payloads').document(receipt_id)
         return (
             self.store.user(uid)
             .collection('chat_sessions')
@@ -34,18 +38,45 @@ class UndoStore:
         if not pointer:
             raise LookupError('Receipt not found')
         session = pointer['session_id']
+        existing = self.ref(uid, session, receipt_id).get().to_dict() or {}
+        if not existing.get('presentation'):
+            raise LookupError('Receipt not found')
         result = self.undo(uid, session, receipt_id)
         row = self.ref(uid, session, receipt_id).get().to_dict() or {}
         block = json.loads(encryption.decrypt(row['presentation'], uid)).get('block')
         if not block:
             raise LookupError('Receipt block not found')
-        block.update(
-            undoneAt=row.get('undone_at'), undoable=result.status == 'unavailable' and row.get('state') == 'ready'
-        )
+        block.update(undoneAt=row.get('undone_at'), undoable=False)
         return UndoChatReceiptResponse(status=result.status, block=EditReceiptBlock.model_validate(block))
+
+    def bind_message(self, uid, receipt_id, message_id):
+        self.store.user(uid).collection('chat_receipts').document(receipt_id).update({'message_id': message_id})
+
+    def update_message_block(self, uid, receipt_id, undone_at):
+        pointer_ref = self.store.user(uid).collection('chat_receipts').document(receipt_id)
+
+        @firestore.transactional
+        def apply(tx):
+            pointer = pointer_ref.get(transaction=tx).to_dict() or {}
+            if not pointer.get('message_id'):
+                return
+            message_ref = self.store.user(uid).collection('messages').document(pointer['message_id'])
+            row = message_ref.get(transaction=tx).to_dict() or {}
+            if not row:
+                return
+            blocks = row.get('content_blocks') or []
+            for block in blocks:
+                if block.get('receiptId') == receipt_id:
+                    block.update(undoneAt=undone_at.isoformat(), undoable=False)
+            tx.update(message_ref, {'content_blocks': blocks})
+
+        run_with_transaction_contention_retry(
+            self.store.db.transaction, apply, operation_name='chat_receipt_block_update'
+        )
 
     def record(self, uid, session, kind, object_id, before, after) -> ActionReceipt:
         runtime = surface_runtime.get()
+        runtime = runtime if runtime is not None and runtime.surface != 'app' else chat_write_runtime.get() or runtime
         if runtime is None or not runtime.session_id:
             raise PermissionError('Action receipts require an admitted chat turn')
         runtime.principal.authorize(uid)
@@ -66,6 +97,21 @@ class UndoStore:
                         dict(text=receipt.text, block=edit_receipt_block(receipt_id, kind, object_id, before, after))
                     ),
                     uid,
+                ),
+                'audit': dict(
+                    uid=uid,
+                    tool={
+                        'conversation': 'update_conversation',
+                        'person': 'rename_person',
+                        'memory_edit': 'edit_memory',
+                        'memory_deleted': 'delete_memory',
+                        'task': 'create_action_item_tool' if before is None else 'update_action_item_tool',
+                    }.get(kind, kind),
+                    target=object_id,
+                    before_hash=state_hash(before),
+                    after_hash=state_hash(after),
+                    surface=runtime.surface,
+                    timestamp=datetime.now(timezone.utc),
                 ),
                 'payload': encryption.encrypt(
                     json.dumps(
@@ -105,12 +151,16 @@ class UndoStore:
 
     def fenced_set(self, uid, session, payload, *, receipt_id="last", turn_id=None):
         ref = self.ref(uid, session, receipt_id)
-        session_ref = self.store.user(uid).collection('chat_sessions').document(session)
+        session_ref = (
+            self.store.user(uid)
+            if session == APP_RECEIPT_SCOPE
+            else self.store.user(uid).collection('chat_sessions').document(session)
+        )
 
         @firestore.transactional
         def apply(tx):
             current = session_ref.get(transaction=tx).to_dict() or {}
-            if not current:
+            if not current or current.get('deleted') or current.get('deletion_requested_at'):
                 raise PermissionError('Chat session removed')
             if current.get('channel_link_id'):
                 self.store.assert_session_link(tx, uid, current)
@@ -118,6 +168,8 @@ class UndoStore:
             pointer = (pointer_ref.get(transaction=tx).to_dict() or {}) if turn_id else {}
             tx.set(ref, payload)
             tx.set(self.store.user(uid).collection('chat_receipts').document(receipt_id), {'session_id': session})
+            if payload.get('audit'):
+                tx.create(self.store.user(uid).collection('chat_edit_audit').document(receipt_id), payload['audit'])
             if turn_id:
                 ids = list(pointer.get('receipt_ids', ())) if pointer.get('turn_id') == turn_id else []
                 ids.append(receipt_id)
@@ -137,12 +189,19 @@ class UndoStore:
 
     def reserve_selection(self, uid, session, turn_id):
         ref = self.ref(uid, session)
-        session_ref = self.store.user(uid).collection('chat_sessions').document(session)
+        session_ref = (
+            self.store.user(uid)
+            if session == APP_RECEIPT_SCOPE
+            else self.store.user(uid).collection('chat_sessions').document(session)
+        )
 
         @firestore.transactional
         def reserve(tx):
             current = session_ref.get(transaction=tx).to_dict() or {}
-            self.store.assert_session_link(tx, uid, current)
+            if current.get('channel_link_id'):
+                self.store.assert_session_link(tx, uid, current)
+            elif not current or current.get('deleted') or current.get('deletion_requested_at'):
+                raise PermissionError('Chat session removed')
             pointer = ref.get(transaction=tx).to_dict() or {}
             ids = pointer.get('receipt_ids', []) if pointer.get('turn_id') == turn_id else []
             tx.set(ref, {'state': 'preparing', 'turn_id': turn_id, 'receipt_ids': ids})
@@ -179,9 +238,11 @@ class UndoStore:
             ) <= datetime.now(timezone.utc):
                 return None
             session_row = (
-                self.store.user(uid).collection('chat_sessions').document(session).get(transaction=tx).to_dict() or {}
-            )
-            if not session_row:
+                self.store.user(uid)
+                if session == APP_RECEIPT_SCOPE
+                else self.store.user(uid).collection('chat_sessions').document(session)
+            ).get(transaction=tx).to_dict() or {}
+            if not session_row or session_row.get('deleted') or session_row.get('deletion_requested_at'):
                 raise PermissionError('Chat session removed')
             if session_row.get('channel_link_id'):
                 self.store.assert_session_link(tx, uid, session_row)
@@ -195,6 +256,8 @@ class UndoStore:
             return UndoResult('unavailable', 'This action cannot be undone now. It may have expired or changed.')
         presentation = json.loads(encryption.decrypt(row['presentation'], uid))
         if row['state'] == 'done':
+            if row.get('undone_at'):
+                self.update_message_block(uid, receipt_id, row['undone_at'])
             return UndoResult(
                 'already_undone',
                 'Already undone.',
@@ -206,12 +269,27 @@ class UndoStore:
         # A failure leaves this inverse running; it is never replayed. The chat
         # turn itself can finish and release its lease after the operation unwinds.
         apply_inverse(uid, payload)
-        ref.update({'state': 'done', 'undone_at': datetime.now(timezone.utc), 'payload': firestore.DELETE_FIELD})
+        undone_at = datetime.now(timezone.utc)
+        audit = dict(row.get('audit') or {})
+        if audit:
+            audit.update(
+                tool='undo:' + audit['tool'],
+                before_hash=audit['after_hash'],
+                after_hash=audit['before_hash'],
+                timestamp=undone_at,
+            )
+            self.store.user(uid).collection('chat_edit_audit').document('undo_' + receipt_id).set(audit)
+        ref.update({'state': 'done', 'undone_at': undone_at, 'payload': firestore.DELETE_FIELD})
+        self.update_message_block(uid, receipt_id, undone_at)
         return UndoResult('undone', 'Undone.', row.get('bubble_id'), presentation['text'] + ' — Undone')
 
 
+def state_hash(value):
+    return sha256(json.dumps(value, sort_keys=True, default=str, separators=(',', ':')).encode()).hexdigest()
+
+
 def edit_receipt_block(receipt_id, kind, object_id, before, after):
-    target_kind = 'memory' if kind == 'memory_closed' else kind
+    target_kind = 'memory' if kind in {'memory_closed', 'memory_edit', 'memory_deleted'} else kind
     action = 'created' if before is None else 'deleted' if after is None or kind == 'memory_closed' else 'updated'
     if kind == 'task' and before is not None and after is not None:
         if after.get('deleted'):
@@ -220,7 +298,22 @@ def edit_receipt_block(receipt_id, kind, object_id, before, after):
             action = 'completed' if after.get('completed') else 'uncompleted'
     if kind == 'person':
         action = 'renamed'
+    if kind == 'memory_deleted':
+        action = 'deleted'
     value = after or before or {}
+    if isinstance(value, dict) and '_snapshot' in value:
+        value = value['_snapshot'] | {'description': value['_summary']}
+        if kind == 'task' and before and after:
+            old, new = before['_snapshot'], after['_snapshot']
+            action = (
+                'deleted'
+                if new.get('deleted')
+                else (
+                    'completed'
+                    if new.get('completed') and not old.get('completed')
+                    else 'uncompleted' if old.get('completed') and not new.get('completed') else 'updated'
+                )
+            )
     summary = (
         value.get('description')
         or value.get('name')
@@ -243,6 +336,10 @@ def action_receipt(receipt_id, kind, object_id, before, after):
     # Same canonical IDs and block schemas as in-app chat, never model-parsed text.
     from models.chat_first import MemoryLinkSpec, TaskCardSpec
 
+    if before is not None or kind in {'conversation', 'person'}:
+        block = edit_receipt_block(receipt_id, kind, object_id, before, after)
+        text = block['summary']
+        return ActionReceipt(receipt_id, block, text)
     if kind == 'task':
         block = TaskCardSpec(type='taskCard', task_id=object_id).model_dump()
         text = ('Task added: ' if before is None else 'Task updated: ') + after.get('description', 'Task')
@@ -262,7 +359,8 @@ def action_receipt(receipt_id, kind, object_id, before, after):
 
 def record_write(uid, kind, object_id, before, after):
     runtime = surface_runtime.get()
-    if runtime is None or runtime.surface == 'app':
+    runtime = runtime if runtime is not None and runtime.surface != 'app' else chat_write_runtime.get() or runtime
+    if runtime is None or not runtime.session_id:
         return ''
     receipt = action_receipt(uuid4().hex, kind, object_id, before, after)
     try:
@@ -278,7 +376,15 @@ def record_write(uid, kind, object_id, before, after):
             reason='dependency_unavailable',
             outcome='exhausted',
         )
-        receipt = replace(receipt, reversible=False, text=receipt.text + ' (Undo unavailable)')
+        receipt = replace(
+            receipt,
+            reversible=False,
+            content_block=dict(
+                receipt.content_block,
+                **({'undoable': False} if receipt.content_block.get('type') == 'editReceipt' else {})
+            ),
+            text=receipt.text + ' (Undo unavailable)',
+        )
     if runtime.action_receipts is not None:
         runtime.action_receipts.append(receipt)
     # The tool already returns its confirmed outcome. Undo mechanics belong to
@@ -288,7 +394,8 @@ def record_write(uid, kind, object_id, before, after):
 
 def record_created_memory(uid, memory_id):
     runtime = surface_runtime.get()
-    if runtime is None or runtime.surface == 'app':
+    runtime = runtime if runtime is not None and runtime.surface != 'app' else chat_write_runtime.get() or runtime
+    if runtime is None or not runtime.session_id:
         return ''
     from database._client import get_data_plane_firestore_client
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
@@ -301,6 +408,54 @@ def record_created_memory(uid, memory_id):
 
 def apply_inverse(uid, payload):
     kind, object_id = payload['kind'], payload['object_id']
+    if kind in {'memory_edit', 'memory_deleted'}:
+        from database._client import get_data_plane_firestore_client
+        from utils.memory.memory_service import MemoryService
+        from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+        from utils.memory.memory_system import MemorySystem
+
+        db = get_data_plane_firestore_client()
+        service = MemoryService(db_client=db)
+        if kind == 'memory_deleted':
+            service.restore_chat_memory_removal(uid, object_id, payload['before'], payload['after'])
+        else:
+            current = read_canonical_memory_item(uid, object_id, db_client=db)
+            if current is None or current.model_dump(mode='json') != payload['after']:
+                raise PermissionError('Memory changed; undo refused')
+            before = payload['before']
+            if before.get('ledger_schema_version') == 'knowledge_ledger.v1':
+                service.revert_superseded_ledger_fact(uid, before['memory_id'], payload['operation_id'])
+            else:
+                service.update_external_memory_content(
+                    uid,
+                    object_id,
+                    before['content'],
+                    memory_system=MemorySystem.CANONICAL,
+                    consumer='chat_undo',
+                    operation='undo_chat_memory_edit',
+                )
+        return
+    if isinstance(payload.get('before'), dict) and '_snapshot' in payload['before']:
+        from database import chat_edits, conversations, users, action_items
+        from utils.notifications import sync_action_item_reminder
+
+        chat_edits.restore(uid, kind, object_id, payload['after']['_snapshot'], payload['before']['_snapshot'])
+        if kind == 'conversation':
+            conversations.invalidate_people_stats_cache(uid)
+            conversations._sync_conversation_search_index(uid, object_id)
+        elif kind == 'task':
+            action_items.bump_action_items_list_version(uid)
+            restored = action_items.get_action_item(uid, object_id) or {}
+            sync_action_item_reminder(
+                uid,
+                object_id,
+                restored.get('description', ''),
+                bool(restored.get('completed')),
+                restored.get('due_at'),
+                status=restored.get('status'),
+                deleted=bool(restored.get('deleted')),
+            )
+        return
     if kind == 'task':
         from database import action_items
         from utils.notifications import sync_action_item_reminder
@@ -369,19 +524,19 @@ def _date(value):
 
 async def prepare_channel_write(uid, tool_name):
     runtime = surface_runtime.get()
-    if (
-        runtime is None
-        or runtime.surface == 'app'
-        or tool_name
-        not in {
-            'save_user_preference_tool',
-            'create_action_item_tool',
-            'update_action_item_tool',
-            'save_playbook',
-            'create_standing_trigger',
-            'close_fact_tool',
-        }
-    ):
+    runtime = runtime if runtime is not None and runtime.surface != 'app' else chat_write_runtime.get() or runtime
+    if runtime is None or tool_name not in {
+        'save_user_preference_tool',
+        'create_action_item_tool',
+        'update_action_item_tool',
+        'save_playbook',
+        'create_standing_trigger',
+        'close_fact_tool',
+        'update_conversation',
+        'rename_person',
+        'edit_memory',
+        'delete_memory',
+    }:
         return
     from utils.executors import db_executor, run_blocking
 

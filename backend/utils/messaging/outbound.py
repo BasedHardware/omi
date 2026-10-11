@@ -103,8 +103,17 @@ class ChannelReplySink:
         await self._send(artifact=artifact)
 
     async def finish(self, text):
-        for part in self.adapter.render(text):
-            await self._send(text=part)
+        from utils.messaging.delivery_context import send_markup
+
+        parts = self.adapter.render(text)
+        markup = send_markup.get()
+        token = send_markup.set(markup)
+        try:
+            for index, part in enumerate(parts):
+                send_markup.set(markup if index == len(parts) - 1 else None)
+                await self._send(text=part)
+        finally:
+            send_markup.reset(token)
         self.finished = True
 
     async def receipt(self, receipt):
@@ -137,7 +146,7 @@ class ChannelReplySink:
                 send_guard.reset(token)
 
     async def finish_payload(self, response):
-        from utils.messaging.adapters.rendering import source_phrases
+        from utils.messaging.adapters.rendering import source_phrases, linked_items
         from utils.messaging.delivery_context import send_markup
 
         markup = None
@@ -150,10 +159,15 @@ class ChannelReplySink:
                     if block.get('type') == 'followUp'
                 ]
             markup = self.adapter.buttons(suggestions)
+        items = linked_items(response)
+        text = source_phrases(response['text'])
+        if items:
+            if hasattr(self.adapter, 'item_buttons'):
+                markup = self.adapter.item_buttons(items)
+            else:
+                text += '\nOpen in Omi: ' + (items[0]['url'] if len(items) == 1 else 'https://h.omi.me')
         token = send_markup.set(markup)
         try:
-            await self.finish(
-                source_phrases(response['text'], response.get('conversations', response.get('memories', ())))
-            )
+            await self.finish(text)
         finally:
             send_markup.reset(token)

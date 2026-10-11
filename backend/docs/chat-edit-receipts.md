@@ -25,3 +25,24 @@ UI integration: render the block's summary and Undo control, replace its state
 with the returned block after undo. Item links use `https://h.omi.me/conversation/<id>`,
 `https://h.omi.me/task/<id>` and `https://h.omi.me/memory/<id>`. Paths contain only
 opaque IDs. The UI lane owns authenticated web fallbacks and mobile routing.
+
+The app receipt store also supports legacy turns without a chat-session ID through
+an owner-only receipt scope, without creating a visible session or enabling
+channel continuity. Undo updates the persisted message block so history reloads
+retain the undone state. Audit rows live at `users/{uid}/chat_edit_audit`, with uid,
+tool, target, before/after SHA-256 hashes, surface and timestamp; summaries and
+inverse payloads stay out of the audit.
+
+Memory removal through chat is reversible removal from current knowledge, not
+privacy erasure. It preserves content/history under the canonical MemoryService
+and denies normal reads through the common access policy. Undo restores product
+metadata through canonical apply. Memory corrections and their undo retain the
+immutable ledger history and advance canonical revisions; they never restore old
+ledger sequence/commit identifiers. Permanent app/MCP privacy-purge deletion is
+unchanged. Clients must describe this distinction when permanent erasure is asked
+for. New chat tools never call the privacy-purge deletion method.
+
+Conversation corrections are owner-confirmed durable notes, compressed (and
+protected for enhanced users) alongside the conversation. Regeneration preserves
+those notes and explicit title/overview overrides and includes the corrections
+as evidence for subsequent summaries. No transcript segment is changed.

@@ -78,6 +78,7 @@ from utils.memory.canonical_memory_adapter import (
     refine_canonical_memory,
     replace_conversation_sourced_memories,
     retract_conversation_sourced_memories,
+    apply_canonical_user_mutation,
     search_canonical_memories,
     search_result_to_memorydb,
     update_canonical_memory_content,
@@ -4570,6 +4571,47 @@ class MemoryService:
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         self._invalidate_prompt_cache(uid)
         return results
+
+    def remove_chat_memory(self, uid: str, memory_id: str) -> MemoryItem:
+        """Reversible owner-requested removal, distinct from privacy erasure.
+
+        Retains canonical history for undo and hides the item through the common
+        access policy. Existing privacy-purge deletion APIs remain destructive.
+        """
+        self.ensure_canonical_mutation_ready(uid)
+        self._ensure_canonical_target(uid, memory_id)
+
+        def build_patch(item, now):
+            if item.uid != uid or item.status != MemoryItemStatus.active:
+                raise HTTPException(status_code=404, detail='Memory not found')
+            promotion = dict(item.promotion or {})
+            if memory_item_to_memorydb(item).is_locked:
+                raise HTTPException(status_code=402, detail='A paid plan is required to access this memory')
+            promotion['chat_deleted'] = True
+            return {}, {'promotion_audit': promotion}
+
+        _, updated = apply_canonical_user_mutation(
+            uid, memory_id, mutation_kind='chat_remove', build_patch=build_patch, db_client=self.db_client
+        )
+        self._invalidate_prompt_cache(uid)
+        return updated
+
+    def restore_chat_memory_removal(
+        self, uid: str, memory_id: str, before: Dict[str, Any], expected: Dict[str, Any]
+    ) -> MemoryItem:
+        """Restore exact product metadata through a new canonical audit revision."""
+        self.ensure_canonical_mutation_ready(uid)
+
+        def build_patch(item, now):
+            if item.model_dump(mode='json') != expected or item.uid != uid:
+                raise HTTPException(status_code=409, detail='Memory changed after removal')
+            return {}, {'promotion_audit': before.get('promotion')}
+
+        _, updated = apply_canonical_user_mutation(
+            uid, memory_id, mutation_kind='chat_remove_undo', build_patch=build_patch, db_client=self.db_client
+        )
+        self._invalidate_prompt_cache(uid)
+        return updated
 
     @_legal_hold_gated_deletion
     def delete_external_memory(

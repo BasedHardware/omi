@@ -987,6 +987,8 @@ class GeneratedConversation {
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
+  final List<Map<String, dynamic>>? userCorrections;
+  final String? userOverview;
   final bool usesCustomStt;
   final String visibility;
 
@@ -1039,6 +1041,8 @@ class GeneratedConversation {
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
+    this.userCorrections,
+    this.userOverview,
     this.usesCustomStt = false,
     this.visibility = "private",
   });
@@ -1093,6 +1097,8 @@ class GeneratedConversation {
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      userCorrections: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["user_corrections"]), "user_corrections", _readMapList, requiredField: false, nullable: true),
+      userOverview: _readFieldValue<String>(_readField(json, const ["user_overview"]), "user_overview", _readString, requiredField: false, nullable: true),
       usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
@@ -1148,6 +1154,8 @@ class GeneratedConversation {
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'user_corrections': userCorrections,
+      'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
     };
@@ -1392,6 +1400,8 @@ class GeneratedConversationSearchItem {
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
+  final List<Map<String, dynamic>>? userCorrections;
+  final String? userOverview;
   final bool usesCustomStt;
   final String visibility;
 
@@ -1445,6 +1455,8 @@ class GeneratedConversationSearchItem {
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
+    this.userCorrections,
+    this.userOverview,
     this.usesCustomStt = false,
     this.visibility = "private",
   });
@@ -1500,6 +1512,8 @@ class GeneratedConversationSearchItem {
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      userCorrections: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["user_corrections"]), "user_corrections", _readMapList, requiredField: false, nullable: true),
+      userOverview: _readFieldValue<String>(_readField(json, const ["user_overview"]), "user_overview", _readString, requiredField: false, nullable: true),
       usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
@@ -1556,6 +1570,8 @@ class GeneratedConversationSearchItem {
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'user_corrections': userCorrections,
+      'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
     };

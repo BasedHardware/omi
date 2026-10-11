@@ -428,12 +428,25 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 )
 
         # cited extraction
-        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-        if len(cited_conversation_idxs) > 0:
-            response = re.sub(r'\[\d+\]', '', response)
+        citation_pattern = r'\[\s*#?\s*\d+(?:\s*[,;–-]\s*#?\s*\d+)*\s*\](?!\()'
+        cited_conversation_idxs = {
+            int(index) for marker in re.findall(citation_pattern, response) for index in re.findall(r'\d+', marker)
+        }
+        if cited_conversation_idxs:
+            response = re.sub(citation_pattern, '', response)
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = extract_memory_ids(memories) if memories else []
+        if runtime is not None and runtime.surface != 'app':
+            callback_data.setdefault('channel_items', []).extend(
+                {
+                    'kind': 'conversation',
+                    'id': memory['id'],
+                    'title': memory.get('structured', {}).get('title', 'Conversation'),
+                }
+                for memory in memories
+                if memory.get('id')
+            )
 
         ai_message_id = str(uuid.uuid4())
         ai_message = Message(
@@ -451,7 +464,13 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             evidence=evidence,
             # One grounded next question, as a chip the client can tap. Empty for
             # any turn that failed or has nothing to go one hop further into.
-            content_blocks=followup_content_blocks(
+            content_blocks=[dict(receipt.content_block) for receipt in callback_data.get('action_receipts', ())]
+            + (
+                [dict(type='itemLink', **item) for item in callback_data.get('channel_items', ())]
+                if runtime is not None and runtime.surface != 'app'
+                else []
+            )
+            + followup_content_blocks(
                 ai_message_id,
                 callback_data.get('followup'),
                 visible_text=response,
@@ -463,6 +482,13 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
         _persist_message(uid, ai_message.model_dump())
+        for receipt in callback_data.get('action_receipts', ()):
+            if receipt.reversible:
+                # Receipt persistence is loaded only for a write turn; read-only
+                # chat keeps its existing dependency and database behavior.
+                from utils.messaging.undo import UndoStore
+
+                UndoStore().bind_message(uid, receipt.id, ai_message.id)
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         usage_app_id = app_id_from_app or compat_app_id
         if usage_app_id and runtime is None:

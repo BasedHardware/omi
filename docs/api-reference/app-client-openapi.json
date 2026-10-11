@@ -8564,6 +8564,25 @@
             ],
             "title": "Updated At"
           },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
@@ -9800,6 +9819,25 @@
               }
             ],
             "title": "Updated At"
+          },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
           },
           "uses_custom_stt": {
             "default": false,
