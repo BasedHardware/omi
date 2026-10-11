@@ -22,6 +22,10 @@ REJECTION_REASONS = {
     'feedback_cap',
     'privacy_rejected',
     'invalid_evidence',
+    'stale_task_evidence',
+    'task_too_recent',
+    'bad_target',
+    'common_word',
 }
 
 logger = logging.getLogger(__name__)
