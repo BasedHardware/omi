@@ -28,6 +28,7 @@ READ_COLLECTIONS = {
 
 
 def read_record(uid, ref, *, control_cache=None):
+    control_cache = {} if control_cache is None else control_cache
     collection, separator, key = ref.partition('/')
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
@@ -47,8 +48,6 @@ def read_record(uid, ref, *, control_cache=None):
             return None
         return row.model_dump(mode='python')
     if collection in {'action_items', 'candidates'}:
-        if control_cache is None:
-            control_cache = {}
         if 'generation' not in control_cache:
             control_cache['generation'] = get_task_workflow_control(uid).account_generation
     if collection == 'action_items':
