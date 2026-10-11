@@ -389,16 +389,16 @@
       "runs_on": "ubuntu-latest"
     },
     "desktop-swift-ci.yml/desktop-siri-xcode27-advisory": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 31,
       "display_name": "Desktop Siri Xcode 27 Advisory",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
-      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && ((github.event_name == 'pull_request' && needs.changes.outputs.should_siri_advisory == 'true') || (github.event_name != 'pull_request' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true'))) }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "PRs select Siri/App Intents or their selector inputs only; main/health selection is unchanged. Run 38131335528 measured 30m44s, avoided on ordinary API PRs. Budget now reflects that observed job; keep one expected Siri PR/day until post-merge reseed",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -447,16 +447,16 @@
       "runs_on": "macos-26"
     },
     "desktop-swift-ci.yml/desktop-swift-verify": {
-      "budget_p50_minutes": 28,
+      "budget_p50_minutes": 29,
       "display_name": "Desktop Swift Static & Test Contracts",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 30,
-      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; generated-only PRs now retain static checks and a measured 502.55s app+test prebuild instead of suites/launchers. Budget rounded to 29 min with one minute headroom for compile selection; actual mixed-lane p50 requires post-merge reseed",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {

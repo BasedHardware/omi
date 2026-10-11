@@ -39,6 +39,8 @@ PHASE_ORDER = (
     "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
+    "desktop-swift-test-compile",
+    "desktop-siri-advisory",
     "desktop-swift-release-compile",
     "desktop-swift-release-test-compile",
     "desktop-swift-notification-release-regression",
@@ -138,6 +140,16 @@ DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
     "desktop/macos/Desktop/Sources/OmiApp.swift",
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
     "desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift",
+}
+
+DESKTOP_SIRI_ADVISORY_INPUTS = {
+    "desktop/macos/Desktop/Tests/SiriIntentServiceTests.swift",
+    "desktop/macos/Desktop/Package.swift",
+    "desktop/macos/Desktop/Package.resolved",
+    "desktop/macos/ci/xcode-pin.json",
+    "desktop/macos/scripts/embed-app-intents-metadata.sh",
+    ".github/workflows/desktop-swift-ci.yml",
+    "scripts/pre_push_ci_prediction.py",
 }
 
 DESKTOP_RELEASE_PR_INPUTS = {
@@ -595,6 +607,27 @@ def resolve_impact(
     if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
 
+    if event == "pull_request":
+        desktop_paths = [path for path in normalized_paths if path.startswith("desktop/macos/")]
+        # Only generated wire shapes qualify. Any other desktop input, or a
+        # change to selection itself, retains the existing full debug lane.
+        if (
+            desktop_paths
+            and not selector_changed
+            and all(
+                path.startswith("desktop/macos/Desktop/Sources/Generated/") and path.endswith(".generated.swift")
+                for path in desktop_paths
+            )
+        ):
+            selected.discard("desktop-swift-tests")
+            selected.add("desktop-swift-test-compile")
+        if any(
+            path in DESKTOP_SIRI_ADVISORY_INPUTS
+            or path.startswith("desktop/macos/Desktop/Sources/SiriIntegration/")
+            for path in normalized_paths
+        ):
+            selected.add("desktop-siri-advisory")
+
     return ImpactPlan(frozenset(selected))
 
 
@@ -623,6 +656,8 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
+        "should_test_compile": str(plan.includes("desktop-swift-test-compile")).lower(),
+        "should_siri_advisory": str(plan.includes("desktop-siri-advisory")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
         "should_release_test_compile": str(plan.includes("desktop-swift-release-test-compile")).lower(),
         "should_notification_release_regression": str(
