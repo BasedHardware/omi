@@ -19,6 +19,12 @@ from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
 
 
+class ChannelTurnError(RuntimeError):
+    def __init__(self, reason):
+        super().__init__('Channel turn failed')
+        self.reason = reason
+
+
 class Gateway:
     def __init__(self, adapter, *, store=None, turn=run_chat_turn, admission=require_access, wake=None):
         self.adapter = adapter
@@ -31,6 +37,10 @@ class Gateway:
         if len(body) > 1_000_000:
             raise ValueError('Webhook too large')
         messages = self.adapter.parse(body)
+        if not messages:
+            logging.getLogger(__name__).info(
+                'Messaging ignored provider=%s reason=non_turn_event', self.adapter.provider
+            )
         paths = []
         for message in messages:
             if (message.channel, message.provider) != (self.adapter.channel, self.adapter.provider):
@@ -38,6 +48,10 @@ class Gateway:
             path = await run_blocking(db_executor, self.store.enqueue, message)
             if path:
                 paths.append(path)
+            else:
+                logging.getLogger(__name__).info(
+                    'Messaging ignored provider=%s reason=duplicate_message', self.adapter.provider
+                )
         # Acknowledge once durable, never await a model or a provider send.
         # wake only publishes content-free inbox paths; pending rows remain recoverable.
         if self.wake and paths:
@@ -51,6 +65,19 @@ class Gateway:
         self.admission(link['uid'])
 
     async def process(self, path):
+        try:
+            return await self._process(path)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',
+                self.adapter.provider,
+                getattr(error, 'reason', 'outbound_gate' if isinstance(error, PermissionError) else 'worker_error'),
+                type(error).__name__,
+                getattr(error, 'status_code', None),
+            )
+            raise
+
+    async def _process(self, path):
         payload = await run_blocking(db_executor, self.store.claim, path)
         if payload is None:
             return False
@@ -67,12 +94,18 @@ class Gateway:
                 await run_blocking(db_executor, self.admission, owner)
                 link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
             except PermissionError:
+                logging.getLogger(__name__).info(
+                    'Messaging reply provider=%s reason=invalid_link_proof', self.adapter.provider
+                )
                 # Same fixed reply as an unknown sender. Do not distinguish a bad,
                 # expired, or unauthorized proof.
                 await ChannelReplySink(self.adapter, message).finish('Link your account in Omi to chat here.')
                 await run_blocking(db_executor, self.store.complete, path)
                 return True
         if not link or not link.get('active'):
+            logging.getLogger(__name__).info(
+                'Messaging reply provider=%s reason=unlinked_sender', self.adapter.provider
+            )
             sink = ChannelReplySink(self.adapter, message)
             await sink.finish('Link your account in Omi to chat here.')
             await run_blocking(db_executor, self.store.complete, path)
@@ -91,6 +124,9 @@ class Gateway:
         session = await run_blocking(db_executor, self.store.session, uid, message, link)
         token = await run_blocking(db_executor, self.store.acquire, uid, session['surface'])
         if token is None:
+            logging.getLogger(__name__).info(
+                'Messaging deferred provider=%s reason=surface_busy', self.adapter.provider
+            )
             await run_blocking(db_executor, self.store.retry, path)
             return False
         try:
@@ -126,8 +162,23 @@ class Gateway:
                         message = await self.adapter.prepare(message, uid, session, guard)
                     await self._turn(uid, session, message, link, Principal(uid))
             await run_blocking(db_executor, self.store.complete, path)
+        except Exception:
+            # The stopped worker must not block later messages. Keep this inbox
+            # row running: its effects/receipts still require reconciliation.
+            try:
+                await sink.finish('Sorry, I could not finish that reply. Please try again.')
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging failure reply failed provider=%s reason=delivery_failed error_type=%s status_code=%s',
+                    self.adapter.provider,
+                    type(error).__name__,
+                    getattr(error, 'status_code', None),
+                )
+            finally:
+                await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
+            raise
         except BaseException:
-            # Ambiguous billable/effect work: leave running + lease, never blindly replay.
+            await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
             raise
         else:
             await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
@@ -149,8 +200,10 @@ class Gateway:
         if any(e['id'] == 'reply:' + event.event_id for e in events):
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             return
-        await self._turn(principal.uid, session, message, link, principal, event=event)
-        await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
+        try:
+            await self._turn(principal.uid, session, message, link, principal, event=event)
+        finally:
+            await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
 
     async def _turn(self, uid, session, message, link, principal, *, event=None):
         def guard():
@@ -197,6 +250,8 @@ class Gateway:
         context_token = surface_runtime.set(runtime)
         typing_stop = asyncio.Event()
         typing_task = start_background_task(_refresh_typing(sink, typing_stop), name='messaging-typing')
+        stream = None
+        terminal = False
         try:
             await sink.typing()
             stream = await run_blocking(
@@ -213,8 +268,11 @@ class Gateway:
                 if frame.startswith('data: '):
                     await sink.text(frame[6:].removesuffix('\n\n').replace('__CRLF__', '\n'))
                 elif frame.startswith('done: '):
+                    terminal = True
                     response = json.loads(base64.b64decode(frame[6:].strip()))
                     answer = response['text']
+                    if not answer.strip():
+                        raise ChannelTurnError('empty_reply')
                     await run_blocking(
                         db_executor,
                         self.store.append_event,
@@ -231,10 +289,25 @@ class Gateway:
                     if runtime.write_reports:
                         response['text'] += '\n\n' + '\n'.join(runtime.write_reports)
                     await sink.finish_payload(response)
+                elif frame.startswith('error: '):
+                    raise ChannelTurnError('turn_error_frame')
+            if not terminal:
+                raise ChannelTurnError('missing_terminal_reply')
             if event:
                 for artifact in event.artifacts:
                     await sink.artifact(artifact)
         finally:
+            # Final delivery can raise while the generator is suspended at its
+            # terminal yield. Close in this task's context, before resetting it.
+            if stream is not None and hasattr(stream, 'aclose'):
+                try:
+                    await stream.aclose()
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging stream close failed provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(error).__name__,
+                    )
             typing_stop.set()
             typing_task.cancel()
             try:

@@ -18,6 +18,14 @@ class FixtureTransport:
                 raise response
             status, body, headers = response
             return httpx.Response(status, json=body, headers=headers)
+        if 'api.linqapp.com' in url and url.endswith('/messages') and method == 'POST':
+            # Replay the v3 boundary, not an unconditional success: the message
+            # container is required by Linq's public SendMessage contract.
+            body = kwargs.get('json', {})
+            message = body.get('message', {})
+            if not message.get('parts') or not message.get('idempotency_key'):
+                return httpx.Response(400, json={'error': 'invalid request'})
+            return httpx.Response(200, json={'chat_id': 'fixture-chat', 'message': {'id': 'provider-receipt'}})
         if url.endswith('/getFile'):
             return httpx.Response(200, json={'ok': True, 'result': {'file_path': 'documents/fixture.txt'}})
         if url.endswith('/attachments'):

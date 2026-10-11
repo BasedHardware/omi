@@ -93,6 +93,96 @@ class TestProviderContracts(AdapterContract):
     pass
 
 
+@pytest.mark.parametrize('failure', [None, 'rejected', 'error_frame', 'empty'])
+def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, failure, caplog):
+    if adapter.channel != 'imessage':
+        return
+    from contextvars import ContextVar
+    from utils.messaging import history
+    from utils.observability.journeys import ClientJourneyAttempt
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    code = '0123456789ABCDEF0123456789ABCDEF'
+    proof = store.mint('user', 'imessage', 'linq', 'code')['proof']
+    store.proofs[code] = store.proofs.pop(proof)
+    cleaned = []
+    usage = ContextVar('fixture_usage', default=None)
+    turns = []
+
+    def turn(*args, **kwargs):
+        turns.append(args)
+
+        async def source():
+            token = usage.set('user')
+            try:
+                if failure == 'empty' and len(turns) == 1:
+                    return
+                if failure == 'error_frame' and len(turns) == 1:
+                    yield 'error: {}\n\n'
+                    return
+                yield 'done: ' + base64.b64encode(json.dumps({'text': 'Synthetic answer'}).encode()).decode() + '\n\n'
+            finally:
+                usage.reset(token)
+                cleaned.append(True)
+
+        return ClientJourneyAttempt('chat_first_answer', 'unknown').observe_stream(
+            source(),
+            success_when=lambda frame: frame.startswith('done: '),
+            failure_when=lambda frame: frame.startswith('error: '),
+        )
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+
+    async def deliver(kind, message_id, text=None):
+        value = json.loads(fixture('linq', kind))
+        value['data']['id'] = message_id
+        if text:
+            value['data']['parts'][0]['value'] = text
+        jobs = (await gateway.webhook(*signed(adapter, json.dumps(value).encode())))['jobs']
+        return jobs[0]
+
+    async def run():
+        link_job = await deliver('start', 'link', f'Hi Omi, link code {code}')
+        assert await gateway.process(link_job)
+        assert store.jobs[link_job]['status'] == 'done'
+        assert next(iter(store.identities.values()))['active']
+        first = await deliver('text', 'first')
+        if failure == 'rejected':
+            # Typing succeeds, final text is rejected, typing stops, failure reply succeeds.
+            adapter.transport.responses = [(200, {}, {}), (400, {'error': 'synthetic'}, {}), (200, {}, {})]
+        if failure:
+            with pytest.raises((ProviderError, RuntimeError)):
+                await gateway.process(first)
+            assert store.jobs[first]['status'] == 'running'  # no replay of ambiguous effects
+            assert 'could not finish' in adapter.sent[-1]['text']
+            assert not store.leases
+            assert not await gateway.process(first)
+        else:
+            assert await gateway.process(first)
+        assert cleaned == [True]
+        assert usage.get() is None
+        second = await deliver('text', 'second')
+        assert await gateway.process(second)
+        assert store.jobs[second]['status'] == 'done'
+        assert not store.leases
+        assert adapter.sent[-1]['text'] == 'Synthetic answer'
+
+    asyncio.run(run())
+    sends = [call[2]['json'] for call in adapter.transport.calls if call[1].endswith('/messages')]
+    assert sends[0]['message']['parts'][0]['value'].startswith('Account linked.')
+    assert all('parts' not in body and body['message']['idempotency_key'] for body in sends)
+    typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
+    assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
+    if failure:
+        reason = {'rejected': 'worker_error', 'error_frame': 'turn_error_frame', 'empty': 'missing_terminal_reply'}[
+            failure
+        ]
+        assert 'reason=' + reason in caplog.text
+    if failure == 'rejected':
+        assert 'status_code=400' in caplog.text
+
+
 @pytest.mark.parametrize(
     'kind',
     ['text', 'voice', 'photo', 'document', 'edited', 'start', 'unlink', 'unknown_sender', 'duplicate', 'bad_signature'],
@@ -297,8 +387,8 @@ def test_ambiguous_5xx_fail_closed_or_idempotent(adapter):
             await adapter.send(message, text='safe')
             assert len(adapter.transport.calls) == 2
             assert (
-                adapter.transport.calls[0][2]['json']['idempotency_key']
-                == adapter.transport.calls[1][2]['json']['idempotency_key']
+                adapter.transport.calls[0][2]['json']['message']['idempotency_key']
+                == adapter.transport.calls[1][2]['json']['message']['idempotency_key']
             )
 
     asyncio.run(run())
@@ -367,7 +457,7 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:Explain more'
         assert 'Daily standup' in payload['text']
     else:
-        assert 'Daily standup' in payload['parts'][0]['value']
+        assert 'Daily standup' in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
 
 
@@ -404,7 +494,7 @@ def test_real_followup_wire_block_and_source_title(adapter):
         assert 'Team meeting' in payload['text']
     else:
         assert 'What changed?' not in str(payload)
-        assert 'Team meeting' in payload['parts'][0]['value']
+        assert 'Team meeting' in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):

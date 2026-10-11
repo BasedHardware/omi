@@ -350,10 +350,15 @@ class ClientJourneyAttempt:
                     else:
                         self.fail(missing_success_class)
             finally:
-                self._stream_active = False
-                self._stream_attached = False
-                if not self.finished:
-                    self.fail('incomplete_stream')
+                try:
+                    close = getattr(source, 'aclose', None)
+                    if close is not None:
+                        await close()
+                finally:
+                    self._stream_active = False
+                    self._stream_attached = False
+                    if not self.finished:
+                        self.fail('incomplete_stream')
 
         return _ObservedClientJourneyStream(self, observed)
 

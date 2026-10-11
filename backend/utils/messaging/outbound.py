@@ -65,6 +65,12 @@ class ChannelReplySink:
         self.sequence += 1
 
     async def typing(self, active=True):
+        # Stopping an existing indicator conveys no content and must still work
+        # after revocation, entitlement loss, or expiry of the reply window.
+        if not active:
+            if self.adapter.capabilities.typing and hasattr(self.adapter, 'typing'):
+                await self.adapter.typing(self.message, False)
+            return
         authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
         if self.guard is not None:
             await self.guard()

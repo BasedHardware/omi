@@ -68,6 +68,9 @@ An injected `wake(paths)` may instead publish content-free task pointers in Stag
 Stage B must call it on startup and periodically for each registered adapter. A job
 moves `pending -> running -> done`. Completed jobs retain content-free dedup tombstones.
 A running job with ambiguous tool/delivery outcomes is **not automatically replayed**.
+A handled worker failure closes its stream, stops typing, attempts a guarded failure
+reply, and releases the surface lease so new inbound messages can progress. The failed
+inbox row stays running for reconciliation; process loss still retains its lease.
 Surface leases use atomic create and a random ownership token. They cannot be stolen,
 even after a timeout: operator recovery must first establish the previous worker is
 stopped, reconcile effects, then reset the affected job/lease. This follows the existing
