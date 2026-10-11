@@ -1,7 +1,7 @@
 """Shared user-requested edits; domain services remain the mutation authority."""
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
@@ -31,7 +31,8 @@ def update_conversation(
     correction: str,
     title: Optional[str] = None,
     overview: Optional[str] = None,
-    config: RunnableConfig = None,
+    *,
+    config: RunnableConfig,
 ) -> str:
     """Change a conversation title and/or overview only when the user asks or confirms a proposed correction.
 
@@ -49,13 +50,13 @@ def update_conversation(
     row = conversations.get_conversation(uid, conversation_id)
     if not row or row.get('is_locked') or row.get('deleted'):
         return 'Error: conversation not found or unavailable.'
-    before = chat_edits.snapshot(uid, 'conversation', conversation_id)
+    before = cast(Dict[str, Any], chat_edits.snapshot(uid, 'conversation', conversation_id))
     structured = dict(row.get('structured') or {})
     notes = list(row.get('user_corrections') or [])
     notes.append({'note': correction.strip(), 'at': datetime.now(timezone.utc).isoformat()})
     if len(notes) > 100:
         return 'Error: correction note limit reached.'
-    patch = {'user_corrections': notes}
+    patch: Dict[str, Any] = {'user_corrections': notes}
     if title is not None:
         structured['title'] = title.strip()
         patch['user_title'] = title.strip()
@@ -70,7 +71,7 @@ def update_conversation(
 
 
 @tool
-def rename_person(person_id: str, name: str, config: RunnableConfig = None) -> str:
+def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     """Rename a person only when the user asks or confirms a proposed correction.
 
     Retrieve the owned person ID first. Reuses the MCP rename implementation,
@@ -89,7 +90,7 @@ def rename_person(person_id: str, name: str, config: RunnableConfig = None) -> s
 
 
 @tool
-def edit_memory(memory_id: str, content: str, config: RunnableConfig = None) -> str:
+def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     """Edit a saved memory only when the user asks or confirms a proposed correction.
 
     Retrieve the owned memory ID first. Uses the same MemoryService method as MCP,
@@ -111,11 +112,11 @@ def edit_memory(memory_id: str, content: str, config: RunnableConfig = None) -> 
     if after is None:
         raise RuntimeError('Memory edit readback unavailable')
     record_write(uid, 'memory_edit', target_id, before.model_dump(mode='json'), after.model_dump(mode='json'))
-    return 'Memory updated: ' + after.content
+    return 'Memory updated: ' + (after.content or '')
 
 
 @tool
-def delete_memory(memory_id: str, config: RunnableConfig = None) -> str:
+def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     """Remove a memory from current knowledge only when the user asks or confirms.
 
     Retrieve the owned memory ID first. This is reversible removal, preserving

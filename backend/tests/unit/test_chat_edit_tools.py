@@ -34,8 +34,14 @@ def test_conversation_correction_keeps_transcript_and_durable_note(monkeypatch, 
         'update_conversation_chat',
         lambda uid, target, before, patch: writes.append(patch) or {'structured': patch['structured']},
     )
-    result = edit_tools.update_conversation.func(
-        'conversation', 'User confirmed the film was The Substance', title='The Substance movie night', config=CONFIG
+    assert 'config' not in edit_tools.update_conversation.tool_call_schema.model_fields
+    result = edit_tools.update_conversation.invoke(
+        {
+            'conversation_id': 'conversation',
+            'correction': 'User confirmed the film was The Substance',
+            'title': 'The Substance movie night',
+        },
+        config=CONFIG,
     )
     assert result == 'Title → The Substance movie night'
     assert 'transcript_segments' not in writes[0]
@@ -162,7 +168,7 @@ def test_inverse_uses_exact_snapshot_not_reconstruction(monkeypatch, kind):
     from utils import notifications
 
     monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *args: None)
-    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *args: None)
+    monkeypatch.setattr(conversations, 'refresh_conversation_after_chat_edit', lambda *args: None)
     monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda *args: None)
     monkeypatch.setattr(action_items, 'get_action_item', lambda *args: {})
     monkeypatch.setattr(notifications, 'sync_action_item_reminder', lambda *args, **kwargs: None)

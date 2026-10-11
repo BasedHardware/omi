@@ -246,8 +246,15 @@ def telegram(text, size=4096):
 
 def html_plain(text):
     """Provider rejected known HTML; strip markup and decode only entities."""
-    parser = HTMLParser(convert_charrefs=True)
-    chunks = []
-    parser.handle_data = chunks.append
+
+    class PlainParser(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.chunks = []
+
+        def handle_data(self, data):
+            self.chunks.append(data)
+
+    parser = PlainParser()
     parser.feed(text)
-    return ''.join(chunks)
+    return ''.join(parser.chunks)

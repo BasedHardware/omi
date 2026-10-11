@@ -436,13 +436,12 @@ def apply_inverse(uid, payload):
                 )
         return
     if isinstance(payload.get('before'), dict) and '_snapshot' in payload['before']:
-        from database import chat_edits, conversations, users, action_items
+        from database import chat_edits, conversations, action_items
         from utils.notifications import sync_action_item_reminder
 
         chat_edits.restore(uid, kind, object_id, payload['after']['_snapshot'], payload['before']['_snapshot'])
         if kind == 'conversation':
-            conversations.invalidate_people_stats_cache(uid)
-            conversations._sync_conversation_search_index(uid, object_id)
+            conversations.refresh_conversation_after_chat_edit(uid, object_id)
         elif kind == 'task':
             action_items.bump_action_items_list_version(uid)
             restored = action_items.get_action_item(uid, object_id) or {}

@@ -1618,6 +1618,12 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     return True
 
 
+def refresh_conversation_after_chat_edit(uid: str, conversation_id: str) -> None:
+    """Reconcile derived conversation views after an edit or inverse commits."""
+    invalidate_people_stats_cache(uid)
+    _sync_conversation_search_index(uid, conversation_id)
+
+
 def update_conversation_chat(uid: str, conversation_id: str, expected: dict, update_data: dict) -> dict:
     """Apply a confirmed correction without touching transcript or lifecycle fields."""
     raw = get_conversation_raw_snapshot(uid, conversation_id)
@@ -1625,8 +1631,7 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
         raise PermissionError('Conversation removed')
     prepared = _prepare_conversation_for_write(update_data, uid, raw.get('data_protection_level', 'standard'))
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
-    invalidate_people_stats_cache(uid)
-    _sync_conversation_search_index(uid, conversation_id)
+    refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
 
 
