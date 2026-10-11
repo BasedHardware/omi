@@ -163,11 +163,13 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
                 return None
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
-        last_pass = data.get('last_pass_at')
+        # Old drained states predate last_pass_at; their watermark seeds cleanup.
+        last_pass = data.get('last_pass_at') or data.get('watermark') or EPOCH
         cleanup_due = (
             not canary
             and trigger == 'schedule'
             and backfill_share() > 0
+            and bool(data)
             and isinstance(last_pass, datetime)
             and now - last_pass >= timedelta(hours=1)
         )

@@ -17,7 +17,8 @@ def eligible_seed(row, last_reviewed_at, now):
     created = timestamp(row.get('created_at'))
     reviewed = timestamp(last_reviewed_at)
     return (
-        created is not None
+        not row.get('pinned')
+        and created is not None
         and created <= now - timedelta(days=SEED_MIN_DAYS)
         and (last_reviewed_at is None or (reviewed is not None and reviewed <= now - timedelta(days=REVIEW_DAYS)))
     )
@@ -45,6 +46,8 @@ def problem_score(ref, row, pool, now):
 def duplicate_pair(ref, row, other_ref, other):
     collection = ref.split('/', 1)[0]
     if ref == other_ref or other_ref.split('/', 1)[0] != collection or collection not in {'people', 'memory_items'}:
+        return False
+    if collection == 'people' and (row.get('pinned') or other.get('pinned')):
         return False
     field, threshold, length = ('name', 0.88, 120) if collection == 'people' else ('content', 0.92, 800)
     if collection == 'memory_items' and any(

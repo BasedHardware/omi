@@ -40,6 +40,34 @@ def test_weight_is_problem_times_staleness():
     assert rng.choices.call_args.kwargs['weights'] == [120, 30]
 
 
+def test_pinned_people_never_seed_or_partner_cleanup():
+    pool = {
+        'people/a': {'created_at': OLD, 'name': 'Mira Holloway', 'pinned': True},
+        'people/b': {'created_at': OLD, 'name': 'Mira Holoway'},
+    }
+    assert not cleanup.eligible_seed(pool['people/a'], None, NOW)
+    assert all(cleanup.problem_score(ref, row, pool, NOW) == 0 for ref, row in pool.items())
+
+
+def test_review_cooldowns_use_one_bounded_batch():
+    from types import SimpleNamespace
+
+    refs = ['people/a', 'people/b']
+
+    def get_all(documents, *, timeout):
+        assert timeout == 3
+        assert len(documents) == 2
+        return [
+            SimpleNamespace(id=documents[1].id, to_dict=lambda: {'last_reviewed_at': NOW}),
+            SimpleNamespace(id=documents[0].id, to_dict=lambda: None),
+        ]
+
+    db = DreamFirestore()
+    db.get_all = get_all
+    assert dream_history.last_reviewed('synthetic', refs, firestore_client=db) == {'people/a': None, 'people/b': NOW}
+    assert dream_history.last_reviewed('synthetic', [], firestore_client=db) == {}
+
+
 def test_uniform_sample_includes_every_collection_and_rank(monkeypatch):
     counts = dict(zip(dream_history.COLLECTIONS, [2, 1, 3, 2]))
     monkeypatch.setattr(dream_history, 'history_count', lambda uid, col: counts[col])
@@ -127,7 +155,7 @@ def test_success_review_metadata_idle_admission_and_failure_fence(monkeypatch):
     uid = 'synthetic-cleanup'
     db = DreamFirestore()
     db.rows[('users', uid)] = {}
-    db.rows[('dream_users', uid)] = {'score': 0, 'last_pass_at': OLD}
+    db.rows[('dream_users', uid)] = {'score': 0, 'watermark': OLD}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
