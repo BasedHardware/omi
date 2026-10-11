@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "ถึง: Omi · {address}",
     "chatAppsInsightsSubtitle": "ให้ Omi ส่งสรุปหรือข้อมูลเชิงลึกมาให้คุณที่นี่",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…"
+    "chatAppsTelegramWaiting": "กำลังรอให้คุณแตะ เริ่ม ใน Telegram…",
+    "maxDeviceNameBytesExceeded": "สูงสุด 25 ไบต์ ({count} ไบต์, อักขระที่ไม่ใช่ ASCII ใช้หลายไบต์)"
 }

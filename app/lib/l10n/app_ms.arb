@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Kepada: Omi · {address}",
     "chatAppsInsightsSubtitle": "Benarkan Omi menghantar rumusan atau pandangan kepada anda di sini.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…"
+    "chatAppsTelegramWaiting": "Menunggu anda mengetik Mula dalam Telegram…",
+    "maxDeviceNameBytesExceeded": "Maksimum 25 bait ({count} bait, bukan ASCII menggunakan berbilang bait)"
 }

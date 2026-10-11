@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Προς: Omi · {address}",
     "chatAppsInsightsSubtitle": "Άσε το Omi να σου στέλνει εδώ μια σύνοψη ή μια πληροφορία.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Αναμονή να πατήσεις «Έναρξη» στο Telegram…"
+    "chatAppsTelegramWaiting": "Αναμονή να πατήσεις «Έναρξη» στο Telegram…",
+    "maxDeviceNameBytesExceeded": "Μέγιστο 25 byte ({count} byte, οι χαρακτήρες εκτός ASCII χρησιμοποιούν πολλαπλά byte)"
 }

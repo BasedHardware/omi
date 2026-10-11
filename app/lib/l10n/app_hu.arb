@@ -4086,5 +4086,6 @@
     "chatAppsIMessageTo": "Címzett: Omi · {address}",
     "chatAppsInsightsSubtitle": "Engedd, hogy Omi itt küldjön összefoglalót vagy meglátást.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Várakozás arra, hogy az Indításra koppints a Telegramban…"
+    "chatAppsTelegramWaiting": "Várakozás arra, hogy az Indításra koppints a Telegramban…",
+    "maxDeviceNameBytesExceeded": "Legfeljebb 25 bájt ({count} bájt, a nem ASCII karakterek több bájtot használnak)"
 }

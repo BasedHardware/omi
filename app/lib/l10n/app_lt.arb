@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Leiskite Omi čia atsiųsti apibendrinimą ar įžvalgą.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…"
+    "chatAppsTelegramWaiting": "Laukiama, kol palieskosite Pradėti Telegram…",
+    "maxDeviceNameBytesExceeded": "Iki 25 baitų ({count} baitai, ne ASCII simboliai naudoja kelis baitus)"
 }

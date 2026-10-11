@@ -23132,6 +23132,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OMI PRO'**
   String get chatAppsOmiPro;
+
+  /// Error message shown when device name exceeds 25 UTF-8 bytes limit in rename dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Max 25 bytes ({count} bytes, non-ASCII uses multiple bytes)'**
+  String maxDeviceNameBytesExceeded(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

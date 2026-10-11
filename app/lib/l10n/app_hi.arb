@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "प्रति: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi को यहाँ आपको रीकैप या अंतर्दृष्टि भेजने दें।",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "आपके Telegram में शुरू करें पर टैप करने का इंतज़ार है…"
+    "chatAppsTelegramWaiting": "आपके Telegram में शुरू करें पर टैप करने का इंतज़ार है…",
+    "maxDeviceNameBytesExceeded": "अधिकतम 25 बाइट्स ({count} बाइट्स, गैर-ASCII एकाधिक बाइट्स का उपयोग करते हैं)"
 }

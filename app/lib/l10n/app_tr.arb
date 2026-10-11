@@ -4025,5 +4025,6 @@
     "chatAppsIMessageTo": "Kime: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi'nin sana buradan bir özet veya içgörü göndermesine izin ver.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…"
+    "chatAppsTelegramWaiting": "Telegram'da Başlat'a dokunman bekleniyor…",
+    "maxDeviceNameBytesExceeded": "Maksimum 25 bayt ({count} bayt, ASCII olmayan karakterler birden fazla bayt kullanır)"
 }

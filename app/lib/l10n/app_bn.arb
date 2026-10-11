@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "খোলেনি? এটি {address} নম্বরে টেক্সট করুন",
     "chatAppsLinkExpired": "লিংকটির মেয়াদ শেষ। নতুন লিংকের জন্য Open Telegram-এ ট্যাপ করুন।",
     "chatAppsIMessageTo": "প্রাপক: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "সর্বোচ্চ ২৫ বাইট ({count} বাইট, নন-ASCII একাধিক বাইট ব্যবহার করে)"
 }

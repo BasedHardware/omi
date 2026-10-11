@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Kellele: Omi · {address}",
     "chatAppsInsightsSubtitle": "Luba Omil saata sulle siia kokkuvõte või ülevaade.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…"
+    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…",
+    "maxDeviceNameBytesExceeded": "Maksimaalselt 25 baiti ({count} baiti, mitte-ASCII kasutab mitut baiti)"
 }

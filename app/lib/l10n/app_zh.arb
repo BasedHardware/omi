@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "收件人：Omi · {address}",
     "chatAppsInsightsSubtitle": "允许 Omi 在这里向你发送回顾或洞察。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…"
+    "chatAppsTelegramWaiting": "正在等待你在 Telegram 中点按“开始”…",
+    "maxDeviceNameBytesExceeded": "最多 25 个字节（当前 {count} 个字节，非 ASCII 字符占用多个字节）"
 }

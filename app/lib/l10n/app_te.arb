@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "తెరుచుకోలేదా? దీన్ని {address}కు పంపండి",
     "chatAppsLinkExpired": "ఆ లింక్ గడువు ముగిసింది. కొత్తది కోసం Telegram తెరవండి నొక్కండి.",
     "chatAppsIMessageTo": "గ్రహీత: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "గరిష్టంగా 25 బైట్లు ({count} బైట్లు, ASCII కానివి బహుళ బైట్‌లను ఉపయోగిస్తాయి)"
 }

@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "திறக்கவில்லையா? இதை {address} எண்ணுக்கு அனுப்புங்கள்",
     "chatAppsLinkExpired": "அந்த இணைப்பு காலாவதியாகிவிட்டது. புதியதைப் பெற Telegram-ஐத் திற என்பதைத் தட்டுங்கள்.",
     "chatAppsIMessageTo": "பெறுநர்: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "அதிகபட்சம் 25 பைட்டுகள் ({count} பைட்டுகள், ASCII அல்லாதவை பல பைட்டுகளைப் பயன்படுத்துகின்றன)"
 }

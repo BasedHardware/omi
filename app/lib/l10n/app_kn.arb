@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "ತೆರೆಯಲಿಲ್ಲವೇ? ಇದನ್ನು {address} ಗೆ ಕಳುಹಿಸಿ",
     "chatAppsLinkExpired": "ಆ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿದಿದೆ. ಹೊಸದಕ್ಕಾಗಿ Telegram ತೆರೆಯಿರಿ ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "chatAppsIMessageTo": "ಗೆ: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "ಗರಿಷ್ಠ 25 ಬೈಟ್‌ಗಳು ({count} ಬೈಟ್‌ಗಳು, ASCII ಅಲ್ಲದವು ಬಹು ಬೈಟ್‌ಗಳನ್ನು ಬಳಸುತ್ತವೆ)"
 }

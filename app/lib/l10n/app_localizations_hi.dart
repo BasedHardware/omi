@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12947,4 +12948,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return 'अधिकतम 25 बाइट्स ($count बाइट्स, गैर-ASCII एकाधिक बाइट्स का उपयोग करते हैं)';
+  }
 }

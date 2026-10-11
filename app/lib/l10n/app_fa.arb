@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "باز نشد؟ این را به {address} پیامک کنید",
     "chatAppsLinkExpired": "آن پیوند منقضی شد. برای دریافت پیوند جدید روی باز کردن Telegram ضربه بزنید.",
     "chatAppsIMessageTo": "به: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "حداکثر ۲۵ بایت ({count} بایت، کاراکترهای غیر ASCII از چندین بایت استفاده می‌کنند)"
 }

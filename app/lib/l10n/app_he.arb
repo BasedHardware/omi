@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "לא נפתח? שלחו את זה אל {address}",
     "chatAppsLinkExpired": "הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.",
     "chatAppsIMessageTo": "אל: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "מקסימום 25 בתים ({count} בתים, תווי non-ASCII משתמשים במספר בתים)"
 }

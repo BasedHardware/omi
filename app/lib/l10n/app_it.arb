@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "A: Omi · {address}",
     "chatAppsInsightsSubtitle": "Lascia che Omi ti invii qui un riepilogo o uno spunto.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "In attesa che tu tocchi Avvia in Telegram…"
+    "chatAppsTelegramWaiting": "In attesa che tu tocchi Avvia in Telegram…",
+    "maxDeviceNameBytesExceeded": "Massimo 25 byte ({count} byte, i caratteri non ASCII utilizzano più byte)"
 }

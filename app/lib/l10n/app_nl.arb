@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Aan: Omi · {address}",
     "chatAppsInsightsSubtitle": "Laat Omi je hier een samenvatting of inzicht sturen.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…"
+    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…",
+    "maxDeviceNameBytesExceeded": "Max. 25 bytes ({count} bytes, niet-ASCII gebruikt meerdere bytes)"
 }

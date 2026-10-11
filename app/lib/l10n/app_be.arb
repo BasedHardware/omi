@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "Не адкрылася? Адпраў гэта на {address}",
     "chatAppsLinkExpired": "Тэрмін дзеяння спасылкі скончыўся. Націсні «Адкрыць Telegram», каб атрымаць новую.",
     "chatAppsIMessageTo": "Каму: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "Максімум 25 байтаў ({count} байтаў, не-ASCII выкарыстоўвае некалькі байтаў)"
 }

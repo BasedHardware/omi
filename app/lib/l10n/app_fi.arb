@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Vastaanottaja: Omi · {address}",
     "chatAppsInsightsSubtitle": "Anna Omin lähettää sinulle yhteenveto tai oivallus tänne.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…"
+    "chatAppsTelegramWaiting": "Odotetaan, että napautat Aloita Telegramissa…",
+    "maxDeviceNameBytesExceeded": "Enintään 25 tavua ({count} tavua, ei-ASCII-merkit käyttävät useita tavuja)"
 }

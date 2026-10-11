@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "宛先: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omiからここにまとめやインサイトを送ってもらえます。",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…"
+    "chatAppsTelegramWaiting": "Telegramで開始をタップするのを待っています…",
+    "maxDeviceNameBytesExceeded": "最大25バイト（現在{count}バイト、非ASCII文字は複数バイトを使用します）"
 }

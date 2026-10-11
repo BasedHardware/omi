@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Đến: Omi · {address}",
     "chatAppsInsightsSubtitle": "Cho phép Omi gửi bản tóm tắt hoặc thông tin chi tiết cho bạn tại đây.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…"
+    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…",
+    "maxDeviceNameBytesExceeded": "Tối đa 25 byte ({count} byte, ký tự không phải ASCII sử dụng nhiều byte)"
 }

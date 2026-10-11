@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Кому: Omi · {address}",
     "chatAppsInsightsSubtitle": "Дозвольте Omi надсилати вам тут підсумок або інсайт.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…"
+    "chatAppsTelegramWaiting": "Чекаємо, поки ви натиснете «Почати» в Telegram…",
+    "maxDeviceNameBytesExceeded": "Максимум 25 байтів ({count} байтів, не-ASCII символи використовують кілька байтів)"
 }

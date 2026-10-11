@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Komu: Omi · {address}",
     "chatAppsInsightsSubtitle": "Nech Omi, ať ti tady pošle shrnutí nebo postřeh.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Čekáme, až v Telegramu klepneš na Spustit…"
+    "chatAppsTelegramWaiting": "Čekáme, až v Telegramu klepneš na Spustit…",
+    "maxDeviceNameBytesExceeded": "Maximálně 25 bajtů ({count} bajtů, znaky mimo ASCII používají více bajtů)"
 }

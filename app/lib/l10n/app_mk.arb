@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "Не се отвори? Испратете го ова на {address}",
     "chatAppsLinkExpired": "Таа врска истече. Допрете Отвори Telegram за нова.",
     "chatAppsIMessageTo": "До: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "Максимум 25 бајти ({count} бајти, знаците што не се ASCII користат повеќе бајти)"
 }

@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "उघडले नाही? हे {address} वर पाठवा",
     "chatAppsLinkExpired": "ती लिंक कालबाह्य झाली. नवीन लिंकसाठी Telegram उघडा वर टॅप करा.",
     "chatAppsIMessageTo": "प्रति: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "कमाल २५ बाइट्स ({count} बाइट्स, नॉन-ASCII अनेक बाइट्स वापरतात)"
 }

@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "받는 사람: Omi · {address}",
     "chatAppsInsightsSubtitle": "Omi가 요약이나 인사이트를 여기로 보내도록 허용하세요.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…"
+    "chatAppsTelegramWaiting": "Telegram에서 시작을 탭하기를 기다리는 중…",
+    "maxDeviceNameBytesExceeded": "최대 25바이트(현재 {count}바이트, 비ASCII 문자는 여러 바이트를 사용합니다)"
 }

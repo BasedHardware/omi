@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Ļaujiet Omi šeit nosūtīt kopsavilkumu vai ieskatu.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…"
+    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…",
+    "maxDeviceNameBytesExceeded": "Maksimums 25 baiti ({count} baiti, ne-ASCII rakstzīmes izmanto vairākus baitus)"
 }

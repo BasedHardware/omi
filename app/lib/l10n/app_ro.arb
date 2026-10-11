@@ -3990,5 +3990,6 @@
     "chatAppsIMessageTo": "Către: Omi · {address}",
     "chatAppsInsightsSubtitle": "Lasă-l pe Omi să-ți trimită aici un rezumat sau o perspectivă.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Așteptăm să atingi Start în Telegram…"
+    "chatAppsTelegramWaiting": "Așteptăm să atingi Start în Telegram…",
+    "maxDeviceNameBytesExceeded": "Maxim 25 de octeți ({count} octeți, caracterele non-ASCII folosesc mai mulți octeți)"
 }

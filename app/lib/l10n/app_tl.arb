@@ -11427,5 +11427,6 @@
     "chatAppsTextThisTo": "Hindi nagbukas? I-text ito sa {address}",
     "chatAppsLinkExpired": "Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.",
     "chatAppsIMessageTo": "Para kay: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "maxDeviceNameBytesExceeded": "Maximum na 25 byte ({count} byte, gumagamit ang non-ASCII ng maraming byte)"
 }
