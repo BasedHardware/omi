@@ -392,6 +392,37 @@ def test_plain_paragraphs_become_untimed_cues_without_speakers():
     ]
 
 
+def test_a_title_line_above_a_single_label_is_its_own_cue():
+    """A title or date above one "Name:" turn must not glue onto the speaker's name."""
+    cues = tf.parse_text_transcript('Meeting notes\nAlice: hi there\n')
+
+    assert [(c.speaker, c.text) for c in cues] == [(None, 'Meeting notes'), (None, 'Alice: hi there')]
+
+
+def test_a_two_line_title_above_a_single_label_is_one_cue():
+    cues = tf.parse_text_transcript('Weekly sync\n2024-01-15\nAlice: hi\n')
+
+    assert [(c.speaker, c.text) for c in cues] == [
+        (None, 'Weekly sync 2024-01-15'),
+        (None, 'Alice: hi'),
+    ]
+
+
+def test_a_one_off_label_in_prose_keeps_every_word_as_text():
+    cues = tf.parse_text_transcript('Some prose\nNote: inline\nmore prose\n')
+
+    assert [(c.speaker, c.text) for c in cues] == [
+        (None, 'Some prose'),
+        (None, 'Note: inline more prose'),
+    ]
+
+
+def test_a_label_from_the_first_line_has_no_title_cue():
+    cues = tf.parse_text_transcript('Alice: hi\nBob: yo\n')
+
+    assert [(c.speaker, c.text) for c in cues] == [('Alice', 'hi'), ('Bob', 'yo')]
+
+
 _VTT_CUE = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n'
 
 

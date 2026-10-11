@@ -292,7 +292,16 @@ def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
     """
     labeled = [_LABEL_RE.match(line) is not None for line in block]
     if sum(labeled) < 2:
-        return [TranscriptCue(text=' '.join(block))]
+        # A line above the first label is a title or date and stands as its own cue
+        # whatever the label count, so it never glues onto the first speaker's name.
+        first = next((index for index, is_label in enumerate(labeled) if is_label), None)
+        if first is None:
+            return [TranscriptCue(text=_plain_cue_text(' '.join(block), _TAG_RE))]
+        head = block[:first]
+        tail = block[first:]
+        cues = [TranscriptCue(text=_plain_cue_text(' '.join(head), _TAG_RE))] if head else []
+        cues.append(TranscriptCue(text=_plain_cue_text(' '.join(tail), _TAG_RE)))
+        return cues
     turns: List[List[str]] = []
     for line, is_label in zip(block, labeled):
         if is_label or not turns:
