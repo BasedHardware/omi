@@ -36,6 +36,7 @@ def test_checked_in_dream_schema_and_mobile_dtos_match_real_routes():
 
 @pytest.fixture
 def store(monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     db = DreamFirestore()
     db.rows[('users', UID)] = {}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
