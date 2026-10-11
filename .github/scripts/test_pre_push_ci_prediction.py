@@ -350,6 +350,7 @@ class PrePushCiPredictionTests(unittest.TestCase):
         generated = "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift"
         for paths in (
             [generated],
+            ["desktop/macos/Desktop/Sources/Generated/Notification.generated.swift"],
             [generated, "backend/routers/dream.py", "docs/api-reference/app-client-openapi.json"],
             [generated, "desktop/macos/Desktop/Sources/Generated/nested/Other.generated.swift"],
         ):
@@ -359,6 +360,7 @@ class PrePushCiPredictionTests(unittest.TestCase):
                 self.assertEqual(outputs["should_run_tests"], "false")
                 self.assertEqual(outputs["should_test_compile"], "true")
                 self.assertEqual(outputs["should_release_compile"], "false")
+                self.assertEqual(outputs["should_notification_release_regression"], "false")
                 self.assertEqual(outputs["should_siri_advisory"], "false")
 
     def test_any_other_desktop_path_or_selector_edit_restores_full_generated_pr_lane(self) -> None:

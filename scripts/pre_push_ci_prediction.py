@@ -436,6 +436,10 @@ def _is_releasable_desktop_path(path: str) -> bool:
     return any(_matches_desktop_release_pathspec(path, pathspec) for pathspec in DESKTOP_RELEASE_PATHSPECS)
 
 
+def _is_generated_desktop_swift_client(path: str) -> bool:
+    return path.startswith("desktop/macos/Desktop/Sources/Generated/") and path.endswith(".generated.swift")
+
+
 def _is_desktop_swift_test_input(path: str) -> bool:
     return (
         path in DESKTOP_SWIFT_TEST_INPUTS
@@ -511,6 +515,15 @@ def resolve_impact(
         path in ROUTING_INPUTS or path.startswith(".github/actions/detect-changes/") for path in normalized_paths
     )
 
+    desktop_paths = [path for path in normalized_paths if path.startswith("desktop/macos/")]
+    # Selection edits must exercise the existing full lane too.
+    generated_only_pr = (
+        event == "pull_request"
+        and bool(desktop_paths)
+        and not selector_changed
+        and all(_is_generated_desktop_swift_client(path) for path in desktop_paths)
+    )
+
     for path in normalized_paths:
         if _is_app_android_pr_input(path):
             selected.add("app-android-pr")
@@ -543,9 +556,13 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             # The full main/health lane compiles the complete release test
             # target. PRs reserve that build for release-specific inputs.
-            if _is_desktop_release_test_input(path) and (event != "pull_request" or _is_desktop_release_pr_input(path)):
+            if (
+                not generated_only_pr
+                and _is_desktop_release_test_input(path)
+                and (event != "pull_request" or _is_desktop_release_pr_input(path))
+            ):
                 selected.add("desktop-swift-release-test-compile")
-            if _is_desktop_notification_input(path):
+            if not generated_only_pr and _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
             if _is_desktop_agent_runtime_input(path):
                 selected.add("desktop-agent-runtime")
@@ -596,7 +613,10 @@ def resolve_impact(
         )
 
     releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
-    release_pr_input = any(_is_desktop_release_pr_input(path) for path in normalized_paths)
+    release_pr_input = any(
+        _is_desktop_release_pr_input(path) and not (generated_only_pr and _is_generated_desktop_swift_client(path))
+        for path in normalized_paths
+    )
     if releasable_desktop:
         selected.add("desktop-ci-only")
     # Ordinary source/test PRs use the debug lane; release settings, packaging,
@@ -607,20 +627,12 @@ def resolve_impact(
     if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
 
+    if generated_only_pr:
+        # Wire shapes still compile against every app and test consumer, but
+        # never wake suite execution (even if a DTO name contains Notification).
+        selected.discard("desktop-swift-tests")
+        selected.add("desktop-swift-test-compile")
     if event == "pull_request":
-        desktop_paths = [path for path in normalized_paths if path.startswith("desktop/macos/")]
-        # Only generated wire shapes qualify. Any other desktop input, or a
-        # change to selection itself, retains the existing full debug lane.
-        if (
-            desktop_paths
-            and not selector_changed
-            and all(
-                path.startswith("desktop/macos/Desktop/Sources/Generated/") and path.endswith(".generated.swift")
-                for path in desktop_paths
-            )
-        ):
-            selected.discard("desktop-swift-tests")
-            selected.add("desktop-swift-test-compile")
         if any(
             path in DESKTOP_SIRI_ADVISORY_INPUTS
             or path.startswith("desktop/macos/Desktop/Sources/SiriIntegration/")
