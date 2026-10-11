@@ -142,7 +142,7 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
                 ),
                 None,
             )
-            if partner:
+            if partner and partner not in records:
                 seeds.append(partner)
         candidate = EvidenceRecords(
             {**records, **{key: pool[key] for key in seeds}}, targets={*records.targets, *seeds}

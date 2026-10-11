@@ -163,3 +163,84 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
 def test_invisible_neighbours_are_excluded():
     records = dream_context.add_context({'people/target': {'name': 'Nuvra'}}, [('people/hidden', None)], Caps())
     assert list(records) == ['people/target']
+
+
+def test_decomposed_accents_do_not_multiply_summary_words():
+    import unicodedata
+
+    speech = unicodedata.normalize('NFD', 'tiếng ' * 20)
+    row = {'transcript_segments': [{'text': speech}]}
+    assert dream_guards.summary_eligibility(row) == {'title': 'insufficient_speech', 'overview': 'insufficient_speech'}
+    assert dream_guards.has_summary_speech(speech, 20)
+    assert not dream_guards.has_summary_speech(speech, 21)
+
+
+def test_empty_target_retrieval_never_touches_memory_store(monkeypatch):
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: pytest.fail('idle retrieval read memory'))
+    assert list(dream_context.context_candidates('synthetic', {}, [], read_record=None, read_entity_record=None)) == []
+
+
+def test_canonical_neighbourhood_unavailability_fails_pass(monkeypatch):
+    from types import SimpleNamespace
+
+    def unavailable(uid, **kwargs):
+        assert kwargs['authoritative'] is True
+        raise RuntimeError('synthetic canonical outage')
+
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(read=unavailable))
+    with pytest.raises(RuntimeError, match='synthetic canonical outage'):
+        list(
+            dream_context.context_candidates(
+                'synthetic', {'people/a': {'name': 'Nuvra'}}, [], read_record=None, read_entity_record=None
+            )
+        )
+
+
+def test_dense_repeated_triage_metadata_is_compacted_and_budgeted():
+    rows = dream_context.EvidenceRecords(
+        {
+            'people/' + 'a' * 100: {'name': 'Synthetic Nuvra'},
+            'people/' + 'b' * 100: {'name': 'Synthetic Nuvrah'},
+        }
+    )
+    triage = Triage(clusters=[Cluster(problem='duplicates', refs=list(rows) * 10) for _ in range(12)])
+    hints = dream_context.cluster_hints(triage, rows)
+    assert hints == {'clusters': [{'problem': 'duplicates', 'refs': sorted(rows)}]}
+    caps = Caps()
+    assert dream_context.fits_pass(rows, caps)
+    messages = dream_prompt.evidence_message(rows, Triage, dream_prompt.triage_budget(caps))
+    ceiling = dream_context.input_ceiling(
+        dream_prompt.mount(Triage, dream_prompt.triage_budget(caps), dream_prompt.TRIAGE_INSTRUCTIONS).messages(
+            messages
+        ),
+        Triage.model_json_schema(),
+    )
+    dream_prompt.evidence_message(
+        rows,
+        Plan,
+        caps.tokens - ceiling - dream_prompt.COMPLETION_RESERVE,
+        clusters=hints,
+        names=dream_prompt.person_names(rows),
+    )
+
+
+def test_merge_question_cannot_mutate_context_entity():
+    from datetime import datetime, timezone
+    from models.review import ReviewItem, SamePersonItem, EntitySummary
+
+    left = EntitySummary(entity_id='person:a', type='person', name='Synthetic Nuvra')
+    right = EntitySummary(entity_id='person:b', type='person', name='Synthetic Nuvrah')
+    question = ReviewItem(
+        item_id='synthetic',
+        kind='same_person',
+        title='Same person?',
+        created_at=datetime.now(timezone.utc),
+        same_person=SamePersonItem(left=left, right=right, reason='Synthetic'),
+    )
+    records = {'people/a': left.model_dump(), 'entity/person:b': right.model_dump()}
+    sink = {}
+    assert not dream_guards.filter_plan(
+        Plan(questions=[question]), records, targets=['people/a'], usage_sink=sink
+    ).questions
+    assert sink['rejected'] == {'context_target': 1}
+    assert dream_guards.filter_plan(Plan(questions=[question]), records, targets=records).questions == [question]

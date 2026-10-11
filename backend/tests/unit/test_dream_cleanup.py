@@ -147,3 +147,26 @@ def test_success_review_metadata_idle_admission_and_failure_fence(monkeypatch):
     )
     assert db.rows[review]['last_reviewed_at'] == NOW
     assert db.rows[('dream_users', uid)]['cleanup_cursor'] == {'people': 'a'}
+
+
+def test_duplicate_seed_preserves_existing_dirty_partner_source(monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
+    monkeypatch.setattr(dream_history, 'history_page', lambda *args, **kwargs: ['a', 'b'])
+    monkeypatch.setattr(dream_history, 'last_reviewed', lambda *args: {})
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'people'
+    rng.choices.return_value = ['people/a']
+    dirty = EvidenceRecords({'people/b': {'created_at': OLD, 'name': 'Mira Holloway'}})
+    records = cleanup.add_seed(
+        'synthetic',
+        dirty,
+        {'started_at': NOW},
+        Caps(),
+        [],
+        read_record=lambda uid, ref: {'created_at': OLD, 'name': 'Mira Holloway'},
+        rng=rng,
+    )
+    assert records.targets == {'people/a', 'people/b'}
+    assert records.target_sources == {'people/a': 'seeded', 'people/b': 'dirty'}
