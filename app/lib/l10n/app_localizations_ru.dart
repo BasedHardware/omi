@@ -11016,11 +11016,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипций в ожидании $count';
-  }
-
-  @override
   String get captureSourceCall => 'Звонок';
 
   @override
@@ -12066,8 +12061,6 @@ class AppLocalizationsRu extends AppLocalizations {
         'likely': 'Вероятно',
         'soundsLike': 'Похоже на $name',
         'notPerson': 'Не $name',
-        'carried': 'По-прежнему $name. Перенесено из вашего прошлого разговора.',
-        'change': 'Изменить',
         'alsoTitle': 'Это тоже $name?',
         'alsoBody': 'Omi нашёл такой же голос в прошлых разговорах.',
         'confirmed': 'Вы подтвердили эту метку',
@@ -13015,4 +13008,42 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Отметить «$task» как выполненную?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Удалить задачу «$task»?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '«$name» и «$other» — один и тот же человек?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Объединить два повторяющихся воспоминания?';
+
+  @override
+  String get reviewProposalMemory => 'Обновить это воспоминание?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Обновить сводку для «$name»?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Применить это предложенное исправление?';
+
+  @override
+  String get reviewProposalApply => 'Применить';
+
+  @override
+  String get reviewProposalSuggested => 'Предложено';
+
+  @override
+  String get reviewProposalConflict => 'Это изменилось после предложения Dream, поэтому ничего не применено.';
 }

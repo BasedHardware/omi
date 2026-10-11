@@ -11011,11 +11011,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
-  }
-
-  @override
   String get captureSourceCall => 'ಕರೆ';
 
   @override
@@ -12061,8 +12056,6 @@ class AppLocalizationsKn extends AppLocalizations {
         'likely': 'ಸಂಭವನೀಯ',
         'soundsLike': '$name ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ',
         'notPerson': '$name ಅಲ್ಲ',
-        'carried': 'ಇನ್ನೂ $name. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.',
-        'change': 'ಬದಲಿಸಿ',
         'alsoTitle': 'ಇದು ಕೂಡ $name ಅವರೇ?',
         'alsoBody': 'Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.',
         'confirmed': 'ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ',
@@ -13008,4 +13001,42 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task” ಅನ್ನು ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸುವುದೇ?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '“$task” ಕಾರ್ಯವನ್ನು ತೆಗೆದುಹಾಕುವುದೇ?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name” ಮತ್ತು “$other” ಒಂದೇ ವ್ಯಕ್ತಿಯೇ?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'ಎರಡು ನಕಲು ನೆನಪುಗಳನ್ನು ವಿಲೀನಗೊಳಿಸುವುದೇ?';
+
+  @override
+  String get reviewProposalMemory => 'ಈ ನೆನಪನ್ನು ನವೀಕರಿಸುವುದೇ?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name” ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸುವುದೇ?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'ಈ ಸೂಚಿಸಿದ ತಿದ್ದುಪಡಿಯನ್ನು ಅನ್ವಯಿಸುವುದೇ?';
+
+  @override
+  String get reviewProposalApply => 'ಅನ್ವಯಿಸಿ';
+
+  @override
+  String get reviewProposalSuggested => 'ಸೂಚಿಸಲಾಗಿದೆ';
+
+  @override
+  String get reviewProposalConflict => 'Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.';
 }

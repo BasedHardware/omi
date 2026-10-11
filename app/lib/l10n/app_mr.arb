@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
     "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
     "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
-    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
     "captureSourceCall": "कॉल",
     "captureSourcePhoneMic": "फोन माइक",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{आवाज शिकला} pending{आवाज शिकत आहे…} disabled{आवाज जतन करणे बंद आहे} other{आवाज अजून शिकलेला नाही}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi पुढच्या वेळी {name} यांना ओळखेल.} pending{यास काही सेकंद लागतात.} disabled{Omi ला {name} यांना ओळखता यावे म्हणून सेटिंग्जमध्ये आवाज जतन करणे चालू करा.} other{Omi ला {name} यांचे आणखी स्पष्ट बोलणे हवे आहे आणि तो प्रयत्न करत राहील.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{मागील 1 संभाषणात आढळला} other{मागील {count} संभाषणांमध्ये आढळला}}",
-    "speakerLabelText": "{part, select, likely{संभाव्य} soundsLike{{name} सारखा वाटतो} notPerson{{name} नाही} carried{अजूनही {name}. तुमच्या मागील संभाषणातून पुढे आणले.} change{बदला} alsoTitle{हे देखील {name} आहेत का?} alsoBody{Omi ला हाच आवाज मागील संभाषणांमध्ये आढळला.} confirmed{तुम्ही हे लेबल निश्चित केले} other{पुनरावलोकन}}",
+    "speakerLabelText": "{part, select, likely{संभाव्य} soundsLike{{name} सारखा वाटतो} notPerson{{name} नाही} alsoTitle{हे देखील {name} आहेत का?} alsoBody{Omi ला हाच आवाज मागील संभाषणांमध्ये आढळला.} confirmed{तुम्ही हे लेबल निश्चित केले} other{पुनरावलोकन}}",
     "speakerLabelTalkTime": "या आवाजाचे {duration}",
     "findDeviceNoneTitle": "कोणताही Omi सापडला नाही",
     "findDeviceNoneMessage": "ते चालू करा आणि तुमच्या फोनजवळ धरा.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "उघडले नाही? हे {address} वर पाठवा",
     "chatAppsLinkExpired": "ती लिंक कालबाह्य झाली. नवीन लिंकसाठी Telegram उघडा वर टॅप करा.",
     "chatAppsIMessageTo": "प्रति: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "“{task}” पूर्ण झाले म्हणून चिन्हांकित करायचे?",
+    "reviewProposalRetireTask": "“{task}” हे काम काढायचे?",
+    "reviewProposalMergePeople": "“{name}” आणि “{other}” एकच व्यक्ती आहेत का?",
+    "reviewProposalMergeMemories": "दोन डुप्लिकेट आठवणी एकत्र करायच्या?",
+    "reviewProposalMemory": "ही आठवण अपडेट करायची?",
+    "reviewProposalEntitySummary": "“{name}” चा सारांश अपडेट करायचा?",
+    "reviewProposalGeneric": "ही सुचवलेली दुरुस्ती लागू करायची?",
+    "reviewProposalApply": "लागू करा",
+    "reviewProposalSuggested": "सुचवलेले",
+    "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही."
 }

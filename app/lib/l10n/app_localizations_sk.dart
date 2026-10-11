@@ -10968,11 +10968,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Čakajúce transkripcie $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hovor';
 
   @override
@@ -12018,8 +12013,6 @@ class AppLocalizationsSk extends AppLocalizations {
         'likely': 'Pravdepodobne',
         'soundsLike': 'Znie ako $name',
         'notPerson': 'Nie je to $name',
-        'carried': 'Stále $name. Prevzaté z vášho posledného rozhovoru.',
-        'change': 'Zmeniť',
         'alsoTitle': 'Je to aj $name?',
         'alsoBody': 'Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.',
         'confirmed': 'Tento štítok ste potvrdili',
@@ -12965,4 +12958,42 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označiť „$task“ ako hotové?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Odstrániť úlohu „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je „$name“ tá istá osoba ako „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Zlúčiť dve duplicitné spomienky?';
+
+  @override
+  String get reviewProposalMemory => 'Aktualizovať túto spomienku?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Aktualizovať zhrnutie pre „$name“?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Použiť túto navrhovanú opravu?';
+
+  @override
+  String get reviewProposalApply => 'Použiť';
+
+  @override
+  String get reviewProposalSuggested => 'Navrhnuté';
+
+  @override
+  String get reviewProposalConflict => 'Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.';
 }

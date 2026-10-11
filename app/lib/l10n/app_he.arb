@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
-    "transcriptionsPendingCount": "תמלילים ממתינים {count}",
     "captureSourceCall": "שיחה",
     "captureSourcePhoneMic": "מיקרופון הטלפון",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{הקול נלמד} pending{לומד את הקול…} disabled{שמירת קול כבויה} other{הקול עדיין לא נלמד}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{נמצא בשיחה קודמת אחת} other{נמצא ב-{count} שיחות קודמות}}",
-    "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
+    "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
     "speakerLabelTalkTime": "{duration} מהקול הזה",
     "findDeviceNoneTitle": "לא נמצא Omi",
     "findDeviceNoneMessage": "הפעילו אותו והחזיקו אותו ליד הטלפון.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "לא נפתח? שלחו את זה אל {address}",
     "chatAppsLinkExpired": "הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.",
     "chatAppsIMessageTo": "אל: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "לסמן את “{task}” כבוצעה?",
+    "reviewProposalRetireTask": "להסיר את המשימה “{task}”?",
+    "reviewProposalMergePeople": "האם “{name}” הוא אותו אדם כמו “{other}”?",
+    "reviewProposalMergeMemories": "למזג שני זיכרונות כפולים?",
+    "reviewProposalMemory": "לעדכן את הזיכרון הזה?",
+    "reviewProposalEntitySummary": "לעדכן את הסיכום של “{name}”?",
+    "reviewProposalGeneric": "להחיל את התיקון המוצע הזה?",
+    "reviewProposalApply": "החל",
+    "reviewProposalSuggested": "מוצע",
+    "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל."
 }

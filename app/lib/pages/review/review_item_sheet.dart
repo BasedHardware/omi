@@ -44,6 +44,7 @@ class ReviewItemDetail extends StatelessWidget {
       ReviewItemKind.task => _TaskDetail(item: item, onDone: done),
       ReviewItemKind.samePerson => _SamePersonDetail(item: item, onDone: done),
       ReviewItemKind.spelling => _SpellingDetail(item: item, onDone: done),
+      ReviewItemKind.agentProposal => _ProposalDetail(item: item, onDone: done),
     };
   }
 }
@@ -211,7 +212,9 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
             children: [
               ReviewPlayButton(playing: playing, onPressed: () => provider.togglePlay(widget.item)),
               const SizedBox(width: OmiSpacing.sm),
-              Expanded(child: _Waveform(seed: speaker.promptId.hashCode, active: playing)),
+              Expanded(
+                child: _Waveform(seed: speaker.promptId.hashCode, active: playing),
+              ),
             ],
           ),
         ),
@@ -335,8 +338,15 @@ class _TranscriptLineView extends StatelessWidget {
                 Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: label, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      if (time != null) TextSpan(text: ' · $time', style: TextStyle(color: OmiColors.textSecondary)),
+                      TextSpan(
+                        text: label,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (time != null)
+                        TextSpan(
+                          text: ' · $time',
+                          style: TextStyle(color: OmiColors.textSecondary),
+                        ),
                     ],
                   ),
                   style: OmiType.footnote,
@@ -522,11 +532,17 @@ class _TaskDetailState extends State<_TaskDetail> {
                     runSpacing: OmiSpacing.xs,
                     children: [
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonAlreadyDone, onPressed: () => dismiss(TaskDismissReason.alreadyDone)),
+                        label: l10n.reviewReasonAlreadyDone,
+                        onPressed: () => dismiss(TaskDismissReason.alreadyDone),
+                      ),
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonNotMine, onPressed: () => dismiss(TaskDismissReason.notMine)),
+                        label: l10n.reviewReasonNotMine,
+                        onPressed: () => dismiss(TaskDismissReason.notMine),
+                      ),
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonNotUseful, onPressed: () => dismiss(TaskDismissReason.notUseful)),
+                        label: l10n.reviewReasonNotUseful,
+                        onPressed: () => dismiss(TaskDismissReason.notUseful),
+                      ),
                     ],
                   ),
                 ),
@@ -751,6 +767,79 @@ class _SpellingDetailState extends State<_SpellingDetail> {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+// --- Dream suggestion ----------------------------------------------------------------------
+
+class _ProposalDetail extends StatelessWidget {
+  const _ProposalDetail({required this.item, required this.onDone});
+
+  final ReviewItem item;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final proposal = item.agentProposal!;
+    final reason = proposal.reason;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (proposal.before.isNotEmpty || proposal.after.isNotEmpty) ...[
+          _EvidenceBox(
+            children: [
+              if (proposal.before.isNotEmpty) _ProposalValue(label: l10n.current, value: proposal.before),
+              if (proposal.before.isNotEmpty && proposal.after.isNotEmpty) const SizedBox(height: OmiSpacing.sm),
+              if (proposal.after.isNotEmpty) _ProposalValue(label: l10n.reviewProposalSuggested, value: proposal.after),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.md),
+        ],
+        if (reason != null) Text(reason, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
+        _Actions(
+          primary: OmiButton(
+            label: l10n.reviewProposalApply,
+            onPressed: () => _send(context, item, const ReviewAnswer.acceptProposal(), onDone),
+          ),
+          secondary: [
+            OmiButton.secondary(
+              label: l10n.dismiss,
+              onPressed: () => _send(context, item, const ReviewAnswer.dismissProposal(), onDone),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.xs),
+          child: OmiButton.secondary(
+            label: l10n.reviewNotSure,
+            onPressed: () => _send(context, item, const ReviewAnswer.notSure(), onDone),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProposalValue extends StatelessWidget {
+  const _ProposalValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: 3),
+        Text(value, style: OmiType.callout),
       ],
     );
   }

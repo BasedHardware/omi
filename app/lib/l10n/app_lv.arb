@@ -3467,7 +3467,6 @@
     "claudeDesktopConnectorSetup": "Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
     "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
-    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}",
     "captureSourceCall": "Zvans",
     "captureSourcePhoneMic": "Tālruņa mikrofons",
     "captureStatusWithSource": "{status} · {source}",
@@ -3721,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Balss apgūta} pending{Apgūst balsi…} disabled{Balss saglabāšana ir izslēgta} other{Balss vēl nav apgūta}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi nākamreiz atpazīs {name}.} pending{Tas aizņem dažas sekundes.} disabled{Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt {name}.} other{Omi vajag vairāk skaidras {name} runas, un tas turpinās mēģināt.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Atrasta 1 iepriekšējā sarunā} other{Atrasta iepriekšējās sarunās: {count}}}",
-    "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
+    "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
     "speakerLabelTalkTime": "{duration} no šīs balss",
     "findDeviceNoneTitle": "Omi netika atrasts",
     "findDeviceNoneMessage": "Ieslēdziet to un turiet tālruņa tuvumā.",
@@ -3991,5 +3990,15 @@
     "chatAppsIMessageTo": "Kam: Omi · {address}",
     "chatAppsInsightsSubtitle": "Ļaujiet Omi šeit nosūtīt kopsavilkumu vai ieskatu.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…"
+    "chatAppsTelegramWaiting": "Gaidām, kamēr pieskarsieties Sākt Telegram…",
+    "reviewProposalCloseTask": "Atzīmēt “{task}” kā paveiktu?",
+    "reviewProposalRetireTask": "Noņemt uzdevumu “{task}”?",
+    "reviewProposalMergePeople": "Vai “{name}” ir tā pati persona, kas “{other}”?",
+    "reviewProposalMergeMemories": "Apvienot divas dublētas atmiņas?",
+    "reviewProposalMemory": "Atjaunināt šo atmiņu?",
+    "reviewProposalEntitySummary": "Atjaunināt “{name}” kopsavilkumu?",
+    "reviewProposalGeneric": "Lietot šo ieteikto labojumu?",
+    "reviewProposalApply": "Lietot",
+    "reviewProposalSuggested": "Ieteikts",
+    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots."
 }

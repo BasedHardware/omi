@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.",
     "transcriptionUnavailableRecordingContinues": "رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود",
     "transcriptionsPendingFraction": "رونویسی‌های در انتظار {pending}/{total}",
-    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}",
     "captureSourceCall": "تماس",
     "captureSourcePhoneMic": "میکروفون تلفن",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{صدا یاد گرفته شد} pending{در حال یادگیری صدا…} disabled{ذخیره صدا خاموش است} other{صدا هنوز یاد گرفته نشده}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi دفعه بعد {name} را تشخیص می‌دهد.} pending{این کار چند ثانیه طول می‌کشد.} disabled{ذخیره صداها را در تنظیمات روشن کنید تا Omi بتواند {name} را تشخیص دهد.} other{Omi به گفتار واضح‌تری از {name} نیاز دارد و به تلاش ادامه می‌دهد.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{در 1 گفتگوی قبلی پیدا شد} other{در {count} گفتگوی قبلی پیدا شد}}",
-    "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
+    "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
     "speakerLabelTalkTime": "{duration} از این صدا",
     "findDeviceNoneTitle": "Omi پیدا نشد",
     "findDeviceNoneMessage": "آن را روشن کنید و نزدیک تلفن خود نگه دارید.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "باز نشد؟ این را به {address} پیامک کنید",
     "chatAppsLinkExpired": "آن پیوند منقضی شد. برای دریافت پیوند جدید روی باز کردن Telegram ضربه بزنید.",
     "chatAppsIMessageTo": "به: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "«{task}» به‌عنوان انجام‌شده علامت بخورد؟",
+    "reviewProposalRetireTask": "وظیفهٔ «{task}» حذف شود؟",
+    "reviewProposalMergePeople": "آیا «{name}» همان «{other}» است؟",
+    "reviewProposalMergeMemories": "دو خاطرهٔ تکراری ادغام شوند؟",
+    "reviewProposalMemory": "این خاطره به‌روزرسانی شود؟",
+    "reviewProposalEntitySummary": "خلاصهٔ «{name}» به‌روزرسانی شود؟",
+    "reviewProposalGeneric": "این اصلاح پیشنهادی اعمال شود؟",
+    "reviewProposalApply": "اعمال",
+    "reviewProposalSuggested": "پیشنهادی",
+    "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد."
 }

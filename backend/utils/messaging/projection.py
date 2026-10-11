@@ -2,10 +2,11 @@
 
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from utils.messaging.contracts import Principal
+from utils.messaging.contracts import ActionReceipt, Principal
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,9 @@ class SurfaceRuntime:
     session_id: str | None = None
     guard: Any = None
     persist: Any = None
-    write_reports: list[str] | None = None
+    action_receipts: list[ActionReceipt] | None = None
+    turn_id: str | None = None
+    request_at: datetime | None = None
     withhold_private_memories: bool = False
 
 

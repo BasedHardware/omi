@@ -3467,7 +3467,6 @@
     "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors lägger du till en anpassad connector och klistrar in server-URL:en. Om Claude ber om ett avancerat OAuth Client ID använder du värdet nedan och lämnar hemligheten tom — använd aldrig din MCP API-nyckel som OAuth-hemlighet.",
     "transcriptionUnavailableRecordingContinues": "Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare",
     "transcriptionsPendingFraction": "Transkriptioner i kö {pending}/{total}",
-    "transcriptionsPendingCount": "Transkriptioner i kö {count}",
     "captureSourceCall": "Samtal",
     "captureSourcePhoneMic": "Telefonmikrofon",
     "captureStatusWithSource": "{status} · {source}",
@@ -3721,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Rösten är inlärd} pending{Lär sig rösten…} disabled{Sparande av röst är avstängt} other{Rösten är inte inlärd ännu}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi känner igen {name} nästa gång.} pending{Det tar några sekunder.} disabled{Aktivera sparande av röster i Inställningar så att Omi kan känna igen {name}.} other{Omi behöver mer tydligt tal från {name} och fortsätter försöka.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Hittades i 1 tidigare konversation} other{Hittades i {count} tidigare konversationer}}",
-    "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
+    "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
     "speakerLabelTalkTime": "{duration} av den här rösten",
     "findDeviceNoneTitle": "Ingen Omi hittades",
     "findDeviceNoneMessage": "Slå på den och håll den nära telefonen.",
@@ -3991,5 +3990,15 @@
     "chatAppsIMessageTo": "Till: Omi · {address}",
     "chatAppsInsightsSubtitle": "Låt Omi skicka en sammanfattning eller en insikt hit.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Väntar på att du trycker på Starta i Telegram …"
+    "chatAppsTelegramWaiting": "Väntar på att du trycker på Starta i Telegram …",
+    "reviewProposalCloseTask": "Markera ”{task}” som klar?",
+    "reviewProposalRetireTask": "Ta bort uppgiften ”{task}”?",
+    "reviewProposalMergePeople": "Är ”{name}” samma person som ”{other}”?",
+    "reviewProposalMergeMemories": "Slå ihop två dubbletter av minnen?",
+    "reviewProposalMemory": "Uppdatera det här minnet?",
+    "reviewProposalEntitySummary": "Uppdatera sammanfattningen för ”{name}”?",
+    "reviewProposalGeneric": "Tillämpa den här föreslagna rättelsen?",
+    "reviewProposalApply": "Tillämpa",
+    "reviewProposalSuggested": "Föreslaget",
+    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades."
 }

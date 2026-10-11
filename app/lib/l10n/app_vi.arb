@@ -3467,7 +3467,6 @@
     "claudeDesktopConnectorSetup": "Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.",
     "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
     "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
-    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}",
     "captureSourceCall": "Cuộc gọi",
     "captureSourcePhoneMic": "Micro điện thoại",
     "captureStatusWithSource": "{status} · {source}",
@@ -3721,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Đã học giọng nói} pending{Đang học giọng nói…} disabled{Tính năng lưu giọng nói đang tắt} other{Chưa học giọng nói}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Tìm thấy trong 1 cuộc trò chuyện trước} other{Tìm thấy trong {count} cuộc trò chuyện trước}}",
-    "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
+    "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
     "speakerLabelTalkTime": "{duration} từ giọng nói này",
     "findDeviceNoneTitle": "Không tìm thấy Omi",
     "findDeviceNoneMessage": "Hãy bật thiết bị và giữ gần điện thoại của bạn.",
@@ -3991,5 +3990,15 @@
     "chatAppsIMessageTo": "Đến: Omi · {address}",
     "chatAppsInsightsSubtitle": "Cho phép Omi gửi bản tóm tắt hoặc thông tin chi tiết cho bạn tại đây.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…"
+    "chatAppsTelegramWaiting": "Đang chờ bạn chạm vào Bắt đầu trong Telegram…",
+    "reviewProposalCloseTask": "Đánh dấu “{task}” là đã xong?",
+    "reviewProposalRetireTask": "Xóa việc “{task}”?",
+    "reviewProposalMergePeople": "“{name}” có phải là cùng người với “{other}” không?",
+    "reviewProposalMergeMemories": "Gộp hai ký ức trùng lặp?",
+    "reviewProposalMemory": "Cập nhật ký ức này?",
+    "reviewProposalEntitySummary": "Cập nhật bản tóm tắt cho “{name}”?",
+    "reviewProposalGeneric": "Áp dụng bản sửa được đề xuất này?",
+    "reviewProposalApply": "Áp dụng",
+    "reviewProposalSuggested": "Đề xuất",
+    "reviewProposalConflict": "Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng."
 }

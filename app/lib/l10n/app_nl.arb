@@ -3467,7 +3467,6 @@
     "claudeDesktopConnectorSetup": "Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.",
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
     "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripties in behandeling {count}",
     "captureSourceCall": "Gesprek",
     "captureSourcePhoneMic": "Telefoonmicrofoon",
     "captureStatusWithSource": "{status} · {source}",
@@ -3721,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Stem geleerd} pending{Stem leren…} disabled{Stem opslaan staat uit} other{Stem nog niet geleerd}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi herkent {name} de volgende keer.} pending{Dit duurt een paar seconden.} disabled{Zet stemmen opslaan aan in Instellingen zodat Omi {name} kan herkennen.} other{Omi heeft meer duidelijke spraak van {name} nodig en blijft het proberen.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Gevonden in 1 eerder gesprek} other{Gevonden in {count} eerdere gesprekken}}",
-    "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} carried{Nog steeds {name}. Overgenomen uit je laatste gesprek.} change{Wijzigen} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
+    "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
     "speakerLabelTalkTime": "{duration} van deze stem",
     "findDeviceNoneTitle": "Geen Omi gevonden",
     "findDeviceNoneMessage": "Zet hem aan en houd hem bij je telefoon.",
@@ -3991,5 +3990,15 @@
     "chatAppsIMessageTo": "Aan: Omi · {address}",
     "chatAppsInsightsSubtitle": "Laat Omi je hier een samenvatting of inzicht sturen.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…"
+    "chatAppsTelegramWaiting": "Wachten tot je in Telegram op Start tikt…",
+    "reviewProposalCloseTask": "“{task}” als klaar markeren?",
+    "reviewProposalRetireTask": "De taak “{task}” verwijderen?",
+    "reviewProposalMergePeople": "Is “{name}” dezelfde persoon als “{other}”?",
+    "reviewProposalMergeMemories": "Twee dubbele herinneringen samenvoegen?",
+    "reviewProposalMemory": "Deze herinnering bijwerken?",
+    "reviewProposalEntitySummary": "De samenvatting van “{name}” bijwerken?",
+    "reviewProposalGeneric": "Deze voorgestelde correctie toepassen?",
+    "reviewProposalApply": "Toepassen",
+    "reviewProposalSuggested": "Voorgesteld",
+    "reviewProposalConflict": "Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast."
 }

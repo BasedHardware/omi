@@ -52,7 +52,10 @@ Production bindings are declared only for Cloud Run `backend`.
 
 The actual registered routes are `/v1/messaging/webhooks/telegram` and
 `/v1/messaging/webhooks/imessage`; setup-guide `/v1/channels/...` paths were placeholders.
-Startup/periodic recovery drains only pending jobs. Running jobs and leases remain fenced.
+Startup/periodic recovery drains only pending jobs. Failed running jobs remain fenced.
+Handled worker failures, including a finished turn's CancelledError, release the
+lease. In-flight task cancellation and process loss keep the lease for operator
+reconciliation.
 
 ## Media, tools and presentation
 
@@ -101,17 +104,68 @@ primitive. No deploy, queue workflow or automatic ambiguous replay is added.
 
 ## Undo
 
-Memory preference and task creation/update, playbook/trigger creation, and standalone
-fact closure record a surface-scoped encrypted inverse receipt. User-visible text reports
-the write and a five-minute undo window; Telegram adds an undo callback. App behavior
-adds no inverse IO. Receipts are removed with their session on unlink/account deletion.
-Undo claims once; ambiguous inverse outcomes remain `running` and are never replayed.
-Task restoration compares the complete observed row inside a transaction and cancels or
-restores scheduled reminders. Memory inverses use the universal `MemoryService`; closed
-facts use its lineage-preserving reopen operation. Changed/historical memories fail closed.
-Calendar/external writes retain their existing tools and are outside these local inverse
-receipts. A memory content check can race a separate surface mutation before service entry;
-full conditional cross-surface memory inverse admission remains a rollout risk.
+Shared memory/task tools emit structured `ActionReceipt` values from the confirmed
+write's canonical object ID and outcome data. They reuse the in-app `memoryLink`
+(`MemoryLinkSpec`) and `taskCard` (`TaskCardSpec`) vocabulary. No model text is parsed
+into write authority. Memory preference and task creation/update, playbook/trigger
+creation, and standalone fact closure record an encrypted inverse per action.
+The assistant answer has no undo footer or controls. Each action gets a separate
+confirmation bubble. Telegram attaches `Undo` with that receipt's opaque ID, not a
+"last write" command. The adapter acknowledges every supported callback immediately.
+After successful undo it edits the persisted confirmation message to `— Undone` and
+removes its button. A second tap never repeats the inverse; an interrupted edit can
+be retried separately. Legacy unscoped Telegram controls cannot reverse a newer write.
+
+Linq has no inline buttons: it renders a plain action receipt and accepts text `undo`
+only when the latest write turn contains exactly one receipt. Multiple writes are
+ambiguous and fail closed. A subsequent write invalidates the text selector before
+mutation. Specific Telegram receipts survive later writes. The inverse admission
+window remains five minutes, without model narration of commands/time windows.
+App behavior adds no inverse IO. Each new write deletes up to 100 receipts expired
+for more than a day, bounding active-session snapshot accumulation while preserving
+a day for cleanup/edit reconciliation. Idle sessions retain receipts until the next
+write or session removal; no Firestore TTL policy is assumed. Receipts are removed
+with their session on unlink or account deletion. Repeated Linq text undo replies
+“Already undone”; acknowledged Telegram taps remain no-ops.
+
+An inverse atomically claims its own receipt once. A tracked async coordinator runs
+that domain operation on `postprocess_executor`, outside the chat lease and DB worker
+pool, because canonical privacy cleanup may take minutes. Other chat turns can proceed.
+The memory content check is not in the same transaction as `MemoryService` delete or
+update, so a concurrent correction during that cleanup can still be overwritten.
+That race is limited to one user's fact, the five-minute receipt window, and one
+claim; it is not cross-user. It remains a rollout risk, not a reason to hold the
+chat lease.
+Inverse exceptions send a guarded short error and leave that inverse `running` for
+reconciliation; ambiguous effects are never replayed. Ordinary settled turn failures
+retain the running inbox row for reconciliation, try an error reply only before accepted
+delivery, and release the surface lease. A settled FIFO marker allows the next update
+without replaying this row. Shutdown cancellation retains fencing when executor/provider work may still be alive.
+
+Task restoration compares the complete observed row inside a transaction and cancels
+or restores scheduled reminders. Memory inverses use the universal `MemoryService`;
+closed facts use its lineage-preserving reopen operation. Changed/historical memories
+fail closed. Calendar/external writes retain their existing tools and are outside these
+local inverse receipts. A memory content check can race a separate mutation before
+service entry; full conditional memory inverse admission remains a rollout risk.
+
+Dated reminders use the same `create_action_item_tool` and existing reminder data/push
+path as Omi chat. Delivery is through Omi's reminder system, not an unsolicited Telegram
+message (this rollout permits replies only). The channel skill explains that limit;
+a Telegram-only delivery request must get an explicit limitation, not a promise.
+
+## First-message feedback
+
+Typing begins immediately after linked-account admission, before session creation,
+media preparation, history/digest work and model setup. It refreshes every four seconds
+on Telegram; provider typing failures have a two-second budget and cannot abort the turn.
+A content-free `Messaging phase=typing` elapsed time is logged. First-use awareness reads
+only twenty recent messages; older context remains available through history/memory
+tools. Channels skip the unused legacy prompt/context load because `chat_mount` is their
+sole prompt authority. App prompt selection and bytes remain unchanged.
+
+The first live QA evidence and fixture measurements are recorded in
+[the channel runbook](runbooks/messaging-channels.md#first-live-qa-2026-10-11).
 
 ## Verification layers
 
@@ -165,3 +219,64 @@ runtime payload access. The dev secret project and four secret names are known f
 setup guide; their existence/enabled versions remain unconfirmed because `ro-dev` metadata
 reads returned permission denied. Linq's written AI-use,
 retention, fallback and production-number assurances also remain provider rollout risks.
+
+## Ordered backlog and reminder clock
+
+An identity's inbox is admitted in `created_at` order inside the claim transaction.
+The oldest pending or unsettled running job is the only eligible head. Settled
+failures retain their running row and carry `fifo_settled_at`; they are never replayed
+and no longer block admission of the next job. Recovery scans in
+that order; after release, the worker wakes the next pending head. An ambiguous
+running head still needs operator reconciliation, never TTL stealing. Private
+channel identities have one thread, so this also serializes their normal replies.
+Undo cleanup edits its original receipt; stale/duplicate callbacks do not emit new
+unscoped replies. Linq text undo pins the selected receipt before background work.
+Confirmed receipts and undo requests enter the ordered channel history.
+
+The channel runtime carries the original message time. Telegram normal messages
+use the verified update's `message.date`; callbacks lack a tap timestamp and use
+first webhook admission time. Linq uses the message `sent_at` (`data.sent_at` on
+`2026-02-03`, `data.message.sent_at` on `2025-01-01`), not webhook `created_at`
+or worker time. Admission clamps a provider clock more than five minutes ahead
+to server time, and raises a clock older than one day up to that one-day floor,
+so a skewed or replayed stamp cannot schedule a far-future reminder or be
+rewritten onto processing time. A relative reminder whose due time is already
+past is saved at that instant and reported as missed; the tool does not ask the
+model to pick a new future time. Shaped evidence
+includes a server-verified request clock in the user's timezone. Relative reminders
+use `create_action_item_tool(due_in_minutes=N)`, which computes `due_at` from that
+original time. A reminder is an action item, not a separate scheduled-message object.
+Future confirmations state phone delivery through Omi's silent FCM/local-notification
+path. If backlog makes the original time past, save that due time, report the missed
+time, and do not reschedule it or claim a phone notification was scheduled.
+`omi_initiated` remains denied: no later Telegram reminder message is sent.
+
+The FIFO query adds composite index `messaging_inbox_fifo` on collection `inbox`
+(`status ASC`, `created_at ASC`, `__name__ ASC`), declared in
+`database/messaging_queries.py` and generated into `firestore.indexes.json`.
+Deploy index reconcile creates it; the backend shipment gate requires that
+composite READY on the target project before rollout. No index or
+production-state changes are performed by this PR.
+
+A busy surface lease requeues the inbox head and does not wake that same head.
+The lease holder wakes the oldest pending row on release. The thirty-second
+pending drain covers a leaked lease. That avoids a claim/wake spin.
+
+For the October 11 burst, logs establish the callback's canonical cleanup at
+09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation
+resumed at 09:31:21 and 09:31:27 on another already-existing instance of the same
+revision. The deployed lease has no TTL and no Firestore TTL policy for its collection,
+recovery polls every thirty seconds, no
+Cloud Tasks dispatcher exists for this inbox, and request-only CPU throttling was
+disabled. Those mechanisms do not supply a ten-minute automatic release. Historical
+lease release/reset was not logged and Firestore audit evidence is unavailable;
+its exact owner and trigger remain unresolved. New content-free lease acquisition,
+release, and queue-age events make future recovery timing distinguishable.
+
+The last task's stored due time was 09:35 UTC, not its message-time target 09:29.
+A reminder-cancellation send for the QA principal followed at 09:31:31. Together
+with the old single overwritten inverse document and the reported second successful
+undo, this strongly suggests the newer task was reversed by a stale callback.
+The cancellation log contains no task identifier, so this is an inference, not an
+audited object-level reversal record. Canonical-memory cleanup proves a memory
+inverse ran earlier; the available logs do not independently identify its fact.

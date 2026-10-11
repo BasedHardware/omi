@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.",
     "transcriptionUnavailableRecordingContinues": "Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней",
     "transcriptionsPendingFraction": "Транскрыпцый у чаканні {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}",
     "captureSourceCall": "Званок",
     "captureSourcePhoneMic": "Мікрафон тэлефона",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Голас запомнены} pending{Вывучэнне голасу…} disabled{Захаванне голасу выключана} other{Голас яшчэ не вывучаны}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Ёсць у 1 ранейшай размове} other{Ёсць у ранейшых размовах: {count}}}",
-    "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
+    "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
     "speakerLabelTalkTime": "{duration} гэтага голасу",
     "findDeviceNoneTitle": "Omi не знойдзены",
     "findDeviceNoneMessage": "Уключыце яго і трымайце побач з тэлефонам.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "Не адкрылася? Адпраў гэта на {address}",
     "chatAppsLinkExpired": "Тэрмін дзеяння спасылкі скончыўся. Націсні «Адкрыць Telegram», каб атрымаць новую.",
     "chatAppsIMessageTo": "Каму: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Пазначыць «{task}» як выкананае?",
+    "reviewProposalRetireTask": "Выдаліць задачу «{task}»?",
+    "reviewProposalMergePeople": "«{name}» і «{other}» — адзін і той жа чалавек?",
+    "reviewProposalMergeMemories": "Аб’яднаць два дубліраваныя ўспаміны?",
+    "reviewProposalMemory": "Абнавіць гэты ўспамін?",
+    "reviewProposalEntitySummary": "Абнавіць зводку для «{name}»?",
+    "reviewProposalGeneric": "Ужыць гэта прапанаванае выпраўленне?",
+    "reviewProposalApply": "Ужыць",
+    "reviewProposalSuggested": "Прапанавана",
+    "reviewProposalConflict": "Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта."
 }

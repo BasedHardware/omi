@@ -3502,7 +3502,6 @@
     "claudeDesktopConnectorSetup": "Sur Claude Desktop → Settings → Connectors, ajoutez un connecteur personnalisé et collez l'URL du serveur. Si Claude demande un Client ID OAuth avancé, utilisez la valeur ci-dessous et laissez le secret vide — n'utilisez jamais votre clé API MCP comme secret OAuth.",
     "transcriptionUnavailableRecordingContinues": "Les transcriptions sont indisponibles, l'enregistrement continue sur l'appareil et sera traité plus tard",
     "transcriptionsPendingFraction": "Transcriptions en attente {pending}/{total}",
-    "transcriptionsPendingCount": "Transcriptions en attente {count}",
     "captureSourceCall": "Appel",
     "captureSourcePhoneMic": "Micro du téléphone",
     "captureStatusWithSource": "{status} · {source}",
@@ -3756,7 +3755,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Voix apprise} pending{Apprentissage de la voix…} disabled{L’enregistrement de la voix est désactivé} other{Voix pas encore apprise}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconnaîtra {name} la prochaine fois.} pending{Cela prend quelques secondes.} disabled{Activez l’enregistrement des voix dans les Réglages pour qu’Omi puisse reconnaître {name}.} other{Omi a besoin d’une parole plus claire de {name} et continuera d’essayer.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Trouvée dans 1 conversation précédente} other{Trouvée dans {count} conversations précédentes}}",
-    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
     "speakerLabelTalkTime": "{duration} de cette voix",
     "findDeviceNoneTitle": "Aucun Omi trouvé",
     "findDeviceNoneMessage": "Allumez-le et tenez-le près de votre téléphone.",
@@ -4026,5 +4025,15 @@
     "chatAppsIMessageTo": "À : Omi · {address}",
     "chatAppsInsightsSubtitle": "Laissez Omi vous envoyer un récap ou une idée ici.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "En attente de votre appui sur Démarrer dans Telegram…"
+    "chatAppsTelegramWaiting": "En attente de votre appui sur Démarrer dans Telegram…",
+    "reviewProposalCloseTask": "Marquer « {task} » comme terminée ?",
+    "reviewProposalRetireTask": "Supprimer la tâche « {task} » ?",
+    "reviewProposalMergePeople": "« {name} » est-il la même personne que « {other} » ?",
+    "reviewProposalMergeMemories": "Fusionner deux souvenirs en double ?",
+    "reviewProposalMemory": "Mettre à jour ce souvenir ?",
+    "reviewProposalEntitySummary": "Mettre à jour le résumé de « {name} » ?",
+    "reviewProposalGeneric": "Appliquer cette correction suggérée ?",
+    "reviewProposalApply": "Appliquer",
+    "reviewProposalSuggested": "Suggéré",
+    "reviewProposalConflict": "Ceci a changé depuis la suggestion de Dream, donc rien n'a été appliqué."
 }

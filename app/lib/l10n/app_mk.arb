@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна.",
     "transcriptionUnavailableRecordingContinues": "Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна",
     "transcriptionsPendingFraction": "Чекаат транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чекаат транскрипции {count}",
     "captureSourceCall": "Повик",
     "captureSourcePhoneMic": "Микрофон на телефонот",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Гласот е научен} pending{Се учи гласот…} disabled{Зачувувањето на глас е исклучено} other{Гласот сѐ уште не е научен}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Пронајден во 1 претходен разговор} other{Пронајден во {count} претходни разговори}}",
-    "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
+    "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
     "speakerLabelTalkTime": "{duration} од овој глас",
     "findDeviceNoneTitle": "Не е пронајден Omi",
     "findDeviceNoneMessage": "Вклучете го и држете го близу до телефонот.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "Не се отвори? Испратете го ова на {address}",
     "chatAppsLinkExpired": "Таа врска истече. Допрете Отвори Telegram за нова.",
     "chatAppsIMessageTo": "До: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Да се означи „{task}“ како завршена?",
+    "reviewProposalRetireTask": "Да се отстрани задачата „{task}“?",
+    "reviewProposalMergePeople": "Дали „{name}“ е истата личност како „{other}“?",
+    "reviewProposalMergeMemories": "Да се спојат две дупликатни сеќавања?",
+    "reviewProposalMemory": "Да се ажурира ова сеќавање?",
+    "reviewProposalEntitySummary": "Да се ажурира резимето за „{name}“?",
+    "reviewProposalGeneric": "Да се примени оваа предложена поправка?",
+    "reviewProposalApply": "Примени",
+    "reviewProposalSuggested": "Предложено",
+    "reviewProposalConflict": "Ова се промени откако Dream го предложи, па ништо не е применето."
 }

@@ -10996,11 +10996,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Laukiančios transkripcijos $count';
-  }
-
-  @override
   String get captureSourceCall => 'Skambutis';
 
   @override
@@ -12045,8 +12040,6 @@ class AppLocalizationsLt extends AppLocalizations {
         'likely': 'Tikėtina',
         'soundsLike': 'Skamba kaip $name',
         'notPerson': 'Ne $name',
-        'carried': 'Vis dar $name. Perkelta iš paskutinio pokalbio.',
-        'change': 'Keisti',
         'alsoTitle': 'Ar tai taip pat $name?',
         'alsoBody': 'Omi rado tą patį balsą ankstesniuose pokalbiuose.',
         'confirmed': 'Patvirtinote šią žymą',
@@ -12993,4 +12986,42 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Pažymėti „$task“ kaip atliktą?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Pašalinti užduotį „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Ar „$name“ yra tas pats asmuo kaip „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Sujungti du pasikartojančius prisiminimus?';
+
+  @override
+  String get reviewProposalMemory => 'Atnaujinti šį prisiminimą?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Atnaujinti „$name“ santrauką?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Pritaikyti šį siūlomą pataisymą?';
+
+  @override
+  String get reviewProposalApply => 'Pritaikyti';
+
+  @override
+  String get reviewProposalSuggested => 'Siūloma';
+
+  @override
+  String get reviewProposalConflict => 'Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.';
 }

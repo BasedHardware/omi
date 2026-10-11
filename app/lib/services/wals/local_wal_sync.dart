@@ -2557,6 +2557,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
               });
               for (final w in members) {
+                if ((s.result?.newConversationIds.length ?? 0) == 0 &&
+                    (s.result?.updatedConversationIds.length ?? 0) == 0) {
+                  DebugLogManager.logEvent('reconcile_completed_empty', {
+                    'jobId': w.jobId,
+                    'walId': w.id,
+                    'walKey': _durableKey(w),
+                    'newConversations': s.result?.newConversationIds.length ?? 0,
+                    'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
+                    'processedSegments': s.processedSegments,
+                    'totalSegments': s.totalSegments,
+                    'retryCount': w.retryCount,
+                    'capacityLimited': false,
+                    'retryCountBumped': false,
+                  });
+                }
                 changed = true;
                 w.status = WalStatus.synced;
                 w.jobId = null;

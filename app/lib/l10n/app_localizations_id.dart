@@ -10980,11 +10980,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripsi tertunda $count';
-  }
-
-  @override
   String get captureSourceCall => 'Panggilan';
 
   @override
@@ -12029,8 +12024,6 @@ class AppLocalizationsId extends AppLocalizations {
         'likely': 'Mungkin',
         'soundsLike': 'Terdengar seperti $name',
         'notPerson': 'Bukan $name',
-        'carried': 'Masih $name. Dilanjutkan dari percakapan terakhir Anda.',
-        'change': 'Ubah',
         'alsoTitle': 'Apakah ini juga $name?',
         'alsoBody': 'Omi menemukan suara yang sama di percakapan sebelumnya.',
         'confirmed': 'Anda telah mengonfirmasi label ini',
@@ -12979,4 +12972,42 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Tandai “$task” sebagai selesai?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Hapus tugas “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Apakah “$name” orang yang sama dengan “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Gabungkan dua memori duplikat?';
+
+  @override
+  String get reviewProposalMemory => 'Perbarui memori ini?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Perbarui ringkasan untuk “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Terapkan perbaikan yang disarankan ini?';
+
+  @override
+  String get reviewProposalApply => 'Terapkan';
+
+  @override
+  String get reviewProposalSuggested => 'Disarankan';
+
+  @override
+  String get reviewProposalConflict => 'Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan.';
 }

@@ -2609,13 +2609,21 @@ _add(
 )
 
 
-# Messaging queries use only collection scans or document-id order; no composite indexes.
+# Messaging FIFO admission owns a declared status/created_at index; remaining queries are scans.
 def _messaging_cleanup(client):
     return unittest.mock.patch.object(client, 'recursive_delete', lambda ref: None, create=True)
 
 
 def _messaging_identity(client, combo, trial):
     client.documents['channel_identities/link'] = {'uid': UID, 'active': True}
+
+
+def _messaging_claim(client, combo, trial):
+    client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
+
+
+def _messaging_decryption(client):
+    return unittest.mock.patch('utils.encryption.decrypt', lambda value, uid: '{}')
 
 
 def _messaging_visibility(client):
@@ -2629,6 +2637,7 @@ for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('claim', {'path': 'channel_identities/link/inbox/job'}, _messaging_claim),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):
@@ -2637,7 +2646,7 @@ for method, base, setup in (
             'database.messaging.MessagingStore.' + method,
             base={'self': _messaging_store, **base},
             setup=setup,
-            patchers=(_messaging_cleanup,),
+            patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
 _add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
@@ -2647,5 +2656,16 @@ _add(
         'database.messaging.MessagingStore.pending_jobs',
         base={'self': _messaging_store, 'channel': 'loopback', 'provider': 'fake'},
         domains={'limit': [1, 100]},
+    )
+)
+
+
+from utils.messaging.undo import UndoStore
+
+_add(
+    DriverEntry(
+        'utils.messaging.undo.UndoStore.prune_expired',
+        base={'self': UndoStore(_messaging_store), 'uid': UID, 'session': 'session'},
+        domains={'now': [None, T0]},
     )
 )

@@ -15,8 +15,26 @@ from utils.messaging.adapters.media import MEDIA_TYPES
 from utils.messaging.adapters.rendering import plain, split_text
 from utils.messaging.adapters.transport import request_json, ProviderError
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
+from utils.messaging.turn_context import bound_provider_clock, parse_provider_instant
 
 _LINK_CODE = re.compile(r'(?<![A-Fa-f0-9])([A-Fa-f0-9]{32})(?![A-Fa-f0-9])')
+
+
+def _message_clock(data, *, now=None):
+    now = now or datetime.now(timezone.utc)
+    nested = data.get('message') if isinstance(data.get('message'), dict) else None
+    values = []
+    if nested is not None:
+        values.extend((nested.get('sent_at'), nested.get('created_at')))
+    values.extend((data.get('sent_at'), data.get('received_at')))
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            return bound_provider_clock(parse_provider_instant(value), now=now)
+        except ValueError:
+            continue
+    return now
 
 
 def _link_code(text: str) -> str | None:
@@ -109,6 +127,8 @@ class LinqProvider:
         )
         # Message ID, not delivery/event ID: two received events for one message
         # must not buy duplicate ratio credit or re-execute a write.
+        # sent_at is the user's send time. Webhook created_at and local now() are
+        # delivery/processing clocks and must not anchor a relative reminder.
         return (
             ChannelMessage(
                 'imessage',
@@ -117,7 +137,7 @@ class LinqProvider:
                 chat_id,
                 message_id,
                 text,
-                datetime.now(timezone.utc),
+                _message_clock(data),
                 reply_to=message_id,
                 link_proof=proof,
                 unlink=command in ('unlink', '/unlink', 'stop', 'unsubscribe'),
@@ -141,7 +161,7 @@ class LinqProvider:
         return await self.api(
             'POST',
             '/chats/' + quote(chat, safe='') + '/messages',
-            body={'parts': parts, 'preferred_service': 'iMessage', 'idempotency_key': operation},
+            body={'message': {'parts': parts, 'idempotency_key': operation}, 'preferred_service': 'iMessage'},
             idempotent=True,
         )
 

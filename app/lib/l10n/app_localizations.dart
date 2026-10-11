@@ -20001,12 +20001,6 @@ abstract class AppLocalizations {
   /// **'Transcriptions pending {pending}/{total}'**
   String transcriptionsPendingFraction(int pending, int total);
 
-  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcriptions pending {count}'**
-  String transcriptionsPendingCount(int count);
-
   /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
   ///
   /// In en, this message translates to:
@@ -21531,10 +21525,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Found in 1 earlier conversation} other{Found in {count} earlier conversations}}'**
   String speakerLabelEarlierMatches(int count);
 
-  /// Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)
+  /// Short speaker-label texts: likely badge, sounds-like question, reject button, earlier-voice card title and body, confirmed check label, and the Review button (other)
   ///
   /// In en, this message translates to:
-  /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
+  /// **'{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}'**
   String speakerLabelText(String part, String name);
 
   /// How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)
@@ -23138,6 +23132,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OMI PRO'**
   String get chatAppsOmiPro;
+
+  /// Dream suggestion card: mark an open task as done
+  ///
+  /// In en, this message translates to:
+  /// **'Mark “{task}” as done?'**
+  String reviewProposalCloseTask(String task);
+
+  /// Dream suggestion card: remove (cancel) an open task
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the task “{task}”?'**
+  String reviewProposalRetireTask(String task);
+
+  /// Dream suggestion card: merge two people who are the same person
+  ///
+  /// In en, this message translates to:
+  /// **'Is “{name}” the same person as “{other}”?'**
+  String reviewProposalMergePeople(String name, String other);
+
+  /// Dream suggestion card: merge two duplicate memories
+  ///
+  /// In en, this message translates to:
+  /// **'Merge two duplicate memories?'**
+  String get reviewProposalMergeMemories;
+
+  /// Dream suggestion card: rewrite one memory
+  ///
+  /// In en, this message translates to:
+  /// **'Update this memory?'**
+  String get reviewProposalMemory;
+
+  /// Dream suggestion card: update a person, organization or project summary
+  ///
+  /// In en, this message translates to:
+  /// **'Update the summary for “{name}”?'**
+  String reviewProposalEntitySummary(String name);
+
+  /// Dream suggestion card fallback when the change has no specific wording
+  ///
+  /// In en, this message translates to:
+  /// **'Apply this suggested fix?'**
+  String get reviewProposalGeneric;
+
+  /// Button: apply a change Dream suggested
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get reviewProposalApply;
+
+  /// Label above the value Dream suggests, shown under the current value
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get reviewProposalSuggested;
+
+  /// Error after Apply: the item changed after Dream suggested the change, so nothing was applied
+  ///
+  /// In en, this message translates to:
+  /// **'This changed since Dream suggested it, so nothing was applied.'**
+  String get reviewProposalConflict;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

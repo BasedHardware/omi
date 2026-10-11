@@ -3467,7 +3467,6 @@
     "claudeDesktopConnectorSetup": "Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.",
     "transcriptionUnavailableRecordingContinues": "Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem",
     "transcriptionsPendingFraction": "Ootel transkriptsioonid {pending}/{total}",
-    "transcriptionsPendingCount": "Ootel transkriptsioonid {count}",
     "captureSourceCall": "Kõne",
     "captureSourcePhoneMic": "Telefoni mikrofon",
     "captureStatusWithSource": "{status} · {source}",
@@ -3721,7 +3720,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Hääl õpitud} pending{Häält õpitakse…} disabled{Hääle salvestamine on välja lülitatud} other{Häält pole veel õpitud}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Leitud 1 varasemast vestlusest} other{Leitud {count} varasemast vestlusest}}",
-    "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
+    "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
     "speakerLabelTalkTime": "{duration} sellest häälest",
     "findDeviceNoneTitle": "Omi-d ei leitud",
     "findDeviceNoneMessage": "Lülita see sisse ja hoia telefoni lähedal.",
@@ -3991,5 +3990,15 @@
     "chatAppsIMessageTo": "Kellele: Omi · {address}",
     "chatAppsInsightsSubtitle": "Luba Omil saata sulle siia kokkuvõte või ülevaade.",
     "chatAppsOmiPro": "OMI PRO",
-    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…"
+    "chatAppsTelegramWaiting": "Ootan, et puudutaksid Telegramis nuppu Alusta…",
+    "reviewProposalCloseTask": "Kas märkida „{task}“ tehtuks?",
+    "reviewProposalRetireTask": "Kas eemaldada ülesanne „{task}“?",
+    "reviewProposalMergePeople": "Kas „{name}“ on sama inimene kui „{other}“?",
+    "reviewProposalMergeMemories": "Kas liita kaks topeltmälestust?",
+    "reviewProposalMemory": "Kas uuendada seda mälestust?",
+    "reviewProposalEntitySummary": "Kas uuendada „{name}“ kokkuvõtet?",
+    "reviewProposalGeneric": "Kas rakendada see soovitatud parandus?",
+    "reviewProposalApply": "Rakenda",
+    "reviewProposalSuggested": "Soovitatud",
+    "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud."
 }

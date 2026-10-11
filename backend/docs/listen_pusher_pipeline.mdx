@@ -3125,6 +3125,56 @@ the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
 Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
+Live query admission additionally records the following closed-label counters:
+
+| Counter | Meaning and reading |
+| --- | --- |
+| `omi_speaker_id_budget_exits_total{cap="voice\|socket\|both"}` | One increment per denied reservation, classified exclusively at the same refill snapshot. Sum the three caps to recover `omi_speaker_id_match_exits_total{reason="embedding_budget"}`. `voice` means only the 12-attempt cap blocked; `socket` means only the shared bucket blocked; `both` means both blocked. |
+| `omi_speaker_id_embedding_attempts_total{outcome="reserved\|succeeded\|failed"}` | `reserved` counts synchronously spent voice attempts/socket tokens. `succeeded` means query extraction returned, even if matching subsequently rejects, loses authority, or becomes stale. `failed` means encoding/extraction raised or the caller was cancelled; a cancelled executor request may still finish remotely. Neither completion refunds budget. Completions can lag reservations. |
+| `omi_speaker_id_budget_voices_total{cap="voice\|socket\|both"}` | First denial per admitted numeric voice per matcher generation, classified by its first cap. Provider scope changes of the same numeric voice do not reset the admission cap or incidence marker. Rollovers reset this marker, including for carried voices whose attempts remain spent. |
+| `omi_speaker_id_budget_sockets_total{cap="voice\|socket\|both"}` | First denial per socket lifetime, classified by the first cap, including a voice-only denial. It counts sockets experiencing any budget denial, not exclusively sockets exhausting tokens; rollovers do not reset it. |
+
+Compare exit rates by cap to locate pressure. Compare summed exits with summed
+voice/socket incidence over a long window to distinguish repeated blocked updates
+from affected voices/sockets; these are incidence cohorts, not active gauges or
+distinct-user counts. Each counter has exactly three preinitialized label values:
+12 counter series per target, plus 12 Prometheus `_created` series. No UID, socket,
+recording, conversation, generation, speaker, or provider scope is a metric label.
+
+The first denied reservation for each voice/generation writes exactly one
+`speaker_id_budget_first_block` metadata line with `uid`, `socket`, `recording`,
+`conversation`, `generation`, numeric `speaker`, provider `scope`, spent `attempts`,
+refilled `tokens`, successful `evidence_seconds`, available `pending_seconds`, and
+exclusive `cap`. Later denials, including cap transitions, do not repeat the line.
+UIDs occur only in this log; there is no transcript, PCM, or embedding payload.
+The old per-update `speaker_id_exit reason=embedding_budget` log is suppressed;
+its legacy metric continues to increment alongside the exclusive counter.
+
+The existing metadata queue holds at most 100 pending scoped voices, coalescing
+updates by matcher generation, conversation, provider scope, and numeric speaker.
+It retains at most 128 distinct timing intervals per slot, never fills silence
+gaps, and keeps the latest segment ID. A voice already running waits in its one
+pending slot until completion, rather than occupying task slots behind its lock.
+Active suppression follows the numeric matcher lock across provider scopes and
+generations, while pending keys remain distinct. After successful extraction,
+unselected intervals beyond a query's ten seconds remain in the same queue for
+normal scheduling after completion, with a new age for the served work quantum.
+Already-pending updates retain their age and latest ID. If the queue is full,
+those intervals remain in matcher metadata for the next ordinary update.
+Failures and denials introduce no retry, and every subsequent query reserves
+through the unchanged caps.
+Before five seconds of queue age, untried voices precede previously attempted
+voices, followed by existing acoustic near-owner preference and longer pooled
+clips. Once aged, ready work wins oldest-first, so at most 99 older pending slots
+can precede it and continued updates cannot renew its age. This is a selection
+bound, not a five-second execution deadline: task capacity and active voice locks
+can still delay work. All queries retain the 10-second audio bound, 12-attempt
+voice cap, shared 16-token burst/refill of 240 per hour, and 16-task ceiling.
+Scheduling introduces no retry timer or reserved/exempt quota. Better utilization
+can change actual call counts within the same ceiling, but cannot enlarge that
+ceiling. Acceptance thresholds, margins, manual veto, contention, and generation
+publication fences are unchanged.
+
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
 `window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
 authority is unavailable records exactly one `authority_unavailable` exit, after applying known

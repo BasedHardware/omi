@@ -10986,11 +10986,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипције на чекању $count';
-  }
-
-  @override
   String get captureSourceCall => 'Позив';
 
   @override
@@ -12034,8 +12029,6 @@ class AppLocalizationsSr extends AppLocalizations {
         'likely': 'Вероватно',
         'soundsLike': 'Звучи као $name',
         'notPerson': 'Није $name',
-        'carried': 'И даље $name. Пренето из вашег последњег разговора.',
-        'change': 'Промени',
         'alsoTitle': 'Да ли је ово такође $name?',
         'alsoBody': 'Omi је пронашао исти глас у ранијим разговорима.',
         'confirmed': 'Потврдили сте ову ознаку',
@@ -12978,4 +12971,42 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označiti „$task“ kao završeno?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Ukloniti zadatak „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Da li je „$name“ ista osoba kao „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Spojiti dve duplirane uspomene?';
+
+  @override
+  String get reviewProposalMemory => 'Ažurirati ovu uspomenu?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Ažurirati rezime za „$name“?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Primeniti ovu predloženu ispravku?';
+
+  @override
+  String get reviewProposalApply => 'Primeni';
+
+  @override
+  String get reviewProposalSuggested => 'Predloženo';
+
+  @override
+  String get reviewProposalConflict => 'Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.';
 }

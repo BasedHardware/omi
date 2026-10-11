@@ -11028,11 +11028,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcrieri în așteptare $count';
-  }
-
-  @override
   String get captureSourceCall => 'Apel';
 
   @override
@@ -12078,8 +12073,6 @@ class AppLocalizationsRo extends AppLocalizations {
         'likely': 'Probabil',
         'soundsLike': 'Sună ca $name',
         'notPerson': 'Nu este $name',
-        'carried': 'Tot $name. Preluat din ultima ta conversație.',
-        'change': 'Schimbă',
         'alsoTitle': 'Este și aceasta $name?',
         'alsoBody': 'Omi a găsit aceeași voce în conversații anterioare.',
         'confirmed': 'Ai confirmat această etichetă',
@@ -13024,4 +13017,42 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Marchezi „$task” ca finalizată?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Elimini sarcina „$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '„$name” este aceeași persoană cu „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Unești două amintiri duplicate?';
+
+  @override
+  String get reviewProposalMemory => 'Actualizezi această amintire?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Actualizezi rezumatul pentru „$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Aplici această corectare sugerată?';
+
+  @override
+  String get reviewProposalApply => 'Aplică';
+
+  @override
+  String get reviewProposalSuggested => 'Sugerat';
+
+  @override
+  String get reviewProposalConflict => 'S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.';
 }

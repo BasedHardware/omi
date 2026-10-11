@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.",
     "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
-    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}",
     "captureSourceCall": "ಕರೆ",
     "captureSourcePhoneMic": "ಫೋನ್ ಮೈಕ್",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{ಧ್ವನಿಯನ್ನು ಕಲಿತಿದೆ} pending{ಧ್ವನಿಯನ್ನು ಕಲಿಯಲಾಗುತ್ತಿದೆ…} disabled{ಧ್ವನಿ ಉಳಿಸುವಿಕೆ ಆಫ್ ಆಗಿದೆ} other{ಧ್ವನಿಯನ್ನು ಇನ್ನೂ ಕಲಿತಿಲ್ಲ}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{ಹಿಂದಿನ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಕಂಡುಬಂದಿದೆ} other{ಹಿಂದಿನ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಕಂಡುಬಂದಿದೆ}}",
-    "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
+    "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
     "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
     "findDeviceNoneTitle": "ಯಾವುದೇ Omi ಕಂಡುಬಂದಿಲ್ಲ",
     "findDeviceNoneMessage": "ಅದನ್ನು ಆನ್ ಮಾಡಿ ಮತ್ತು ನಿಮ್ಮ ಫೋನ್ ಹತ್ತಿರ ಹಿಡಿದುಕೊಳ್ಳಿ.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "ತೆರೆಯಲಿಲ್ಲವೇ? ಇದನ್ನು {address} ಗೆ ಕಳುಹಿಸಿ",
     "chatAppsLinkExpired": "ಆ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿದಿದೆ. ಹೊಸದಕ್ಕಾಗಿ Telegram ತೆರೆಯಿರಿ ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "chatAppsIMessageTo": "ಗೆ: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "“{task}” ಅನ್ನು ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸುವುದೇ?",
+    "reviewProposalRetireTask": "“{task}” ಕಾರ್ಯವನ್ನು ತೆಗೆದುಹಾಕುವುದೇ?",
+    "reviewProposalMergePeople": "“{name}” ಮತ್ತು “{other}” ಒಂದೇ ವ್ಯಕ್ತಿಯೇ?",
+    "reviewProposalMergeMemories": "ಎರಡು ನಕಲು ನೆನಪುಗಳನ್ನು ವಿಲೀನಗೊಳಿಸುವುದೇ?",
+    "reviewProposalMemory": "ಈ ನೆನಪನ್ನು ನವೀಕರಿಸುವುದೇ?",
+    "reviewProposalEntitySummary": "“{name}” ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸುವುದೇ?",
+    "reviewProposalGeneric": "ಈ ಸೂಚಿಸಿದ ತಿದ್ದುಪಡಿಯನ್ನು ಅನ್ವಯಿಸುವುದೇ?",
+    "reviewProposalApply": "ಅನ್ವಯಿಸಿ",
+    "reviewProposalSuggested": "ಸೂಚಿಸಲಾಗಿದೆ",
+    "reviewProposalConflict": "Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ."
 }

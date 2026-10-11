@@ -10813,11 +10813,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '대기 중인 전사 $count';
-  }
-
-  @override
   String get captureSourceCall => '통화';
 
   @override
@@ -11850,8 +11845,6 @@ class AppLocalizationsKo extends AppLocalizations {
         'likely': '추정',
         'soundsLike': '$name님 목소리와 비슷해요',
         'notPerson': '$name님 아님',
-        'carried': '계속 $name님이에요. 지난 대화에서 이어졌어요.',
-        'change': '변경',
         'alsoTitle': '이분도 $name님인가요?',
         'alsoBody': 'Omi가 이전 대화에서 같은 목소리를 찾았어요.',
         'confirmed': '이 라벨을 확인했어요',
@@ -12788,4 +12781,42 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task”을(를) 완료로 표시할까요?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '“$task” 작업을 삭제할까요?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name”와(과) “$other”은(는) 같은 사람인가요?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => '중복된 기억 두 개를 합칠까요?';
+
+  @override
+  String get reviewProposalMemory => '이 기억을 업데이트할까요?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name”의 요약을 업데이트할까요?';
+  }
+
+  @override
+  String get reviewProposalGeneric => '이 수정 제안을 적용할까요?';
+
+  @override
+  String get reviewProposalApply => '적용';
+
+  @override
+  String get reviewProposalSuggested => '제안';
+
+  @override
+  String get reviewProposalConflict => 'Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.';
 }

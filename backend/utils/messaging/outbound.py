@@ -26,6 +26,7 @@ class ChannelReplySink:
         self.buffer = ''
         self.sequence = 0
         self.last_draft = 0
+        self.finished = False
 
     def response(self, stream, *, media_type):
         return stream
@@ -41,12 +42,13 @@ class ChannelReplySink:
         token = send_sequence.set(self.sequence)
         guard_token = send_guard.set(self.guard)
         try:
-            await self.adapter.send(self.message, text=text, artifact=artifact, draft=draft)
+            provider_id = await self.adapter.send(self.message, text=text, artifact=artifact, draft=draft)
         finally:
             send_guard.reset(guard_token)
             send_sequence.reset(token)
         if not draft:
             self.sequence += 1
+        return provider_id
 
     async def action(self, action, value):
         authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
@@ -65,6 +67,12 @@ class ChannelReplySink:
         self.sequence += 1
 
     async def typing(self, active=True):
+        # Stopping an existing indicator conveys no content and must still work
+        # after revocation, entitlement loss, or expiry of the reply window.
+        if not active:
+            if self.adapter.capabilities.typing and hasattr(self.adapter, 'typing'):
+                await self.adapter.typing(self.message, False)
+            return
         authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
         if self.guard is not None:
             await self.guard()
@@ -97,6 +105,36 @@ class ChannelReplySink:
     async def finish(self, text):
         for part in self.adapter.render(text):
             await self._send(text=part)
+        self.finished = True
+
+    async def receipt(self, receipt):
+        from utils.messaging.delivery_context import send_markup
+
+        markup = self.adapter.receipt_buttons(receipt) if hasattr(self.adapter, 'receipt_buttons') else None
+        token = send_markup.set(markup)
+        try:
+            parts = self.adapter.render(receipt.text)
+            provider_id = None
+            for index, part in enumerate(parts):
+                # Only the final part owns the button when a receipt must split.
+                send_markup.set(markup if index == len(parts) - 1 else None)
+                provider_id = await self._send(text=part)
+            return provider_id
+        finally:
+            send_markup.reset(token)
+
+    async def edit_receipt(self, result):
+        authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
+        if self.guard is not None:
+            await self.guard()
+        if hasattr(self.adapter, 'edit_receipt'):
+            from utils.messaging.delivery_context import send_guard
+
+            token = send_guard.set(self.guard)
+            try:
+                await self.adapter.edit_receipt(self.message, result)
+            finally:
+                send_guard.reset(token)
 
     async def finish_payload(self, response):
         from utils.messaging.adapters.rendering import source_phrases

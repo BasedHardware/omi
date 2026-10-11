@@ -11068,11 +11068,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcriptions en attente $count';
-  }
-
-  @override
   String get captureSourceCall => 'Appel';
 
   @override
@@ -12121,8 +12116,6 @@ class AppLocalizationsFr extends AppLocalizations {
         'likely': 'Probable',
         'soundsLike': 'Ressemble à $name',
         'notPerson': 'Pas $name',
-        'carried': 'Toujours $name. Repris de votre dernière conversation.',
-        'change': 'Modifier',
         'alsoTitle': 'Est-ce aussi $name ?',
         'alsoBody': 'Omi a retrouvé la même voix dans des conversations précédentes.',
         'confirmed': 'Vous avez confirmé cette étiquette',
@@ -13072,4 +13065,42 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Marquer « $task » comme terminée ?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Supprimer la tâche « $task » ?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '« $name » est-il la même personne que « $other » ?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Fusionner deux souvenirs en double ?';
+
+  @override
+  String get reviewProposalMemory => 'Mettre à jour ce souvenir ?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Mettre à jour le résumé de « $name » ?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Appliquer cette correction suggérée ?';
+
+  @override
+  String get reviewProposalApply => 'Appliquer';
+
+  @override
+  String get reviewProposalSuggested => 'Suggéré';
+
+  @override
+  String get reviewProposalConflict => 'Ceci a changé depuis la suggestion de Dream, donc rien n\'a été appliqué.';
 }

@@ -10988,11 +10988,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'زیرِ التوا ٹرانسکرپشن $count';
-  }
-
-  @override
   String get captureSourceCall => 'کال';
 
   @override
@@ -12037,8 +12032,6 @@ class AppLocalizationsUr extends AppLocalizations {
         'likely': 'ممکنہ',
         'soundsLike': '$name جیسی لگتی ہے',
         'notPerson': '$name نہیں',
-        'carried': 'اب بھی $name۔ آپ کی پچھلی گفتگو سے جاری۔',
-        'change': 'تبدیل کریں',
         'alsoTitle': 'کیا یہ بھی $name ہیں؟',
         'alsoBody': 'Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔',
         'confirmed': 'آپ نے اس لیبل کی تصدیق کی',
@@ -12983,4 +12976,42 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task” کو مکمل نشان زد کریں؟';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'کام “$task” ہٹا دیں؟';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'کیا “$name” اور “$other” ایک ہی شخص ہیں؟';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'دو دہری یادیں ضم کریں؟';
+
+  @override
+  String get reviewProposalMemory => 'یہ یاد اپ ڈیٹ کریں؟';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name” کا خلاصہ اپ ڈیٹ کریں؟';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'یہ تجویز کردہ درستی لاگو کریں؟';
+
+  @override
+  String get reviewProposalApply => 'لاگو کریں';
+
+  @override
+  String get reviewProposalSuggested => 'تجویز کردہ';
+
+  @override
+  String get reviewProposalConflict => 'Dream کی تجویز کے بعد یہ بدل گیا، اس لیے کچھ بھی لاگو نہیں کیا گیا۔';
 }

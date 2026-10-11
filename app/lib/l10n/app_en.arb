@@ -13071,15 +13071,6 @@
             }
         }
     },
-    "transcriptionsPendingCount": "Transcriptions pending {count}",
-    "@transcriptionsPendingCount": {
-        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "captureSourceCall": "Call",
     "@captureSourceCall": {
         "description": "Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun."
@@ -14367,9 +14358,9 @@
             }
         }
     },
-    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
+    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
     "@speakerLabelText": {
-        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
+        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
         "placeholders": {
             "part": {
                 "type": "String"
@@ -15692,5 +15683,68 @@
     "@chatAppsIncludedWithPro": {
         "description": "Small all-caps tag: chat apps come with the Omi Pro plan"
     },
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Mark “{task}” as done?",
+    "@reviewProposalCloseTask": {
+        "description": "Dream suggestion card: mark an open task as done",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalRetireTask": "Remove the task “{task}”?",
+    "@reviewProposalRetireTask": {
+        "description": "Dream suggestion card: remove (cancel) an open task",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergePeople": "Is “{name}” the same person as “{other}”?",
+    "@reviewProposalMergePeople": {
+        "description": "Dream suggestion card: merge two people who are the same person",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "other": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergeMemories": "Merge two duplicate memories?",
+    "@reviewProposalMergeMemories": {
+        "description": "Dream suggestion card: merge two duplicate memories"
+    },
+    "reviewProposalMemory": "Update this memory?",
+    "@reviewProposalMemory": {
+        "description": "Dream suggestion card: rewrite one memory"
+    },
+    "reviewProposalEntitySummary": "Update the summary for “{name}”?",
+    "@reviewProposalEntitySummary": {
+        "description": "Dream suggestion card: update a person, organization or project summary",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalGeneric": "Apply this suggested fix?",
+    "@reviewProposalGeneric": {
+        "description": "Dream suggestion card fallback when the change has no specific wording"
+    },
+    "reviewProposalApply": "Apply",
+    "@reviewProposalApply": {
+        "description": "Button: apply a change Dream suggested"
+    },
+    "reviewProposalSuggested": "Suggested",
+    "@reviewProposalSuggested": {
+        "description": "Label above the value Dream suggests, shown under the current value"
+    },
+    "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
+    "@reviewProposalConflict": {
+        "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"
+    }
 }

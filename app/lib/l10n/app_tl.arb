@@ -10904,7 +10904,6 @@
     "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
     "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
     "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
-    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
     "captureSourceCall": "Tawag",
     "captureSourcePhoneMic": "Mic ng telepono",
     "captureStatusWithSource": "{status} · {source}",
@@ -11158,7 +11157,7 @@
     "speakerLabelVoiceStatus": "{state, select, learned{Natutunan na ang boses} pending{Tinututunan ang boses…} disabled{Naka-off ang pag-save ng boses} other{Hindi pa natutunan ang boses}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
     "speakerLabelEarlierMatches": "{count, plural, =1{Nakita sa 1 naunang usapan} other{Nakita sa {count} naunang usapan}}",
-    "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} carried{Si {name} pa rin. Dinala mula sa huli mong usapan.} change{Baguhin} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
+    "speakerLabelText": "{part, select, likely{Posible} soundsLike{Parang si {name}} notPerson{Hindi si {name}} alsoTitle{Si {name} rin ba ito?} alsoBody{Nahanap ni Omi ang parehong boses sa mga naunang usapan.} confirmed{Kinumpirma mo ang label na ito} other{Suriin}}",
     "speakerLabelTalkTime": "{duration} ng boses na ito",
     "findDeviceNoneTitle": "Walang Nahanap na Omi",
     "findDeviceNoneMessage": "I-on ito at hawakan malapit sa iyong telepono.",
@@ -11428,5 +11427,15 @@
     "chatAppsTextThisTo": "Hindi nagbukas? I-text ito sa {address}",
     "chatAppsLinkExpired": "Nag-expire na ang link na iyon. I-tap ang Buksan ang Telegram para sa bago.",
     "chatAppsIMessageTo": "Para kay: Omi · {address}",
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Markahan ang “{task}” bilang tapos na?",
+    "reviewProposalRetireTask": "Alisin ang gawaing “{task}”?",
+    "reviewProposalMergePeople": "Iisang tao ba sina “{name}” at “{other}”?",
+    "reviewProposalMergeMemories": "Pagsamahin ang dalawang dobleng alaala?",
+    "reviewProposalMemory": "I-update ang alaalang ito?",
+    "reviewProposalEntitySummary": "I-update ang buod para kay “{name}”?",
+    "reviewProposalGeneric": "Ilapat ang iminungkahing ayos na ito?",
+    "reviewProposalApply": "Ilapat",
+    "reviewProposalSuggested": "Iminungkahi",
+    "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat."
 }

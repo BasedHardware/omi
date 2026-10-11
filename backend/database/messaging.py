@@ -183,6 +183,22 @@ class MessagingStore:
             row = ref.get(transaction=tx).to_dict()
             if not row or row['status'] != 'pending':
                 return None
+            # The query participates in the transaction: only the oldest admitted
+            # unfinished update may run. Unsettled running/ambiguous heads are never skipped.
+            head = next(
+                (
+                    candidate
+                    for candidate in (
+                        ref.parent.where('status', 'in', ['pending', 'running'])
+                        .order_by('created_at')
+                        .stream(transaction=tx)
+                    )
+                    if not candidate.to_dict().get('fifo_settled_at')
+                ),
+                None,
+            )
+            if head is None or head.reference.path != path:
+                return None
             tx.update(ref, {'status': 'running'})
             return json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
 
@@ -191,6 +207,19 @@ class MessagingStore:
     def complete(self, path):
         # Content-free dedup tombstone survives retries; unlink removes its parent.
         self.db.document(path).update({'status': 'done', 'payload': firestore.DELETE_FIELD})
+
+    def settle(self, path):
+        # Retain evidence and prevent replay; only fully unwound workers may
+        # mark their running head as no longer blocking newer admitted turns.
+        ref = self.db.document(path)
+
+        @firestore.transactional
+        def apply(tx):
+            row = ref.get(transaction=tx).to_dict() or {}
+            if row.get('status') == 'running':
+                tx.update(ref, {'fifo_settled_at': datetime.now(timezone.utc)})
+
+        run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
     def acquire(self, uid, surface):
         ref = self.user(uid).collection('channel_turn_leases').document(key(surface))
@@ -274,6 +303,7 @@ class MessagingStore:
             d.reference.path
             for d in self.identity(message.channel, message.provider, message.external_user_id)
             .collection('inbox')
+            .order_by('created_at')
             .stream()
             if d.to_dict().get('status') == 'pending'
         ]
@@ -318,7 +348,7 @@ class MessagingStore:
             row = identity.to_dict()
             if (row.get('channel'), row.get('provider')) != (channel, provider):
                 continue
-            for event in identity.reference.collection('inbox').stream():
+            for event in identity.reference.collection('inbox').order_by('created_at').stream():
                 if event.to_dict().get('status') == 'pending':
                     paths.append(event.reference.path)
                     if len(paths) >= limit:
