@@ -270,6 +270,61 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
     XCTAssertFalse(facts.contains { $0.kind == .decision })
   }
 
+  private static let unrealizedOutcomes = [
+    "The budget will be approved next week.",
+    "We will have decided on the launch date by Friday.",
+    "We would have approved the budget if the price had changed.",
+  ]
+
+  func testFutureAndHypotheticalOutcomesAreNeverDecisionsInTopicSections() {
+    for line in Self.unrealizedOutcomes {
+      XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(line), line)
+      let facts = MeetingMemoryBriefComposer.facts(
+        from: conversation(sections: [
+          SummarySection(heading: "Budget", bodyMarkdown: "- " + line, sourceSegmentIDs: ["s1"])
+        ]))
+      XCTAssertFalse(facts.contains { $0.kind == .decision }, line)
+    }
+  }
+
+  func testFutureAndHypotheticalOutcomesAreNeverDecisionsUnderADecisionsHeading() {
+    for line in Self.unrealizedOutcomes {
+      let facts = MeetingMemoryBriefComposer.facts(
+        from: conversation(sections: [
+          SummarySection(heading: "Decisions", bodyMarkdown: "- " + line, sourceSegmentIDs: ["s1"])
+        ]))
+      XCTAssertFalse(facts.contains { $0.kind == .decision }, line)
+    }
+
+    let mixed = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Decisions",
+          bodyMarkdown: (Self.unrealizedOutcomes + ["Ship the smaller pilot first."]).map { "- " + $0 }
+            .joined(separator: "\n"),
+          sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertEqual(mixed.first { $0.kind == .decision }?.text, "Ship the smaller pilot first.")
+    XCTAssertEqual(mixed.first { $0.kind == .decision }?.sourceSegmentIDs, ["s1"])
+  }
+
+  func testACompletedAgreementAboutTheFutureIsStillADecision() {
+    for line in [
+      "We agreed we will ship Thursday.", "The team decided it would launch in May.",
+      "Priya approved the budget, which we'll spend in Q3.", "They made a decision to pause hiring.",
+    ] {
+      XCTAssertTrue(MeetingMemoryBriefComposer.statesDecision(line), line)
+    }
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(heading: "Launch", bodyMarkdown: "- We agreed we will ship Thursday.", sourceSegmentIDs: ["s9"])
+      ]))
+    XCTAssertEqual(facts.first { $0.kind == .decision }?.text, "We agreed we will ship Thursday.")
+    XCTAssertFalse(
+      MeetingMemoryBriefComposer.statesDecision("We will have made a decision by Friday."),
+      "the phrase form is checked the same way")
+  }
+
   func testADecisionsHeadingDropsDisputedAndNegatedLinesButKeepsImperatives() {
     let disputed = MeetingMemoryBriefComposer.facts(
       from: conversation(sections: [

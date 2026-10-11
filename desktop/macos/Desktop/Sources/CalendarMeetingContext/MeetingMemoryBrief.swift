@@ -193,7 +193,11 @@ enum MeetingMemoryBriefComposer {
   /// Verbs that report an outcome as settled. "decision" alone is not one: "We will discuss
   /// the decision next week" mentions a decision that has not been made.
   private static let settledWords = ["decided", "agreed", "chose", "chosen", "approved", "settled", "finalized"]
-  private static let settledPhrases = ["made a decision", "made the decision", "reached a decision"]
+  /// Words that put an outcome in the future, a hypothetical, or an obligation when they come
+  /// just before its verb: "will be approved", "would have approved", "needs to be finalized".
+  private static let unrealizedMarkers: Set<String> = [
+    "will", "would", "shall", "should", "could", "might", "may", "must", "can", "going", "gonna", "to",
+  ]
   private static let disputeMarkers = ["disagree", "objected", "pushed back", "dispute"]
   /// Discussion, proposals and questions are not outcomes.
   private static let uncertaintyMarkers = [
@@ -230,14 +234,34 @@ enum MeetingMemoryBriefComposer {
     let lower = line.lowercased()
     return words(line).contains(where: isNegation) || disputeMarkers.contains(where: lower.contains)
       || uncertaintyMarkers.contains(where: lower.contains) || statesOpenQuestion(line)
+      || reportsUnrealizedOutcome(line)
   }
 
   /// A settled outcome only, named by a settled verb and passing the shared veto.
   static func statesDecision(_ line: String) -> Bool {
-    let lower = line.lowercased()
-    let settled =
-      words(line).contains(where: settledWords.contains) || settledPhrases.contains(where: lower.contains)
-    return settled && !isUnsettled(line)
+    !settledOutcomeIndices(words(line)).isEmpty && !isUnsettled(line)
+  }
+
+  /// Where a settled verb ("approved"), or "made/reached a/the decision", names an outcome.
+  private static func settledOutcomeIndices(_ tokens: [String]) -> [Int] {
+    tokens.indices.filter { index in
+      if settledWords.contains(tokens[index]) { return true }
+      guard ["made", "reached"].contains(tokens[index]), index + 2 < tokens.count else { return false }
+      return ["a", "the"].contains(tokens[index + 1]) && tokens[index + 2] == "decision"
+    }
+  }
+
+  /// "The budget will be approved", "We will have decided by Friday", "We would have approved
+  /// it": the verb is governed by an auxiliary in the few words before it, so nothing has been
+  /// settled yet. A later "will" ("We agreed we will ship Thursday") reports a settled agreement.
+  static func reportsUnrealizedOutcome(_ line: String) -> Bool {
+    let tokens = words(line)
+    return settledOutcomeIndices(tokens).contains { index in
+      tokens[max(0, index - 3)..<index].contains { word in
+        unrealizedMarkers.contains(word) || word.hasSuffix("'ll") || word.hasSuffix("\u{2019}ll")
+          || word.hasSuffix("'d") || word.hasSuffix("\u{2019}d")
+      }
+    }
   }
 
   private static func cleanedLines(_ text: String) -> [String] {
