@@ -16,6 +16,7 @@ import base64
 from datetime import datetime, timezone
 from typing import Optional
 from utils.executors import db_executor, llm_executor, run_blocking
+from utils.messaging.receipt_presentation import app_receipt_text
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
@@ -437,6 +438,15 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = extract_memory_ids(memories) if memories else []
+        receipt_blocks = [receipt.content_block for receipt in callback_data.get('action_receipts', ())]
+        app_edit_receipts = (runtime is None or runtime.surface == 'app') and any(
+            block.get('type') == 'editReceipt' for block in receipt_blocks
+        )
+        if app_edit_receipts:
+            response = app_receipt_text(response, receipt_blocks)
+            # The outcome is grounded by its owned receipt target, rather than
+            # citation indices in model prose that the cards replace.
+            memories, memories_id = [], []
         if runtime is not None and runtime.surface != 'app':
             callback_data.setdefault('channel_items', []).extend(
                 {

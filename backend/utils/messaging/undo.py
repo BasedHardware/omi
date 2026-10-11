@@ -322,13 +322,26 @@ def edit_receipt_block(receipt_id, kind, object_id, before, after):
         if isinstance(value, dict)
         else str(value)
     )
+    summary = str(summary or target_kind)
+    if before is not None and kind == 'task':
+        summary = {
+            'completed': 'Completed task: ',
+            'uncompleted': 'Reopened task: ',
+            'deleted': 'Deleted task: ',
+        }.get(action, 'Updated task: ') + summary
+    elif kind == 'memory_edit':
+        summary = 'Updated memory: ' + summary
+    elif kind == 'memory_deleted':
+        summary = 'Removed from current knowledge: ' + summary
+    elif kind == 'memory_closed':
+        summary = 'Closed memory: ' + summary
     return EditReceiptBlock(
         id=receipt_id,
         receiptId=receipt_id,
         targetKind=target_kind,
         action=action,
         targetId=object_id,
-        summary=(str(summary or target_kind)[:250]),
+        summary=summary[:250],
     ).model_dump(mode='json')
 
 

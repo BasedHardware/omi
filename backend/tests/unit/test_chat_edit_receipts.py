@@ -114,3 +114,35 @@ def test_authenticated_http_undo_endpoint(monkeypatch):
     assert client.post('/v1/chat/receipts/' + 'b' * 32 + '/undo').status_code == 404
     assert client.post('/v1/chat/receipts/invalid/undo').status_code == 404
     assert all(uid == 'owner' for uid, _ in calls)
+
+
+def test_app_receipt_body_is_owned_by_native_card_without_changing_other_turns():
+    from utils.messaging.receipt_presentation import app_receipt_text
+
+    block = EditReceiptBlock(
+        id='block', receiptId='a' * 32, targetKind='person', action='renamed', targetId='person', summary='Name → Priya'
+    ).model_dump(mode='json')
+    assert app_receipt_text('I renamed them to Priya.', [block]) == 'Name → Priya'
+    assert app_receipt_text('I renamed them to Priya.', [block], surface='telegram') == 'I renamed them to Priya.'
+    for blocks in ([], [{'type': 'memoryLink'}], [{'type': 'taskCard'}]):
+        assert app_receipt_text('Existing reply', blocks) == 'Existing reply'
+
+
+def test_mobile_receipt_fixture_is_current_real_backend_serializer_output():
+    import json
+    from pathlib import Path
+    from testing.messaging.receipt_payloads import receipt_payloads
+
+    fixture = Path(__file__).resolve().parents[3] / 'app/test/fixtures/backend_edit_receipts.json'
+    assert json.loads(fixture.read_text()) == receipt_payloads()
+
+
+def test_mixed_create_edit_fallback_matches_mobile_without_duplicate_prose():
+    from utils.messaging.receipt_presentation import app_receipt_text
+
+    blocks = [
+        dict(type='taskCard', task_id='task'),
+        dict(type='memoryLink', summary='A saved fact'),
+        dict(type='editReceipt', summary='Name → Priya'),
+    ]
+    assert app_receipt_text('I made those changes.', blocks) == 'Task\nMemory - A saved fact\nName → Priya'

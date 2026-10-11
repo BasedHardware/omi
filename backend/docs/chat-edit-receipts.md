@@ -51,3 +51,9 @@ Conversation corrections are owner-confirmed durable notes, compressed (and
 protected for enhanced users) alongside the conversation. Regeneration preserves
 those notes and explicit title/overview overrides and includes the corrections
 as evidence for subsequent summaries. No transcript segment is changed.
+
+App edit outcomes use the receipt summaries as their canonical message text.
+Mobile recognizes the same fallback body and renders each native receipt once;
+older clients still receive readable text. Channel prose and existing create-only
+blocks keep their existing behavior. Person receipts have Undo, but no item URL
+or open-item button because there is no person deep-link route.
