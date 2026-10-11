@@ -153,6 +153,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
     consumed = []
     reviewed = set()
     cleanup_cursor = None
+    deferred = set()
     refund = False
     success = False
     release = True
@@ -285,6 +286,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                             )
                             if is_question and status in {'suggestion_cap', 'already_suggested', 'suppressed'}:
                                 remaining += 1
+                            if is_question and status == 'suggestion_cap':
+                                deferred.add(edit.target)
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
@@ -353,10 +356,10 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         lease,
         report,
         success=success,
-        consumed=consumed,
+        consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
         release=release,
         refund=refund,
-        reviewed=reviewed,
+        reviewed=reviewed - deferred,
         cleanup_cursor=cleanup_cursor,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
     )

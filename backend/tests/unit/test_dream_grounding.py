@@ -67,7 +67,12 @@ def test_derived_memory_and_alias_of_same_record_are_not_independent():
 
 
 def test_existing_vocabulary_support_is_exact_and_accent_sensitive():
-    assert dream_grounding.spelling_grounding_rejection(correction(), records(), [{'spelling': 'ZUVRAH'}]) is None
+    assert (
+        dream_grounding.spelling_grounding_rejection(
+            correction(), records(), [{'spelling': 'ZUVRAH', 'authorship': 'user_authored'}]
+        )
+        is None
+    )
     assert (
         dream_grounding.spelling_grounding_rejection(correction(), records(), [{'spelling': 'Zuvrahtown'}])
         == 'ungrounded_spelling'
@@ -191,8 +196,10 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a: None)
-    monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (rows, []))
+    finished = []
+    monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: finished.append(k))
+    dirty = [{'collection': 'conversations', 'id': 'film'}]
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (rows, dirty))
     summary = Edit(
         kind='title',
         target='conversations/empty',
@@ -209,6 +216,7 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     result = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps(edits=1), turn=AsyncMock()))
     assert result['status'] == 'complete'
     assert applied == ['conversations/empty']
+    assert finished[0]['consumed'] == []
 
 
 def test_read_only_eval_shows_zero_ungrounded_auto_applies_and_question():
@@ -263,7 +271,7 @@ def test_real_pass_routes_ungrounded_to_spelling_question_with_shared_cap(monkey
 
 def test_automatic_boundary_rechecks_current_support_and_fences_before_read(monkeypatch):
     calls = []
-    raw = {'source': [{'spelling': 'Zuvrah'}]}
+    raw = {'source': [{'spelling': 'Zuvrah', 'authorship': 'user_authored'}]}
     monkeypatch.setattr(dream_tools, 'validate_edit', lambda *a: None)
     monkeypatch.setattr(
         dream_tools, 'proposal_fences', lambda *a: calls.append('fence') or {'conversations/film': {'raw': 'snapshot'}}
@@ -290,3 +298,33 @@ def test_automatic_boundary_rechecks_current_support_and_fences_before_read(monk
     raw['source'] = []
     with pytest.raises(ValueError, match='ungrounded_spelling'):
         dream_tools.apply_grounded_edit('synthetic', correction(), records())
+
+
+def test_dream_vocabulary_cannot_launder_target_or_invented_spelling():
+    rows = records()
+    invented = {'spelling': 'Zuvrah', 'evidence': ['conversations/film']}
+    assert dream_grounding.spelling_grounding_rejection(correction(), rows, [invented]) == 'ungrounded_spelling'
+    invented['authorship'] = 'user_accepted'
+    assert dream_grounding.spelling_grounding_rejection(correction(), rows, [invented]) == 'ungrounded_spelling'
+    rows['memory_items/derived'] = {'content': 'Zuvrah', 'evidence': ['conversations/film']}
+    invented['evidence'] = ['memory_items/derived']
+    assert dream_grounding.spelling_grounding_rejection(correction(), rows, [invented]) == 'ungrounded_spelling'
+    with pytest.raises(ValueError, match='requires_acceptance'):
+        dream_tools.apply_vocabulary('synthetic', [])
+    from config.dream_agent import auto_apply_kinds, apply_policy
+
+    assert apply_policy('vocabulary', auto_apply_kinds()) == 'suggest'
+
+
+@pytest.mark.parametrize('support,expected', [('jordan', 'ungrounded_spelling'), ('Jordan', None)])
+def test_case_only_changes_need_exact_case_support(support, expected):
+    rows = {'conversations/a': {'transcript_segments': [{'text': 'jordan'}]}, 'people/p': {'name': support}}
+    edit = Edit(
+        kind='spelling',
+        target='conversations/a',
+        before='jordan',
+        after='Jordan',
+        reason='Synthetic',
+        evidence=list(rows),
+    )
+    assert dream_grounding.spelling_grounding_rejection(edit, rows) == expected

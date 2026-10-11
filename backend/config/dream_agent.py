@@ -4,8 +4,10 @@ import math
 import os
 from dataclasses import dataclass
 
-AUTO = frozenset({'title', 'overview', 'spelling', 'vocabulary'})
-SUGGEST = frozenset({'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'})
+AUTO = frozenset({'title', 'overview', 'spelling'})
+SUGGEST = frozenset(
+    {'vocabulary', 'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
+)
 KNOWN_KINDS = AUTO | SUGGEST
 SUGGESTIONS_PER_DAY = 3
 

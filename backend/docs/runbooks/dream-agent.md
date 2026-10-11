@@ -446,7 +446,7 @@ folder's README for the verified dev tunnel procedure.
 
 ## Tiered apply policy
 
-When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
+When mode is `on`, only `title`, `overview` and grounded `spelling` edits
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
 become `agent_proposal` items in the existing Review queue, exposed through
@@ -485,3 +485,4 @@ change cohorts/schedules, or deploy anything.
 Registered, previously processed owners with empty dirty queues may run again after one hour under the same daily caps. Successful model passes record target review timestamps atomically with completion; failed passes do not. Empty passes refund inference admission but persist page progress. Synthetic canaries skip backfill.
 
 Uniform epsilon sampling uses collection counts and a random document rank, without rerolling filtered records. Offsets can bill linear skipped reads and large histories can hit the 3-second RPC deadline; this cost is outside the model USD reservation. Disable the random share when that cost is unsuitable. The sample is unbiased for a stable stored population before visibility/age/cooldown rejection, not an unbiased sample of automatically editable records.
+Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.
