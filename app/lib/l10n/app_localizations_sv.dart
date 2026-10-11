@@ -9117,6 +9117,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncCardRateLimited => 'Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt';
 
   @override
+  String get syncCardThrottlePaused => 'Synkroniseringen har pausats kort — den återupptas automatiskt';
+
+  @override
   String get syncCardBackendBusy =>
       'Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs';
 

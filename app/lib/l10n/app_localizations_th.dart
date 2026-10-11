@@ -9063,6 +9063,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncCardRateLimited => 'ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ';
 
   @override
+  String get syncCardThrottlePaused => 'หยุดการซิงค์ชั่วครู่ — จะดำเนินการต่อโดยอัตโนมัติ';
+
+  @override
   String get syncCardBackendBusy => 'เซิร์ฟเวอร์ของ Omi กำลังคับคั่ง — การบันทึกของคุณจะซิงค์เมื่อมีพื้นที่ว่างกลับมา';
 
   @override

@@ -9115,6 +9115,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncCardRateLimited => 'Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis';
 
   @override
+  String get syncCardThrottlePaused => 'Sinkronisasi dijeda sebentar — akan dilanjutkan secara otomatis';
+
+  @override
   String get syncCardBackendBusy =>
       'Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali';
 

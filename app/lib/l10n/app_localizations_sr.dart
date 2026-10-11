@@ -9119,6 +9119,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncCardRateLimited => 'Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронизација је накратко паузирана — наставиће се аутоматски';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет';
 

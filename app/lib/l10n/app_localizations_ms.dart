@@ -9132,6 +9132,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik';
 
   @override
+  String get syncCardThrottlePaused => 'Penyegerakan dijeda sebentar — ia akan disambung semula secara automatik';
+
+  @override
   String get syncCardBackendBusy =>
       'Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula';
 

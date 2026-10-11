@@ -9164,6 +9164,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncCardRateLimited => 'S\'ha assolit el límit d\'ús just — la sincronització es reprendrà automàticament';
 
   @override
+  String get syncCardThrottlePaused => 'La sincronització s\'ha pausat breument — es reprendrà automàticament';
+
+  @override
   String get syncCardBackendBusy =>
       'Els servidors d\'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible';
 

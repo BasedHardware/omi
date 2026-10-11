@@ -8982,6 +8982,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
 
   @override
+  String get syncCardThrottlePaused => '同期を一時停止しています — 自動的に再開します';
+
+  @override
   String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
 
   @override

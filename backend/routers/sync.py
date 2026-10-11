@@ -49,6 +49,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
+from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -205,6 +206,7 @@ class SyncJobStatusResponse(BaseModel):
     reason_code: str | None = None
     retry_after: int | None = None
     recording_age_seconds: int | None = None
+    poll_after_ms: int | None = None
 
 
 class SyncCaptureManifestFile(BaseModel):
@@ -1153,11 +1155,7 @@ async def sync_local_files_v2(
             if backfill_slot_acquired:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                 backfill_slot_acquired = False
-            return JSONResponse(
-                status_code=409,
-                headers={'Retry-After': '10'},
-                content={'code': 'sync_content_in_progress', 'detail': 'The same audio is already processing'},
-            )
+            return sync_content_in_progress_response(claim.get('job_id'))
         try:
             OMI_SYNC_LANE_JOBS_TOTAL.labels(
                 lane=lane_decision.lane.value,

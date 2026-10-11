@@ -9135,6 +9135,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisatie kort gepauzeerd — deze wordt automatisch hervat';
+
+  @override
   String get syncCardBackendBusy =>
       'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 

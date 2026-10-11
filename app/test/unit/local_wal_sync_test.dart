@@ -14,6 +14,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -45,6 +46,9 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -55,6 +59,12 @@ void main() {
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
+  });
+
+  tearDown(() {
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
   });
 
   group('onFrameCaptured', () {
@@ -993,9 +1003,10 @@ void main() {
 
     test('queued then completed 0/0/0 acknowledges the WAL and emits a diagnostic', () async {
       var polls = 0;
+      var pollNow = now.subtract(SyncJobPoller.minimumInterval);
       final local = LocalWalSyncImpl(
         listener,
-        now: () => now,
+        now: () => pollNow,
         jobStatusFetcher: (jobId) async => SyncJobFetch(
           SyncJobFetchOutcome.ok,
           polls++ == 0 ? SyncJobStatusResponse(jobId: jobId, status: 'queued') : completed(),
@@ -1008,9 +1019,14 @@ void main() {
       expect(wal.status, WalStatus.uploaded);
       expect(wal.retryCount, 0);
 
+      await local.reconcileUploadedWals();
+      expect(polls, 1, reason: 'the first poll is immediate, repeated same-time passes are deferred');
+      expect(wal.status, WalStatus.uploaded);
+      pollNow = now; // exactly one minimum interval; retain the original ACK timestamp.
       final response = await local.reconcileUploadedWals();
       expect(response.newConversationIds, isEmpty);
       expect(response.updatedConversationIds, isEmpty);
+      expect(polls, 2);
       // capture_recovery_replay_scenarios_test.dart: acknowledgement resolves by
       // polling, never by re-uploading bytes, including legitimate empty results.
       expect(wal.status, WalStatus.synced);

@@ -9145,6 +9145,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncCardRateLimited => 'ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ';
 
   @override
+  String get syncCardThrottlePaused => 'ಸಿಂಕ್ ಸ್ವಲ್ಪ ಸಮಯ ನಿಲ್ಲಿಸಲಾಗಿದೆ — ಅದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪುನರಾರಂಭಗೊಳ್ಳುತ್ತದೆ';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ';
 
