@@ -60,8 +60,17 @@ class UndoStore:
             pointer = pointer_ref.get(transaction=tx).to_dict() or {}
             if not pointer.get('message_id'):
                 return
-            message_ref = self.store.user(uid).collection('messages').document(pointer['message_id'])
-            row = message_ref.get(transaction=tx).to_dict() or {}
+            matches = list(
+                self.store.user(uid)
+                .collection('messages')
+                .where('id', '==', pointer['message_id'])
+                .limit(1)
+                .stream(transaction=tx)
+            )
+            if not matches:
+                return
+            message_ref = matches[0].reference
+            row = matches[0].to_dict() or {}
             if not row:
                 return
             blocks = row.get('content_blocks') or []

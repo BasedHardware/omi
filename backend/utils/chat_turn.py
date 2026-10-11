@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.messaging.receipt_presentation import app_receipt_text
+from utils.messaging.adapters.rendering import CITATION_PATTERN
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
@@ -429,9 +430,11 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 )
 
         # cited extraction
-        citation_pattern = r'\[\s*#?\s*\d+(?:\s*[,;–-]\s*#?\s*\d+)*\s*\](?!\()'
+        citation_pattern = CITATION_PATTERN
         cited_conversation_idxs = {
-            int(index) for marker in re.findall(citation_pattern, response) for index in re.findall(r'\d+', marker)
+            int(index)
+            for marker in re.finditer(citation_pattern, response)
+            for index in re.findall(r'\d+', marker.group(0))
         }
         if cited_conversation_idxs:
             response = re.sub(citation_pattern, '', response)

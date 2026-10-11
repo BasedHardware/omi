@@ -117,3 +117,12 @@ def test_spoilers_support_nested_markdown():
         '<tg-spoiler><b>secret</b> and <code>code</code></tg-spoiler>',
     )
     assert rendering.plain('||**secret**||') == 'secret'
+
+
+def test_plain_markdown_links_keep_the_destination():
+    assert rendering.plain('[documentation](https://example.com/help)') == 'documentation (https://example.com/help)'
+
+
+def test_adversarial_unclosed_citation_does_not_backtrack():
+    text = '[0,' + ' 0,' * 20000
+    assert rendering.source_phrases(text) == text

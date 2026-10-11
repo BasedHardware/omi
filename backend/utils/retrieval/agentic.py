@@ -10,7 +10,6 @@ Anthropic's native streaming contract.
 from __future__ import annotations
 from utils.messaging.projection import chat_write_runtime, SurfaceRuntime
 from utils.messaging.contracts import Principal
-from utils.retrieval.tools.edit_tools import update_conversation, rename_person, edit_memory, delete_memory
 from dataclasses import replace
 from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface, channel_evidence, EDIT_GUARDRAIL
 from utils.messaging.projection import project_runtime_tools, surface_runtime

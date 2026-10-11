@@ -202,7 +202,8 @@ def rich_notes_inputs(
             images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
         except Exception as exc:  # noqa: BLE001 - frame images are best effort
             logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
-    block = (block or '') + corrections
+    if corrections:
+        block = (block or '') + corrections
     return roster, block, desktop_capture, images
 
 

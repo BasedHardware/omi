@@ -96,8 +96,8 @@ def test_app_owner_undo_once_audit_and_reloaded_message(store, monkeypatch):
         )
     finally:
         chat_write_runtime.reset(token)
-    store.user('owner').collection('messages').document('message').set(
-        {'content_blocks': [dict(receipt.content_block)]}
+    store.user('owner').collection('messages').document('auto-document').set(
+        {'id': 'message', 'content_blocks': [dict(receipt.content_block)]}
     )
     manager.bind_message('owner', receipt.id, 'message')
     monkeypatch.setattr(undo, 'apply_inverse', lambda uid, payload: calls.append((uid, payload)))
@@ -113,5 +113,5 @@ def test_app_owner_undo_once_audit_and_reloaded_message(store, monkeypatch):
     assert audit['uid'] == 'owner' and audit['tool'] == 'rename_person' and audit['surface'] == 'app'
     assert audit['before_hash'] != audit['after_hash']
     assert 'Before' not in str(audit) and 'After' not in str(audit)
-    blocks = store.user('owner').collection('messages').document('message').get().to_dict()['content_blocks']
+    blocks = store.user('owner').collection('messages').document('auto-document').get().to_dict()['content_blocks']
     assert blocks[0]['undoneAt'] and not blocks[0]['undoable']

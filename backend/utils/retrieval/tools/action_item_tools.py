@@ -1,6 +1,3 @@
-from database import chat_edits
-from database.chat_edits import envelope
-
 """
 Tools for accessing and managing user action items.
 """
@@ -680,6 +677,10 @@ def update_action_item_tool(
 
     if not update_data:
         return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
+
+    # Import mutation storage only for writes; retrieval and tool schemas need no client.
+    from database import chat_edits
+    from database.chat_edits import envelope
 
     # Update the action item
     try:

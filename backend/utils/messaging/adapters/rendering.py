@@ -8,7 +8,7 @@ from urllib.parse import quote, urlparse
 from markdown_it import MarkdownIt
 from utils.observability.fallback import record_fallback
 
-CITATION_PATTERN = r'\[\s*#?\s*(\d+)(?:\s*[,;–-]\s*#?\s*\d+)*\s*\](?!\()'
+CITATION_PATTERN = r'\[\s*+#?\s*+(\d++)(?:\s*+[,;–-]\s*+#?\s*+\d++)*+\s*+\](?!\()'
 CITATIONS = re.compile(CITATION_PATTERN)
 
 
@@ -103,6 +103,7 @@ def _tokens(text):
 
 def _inline(tokens, rich):
     out = []
+    plain_links = []
     for token in tokens or ():
         if token.type == 'text':
             value = html.escape(token.content, quote=False) if rich else token.content
@@ -121,6 +122,12 @@ def _inline(tokens, rich):
         elif token.type in {'strong_open', 'strong_close', 'em_open', 'em_close'} and rich:
             tag = 'b' if token.type.startswith('strong') else 'i'
             out.append('<' + ('/' if token.nesting == -1 else '') + tag + '>')
+        elif token.type == 'link_open' and not rich:
+            plain_links.append(token.attrGet('href') or '')
+        elif token.type == 'link_close' and not rich:
+            url = plain_links.pop() if plain_links else ''
+            if urlparse(url).scheme in {'https', 'http'}:
+                out.append(' (' + url + ')')
         elif token.type == 'link_open' and rich:
             url = token.attrGet('href') or ''
             if urlparse(url).scheme in {'https', 'http'}:

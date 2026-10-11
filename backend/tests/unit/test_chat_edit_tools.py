@@ -149,7 +149,7 @@ def test_task_mutations_and_receipt_actions(monkeypatch, receipts, patch, action
         or kwargs['expected_chat_state'].update(after=chat_edits.encode(dict(row)))
         or True,
     )
-    monkeypatch.setattr(action_item_tools.chat_edits, 'snapshot', lambda *args: chat_edits.encode(dict(row)))
+    monkeypatch.setattr(chat_edits, 'snapshot', lambda *args: chat_edits.encode(dict(row)))
     monkeypatch.setattr(action_item_tools, 'send_action_item_completed_notification', lambda *args: None)
     monkeypatch.setattr(action_item_tools, 'sync_action_item_reminder', lambda *args, **kwargs: None)
     result = action_item_tools.update_action_item_tool.func('task', config=CONFIG, **patch)
@@ -208,3 +208,26 @@ def test_durable_correction_notes_roundtrip_with_conversation_protection(level):
     assert 'The Substance' not in str(encoded['user_corrections'])
     decoded = edit_tools.conversations.prepare_conversation_for_read(encoded, 'owner')
     assert decoded['user_corrections'] == notes
+
+
+def test_conversation_patch_uses_the_snapshot_version(monkeypatch, receipts):
+    monkeypatch.setattr(
+        edit_tools.conversations,
+        'get_conversation',
+        lambda *args: {'structured': {'title': 'Old', 'overview': 'Stale'}},
+    )
+    fresh = {
+        'structured': {'title': 'Old', 'overview': 'Concurrent summary'},
+        'user_corrections': [{'note': 'Already confirmed'}],
+    }
+    monkeypatch.setattr(chat_edits, 'snapshot', lambda *args: fresh)
+    writes = []
+    monkeypatch.setattr(
+        edit_tools.conversations,
+        'update_conversation_chat',
+        lambda uid, target, before, patch: writes.append((before, patch)) or patch,
+    )
+    edit_tools.update_conversation.func('target', 'User confirmed new title', 'New', config=CONFIG)
+    assert writes[0][0] == fresh
+    assert writes[0][1]['structured']['overview'] == 'Concurrent summary'
+    assert writes[0][1]['user_corrections'][0]['note'] == 'Already confirmed'

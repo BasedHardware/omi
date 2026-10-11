@@ -51,8 +51,9 @@ def update_conversation(
     if not row or row.get('is_locked') or row.get('deleted'):
         return 'Error: conversation not found or unavailable.'
     before = cast(Dict[str, Any], chat_edits.snapshot(uid, 'conversation', conversation_id))
-    structured = dict(row.get('structured') or {})
-    notes = list(row.get('user_corrections') or [])
+    observed = cast(Dict[str, Any], chat_edits.decode(before))
+    structured = dict(observed.get('structured') or {})
+    notes = list(observed.get('user_corrections') or [])
     notes.append({'note': correction.strip(), 'at': datetime.now(timezone.utc).isoformat()})
     if len(notes) > 100:
         return 'Error: correction note limit reached.'
