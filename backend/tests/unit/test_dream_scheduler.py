@@ -1,6 +1,7 @@
 """Synthetic fair rotation, concurrent admission and reserved-capacity contracts."""
 
 import asyncio
+import pytest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -18,13 +19,14 @@ NOW = datetime(2026, 10, 12, tzinfo=timezone.utc)
 def test_age_weight_and_paid_ties():
     free_old = {'usage_weight': 1, 'last_pass_at': NOW - timedelta(hours=5)}
     paid = {'usage_weight': 2, 'last_pass_at': NOW - timedelta(hours=2)}
-    assert dream_scheduler.priority(free_old, NOW) > dream_scheduler.priority(paid, NOW)
+    assert dream_scheduler.priority(free_old, NOW) > dream_scheduler.priority(paid, NOW, weight=2)
     paid['last_pass_at'] = NOW - timedelta(hours=2.5)
-    assert dream_scheduler.priority(paid, NOW) > dream_scheduler.priority(free_old, NOW)
+    assert dream_scheduler.priority(paid, NOW, weight=2) > dream_scheduler.priority(free_old, NOW)
 
 
 def test_rotation_reaches_owners_beyond_top_100_and_wraps(monkeypatch):
     db = DreamFirestore()
+    db.get_all = lambda refs, **kwargs: [SimpleNamespace(id=ref.id, to_dict=lambda: {}) for ref in refs]
     rows = [SimpleNamespace(id=f'owner-{i:03}', to_dict=lambda: {'usage_weight': 1}) for i in range(205)]
 
     def page(*, after=None, limit=100, **kwargs):
@@ -76,6 +78,45 @@ def test_waiting_does_not_acquire_budget(monkeypatch):
     monkeypatch.setattr(dream_agent.dream_store, 'acquire', acquire)
     assert asyncio.run(dream_agent.run_pass('synthetic')) == {'status': 'waiting', 'reason': 'reserved_capacity'}
     acquire.assert_not_called()
+
+
+@pytest.mark.parametrize('reason', ['dream_run_in_progress', 'dream_manual_limit', 'dream_budget_unavailable'])
+def test_deterministic_admission_rejection_releases_reserved_slot(monkeypatch, reason):
+    slot = ('fixture-slot', 'token')
+    monkeypatch.setattr(dream_capacity, 'claim', AsyncMock(return_value=slot))
+    released = AsyncMock()
+    monkeypatch.setattr(dream_capacity, 'release', released)
+    monkeypatch.setattr(
+        dream_agent.dream_store, 'acquire', Mock(side_effect=dream_agent.dream_store.AdmissionDenied(reason))
+    )
+    with pytest.raises(dream_agent.dream_store.AdmissionDenied, match=reason):
+        asyncio.run(dream_agent.run_pass('synthetic', trigger='manual'))
+    released.assert_awaited_once_with(slot)
+
+
+def test_scheduling_reads_current_subscription_for_idle_and_changed_owners(monkeypatch):
+    from config.plan_catalog import PAID_PLAN_IDS
+
+    db = DreamFirestore()
+    rows = [
+        SimpleNamespace(id=uid, to_dict=lambda: {'last_pass_at': NOW - timedelta(hours=2), 'usage_weight': 1})
+        for uid in ['free', 'paid']
+    ]
+    plans = {'free': '', 'paid': next(iter(PAID_PLAN_IDS))}
+
+    def get_all(refs, *, transaction, timeout):
+        assert timeout == 3 and transaction is not None
+        return [
+            SimpleNamespace(id=ref.id, to_dict=lambda uid=ref.id: {'subscription': {'plan': plans[uid]}})
+            for ref in refs
+        ]
+
+    db.get_all = get_all
+    monkeypatch.setattr(dream_scheduler, 'candidate_page', lambda **k: rows)
+    monkeypatch.setattr(dream_scheduler.firestore, 'transactional', lambda fn: fn)
+    assert dream_scheduler.candidates(now=NOW, firestore_client=db) == ['paid', 'free']
+    plans.update(free=next(iter(PAID_PLAN_IDS)), paid='')
+    assert dream_scheduler.candidates(now=NOW, firestore_client=db) == ['free', 'paid']
 
 
 def test_bounded_parallel_drain(monkeypatch):

@@ -3,15 +3,15 @@
 from datetime import datetime, timezone
 from google.cloud import firestore
 from database._client import get_firestore_client
+from config.plan_catalog import PAID_PLAN_IDS
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def priority(row, now):
+def priority(row, now, *, weight=1):
     last = row.get('last_pass_at')
     if not isinstance(last, datetime) or last.tzinfo is None:
         last = EPOCH
-    weight = 2 if row.get('usage_weight') == 2 else 1
     return weight * max(0, (now - last).total_seconds()), weight
 
 
@@ -37,8 +37,29 @@ def candidates(*, limit=100, now=None, firestore_client=None):
         rows = candidate_page(after=after, limit=limit, transaction=tx, firestore_client=database)
         if not rows and after:
             rows = candidate_page(limit=limit, transaction=tx, firestore_client=database)
+        # Read current plans in one transaction-bound batch; idle owners and plan
+        # changes must not depend on a later product write to refresh their weight.
+        owners = (
+            {
+                snapshot.id: snapshot.to_dict() or {}
+                for snapshot in database.get_all(
+                    [database.collection('users').document(row.id) for row in rows], transaction=tx, timeout=3
+                )
+            }
+            if rows
+            else {}
+        )
+        weights = {
+            uid: 2 if (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS else 1
+            for uid, user in owners.items()
+        }
         # Advance atomically across competing drains. Leases still serialize owners.
         tx.set(cursor, {'after': rows[-1].id if rows else None})
-        return [row.id for row in sorted(rows, key=lambda row: priority(row.to_dict() or {}, now), reverse=True)]
+        return [
+            row.id
+            for row in sorted(
+                rows, key=lambda row: priority(row.to_dict() or {}, now, weight=weights.get(row.id, 1)), reverse=True
+            )
+        ]
 
     return select(database.transaction())

@@ -78,7 +78,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # Bump once in the final chunk: a concurrent pass must not clear the
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
-            batch.set(state, {'score': firestore.Increment(weight), 'usage_weight': weight}, merge=True)
+            batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True

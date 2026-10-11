@@ -148,6 +148,11 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             timeout_seconds=min(timeout_seconds, 180),
             progress=progress,
         )
+    except dream_store.AdmissionDenied:
+        # The transaction deterministically declined without creating an owner lease.
+        if slot is not None:
+            await dream_capacity.release(slot)
+        raise
     except BaseException:
         # Cancellation/ambiguous failures keep the slot until TTL, just as owner leases.
         raise
