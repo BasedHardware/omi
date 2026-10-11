@@ -652,6 +652,12 @@ environment_shared:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         secrets:
+          TYPESENSE_HOST:
+            secret: TYPESENSE_HOST
+            version: latest
+          TYPESENSE_API_KEY:
+            secret: TYPESENSE_API_KEY
+            version: latest
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
             version: latest
@@ -668,6 +674,9 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          TYPESENSE_HOST_PORT:
+            value: '443'
+            category: service_discovery
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery

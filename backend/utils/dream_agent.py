@@ -157,7 +157,10 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
     try:
         async with asyncio.timeout(timeout_seconds):
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
-            records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
+            # Retrieval coordinates storage and embedding providers; leave CRUD workers free.
+            records, consumed = await run_blocking(
+                postprocess_executor, dream_reads.read_changes, uid, lease, caps, vocabulary
+            )
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
             report['role_counts'] = {
