@@ -502,9 +502,17 @@ At most four live generations, eight scopes per summary, and 8 KiB of encoded
 metadata survive. The first-resolver summary is immutable across later repair
 and reprocessing; transactional merges retain newer live sequences. Live
 metadata piggybacks on identity flushes, with a metadata-only transactional
-read/update when no labels were produced and at finalization boundaries.
-Unchanged snapshots do not write. This adds bounded document writes/reads,
-not an embedding retry or a per-segment diagnostic write. Optional metadata
+read/update at finalization/drain/rollover boundaries when no labels were produced.
+Each socket/conversation/generation claims at most one standalone attempt before
+awaiting persistence; concurrent and repeated boundaries cannot retry it, even
+on failure. Post-checkpoint observations remain in logs and may piggyback on
+existing identity/processing writes. Unchanged snapshots do not write. Thus
+N generations add at most N successful standalone writes (and N transaction
+invocations; Firestore may retry reads within a transaction). Each can advance
+the document revision once and invalidate an overlapping late-repair CAS.
+There is no extra diagnostic write on the segment loop. The unqueried map has
+a declared single-field indexing exemption, inherited by its descendants;
+applying exemptions follows the separate approved field-exemptions operation. Optional metadata
 is omitted if the resulting document exceeds the conservative 900 KiB size
 guard; failures preserve existing metadata and allow content writes to continue.
 A stopped generation freezes its summary so an in-flight old task cannot claim

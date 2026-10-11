@@ -555,13 +555,16 @@ class TranscriptProcessor:
             or speaker.segment_identity_status
             or getattr(speaker, 'voice_identity_status', None)
         ):
-            if diagnostic_snapshot and conversation_id and observation:
+            boundary_snapshot = (
+                observation.boundary_snapshot(conversation_id) if observation and conversation_id else None
+            )
+            if boundary_snapshot:
                 try:
                     await self.host.persistence.call(
                         conversations_db.update_owner_recognition_diagnostics,
                         self.host.request.uid,
                         conversation_id,
-                        diagnostic_snapshot,
+                        boundary_snapshot,
                     )
                 except Exception:
                     observation.observe('flush_failed')

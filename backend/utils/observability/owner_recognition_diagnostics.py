@@ -29,6 +29,7 @@ class LiveGeneration:
         self.data: dict[str, Any] = dict(ids, sequence=0, reasons={}, scopes=[])
         self.logged = set()
         self.closed = False
+        self.boundary_claimed = False
 
     def add(self, key, amount=1):
         if not self.closed:
@@ -97,6 +98,21 @@ class LiveDiagnostics:
         return contract.normalize(
             {'live': [row.data for row in self.generations if row.data['conversation'] == conversation]}
         )
+
+    def boundary_snapshot(self, conversation):
+        """Claim one optional standalone flush per generation, before any await.
+
+        Failed attempts are not retried. Later observations remain available to
+        logs and existing identity/processing writes without another revision.
+        """
+        rows = [
+            row
+            for row in self.generations
+            if row.data['conversation'] == conversation and row.data.get('stop') and not row.boundary_claimed
+        ]
+        for row in rows:
+            row.boundary_claimed = True
+        return contract.normalize({'live': [row.data for row in rows]})
 
     def checkpoint(self, conversation, queue, tasks):
         row = self.current

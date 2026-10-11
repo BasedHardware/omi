@@ -260,7 +260,8 @@ class LiveConversationController:
     async def schedule_finalization(self, conversation_id: str) -> bool:
         observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
         if observation:
-            snapshot = observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            snapshot = observation.boundary_snapshot(conversation_id)
             if snapshot:
                 try:
                     await self.host.persistence.call(

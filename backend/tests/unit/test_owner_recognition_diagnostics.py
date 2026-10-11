@@ -368,6 +368,7 @@ def test_actual_flush_with_no_identity_map_persists_only_diagnostic_field(monkey
     processor = transcripts.TranscriptProcessor.__new__(transcripts.TranscriptProcessor)
     processor.host = host
     matcher.diagnostics.observe('no_prints', 'socket:0')
+    matcher.diagnostics.stop('drain', matcher.queue, matcher.tasks)
     asyncio.run(processor.flush_speaker_assignments('c'))
     assert {k: v for k, v in store.rows[path].items() if k != contract.FIELD} == original
     assert store.rows[path][contract.FIELD]['live'][0]['reasons']['no_prints'] == 1
@@ -416,3 +417,44 @@ def test_optional_score_fault_does_not_interrupt_identity_publication(monkeypatc
     assert matcher.speaker_to_person[1][0] == 'user'
     assert matcher.voice_identity_status[1].value == 'user'
     assert snapshot(matcher)['reasons']['scores_failed'] >= 1
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_standalone_boundary_is_claimed_once_before_await_even_on_failure(monkeypatch, fail):
+    matcher, host, _ = live(monkeypatch, [])
+    host.speakers = matcher
+    calls = []
+    processor = transcripts.TranscriptProcessor.__new__(transcripts.TranscriptProcessor)
+    processor.host = host
+
+    async def persist(fn, *args, **kwargs):
+        calls.append(copy.deepcopy(args[-1]))
+        # Re-enter while the first persistence operation is still outstanding.
+        await processor.flush_speaker_assignments('c')
+        if fail:
+            raise ConnectionError('synthetic')
+        return True
+
+    host.persistence = SimpleNamespace(call=persist)
+
+    async def run():
+        await processor.flush_speaker_assignments('c')
+        assert not calls, 'active segment-loop flushes must not add diagnostic writes'
+        matcher.diagnostics.checkpoint('c', matcher.queue, matcher.tasks)
+        await processor.flush_speaker_assignments('c')
+        # New sequence/pending counts, stop, and repeated boundaries do not retry.
+        matcher.diagnostics.observe('no_pcm')
+        matcher.diagnostics.stop('drain', matcher.queue, matcher.tasks)
+        for _ in range(20):
+            matcher.diagnostics.checkpoint('c', matcher.queue, matcher.tasks)
+            await processor.flush_speaker_assignments('c')
+        assert len(calls) == 1
+        assert calls[0]['live'][0]['stop'] == 'finalized'
+        # A successor owns its own single attempt.
+        matcher.diagnostics.begin('c', matcher._generation + 1)
+        matcher.diagnostics.stop('rollover', matcher.queue, matcher.tasks)
+        await processor.flush_speaker_assignments('c')
+        assert len(calls) == 2
+        assert calls[1]['live'][0]['generation'] == matcher._generation + 1
+
+    asyncio.run(run())

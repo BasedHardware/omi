@@ -684,6 +684,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'speaker_resolution',
         # Server-derived numeric voice evidence; not client-authored display projection.
         'speaker_match_scores',
+        # Server-authored counts/enums/durations/ids only; no client display
+        # projection. Internal metadata, excluded from API and integrations.
+        'owner_recognition_diagnostics',
     }
 )
 
@@ -2214,3 +2217,15 @@ def test_internal_voice_match_scores_are_absent_from_client_and_integration_view
         public = redact(conv.model_dump())
         assert 'speaker_match_scores' not in public
         assert all('speaker_match_scores' not in s for s in public.get('transcript_segments', []))
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_internal_owner_diagnostics_are_absent_from_client_and_integration_views(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.owner_recognition_diagnostics = {'first_resolver': {'reason': 'private_cloud_disabled', 'uid': 'owner'}}
+    assert conv.model_dump()['owner_recognition_diagnostics']['first_resolver']['uid'] == 'owner'
+    assert 'owner_recognition_diagnostics' not in conv.model_dump(mode='json')
+    assert 'owner_recognition_diagnostics' not in render_mod.PROJECTION_FAMILY_FIELDS
+    assert 'owner_recognition_diagnostics' not in render_mod.conversation_to_dict(conv)
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        assert 'owner_recognition_diagnostics' not in redact(conv.model_dump())
