@@ -27,10 +27,10 @@ class UndoStore:
             .document(receipt_id)
         )
 
-    def record(self, uid, session, kind, object_id, before, after):
+    def record(self, uid, session, kind, object_id, before, after) -> ActionReceipt:
         runtime = surface_runtime.get()
         if runtime is None or runtime.surface == 'app':
-            return
+            raise PermissionError('Action receipts require an admitted channel turn')
         runtime.principal.authorize(uid)
         if runtime.guard:
             runtime.guard()

@@ -182,7 +182,7 @@ class Gateway:
             # Cancellation can leave executor/provider work alive. Retain fencing
             # on process shutdown; ordinary settled errors never strand the chat.
             current_task = asyncio.current_task()
-            if token and (current_task is None or not current_task.cancelling()):
+            if token and session is not None and (current_task is None or not current_task.cancelling()):
                 await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
         return True
 
