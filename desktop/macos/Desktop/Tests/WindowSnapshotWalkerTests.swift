@@ -259,6 +259,25 @@ final class WindowSnapshotWalkerTests: XCTestCase {
     XCTAssertTrue(line.contains("Pay\\\" [press] fp=00000000 · a:send AXButton \\\"Send\\\""), line)
   }
 
+  /// WhatsApp starts nearly every label with U+200E; the model reads the words alone.
+  func testTheHarmlessMarksAppsPutAroundTheirLabelsAreDropped() throws {
+    let source = FixtureAccessibilitySource(
+      windows: [
+        window(
+          "W",
+          children: [
+            axNode("AXButton", "\u{200E}Send", actions: ["AXPress"]),
+            axNode("AXButton", "\u{200F}Cap\u{200B}tion\u{2060}\u{FEFF}\u{061C}", actions: ["AXPress"]),
+          ])
+      ])
+
+    let lines = try snapshot(source).lines
+
+    XCTAssertTrue(lines.contains { $0.hasPrefix("n:AXButton:\"Send\" ") }, "\(lines)")
+    XCTAssertTrue(lines.contains { $0.hasPrefix("n:AXButton:\"Caption\" ") }, "\(lines)")
+    XCTAssertFalse(lines.joined().unicodeScalars.contains { InvisibleFormatMarks.isHarmless($0) })
+  }
+
   /// Catalyst messaging apps answer with buttons inside groups and static
   /// text bubbles: no list and no text field. The walk must still name them.
   func testACatalystMessagingWindowStillYieldsButtonsAndText() throws {
