@@ -28,7 +28,9 @@ const h = vi.hoisted(() => ({
     generatedAt: 0
   })),
   // Never settles — a source fetch stays in flight so a sign-out can abort it.
-  netFetch: vi.fn((_url: string, _init: { signal: AbortSignal }) => new Promise<Response>(() => {})),
+  netFetch: vi.fn(
+    (_url: string, _init: { signal: AbortSignal }) => new Promise<Response>(() => {})
+  ),
   onBackendSessionChanged: vi.fn()
 }))
 
