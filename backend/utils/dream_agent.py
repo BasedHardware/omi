@@ -153,8 +153,12 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         if slot is not None:
             await dream_capacity.release(slot)
         raise
+    except Exception:
+        if slot is not None:
+            await dream_capacity.release(slot)
+        raise
     except BaseException:
-        # Cancellation/ambiguous failures keep the slot until TTL, just as owner leases.
+        # Cancellation may leave synchronous IO running; retain the TTL fence.
         raise
     if slot is not None and report.get('error_type') != 'TimeoutError':
         await dream_capacity.release(slot)
@@ -404,32 +408,61 @@ async def _run_admitted_pass(
         and report['tokens'] > 0
         and report.get('reasoning_attempted', False),
     )
+    if report.get('reason') == 'idle':
+        report.pop('run_id', None)
     record_pass(report)
     return report
 
 
-DRAIN_TIMEOUT_SECONDS = 120
+PASS_TIMEOUT_SECONDS = 180
+FINISH_MARGIN_SECONDS = 30
+DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
 
 
 async def drain(*, limit=100):
     if mode() == 'off' or limit <= 0:
         return []
     results = []
+    page = None
+    tried = set()
+    stop = asyncio.Event()
+    deadline = asyncio.get_running_loop().time() + DRAIN_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             if await dream_capacity.available_model() is None:
                 return [{'status': 'waiting', 'reason': 'reserved_capacity'}]
-            owners = iter(await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100)))
+            page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100))
+            owners = iter(page)
 
             async def worker():
                 for uid in owners:
-                    if mode() == 'off':
+                    if mode() == 'off' or stop.is_set():
                         return
-                    results.append(await run_pass(uid))
+                    if deadline - asyncio.get_running_loop().time() < PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS:
+                        stop.set()
+                        results.append({'status': 'deadline'})
+                        return
+                    try:
+                        report = await run_pass(uid)
+                    except Exception as exc:
+                        # Owner-local acquire/finish faults must not cancel siblings.
+                        report = {'status': 'failed', 'error_type': type(exc).__name__}
+                        record_pass(report)
+                    results.append(report)
+                    if report.get('status') == 'waiting':
+                        stop.set()
+                        return
+                    tried.add(uid)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):
                     group.create_task(worker())
     except TimeoutError:
         results.append({'status': 'deadline'})
+    if isinstance(page, dream_scheduler.CandidatePage):
+        try:
+            await run_blocking(db_executor, dream_scheduler.advance, page, tried)
+        except Exception:
+            # Failed cursor persistence retries the same page, never skips owners.
+            results.append({'status': 'failed', 'error_type': 'CursorWriteError'})
     return results

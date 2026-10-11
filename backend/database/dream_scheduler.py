@@ -21,48 +21,72 @@ def candidate_page(*, after=None, limit=100, transaction=None, firestore_client=
     query = users.order_by('__name__')
     if after:
         query = query.start_after({'__name__': users.document(after)})
-    return list(query.limit(max(1, min(limit, 100))).stream(transaction=transaction))
+    return list(query.limit(max(1, min(limit, 100))).stream(transaction=transaction, timeout=3))
+
+
+class CandidatePage(list):
+    def __init__(self, owners, *, ordered, after):
+        super().__init__(owners)
+        self.ordered = ordered
+        self.after = after
 
 
 def candidates(*, limit=100, now=None, firestore_client=None):
     if limit <= 0:
-        return []
+        return CandidatePage([], ordered=[], after=None)
     database = firestore_client if firestore_client is not None else get_firestore_client()
     cursor = database.collection('dream_scheduler').document('rotation')
     now = now or datetime.now(timezone.utc)
-
-    @firestore.transactional
-    def select(tx):
-        after = (cursor.get(transaction=tx).to_dict() or {}).get('after')
-        rows = candidate_page(after=after, limit=limit, transaction=tx, firestore_client=database)
-        if not rows and after:
-            rows = candidate_page(limit=limit, transaction=tx, firestore_client=database)
-        # Read current plans in one transaction-bound batch; idle owners and plan
-        # changes must not depend on a later product write to refresh their weight.
-        owners = (
-            {
-                snapshot.id: snapshot.to_dict() or {}
-                for snapshot in database.get_all(
-                    [database.collection('users').document(row.id) for row in rows],
-                    transaction=tx,
-                    timeout=3,
-                    field_paths=['subscription.plan', 'plan'],
-                )
-            }
-            if rows
-            else {}
-        )
-        weights = {
-            uid: 2 if (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS else 1
-            for uid, user in owners.items()
+    after = (cursor.get(timeout=3).to_dict() or {}).get('after')
+    rows = candidate_page(after=after, limit=limit, firestore_client=database)
+    if not rows and after:
+        rows = candidate_page(limit=limit, firestore_client=database)
+    # Entitlements are a projected read outside a transaction, with no user locks.
+    owners = (
+        {
+            snapshot.id: snapshot.to_dict() or {}
+            for snapshot in database.get_all(
+                [database.collection('users').document(row.id) for row in rows],
+                timeout=3,
+                field_paths=['subscription.plan', 'plan'],
+            )
         }
-        # Advance atomically across competing drains. Leases still serialize owners.
-        tx.set(cursor, {'after': rows[-1].id if rows else None})
-        return [
+        if rows
+        else {}
+    )
+    weights = {
+        uid: 2 if (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS else 1
+        for uid, user in owners.items()
+    }
+    return CandidatePage(
+        [
             row.id
             for row in sorted(
                 rows, key=lambda row: priority(row.to_dict() or {}, now, weight=weights.get(row.id, 1)), reverse=True
             )
-        ]
+        ],
+        ordered=[row.id for row in rows],
+        after=after,
+    )
 
-    return select(database.transaction())
+
+def advance(page, tried, *, firestore_client=None):
+    # Priority order can differ from document order. Only advance over a contiguous
+    # prefix of attempted owners so capacity waits never skip anyone.
+    after = page.after
+    for uid in page.ordered:
+        if uid not in tried:
+            break
+        after = uid
+    if after == page.after:
+        return
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    cursor = database.collection('dream_scheduler').document('rotation')
+
+    @firestore.transactional
+    def finish(tx):
+        current = (cursor.get(transaction=tx).to_dict() or {}).get('after')
+        if current == page.after:
+            tx.set(cursor, {'after': after})
+
+    finish(database.transaction())

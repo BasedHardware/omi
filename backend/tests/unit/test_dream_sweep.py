@@ -110,6 +110,10 @@ def store(monkeypatch):
     db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
+    db.rows[('dream_users', UID, 'dirty', 'fixture')] = {
+        'version': 'fixture',
+        'last_changed_at': datetime.now(timezone.utc),
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
@@ -195,6 +199,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     assert set(store.rows) == {
         ('users', UID),
         ('dream_users', UID),
+        ('dream_users', UID, 'dirty', 'fixture'),
         ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
         ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
@@ -204,6 +209,8 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
 @pytest.mark.parametrize('stalled_stage', ['query', 'plan', 'finish'])
 def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeypatch, stalled_stage):
     monkeypatch.setattr(dream_agent, 'DRAIN_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(dream_agent, 'PASS_TIMEOUT_SECONDS', 0)
+    monkeypatch.setattr(dream_agent, 'FINISH_MARGIN_SECONDS', 0)
     monkeypatch.setenv('DREAM_AGENT_CONCURRENCY', '1')
     monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
     monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
@@ -279,8 +286,12 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '180s'
-    assert dream_agent.DRAIN_TIMEOUT_SECONDS < 150 < int(dream['attempt_deadline'][:-1])
+    assert dream['attempt_deadline'] == '300s'
+    assert (
+        dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
+        <= dream_agent.DRAIN_TIMEOUT_SECONDS
+        < int(dream['attempt_deadline'][:-1])
+    )
     assert not any(
         job['name'] == dream['name'] and job['state'] != 'PAUSED' for job in scheduler['environments']['dev']['jobs']
     )

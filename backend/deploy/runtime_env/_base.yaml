@@ -674,6 +674,9 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          OMI_VERTEX_RESERVATION_PROJECT:
+            value: '{compute_project}'
+            category: runtime_identity
           TYPESENSE_HOST_PORT:
             value: '443'
             category: service_discovery

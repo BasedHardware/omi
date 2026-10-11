@@ -87,7 +87,12 @@ class ReservationState:
             for m, s in sorted(RESERVATIONS.items())
         ]
         revision = hashlib.sha256(json.dumps(addresses).encode()).hexdigest()[:16]
-        return 'vertex-reservations:v1:' + os.getenv('GOOGLE_CLOUD_PROJECT', '') + ':' + revision
+        return (
+            'vertex-reservations:v1:'
+            + os.getenv('OMI_VERTEX_RESERVATION_PROJECT', os.getenv('GOOGLE_CLOUD_PROJECT', ''))
+            + ':'
+            + revision
+        )
 
     def _check_scope(self) -> None:
         key = self.key()
