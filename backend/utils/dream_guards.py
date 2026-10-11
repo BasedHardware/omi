@@ -125,19 +125,34 @@ RECORD_REF = re.compile(
 )
 
 
-def summary_rejection(edit, row, *, min_words=None):
-    if edit.kind not in {'title', 'overview'}:
+def summary_field_rejection(kind, row, *, min_words=None):
+    """Storage eligibility shared by prompt projection and the effect backstop."""
+    if kind not in {'title', 'overview'}:
         return None
-    current = (row.get('structured') or {}).get(edit.kind) or ''
-    has_content = bool(current) if edit.kind == 'title' else bool(current.strip())
-    if has_content or (edit.kind == 'title' and row.get('user_title')):
+    current = (row.get('structured') or {}).get(kind) or ''
+    has_content = bool(current) if kind == 'title' else bool(current.strip())
+    if has_content or (kind == 'title' and row.get('user_title')):
         return 'nonempty_field'
     # Sections can be the visible overview even when its compatibility field is blank.
-    if edit.kind == 'overview' and (row.get('structured') or {}).get('sections'):
+    if kind == 'overview' and (row.get('structured') or {}).get('sections'):
         return 'nonempty_field'
     speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
     if len(tokens(speech)) < (MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words):
         return 'insufficient_speech'
+    return None
+
+
+def summary_eligibility(row):
+    return {kind: summary_field_rejection(kind, row) or 'editable' for kind in ('title', 'overview')}
+
+
+def summary_rejection(edit, row, *, min_words=None):
+    if edit.kind not in {'title', 'overview'}:
+        return None
+    reason = summary_field_rejection(edit.kind, row, min_words=min_words)
+    if reason:
+        return reason
+    speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
     after_words = tokens(edit.after)
     if len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words)):
         return 'placeholder'
