@@ -950,11 +950,13 @@ enum GeneratedToolCapabilities {
       "Always requires an approval dispatch showing the resolved recipient and exact text.",
       "Resolve named recipients with search_contacts first.",
       "Leave service unset unless the user explicitly asked for SMS or iMessage.",
+      "Reports delivered, sent, not_delivered or unconfirmed from the Messages history, and never sends twice.",
       "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
       "Put the exact text you intend to send in the text field — the approval card shows the user this string verbatim.",
       "Never send to a handle the user did not name or confirm.",
       "Leave service unset unless the user explicitly asked for SMS or iMessage; auto lets Messages.app choose.",
-      "After a successful send, report the recipient and that it was sent — do not re-send on an ambiguous result."
+      "Report the result's status in plain words: delivered; sent but not yet delivered; not_delivered (Messages recorded an error); or unconfirmed (Omi could not find it in the Messages history).",
+      "Never send again on your own. On unconfirmed, say it may or may not have gone and ask the person to check Messages before anything is sent again; on not_delivered, send again only if they ask."
     ]
     ),
     Capability(
