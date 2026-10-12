@@ -515,7 +515,7 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
                 response = await client.post('/v1/messaging/webhooks/telegram', headers=headers, json=body)
                 assert response.status_code == 202
                 for _ in range(100):
-                    if all(job['status'] == 'done' for job in store.jobs.values()):
+                    if all(job['status'] == 'done' for job in store.jobs.values()) and not store.leases:
                         break
                     await asyncio.sleep(0.005)
                 assert not store.leases
