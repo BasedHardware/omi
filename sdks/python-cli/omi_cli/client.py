@@ -214,6 +214,13 @@ class OmiClient:
                 message="Connection failed",
                 detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
             ) from exc
+        except httpx.DecodingError as exc:
+            if method in _AMBIGUOUS_WRITE_METHODS:
+                raise _unknown_write_outcome(method) from exc
+            raise TransportError(
+                message="Response decoding failed",
+                detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection or try again.",
+            ) from exc
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")
@@ -305,7 +312,7 @@ def _may_retry(method: str, exc: BaseException) -> bool:
     """Only replay writes when the failure establishes they were not applied."""
     if isinstance(exc, _RetryableHttp):
         return method not in _AMBIGUOUS_WRITE_METHODS or exc.response.status_code == 429
-    if isinstance(exc, httpx.TransportError):
+    if isinstance(exc, (httpx.TransportError, httpx.DecodingError)):
         return method not in _AMBIGUOUS_WRITE_METHODS or isinstance(
             exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
         )
