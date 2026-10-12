@@ -1,0 +1,3 @@
+{
+  "change": "Offline Sync restores detail navigation on unsyncable rows for manual export, and adds bulk clearing for unsyncable recordings."
+}
