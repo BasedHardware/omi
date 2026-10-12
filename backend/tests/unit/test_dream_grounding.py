@@ -329,7 +329,7 @@ def test_real_pass_routes_ungrounded_to_spelling_question_with_shared_cap(monkey
             (questions.append(dream_grounding.spelling_question(edit)) or 'suggested') if budget else 'suggestion_cap'
         ),
     )
-    report = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps()))
+    report = asyncio.run(dream_agent.run_pass('synthetic', caps=Caps(), turn=AsyncMock()))
     assert report['status'] == 'complete'
     assert report['proposed']['edits'][0]['policy'] == 'suggest'
     assert report['outcomes'][0]['status'] == ('suggested' if budget else 'suggestion_cap')

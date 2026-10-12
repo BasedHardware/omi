@@ -505,6 +505,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 yield _openai_sse_done()
                 return
             except _VertexHttpError as error:
+                await self._reservations.record(model, capacity, error.status_code, None)
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
                 recovery = self._recovery_attempts(
                     model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
@@ -741,6 +742,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     timeout_ms=remaining_ms,
                 )
             except _VertexHttpError as error:
+                await self._reservations.record(model, capacity, error.status_code, None)
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
                 recovery = self._recovery_attempts(

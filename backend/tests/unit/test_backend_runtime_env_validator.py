@@ -132,7 +132,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -140,7 +141,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     return re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         # backend-sync finalizes conversations, so it reads this environment's frame docs.
-        flags + r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
         r'\n        {"name": "TYPESENSE_HOST_PORT", "value": "443"},'
         r'\n        {"name": "TYPESENSE_HOST", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_HOST", "key": "latest"}}},'
         r'\n        {"name": "TYPESENSE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_API_KEY", "key": "latest"}}},',

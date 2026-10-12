@@ -16,6 +16,7 @@ from utils.llm.shaped_agent import Budget, Mount
 
 @pytest.fixture
 def transport(monkeypatch):
+    monkeypatch.setattr(dream_transport.dream_capacity, 'available_model', AsyncMock(return_value='gemini-2.5-flash'))
     client = type('Client', (), {'post': AsyncMock()})()
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
