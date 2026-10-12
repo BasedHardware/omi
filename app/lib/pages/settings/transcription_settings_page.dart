@@ -878,7 +878,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       description = Semantics(
         link: true,
         child: InkWell(
-          onTap: () => routeToPage(context, const UsagePage(showUpgradeDialog: true)),
+          onTap: () {
+            final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+            PlatformManager.instance.analytics.paywallOpened('transcription_settings', currentPlan: plan);
+            routeToPage(
+              context,
+              const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'),
+            );
+          },
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Align(

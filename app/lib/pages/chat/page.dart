@@ -739,9 +739,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
+    final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
-    context.read<UsageProvider>().fetchSubscription();
-    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
+    usage.fetchSubscription();
+    PlatformManager.instance.analytics.paywallOpened(
+      'chat_quota_exceeded',
+      currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
+    );
+    showOmiSheet<void>(
+      context: context,
+      padding: EdgeInsets.zero,
+      builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+    );
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1139,7 +1148,9 @@ class _SelectedTextChip extends StatelessWidget {
 }
 
 class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
+  const _PlansSheetWrapper({this.analyticsSource = 'chat_quota_exceeded'});
+
+  final String analyticsSource;
 
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
@@ -1178,6 +1189,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _notesController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
+      analyticsSource: widget.analyticsSource,
     );
   }
 }
