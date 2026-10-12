@@ -36,6 +36,17 @@ class EvidenceRecords(dict):
     def __init__(self, records=(), *, targets=None):
         super().__init__(records)
         self.targets = set(self if targets is None else targets)
+        self.target_sources = {ref: getattr(records, 'target_sources', {}).get(ref, 'dirty') for ref in self.targets}
+        self.cleanup_cursor = dict(getattr(records, 'cleanup_cursor', {}) or {})
+        self.seed_errors = getattr(records, 'seed_errors', 0)
+
+
+def preserve_sources(records, original):
+    sources = getattr(original, 'target_sources', {})
+    records.target_sources = {ref: sources.get(ref, 'dirty') for ref in records.targets}
+    records.cleanup_cursor = dict(getattr(original, 'cleanup_cursor', {}) or {})
+    records.seed_errors = getattr(original, 'seed_errors', 0)
+    return records
 
 
 def target_refs(records):
@@ -333,4 +344,4 @@ def add_context(
             break
         records = candidate
         path_count(diagnostics, path, 'added')
-    return records
+    return preserve_sources(records, targets)

@@ -309,7 +309,14 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     host.state.speaker_id_enabled = True
     host.state.speaker_id_done = asyncio.Event()
     host.request.uid = 'test-owner'
-    host.persistence = SimpleNamespace(call=AsyncMock(return_value={}))
+    rejector_finished = asyncio.Event()
+
+    async def authority(*args):
+        # Force the cheaper rejected task to finish while owner authority awaits.
+        await rejector_finished.wait()
+        return {}
+
+    host.persistence = SimpleNamespace(call=AsyncMock(side_effect=authority))
     matcher._profile_conversation_id = 'conversation'
     matcher._embedding_attempts[1] = 8
     matcher._socket_embedding_tokens = 1
@@ -320,7 +327,6 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     completed = []
     original = matcher.match
     finished = asyncio.Event()
-    rejector_finished = asyncio.Event()
     extract_query = matcher._extract_query
 
     async def delayed_query(pcm):

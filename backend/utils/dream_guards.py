@@ -64,6 +64,13 @@ def spelling_rejection(edit):
     collection, separator, key = edit.target.partition('/')
     if collection not in SPELLING_COLLECTIONS or not separator or not key or '/' in key:
         return 'bad_target'
+    if (
+        not edit.before.strip()
+        or not edit.after.strip()
+        or edit.before.strip() == edit.after.strip()
+        or max(len(edit.before), len(edit.after)) > 50
+    ):
+        return 'invalid_spelling'
     return None
 
 

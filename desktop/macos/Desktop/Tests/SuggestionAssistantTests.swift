@@ -997,3 +997,31 @@ final class SuggestionPacingTests: XCTestCase {
     }
   }
 }
+
+/// The automation probe reports `delivered` from the notification service's real presentation
+/// outcome, not from handing the card over: gates and the bar can still withhold it.
+final class SuggestionProbePresentationTests: XCTestCase {
+  private func outcomes(_ values: [Bool]) -> AsyncStream<Bool> {
+    AsyncStream { continuation in
+      values.forEach { continuation.yield($0) }
+      continuation.finish()
+    }
+  }
+
+  func testAPresentedCardIsDelivered() async {
+    let presented = await SuggestionAssistant.awaitPresentation(outcomes([true]), timeout: .seconds(1))
+    XCTAssertTrue(presented)
+  }
+
+  func testADroppedCardIsNotDelivered() async {
+    let presented = await SuggestionAssistant.awaitPresentation(outcomes([false]), timeout: .seconds(1))
+    XCTAssertFalse(presented)
+  }
+
+  func testACardThatNeverReportsIsNotDelivered() async {
+    let (silent, continuation) = AsyncStream.makeStream(of: Bool.self)
+    let presented = await SuggestionAssistant.awaitPresentation(silent, timeout: .milliseconds(50))
+    continuation.finish()
+    XCTAssertFalse(presented)
+  }
+}

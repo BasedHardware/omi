@@ -4,8 +4,10 @@ import math
 import os
 from dataclasses import dataclass
 
-AUTO = frozenset({'title', 'overview', 'spelling', 'vocabulary'})
-SUGGEST = frozenset({'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'})
+AUTO = frozenset({'title', 'overview', 'spelling'})
+SUGGEST = frozenset(
+    {'vocabulary', 'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
+)
 KNOWN_KINDS = AUTO | SUGGEST
 SUGGESTIONS_PER_DAY = 3
 
@@ -125,3 +127,11 @@ class Caps:
     @property
     def reservation_usd(self) -> float:
         return self.tokens * self.max_usd_per_token
+
+
+def backfill_share() -> float:
+    return min(1.0, number('DREAM_AGENT_BACKFILL_SHARE', 0.1))
+
+
+def random_seed_share() -> float:
+    return min(1.0, number('DREAM_AGENT_RANDOM_SEED_SHARE', 0.1))
