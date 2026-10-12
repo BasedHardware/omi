@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +28,7 @@ import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -538,6 +540,21 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
+    final user = FirebaseAuth.instance.currentUser;
+    final plan = context.read<UsageProvider>().subscription?.subscription.plan;
+    if (SuperwallPilot.instance.isEnabled && user != null && !user.isAnonymous && plan?.isPaid == false) {
+      unawaited(_showSuperwallUsageUpgrade(user.uid));
+      return;
+    }
+    _showExistingPlansSheet();
+  }
+
+  Future<void> _showSuperwallUsageUpgrade(String uid) async {
+    final registered = await SuperwallPilot.instance.showUsageUpgrade(uid);
+    if (!registered && mounted) _showExistingPlansSheet();
+  }
+
+  void _showExistingPlansSheet() {
     showOmiSheet(
       context: context,
       padding: EdgeInsets.zero,

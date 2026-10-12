@@ -18,6 +18,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -286,6 +287,7 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('platform_services', PlatformManager.initializeServices);
+  SuperwallPilot.instance.configure();
   await PhysicalQualification.startupStage('notification_locale', NotificationChannelStrings.loadAppLocale);
   await PhysicalQualification.startupStage('notification_service', NotificationService.instance.initialize);
 
@@ -339,6 +341,7 @@ Future _init() async {
   if (isAuth) {
     OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
+    await SuperwallPilot.instance.syncUser(firebaseUser != null && !firebaseUser.isAnonymous ? firebaseUser.uid : null);
     PlatformManager.instance.analytics.identify(
       authMethod:
           firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
