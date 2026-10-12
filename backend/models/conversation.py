@@ -750,6 +750,7 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 

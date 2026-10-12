@@ -19,6 +19,7 @@ from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 
+from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
@@ -1212,6 +1213,18 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
+    folder_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="ID of one of your folders (GET /v1/dev/user/folders). Files the conversation there instead of "
+        "letting AI pick a folder.",
+    )
+    calendar_meeting_context: Optional[DevCalendarMeetingContext] = Field(
+        default=None,
+        description="Calendar meeting this conversation belongs to. Used as context for the summary and to identify "
+        "participants, like the meetings Omi reads from a connected calendar.",
+    )
     # Optional for backwards compatibility. When supplied, rotation fragments
     # are persisted but do not create a notes-ready receipt.
     # Plain string, not a Literal: this is opaque client-versioned metadata
@@ -1956,6 +1969,10 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
+    if request.folder_id is not None and not folders_db.get_folder(uid, request.folder_id):
+        raise HTTPException(status_code=422, detail="folder_id does not match any of your folders")
+    calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
+
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
     geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
@@ -2063,12 +2080,18 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            folder_id=request.folder_id,
             structured=Structured(),
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
                 'conversation_role': request.conversation_role,
                 **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
+                **(
+                    {'calendar_meeting_context': calendar_context.model_dump(mode='json')}
+                    if calendar_context is not None
+                    else {}
+                ),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2109,6 +2132,8 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            folder_id=request.folder_id,
+            calendar_meeting_context=calendar_context,
             external_data={
                 'conversation_role': request.conversation_role,
                 **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
@@ -2181,6 +2206,13 @@ def _create_conversation_from_segments(
         lifecycle_service.persist_processed_conversation(
             uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
         )
+
+    if request.folder_id is not None:
+        # A preset folder skips AI folder assignment, and with it the count refresh that assignment does.
+        try:
+            folders_db.update_folder_conversation_count(uid, request.folder_id)
+        except Exception:
+            logger.exception('from-segments folder count refresh failed uid=%s folder_id=%s', uid, request.folder_id)
 
     conversation.external_data = {
         **(conversation.external_data or {}),
@@ -2264,6 +2296,9 @@ def create_conversation_from_segments(
     - **finished_at**: When conversation finished (calculated from last segment if not provided)
     - **language**: Language code (default: 'en')
     - **geolocation**: Optional geolocation data
+    - **folder_id**: Optional ID of one of your folders (from GET /v1/dev/user/folders); skips AI folder assignment
+    - **calendar_meeting_context**: Optional calendar meeting (title, participants, start_time, duration_minutes,
+      notes…) used as context for the summary
 
     **Example:**
     ```json

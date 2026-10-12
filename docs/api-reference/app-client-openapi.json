@@ -10395,8 +10395,107 @@
         "title": "CreateCheckoutRequest",
         "type": "object"
       },
+      "CreateConversationCalendarMeeting": {
+        "description": "Calendar meeting a developer-API caller attaches to a conversation it uploads",
+        "properties": {
+          "calendar_event_id": {
+            "description": "Event ID in your calendar",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Calendar Event Id",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "description": "Meeting duration in minutes",
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "meeting_link": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL to join the meeting",
+            "title": "Meeting Link"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Meeting description from the calendar",
+            "title": "Notes"
+          },
+          "participants": {
+            "description": "Invited participants (name and/or email)",
+            "items": {
+              "$ref": "#/components/schemas/MeetingParticipant"
+            },
+            "maxItems": 100,
+            "title": "Participants",
+            "type": "array"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Zoom, Teams, Google Meet, in person…",
+            "title": "Platform"
+          },
+          "start_time": {
+            "description": "Meeting start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "title": {
+            "description": "Meeting title",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "calendar_event_id",
+          "title",
+          "start_time",
+          "duration_minutes"
+        ],
+        "title": "CreateConversationCalendarMeeting",
+        "type": "object"
+      },
       "CreateConversationFromTranscriptRequest": {
         "properties": {
+          "calendar_meeting_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreateConversationCalendarMeeting"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Calendar meeting this conversation belongs to. Used as context for the summary and to identify participants, like the meetings Omi reads from a connected calendar."
+          },
           "capture_evidence": {
             "anyOf": [
               {
@@ -10487,6 +10586,20 @@
             ],
             "description": "When conversation finished (calculated from segments duration if not provided)",
             "title": "Finished At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of one of your folders (GET /v1/dev/user/folders). Files the conversation there instead of letting AI pick a folder.",
+            "title": "Folder Id"
           },
           "geolocation": {
             "anyOf": [
@@ -50109,7 +50222,7 @@
     },
     "/v1/dev/user/conversations/from-segments": {
       "post": {
-        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
+        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n- **folder_id**: Optional ID of one of your folders (from GET /v1/dev/user/folders); skips AI folder assignment\n- **calendar_meeting_context**: Optional calendar meeting (title, participants, start_time, duration_minutes,\n  notes…) used as context for the summary\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
         "operationId": "createConversationFromSegments",
         "requestBody": {
           "content": {

@@ -1633,7 +1633,19 @@ export interface CreateCheckoutRequest {
   promotion_code?: string | null;
 }
 
+export interface CreateConversationCalendarMeeting {
+  calendar_event_id: string;
+  duration_minutes: number;
+  meeting_link?: string | null;
+  notes?: string | null;
+  participants?: Array<MeetingParticipant>;
+  platform?: string | null;
+  start_time: string;
+  title: string;
+}
+
 export interface CreateConversationFromTranscriptRequest {
+  calendar_meeting_context?: CreateConversationCalendarMeeting | null;
   capture_evidence?: CaptureEvidenceLineage | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -1642,6 +1654,7 @@ export interface CreateConversationFromTranscriptRequest {
   conversation_finalization_reason?: string | null;
   conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
+  folder_id?: string | null;
   geolocation?: GeolocationInput | null;
   language?: string | null;
   source?: ConversationSource | null;
@@ -6079,6 +6092,7 @@ export interface OmiApiSchemas {
   "CreateAnnouncementRequest": CreateAnnouncementRequest;
   "CreateChatSessionRequest": CreateChatSessionRequest;
   "CreateCheckoutRequest": CreateCheckoutRequest;
+  "CreateConversationCalendarMeeting": CreateConversationCalendarMeeting;
   "CreateConversationFromTranscriptRequest": CreateConversationFromTranscriptRequest;
   "CreateConversationRequest": CreateConversationRequest;
   "CreateConversationResponse": CreateConversationResponse;

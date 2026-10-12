@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Callable, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MeetingParticipant(BaseModel):
@@ -62,3 +62,34 @@ class CalendarMeetingContext(BaseModel):
                 if on_error is not None:
                     on_error(record, exc)
         return parsed
+
+
+class DevCalendarMeetingContext(BaseModel):
+    """Calendar meeting a developer-API caller attaches to a conversation it uploads"""
+
+    model_config = ConfigDict(title='CreateConversationCalendarMeeting')
+
+    calendar_event_id: str = Field(min_length=1, max_length=1024, description="Event ID in your calendar")
+    title: str = Field(min_length=1, max_length=500, description="Meeting title")
+    participants: List[MeetingParticipant] = Field(
+        default_factory=list, max_length=100, description="Invited participants (name and/or email)"
+    )
+    platform: Optional[str] = Field(default=None, max_length=100, description="Zoom, Teams, Google Meet, in person…")
+    meeting_link: Optional[str] = Field(default=None, max_length=2048, description="URL to join the meeting")
+    start_time: datetime = Field(description="Meeting start time")
+    duration_minutes: int = Field(ge=0, le=1440, description="Meeting duration in minutes")
+    notes: Optional[str] = Field(default=None, max_length=10000, description="Meeting description from the calendar")
+
+    def to_context(self) -> CalendarMeetingContext:
+        # 'screen_activity' has its own merge rules; an API caller always supplies calendar data.
+        return CalendarMeetingContext(
+            calendar_event_id=self.calendar_event_id,
+            title=self.title,
+            participants=self.participants,
+            platform=self.platform,
+            meeting_link=self.meeting_link,
+            start_time=self.start_time,
+            duration_minutes=self.duration_minutes,
+            notes=self.notes,
+            calendar_source='developer_api',
+        )

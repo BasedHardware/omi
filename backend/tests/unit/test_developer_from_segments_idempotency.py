@@ -1009,3 +1009,127 @@ def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
     with pytest.raises(RuntimeError, match='unavailable'):
         developer._create_conversation_from_segments('uid1', _request(client_session_id='session'))
     process.assert_not_called()
+
+
+def _calendar_meeting():
+    return {
+        'calendar_event_id': 'evt-42',
+        'title': 'Weekly sync with Acme',
+        'participants': [{'name': 'Ana', 'email': 'ana@acme.com'}],
+        'start_time': NOW.isoformat(),
+        'duration_minutes': 30,
+        'notes': 'Agenda: roadmap',
+    }
+
+
+def test_unknown_folder_id_is_rejected_before_processing(monkeypatch):
+    get_folder = MagicMock(return_value=None)
+    monkeypatch.setattr(developer.folders_db, 'get_folder', get_folder)
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    with pytest.raises(HTTPException) as exc:
+        developer._create_conversation_from_segments('uid1', _request(folder_id='not-mine'))
+
+    assert exc.value.status_code == 422
+    get_folder.assert_called_once_with('uid1', 'not-mine')
+    process.assert_not_called()
+
+
+def test_folder_and_calendar_reach_create_conversation(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1'}))
+    refresh = MagicMock()
+    monkeypatch.setattr(developer.folders_db, 'update_folder_conversation_count', refresh)
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+
+    def process(_uid, _language, conversation):
+        captured['conversation'] = conversation
+        return Conversation(
+            **conversation.model_dump(exclude={'calendar_meeting_context'}),
+            id='with-folder',
+            created_at=NOW,
+            structured={'title': 'Weekly sync'},
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    body = _request().model_dump(mode='json')
+    body.update(folder_id='folder-1', calendar_meeting_context=_calendar_meeting())
+    response = TestClient(app).post('/v1/dev/user/conversations/from-segments', json=body)
+
+    assert response.status_code == 200, response.text
+    conversation = captured['conversation']
+    assert isinstance(conversation, CreateConversation)
+    assert conversation.folder_id == 'folder-1'
+    context = conversation.calendar_meeting_context
+    assert context.title == 'Weekly sync with Acme'
+    assert context.participants[0].email == 'ana@acme.com'
+    assert context.start_time == NOW
+    assert context.calendar_source == 'developer_api'
+    refresh.assert_called_once_with('uid1', 'folder-1')
+
+
+def test_folder_and_calendar_reach_idempotent_conversation(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1'}))
+    refresh = MagicMock()
+    monkeypatch.setattr(developer.folders_db, 'update_folder_conversation_count', refresh)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    claim = MagicMock(return_value=True)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def process(_uid, _language, conversation):
+        captured['conversation'] = conversation
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    developer._create_conversation_from_segments(
+        'uid1',
+        _request(client_session_id='session-1', folder_id='folder-1', calendar_meeting_context=_calendar_meeting()),
+    )
+
+    assert claim.call_args.args[1]['folder_id'] == 'folder-1'
+    conversation = captured['conversation']
+    assert conversation.folder_id == 'folder-1'
+    stored = conversation.external_data['calendar_meeting_context']
+    assert stored['title'] == 'Weekly sync with Acme'
+    assert stored['calendar_source'] == 'developer_api'
+    refresh.assert_called_once_with('uid1', 'folder-1')
+
+
+def test_without_folder_id_ai_assignment_stays_in_charge(monkeypatch):
+    captured = {}
+    get_folder = MagicMock()
+    refresh = MagicMock()
+    monkeypatch.setattr(developer.folders_db, 'get_folder', get_folder)
+    monkeypatch.setattr(developer.folders_db, 'update_folder_conversation_count', refresh)
+
+    def process(_uid, _language, conversation):
+        captured['conversation'] = conversation
+        return Conversation(
+            **conversation.model_dump(exclude={'calendar_meeting_context'}),
+            id='no-folder',
+            created_at=NOW,
+            structured={'title': 'Chat'},
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    developer._create_conversation_from_segments('uid1', _request())
+
+    assert captured['conversation'].folder_id is None
+    assert captured['conversation'].calendar_meeting_context is None
+    get_folder.assert_not_called()
+    refresh.assert_not_called()
