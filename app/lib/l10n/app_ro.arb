@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Aplici această corectare sugerată?",
     "reviewProposalApply": "Aplică",
     "reviewProposalSuggested": "Sugerat",
-    "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic."
+    "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.",
+    "itemLinkListTitle": "{count, plural, =0{Niciun element} =1{1 element} other{{count} elemente}}"
 }

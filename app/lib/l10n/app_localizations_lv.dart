@@ -13038,4 +13038,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vienības',
+      one: '1 vienība',
+      zero: 'Nav vienību',
+    );
+    return '$_temp0';
+  }
 }

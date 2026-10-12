@@ -12916,4 +12916,16 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count פריטים',
+      one: 'פריט אחד',
+      zero: 'אין פריטים',
+    );
+    return '$_temp0';
+  }
 }

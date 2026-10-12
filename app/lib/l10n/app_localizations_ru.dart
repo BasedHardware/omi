@@ -13055,4 +13055,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Это изменилось после предложения Dream, поэтому ничего не применено.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count элементов',
+      one: '1 элемент',
+      zero: 'Нет элементов',
+    );
+    return '$_temp0';
+  }
 }

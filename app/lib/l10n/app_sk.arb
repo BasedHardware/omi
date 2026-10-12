@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Použiť túto navrhovanú opravu?",
     "reviewProposalApply": "Použiť",
     "reviewProposalSuggested": "Navrhnuté",
-    "reviewProposalConflict": "Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo."
+    "reviewProposalConflict": "Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.",
+    "itemLinkListTitle": "{count, plural, =0{Žiadne položky} =1{1 položka} other{{count} položiek}}"
 }

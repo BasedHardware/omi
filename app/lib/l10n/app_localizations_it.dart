@@ -13079,4 +13079,16 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get reviewProposalConflict =>
       'È cambiato da quando Dream lo ha suggerito, quindi non è stato applicato nulla.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementi',
+      one: '1 elemento',
+      zero: 'Nessun elemento',
+    );
+    return '$_temp0';
+  }
 }

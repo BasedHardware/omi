@@ -13033,4 +13033,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementai',
+      one: '1 elementas',
+      zero: 'Nėra elementų',
+    );
+    return '$_temp0';
+  }
 }

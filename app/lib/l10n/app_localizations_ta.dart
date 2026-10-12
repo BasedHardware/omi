@@ -13099,4 +13099,16 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream பரிந்துரைத்த பிறகு இது மாறியுள்ளது, அதனால் எதுவும் பயன்படுத்தப்படவில்லை.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உருப்படிகள்',
+      one: '1 உருப்படி',
+      zero: 'உருப்படிகள் இல்லை',
+    );
+    return '$_temp0';
+  }
 }

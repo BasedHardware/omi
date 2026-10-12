@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Pritaikyti šį siūlomą pataisymą?",
     "reviewProposalApply": "Pritaikyti",
     "reviewProposalSuggested": "Siūloma",
-    "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta."
+    "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.",
+    "itemLinkListTitle": "{count, plural, =0{Nėra elementų} =1{1 elementas} other{{count} elementai}}"
 }

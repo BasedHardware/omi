@@ -13011,4 +13011,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Od návrhu Dream se to změnilo, takže se nic nepoužilo.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count položek',
+      one: '1 položka',
+      zero: 'Žádné položky',
+    );
+    return '$_temp0';
+  }
 }

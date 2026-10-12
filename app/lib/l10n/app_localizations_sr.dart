@@ -13018,4 +13018,16 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ставки',
+      one: '1 ставка',
+      zero: 'Нема ставки',
+    );
+    return '$_temp0';
+  }
 }
