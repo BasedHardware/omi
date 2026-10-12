@@ -76,7 +76,13 @@ function subscriptionPlanWire(raw: string | null | undefined): string {
 function subscriptionIntervalWire(raw: string | null | undefined): string {
   const value = raw?.trim().toLowerCase() ?? ''
   // Year before month so a title that contains both words is not labeled monthly.
-  if (value === 'year' || value === 'yearly' || value === 'annual' || value.includes('year') || value.includes('annual')) {
+  if (
+    value === 'year' ||
+    value === 'yearly' ||
+    value === 'annual' ||
+    value.includes('year') ||
+    value.includes('annual')
+  ) {
     return 'year'
   }
   if (value === 'month' || value === 'monthly' || value.includes('month')) return 'month'

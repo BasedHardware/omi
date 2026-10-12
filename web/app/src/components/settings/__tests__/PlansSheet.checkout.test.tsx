@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createCheckoutSession = vi.fn(async () => ({
+const createCheckoutSession = vi.fn(async (_priceId: string) => ({
   url: 'https://checkout.stripe.test/pay',
 }));
 
@@ -19,7 +19,7 @@ vi.mock('posthog-js', () => ({
 
 vi.mock('@/lib/api', () => ({
   getAvailablePlans: vi.fn(),
-  createCheckoutSession: (...args: unknown[]) => createCheckoutSession(...args),
+  createCheckoutSession: (priceId: string) => createCheckoutSession(priceId),
   upgradeSubscription: vi.fn(),
   cancelSubscription: vi.fn(),
   getCustomerPortal: vi.fn(),
