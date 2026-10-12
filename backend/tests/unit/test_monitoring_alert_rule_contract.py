@@ -110,7 +110,6 @@ COUNTER_FN_ON_GAUGE_DEBT = {
     "dfpgfzd3t1m9sf",  # critical, pages
     "efpossz9hmsqod",  # critical, pages
     "efpgg049laqyof",
-    "efpgg1kfjglj4d",
     "bevzeigrns5xca",
     "cevzen5b94z5sb",  # critical, pages
     "tz_backend_listen_lb_zero",  # critical, pages

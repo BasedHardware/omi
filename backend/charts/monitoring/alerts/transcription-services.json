@@ -83,7 +83,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  8
                 ],
                 "type": "gt"
               },
@@ -117,12 +117,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1",
+      "threshold": ">8 rps for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >1 rps threshold breached 71% of hours; p50 1.68 / p90 3.07 / p99 4.36 / max 4.79 rps. Threshold above the measured maximum.",
       "summary": "Omi live transcription alert: Backend-listen - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi live transcription production service path.",
@@ -518,9 +518,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  58
                 ],
-                "type": "gt"
+                "type": "gte"
               },
               "operator": {
                 "type": "and"
@@ -552,12 +552,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "threshold": "50",
+      "threshold": ">=58 replicas for 30m (maxReplicas - 2). Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >50 threshold breached 13% of hours; p50 34 / p90 52 / max 60. backend/charts/backend-listen/prod_omi_backend_listen_values.yaml sets HPA maxReplicas=60.",
       "summary": "Omi live transcription alert: Backend-listen replica count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi live transcription production service path.",
