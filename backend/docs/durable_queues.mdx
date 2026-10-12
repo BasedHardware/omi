@@ -125,7 +125,13 @@ Remaining exceptions, called out because they must not change product semantics:
   `blocked_byok`, Cloud Tasks fence, and `reconcile_after_at`. The attempt
   decision in the async pusher helper comes from `decide_attempt` in
   `utils/durable_queue_policy.py`. Age is sampled store-wide on the periodic
-  tick from `get_finalization_job_summary`.
+  tick from `get_finalization_job_summary`. The existing
+  `listen_finalization_oldest_nonterminal_age_seconds` covers only `queued` and
+  `leased` (system-owned work). User-reconnect waiting is reported separately by
+  `listen_finalization_oldest_blocked_byok_age_seconds`, with no alert. BYOK
+  expired ownership returns transactionally to `blocked_byok`; legacy recovery
+  scans at most 50 rows per active status with rotating cursors and the existing
+  status/created-at index.
 - `chat_first_proactive_intents` fetch order uses `ready_sort_key` via
   `database/chat_first_intent_queue.py` so `chat_first_intents.py` does not
   grow. Materialize keeps HTTP 200 for the client contract; a batch whose

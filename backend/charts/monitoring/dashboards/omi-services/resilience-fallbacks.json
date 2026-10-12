@@ -623,7 +623,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "oldest nonterminal age"
+              "options": "oldest system-owned age (queued + leased)"
             },
             "properties": [
               {
@@ -690,7 +690,7 @@
           },
           "editorMode": "code",
           "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)",
-          "legendFormat": "oldest nonterminal age",
+          "legendFormat": "oldest system-owned age (queued + leased)",
           "range": true,
           "refId": "C"
         },
