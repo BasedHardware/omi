@@ -76,6 +76,17 @@ def _coerce_dt(value):
 _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _merge_order_key(conv: Dict) -> datetime:
+    """Chronological order key for a merge source.
+
+    Prefer ``started_at``; fall back to ``created_at`` when a source has no
+    (or an unparseable) ``started_at`` so an API/integration-created
+    conversation is not forced to the year-0001 sentinel and sorted first.
+    Sources with neither timestamp keep the sentinel and their given order.
+    """
+    return _coerce_dt(conv.get("started_at")) or _coerce_dt(conv.get("created_at")) or _UTC_MIN
+
+
 def _photo_created_at_sort_key(photo: Dict) -> datetime:
     created_at = coerce_utc_datetime(photo.get("created_at"))
     if created_at is None:
@@ -182,7 +193,7 @@ def validate_merge_compatibility(
     # Generate warnings for large gaps (but don't reject)
     warnings = []
     _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-    sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get("started_at")) or _UTC_MIN)
+    sorted_convs = sorted(conversations, key=_merge_order_key)
 
     for i in range(1, len(sorted_convs)):
         prev_finished = _coerce_dt(sorted_convs[i - 1].get("finished_at"))
@@ -252,10 +263,11 @@ def perform_merge_async(
         # details and rationale.
         conversations = _normalize_conversation_timestamps(conversations)
 
-        # Sort by started_at (earliest first). _UTC_MIN keeps sort total even
-        # if a doc has no (or an unparseable) started_at.
+        # Sort by started_at (earliest first), falling back to created_at so a
+        # source without started_at is not forced to the year-0001 sentinel.
+        # _UTC_MIN keeps sort total even if a doc has neither timestamp.
         _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-        sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
+        sorted_convs = sorted(conversations, key=_merge_order_key)
 
         # 2. Merge raw data
         merged_segments = _merge_transcript_segments(sorted_convs)

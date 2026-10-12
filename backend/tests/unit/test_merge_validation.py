@@ -699,3 +699,40 @@ class TestResolveMergedFinishedAt:
     def test_missing_key_treated_like_none(self, merge):
         later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
         assert merge._resolve_merged_finished_at([{}, {"finished_at": later}]) == later
+
+
+# ---------------------------------------------------------------------------
+# _merge_order_key
+# ---------------------------------------------------------------------------
+
+
+class TestMergeOrderKey:
+    def test_prefers_started_at(self, merge):
+        started = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        assert merge._merge_order_key({"started_at": started, "created_at": created}) == started
+
+    def test_falls_back_to_created_at_when_started_at_missing(self, merge):
+        created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        assert merge._merge_order_key({"created_at": created}) == created
+
+    def test_falls_back_to_created_at_when_started_at_unparseable(self, merge):
+        created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        assert merge._merge_order_key({"started_at": "not-a-date", "created_at": created}) == created
+
+    def test_neither_timestamp_returns_sentinel(self, merge):
+        assert merge._merge_order_key({}) == merge._UTC_MIN
+        assert merge._merge_order_key({"started_at": None, "created_at": None}) == merge._UTC_MIN
+
+    def test_source_without_started_at_sorts_after_earlier_recorded_source(self, merge):
+        # Regression for the ordering bug: an API/integration-created source
+        # (started_at None, created_at noon) must not sort before a recorded
+        # source that started at 10:00.
+        ten = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        noon = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        pendant = {"id": "pendant", "started_at": ten, "created_at": ten}
+        api = {"id": "api", "started_at": None, "created_at": noon}
+        ordered = sorted([api, pendant], key=merge._merge_order_key)
+        assert [c["id"] for c in ordered] == ["pendant", "api"]
+        # The merged created_at (taken from sorted_convs[0]) is 10:00, not noon.
+        assert ordered[0]["created_at"] == ten
