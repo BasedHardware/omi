@@ -476,6 +476,44 @@ void main() {
       expect(canClaimLiveCapture(batch, oversized, now), isFalse);
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
     });
+
+    test('pendant custody 10s WALs upload in jobs of 300s of audio, not 50s', () {
+      // Discord #21177: pendant ring custody drains audio into ~10s WALs, and a
+      // five-file batch made every sync job and conversation 50s long.
+      const now = 2000000000;
+      final custodyTail = List.generate(
+        40,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 10, codec: BleAudioCodec.opus, seconds: 10),
+      );
+
+      final batch = nextSyncUploadBatch(custodyTail.reversed.toList(), now);
+
+      expect(batch, hasLength(30));
+      expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 300);
+      expect(batch.map((wal) => wal.timerStart), custodyTail.take(30).map((wal) => wal.timerStart));
+    });
+
+    test('a batch is bounded by audio seconds, not by file count', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        10,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 45, codec: BleAudioCodec.opus, seconds: 45),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch, hasLength(6), reason: 'six 45s WALs are 270s; a seventh would pass 300s');
+    });
+
+    test('a WAL longer than the audio budget still uploads, alone', () {
+      const now = 2000000000;
+      final long = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 400);
+      final older = Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 10);
+
+      final batch = nextSyncUploadBatch([older, long], now);
+
+      expect(batch, [long]);
+    });
   });
 
   group('bounded retained capture WALs', () {
