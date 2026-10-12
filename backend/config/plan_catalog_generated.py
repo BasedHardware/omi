@@ -25,8 +25,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'e5088da47b1b6fa03722f8e3f339326954ee8ed8b82bdcec5338009f4ac12c37'
-CATALOG_REVISION: Final = 5
+CATALOG_SHA256: Final = 'f32e383c33fd49df6610373101cb3ceb2c013bf53560f6b2d3a0d2d263a642e5'
+CATALOG_REVISION: Final = 6
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -163,7 +163,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                                        'accepted_env_vars': ['STRIPE_ARCHITECT_ANNUAL_PRICE_ID',
                                                              'STRIPE_PRO_ANNUAL_PRICE_ID']}]}},
  'operator': {'id': 'operator',
-              'display_name': 'Operator',
+              'display_name': 'Pro',
               'wire_aliases': [],
               'wire_fallback_plan': None,
               'lifecycle': 'current',
@@ -268,7 +268,7 @@ PLAN_DISPLAY_NAMES: Final[dict[PlanType, str]] = {
     PlanType.basic: 'Free',
     PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
-    PlanType.operator: 'Operator',
+    PlanType.operator: 'Pro',
     PlanType.plus: 'Plus',
     PlanType.unlimited_v2: 'Unlimited',
 }
