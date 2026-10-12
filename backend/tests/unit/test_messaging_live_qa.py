@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from testing.messaging.adapter_fakes import FixtureLedger, FixtureTransport, no_sleep
 from testing.messaging.store import MemoryStore
 from utils.messaging.adapters.telegram import TelegramAdapter
+from utils.messaging.adapters import telegram as telegram_module
+from utils.messaging.turn_context import bound_provider_clock
 from utils.messaging.contracts import ChannelMessage
 from utils.messaging.gateway import Gateway
 from utils.messaging import gateway as gateway_module
@@ -872,9 +874,16 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
     assert not store.leases
 
 
-def test_telegram_request_clock_uses_message_date_not_late_webhook_time():
+def test_telegram_request_clock_uses_message_date_not_late_webhook_time(monkeypatch):
     adapter, _, _ = setup_turn()
     at = datetime(2026, 10, 11, 9, 19, 3, tzinfo=timezone.utc)
+    # This fixture exercises an in-window message date; wall time must not
+    # eventually push it past the unchanged production 24-hour bound.
+    monkeypatch.setattr(
+        telegram_module,
+        'bound_provider_clock',
+        lambda stamp: bound_provider_clock(stamp, now=at + timedelta(minutes=5)),
+    )
     item = {
         'message_id': 1,
         'date': int(at.timestamp()),
