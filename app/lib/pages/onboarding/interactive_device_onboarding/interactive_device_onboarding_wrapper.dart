@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -6,7 +8,11 @@ import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/superwall_pilot.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/voice_reply_step.dart';
@@ -144,7 +150,22 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
+    final offerUpgrade = !widget.allowExit && _isFreeUser();
     Navigator.of(context).pop();
+    if (offerUpgrade) unawaited(_showSetupCompletePaywall());
+  }
+
+  bool _isFreeUser() {
+    final usage = context.read<UsageProvider>();
+    return usage.subscription?.subscription.plan == PlanType.basic && usage.showSubscriptionUI;
+  }
+
+  /// First device setup finished: offer the plan through Superwall (local pilot only). Superwall
+  /// presents its own screen, so this runs after the tutorial route has closed.
+  Future<void> _showSetupCompletePaywall() async {
+    final shown =
+        await SuperwallPilot.instance.showPlacementForCurrentUser(SuperwallPilot.deviceSetupCompletePlacement);
+    if (shown) PlatformManager.instance.analytics.paywallOpened('Device Setup Complete');
   }
 
   /// Leave the tutorial from any point. Persists completion so the forced

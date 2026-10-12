@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/logger.dart';
@@ -68,8 +71,20 @@ class SuperwallPilot {
   /// Placement for tapping a conversation or memory locked after the free minutes run out.
   static const lockedContentPlacement = 'locked_content';
 
+  /// Placement shown once a free user reaches "All set" in their first device tutorial. Superwall
+  /// only: there is no plans-sheet fallback, so nothing changes when the pilot is off.
+  static const deviceSetupCompletePlacement = 'device_setup_complete';
+
   /// Returns false if the pilot could not register its test placement.
   Future<bool> showUsageUpgrade(String uid) => showPlacement('omi_usage_upgrade_test', uid);
+
+  /// [showPlacement] for the signed-in, non-anonymous Firebase user.
+  Future<bool> showPlacementForCurrentUser(String placement) async {
+    if (!_configured) return false;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return false;
+    return showPlacement(placement, user.uid);
+  }
 
   /// Registers [placement] for [uid]. Returns false when the pilot is off or registration failed,
   /// so the caller can fall back to the existing plans sheet.
