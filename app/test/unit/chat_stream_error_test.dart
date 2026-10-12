@@ -1,8 +1,35 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/schema/message.dart';
 
 void main() {
+  test('backend citation SSE capture settles to stripped text and owned cards', () {
+    final bytes = jsonDecode(File('../backend/tests/fixtures/chat_app_citations_pre_21240.sse.json').readAsStringSync())
+        as String;
+    var streamedText = '';
+    ServerMessage? finalMessage;
+    for (final line in bytes.split('\n')) {
+      final chunk = parseMessageChunk(line, 'fixture-client');
+      if (chunk?.type == MessageChunkType.data) streamedText += chunk!.text;
+      if (chunk?.type == MessageChunkType.done) finalMessage = chunk!.message;
+    }
+    expect(streamedText, 'I can name them.[1][2][4][6][7]');
+    expect(finalMessage, isNotNull);
+    expect(finalMessage!.text, 'I can name them.');
+    expect(finalMessage.memories.map((card) => card.id), [
+      'conversation-1',
+      'conversation-2',
+      'conversation-4',
+      'conversation-6',
+      'conversation-7',
+    ]);
+    expect(finalMessage.contentBlocks, isEmpty);
+    expect(finalMessage.typedContentBlocks, isEmpty);
+  });
+
   test('memory receipt event is decoded without changing reply text', () {
     final saved = parseMessageChunk('memory: saved', 'message-id');
     final updated = parseMessageChunk('memory: updated', 'message-id');
