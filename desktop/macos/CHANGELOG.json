@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.477",
+      "date": "2026-10-12",
+      "changes": [
+        "Receive your actual subscription tier while preserving compatibility with older apps"
+      ]
+    },
+    {
       "version": "0.12.476",
       "date": "2026-10-12",
       "changes": [
