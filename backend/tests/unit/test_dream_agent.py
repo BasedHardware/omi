@@ -23,9 +23,9 @@ def admission(monkeypatch):
     database = DreamFirestore()
     database.rows[('users', UID)] = {}
     database.rows[('dream_users', UID)] = {'sequence': 2, 'watermark': 0, 'score': 2}
-    database.rows[('dream_users', UID, 'dirty', 'read')] = {
+    database.rows[('dream_users', UID, 'dirty', dream_store.dirty_id('conversations', 'read'))] = {
         'collection': 'conversations',
-        'id': 'c1',
+        'id': 'read',
         'version': 'read-version',
         'last_changed_at': NOW,
     }
@@ -136,7 +136,7 @@ def pass_context(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [{'spelling': 'Meeting', 'authorship': 'user_authored'}])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
@@ -298,10 +298,13 @@ def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
     state.update(score=4)
     from datetime import timedelta
 
-    consumed = [{'version': 'read-version', 'last_changed_at': NOW}]
+    consumed = [{'collection': 'conversations', 'id': 'read', 'version': 'read-version', 'last_changed_at': NOW}]
     state_path = ('dream_users', UID, 'dirty')
-    admission.rows[(*state_path, 'read')] = {'version': 'read-version', 'last_changed_at': NOW}
-    admission.rows[(*state_path, 'arrival')] = {
+    admission.rows[(*state_path, dream_store.dirty_id('conversations', 'read'))] = {
+        'version': 'read-version',
+        'last_changed_at': NOW,
+    }
+    admission.rows[(*state_path, dream_store.dirty_id('conversations', 'arrival'))] = {
         'version': 'arrival-version',
         'last_changed_at': NOW + timedelta(seconds=1),
     }
@@ -315,8 +318,8 @@ def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
     )
     state = admission.rows[('dream_users', UID)]
     assert state['watermark'] == NOW and state['score'] == 4
-    assert (*state_path, 'read') not in admission.rows
-    assert (*state_path, 'arrival') in admission.rows
+    assert (*state_path, dream_store.dirty_id('conversations', 'read')) not in admission.rows
+    assert (*state_path, dream_store.dirty_id('conversations', 'arrival')) in admission.rows
     assert state['lease'] is None
     report = admission.rows[('users', UID, 'dream_runs', lease['run_id'])]
     assert 'review_encrypted_v1' in report['source']
