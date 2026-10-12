@@ -86,7 +86,7 @@ def test_oldest_ready_age_reflects_the_oldest_item():
     older = NOW - timedelta(hours=3)
     newer = NOW - timedelta(minutes=5)
     age = oldest_ready_age_seconds([newer, older], now=NOW)
-    assert age == pytest.approx(3 * 3600)
+    assert age == 3 * 3600
     assert oldest_ready_age_seconds([], now=NOW) is None
 
 
@@ -126,7 +126,7 @@ def test_daily_sweep_poison_uid_does_not_block_the_uid_behind_it():
 
 def test_daily_sweep_age_gauge_reflects_oldest_ready_item():
     age = oldest_ready_age_seconds([NOW - timedelta(hours=2), NOW - timedelta(minutes=3)], now=NOW)
-    assert age == pytest.approx(2 * 3600)
+    assert age == 2 * 3600
 
 
 def test_queue_names_match_store_wide_samplers():
@@ -143,6 +143,10 @@ def test_store_wide_age_is_min_created_at_across_the_bounded_page():
 
     class _Query:
         def where(self, *args, **kwargs):
+            return self
+
+        def select(self, fields):
+            assert 'payload' not in fields
             return self
 
         def limit(self, _limit: int):
@@ -177,7 +181,7 @@ def test_store_wide_age_is_min_created_at_across_the_bounded_page():
         firestore_client=_Client(),
         finalization_summary={'oldest_nonterminal_age_seconds': 12},
     )
-    assert ages['memory_outbox'] == pytest.approx(4 * 3600)
+    assert ages['memory_outbox'] == 4 * 3600
     assert ages['daily_summary_hour_groups'] == 0.0
     assert ages['daily_memory_sweep'] == 0.0
     assert ages['conversation_finalization_jobs'] == 12.0
@@ -215,3 +219,24 @@ def test_chat_first_fetch_order_uses_ready_sort_key():
     ]
     ordered = sort_ready_intents(intents, priority_of=lambda intent: 0 if intent.intent_id == 'meeting' else 2)
     assert [intent.intent_id for intent in ordered] == ['meeting', 'capture']
+
+
+@pytest.mark.parametrize(
+    'payload,expected',
+    [
+        ({'available_at': NOW + timedelta(minutes=1)}, []),
+        ({'available_at': NOW - timedelta(minutes=1)}, [NOW - timedelta(days=60)]),
+        ({'status': 'processing', 'claimed_at': NOW - timedelta(seconds=299)}, []),
+        ({'status': 'processing', 'claimed_at': NOW - timedelta(seconds=300)}, [NOW - timedelta(days=60)]),
+        ({'status': 'processing'}, [NOW - timedelta(days=60)]),
+    ],
+)
+def test_age_sampler_excludes_future_retries_and_live_leases_but_keeps_abandoned_work(payload, expected):
+    from database.durable_queue_age import _created_ats_from_page
+
+    assert (
+        _created_ats_from_page(
+            [{'created_at': NOW - timedelta(days=60), **payload}], created_at_field='created_at', now=NOW
+        )
+        == expected
+    )

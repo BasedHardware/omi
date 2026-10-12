@@ -4,7 +4,7 @@ tests can load policy/redrive without the Firestore SDK.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -77,6 +77,7 @@ def _created_ats_from_page(
     *,
     created_at_field: str,
     event_type: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> List[datetime]:
     created_ats: List[datetime] = []
     for snapshot in snapshots:
@@ -85,13 +86,26 @@ def _created_ats_from_page(
             continue
         if event_type is not None and payload.get('event_type') != event_type:
             continue
+        available_at = payload.get('available_at')
+        if now is not None and isinstance(available_at, datetime) and available_at > now:
+            continue
+        # A live candidate lease is owned work, not ready work. Expired leases
+        # remain visible so a vanished dispatcher still pages.
+        claimed_at = payload.get('claimed_at')
+        if (
+            now is not None
+            and payload.get('status') == 'processing'
+            and isinstance(claimed_at, datetime)
+            and claimed_at + timedelta(seconds=300) > now
+        ):
+            continue
         created_at = payload.get(created_at_field)
         if isinstance(created_at, datetime):
             created_ats.append(created_at)
     return created_ats
 
 
-def _sample_status_page(client: Any, spec: Mapping[str, Any]) -> List[datetime]:
+def _sample_status_page(client: Any, spec: Mapping[str, Any], *, now: datetime) -> List[datetime]:
     collection = str(spec['collection'])
     created_at_field = str(spec['created_at_field'])
     event_type = spec.get('event_type')
@@ -103,15 +117,20 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any]) -> List[datetime]:
             query = (
                 client.collection_group(collection)
                 .where(filter=FieldFilter(status_field, '==', status))
+                .select([created_at_field, 'event_type', 'available_at', 'status', 'claimed_at'])
                 .limit(_STORE_WIDE_PAGE)
             )
             snapshots: Iterable[Any] = query.stream()
             created_ats.extend(
-                _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type)
+                _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type, now=now)
             )
         return created_ats
-    query = client.collection_group(collection).limit(_STORE_WIDE_PAGE)
-    return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type)
+    query = (
+        client.collection_group(collection)
+        .select([created_at_field, 'event_type', 'available_at', 'status', 'claimed_at'])
+        .limit(_STORE_WIDE_PAGE)
+    )
+    return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type, now=now)
 
 
 def sample_store_wide_oldest_ready_ages(
@@ -137,7 +156,7 @@ def sample_store_wide_oldest_ready_ages(
                     continue
                 ages[queue] = float(finalization_summary.get('oldest_nonterminal_age_seconds') or 0.0)
                 continue
-            created_ats = _sample_status_page(client, spec)
+            created_ats = _sample_status_page(client, spec, now=observed)
             ages[queue] = oldest_ready_age_seconds(created_ats, now=observed)
         except Exception:
             continue
