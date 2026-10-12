@@ -125,18 +125,6 @@ def trim_dirty(uid, *, firestore_client=None):
         trim(database.transaction())
 
 
-def candidates(*, limit=100, firestore_client=None):
-    # Single-field query: no composite index or collection-group scan.
-    return [
-        s.id
-        for s in client(firestore_client)
-        .collection('dream_users')
-        .order_by('score', direction='DESCENDING')
-        .limit(limit)
-        .stream()
-    ]
-
-
 class AdmissionDenied(Exception):
     def __init__(self, reason):
         self.reason = reason

@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -44,6 +46,9 @@ def store(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '3')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(dream_report, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
@@ -62,6 +67,14 @@ def client(store):
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: UID
     return TestClient(app)
+
+
+def test_manual_capacity_wait_is_retryable_instead_of_idle(store, client, monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=None))
+    response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'reserved_capacity'}
+    assert response.headers['retry-after'] == '120'
 
 
 @pytest.mark.parametrize('method', ['get', 'post'])

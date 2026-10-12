@@ -324,6 +324,7 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -396,6 +397,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
+- `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
 - `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort (fail: closed)
