@@ -407,3 +407,68 @@ def test_sampler_queries_expired_lease_status(queue, status, timestamp_field):
     )
     assert _sample_status_page(client, QUEUE_AGE_SAMPLERS[queue], now=NOW) == [created]
     assert status in client.statuses
+
+
+@pytest.mark.parametrize('initial_age', [None, 0, 99])
+def test_unknown_sample_removes_stale_age_and_recovers(initial_age):
+    if initial_age is not None:
+        publish_sampled_queue_oldest_ready_ages({'memory_outbox': initial_age})
+    publish_sampled_queue_oldest_ready_ages({})
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{queue="memory_outbox"}' not in exported
+    assert 'omi_queue_oldest_ready_sample_unknown{queue="memory_outbox"} 1.0' in exported
+    publish_sampled_queue_oldest_ready_ages({'memory_outbox': None})
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{queue="memory_outbox"} 0.0' in exported
+    assert 'omi_queue_oldest_ready_sample_unknown{queue="memory_outbox"} 0.0' in exported
+
+
+@pytest.mark.parametrize(
+    'metadata,expected_hours',
+    [
+        ({'status': 'processing', 'lease_expires_at': NOW - timedelta(hours=7)}, 7),
+        ({'status': 'processing', 'claimed_at': NOW - timedelta(hours=8)}, 8),
+        ({'status': 'pending', 'event_type': 'vector_repair_purge', 'queued_at': NOW - timedelta(hours=9)}, 9),
+        ({'status': 'pending', 'available_at': NOW - timedelta(hours=10)}, 10),
+        ({'status': 'processing', 'created_at': NOW - timedelta(hours=12), 'lease_expires_at': NOW}, 12),
+    ],
+)
+def test_memory_sampler_ages_canonical_and_vector_rows_without_creation_time(metadata, expected_hours):
+    from database.durable_queue_age import _sample_status_page
+
+    result = _sample_status_page(_PagedAgeClient([metadata]), QUEUE_AGE_SAMPLERS['memory_outbox'], now=NOW)
+    assert result == [NOW - timedelta(hours=expected_hours)]
+
+
+@pytest.mark.parametrize('include_ready', [False, True])
+def test_cap_with_other_event_types_is_unknown_even_with_partial_ready_proof(include_ready, monkeypatch):
+    from database import durable_queue_age
+
+    ready = {'status': 'pending', 'event_type': 'vector_repair_purge', 'queued_at': NOW - timedelta(hours=7)}
+    skipped = {'status': 'pending', 'event_type': 'memory_change'}
+    rows = ([ready] if include_ready else [skipped]) + [skipped] * 999 + [ready]
+    client = _PagedAgeClient(rows)
+    monkeypatch.setattr(
+        durable_queue_age, 'QUEUE_AGE_SAMPLERS', {'vector_repair_outbox': QUEUE_AGE_SAMPLERS['vector_repair_outbox']}
+    )
+    publish_sampled_queue_oldest_ready_ages({'vector_repair_outbox': 0})
+    ages = sample_store_wide_oldest_ready_ages(now=NOW, firestore_client=client)
+    assert ages == {}
+    assert client.reads == 1000
+    publish_sampled_queue_oldest_ready_ages(ages)
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{queue="vector_repair_outbox"}' not in exported
+    assert 'omi_queue_oldest_ready_sample_unknown{queue="vector_repair_outbox"} 1.0' in exported
+
+
+def test_document_failure_without_proof_invalidates_previous_zero(monkeypatch):
+    from database import durable_queue_age
+
+    monkeypatch.setattr(durable_queue_age, 'QUEUE_AGE_SAMPLERS', {'memory_outbox': QUEUE_AGE_SAMPLERS['memory_outbox']})
+    publish_sampled_queue_oldest_ready_ages({'memory_outbox': 0})
+    ages = sample_store_wide_oldest_ready_ages(now=NOW, firestore_client=_PagedAgeClient([{'status': 'pending'}]))
+    assert ages == {}
+    publish_sampled_queue_oldest_ready_ages(ages)
+    exported = generate_latest().decode()
+    assert 'omi_queue_oldest_ready_age_seconds{queue="memory_outbox"}' not in exported
+    assert 'omi_queue_oldest_ready_sample_unknown{queue="memory_outbox"} 1.0' in exported

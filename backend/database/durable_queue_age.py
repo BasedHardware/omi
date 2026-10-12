@@ -12,6 +12,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from utils.durable_queue_policy import oldest_ready_age_seconds
 
+# Metadata-only reads: at most 5 pages x 200 rows per status. Document-name
+# order is not age order; reaching the cap cannot prove the oldest ready age.
 _STORE_WIDE_PAGE = 200
 _STORE_WIDE_MAX_PAGES = 5
 
@@ -22,6 +24,9 @@ QUEUE_AGE_SAMPLERS: Dict[str, Dict[str, Any]] = {
         'status_field': 'status',
         'ready_statuses': ('pending', 'retryable_failure', 'processing'),
         'created_at_field': 'created_at',
+        # Canonical events lack created_at; lease/claim/availability timestamps
+        # are conservative lower bounds on age, not original creation times.
+        'age_fallback_fields': ('queued_at', 'lease_expires_at', 'claimed_at', 'available_at'),
         'collection_group': True,
     },
     'candidate_integration_outbox': {
@@ -90,6 +95,7 @@ def _created_ats_from_page(
     *,
     created_at_field: str,
     event_type: Optional[str] = None,
+    age_fallback_fields: Iterable[str] = (),
     now: Optional[datetime] = None,
     failures: Optional[List[bool]] = None,
 ) -> List[datetime]:
@@ -116,6 +122,10 @@ def _created_ats_from_page(
                 if available_at is not None and available_at > now:
                     continue
             created_at = _utc_timestamp(payload.get(created_at_field))
+            for field in age_fallback_fields:
+                if created_at is not None:
+                    break
+                created_at = _utc_timestamp(payload.get(field))
             if created_at is None:
                 raise ValueError('missing queue creation timestamp')
             created_ats.append(created_at)
@@ -131,6 +141,7 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any], *, now: datetime) 
     collection = str(spec['collection'])
     created_at_field = str(spec['created_at_field'])
     event_type = spec.get('event_type')
+    age_fallback_fields = tuple(spec.get('age_fallback_fields') or ())
     status_field = spec.get('status_field')
     ready_statuses: tuple[Any, ...] = tuple(spec.get('ready_statuses') or ())
     created_ats: List[datetime] = []
@@ -143,13 +154,30 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any], *, now: datetime) 
         # Keep the declared equality-only group query. Firestore's implicit
         # document-name ordering plus snapshot cursors needs no new composite.
         query = query.select(
-            [created_at_field, 'event_type', 'available_at', 'status', 'claimed_at', 'lease_expires_at']
+            list(
+                dict.fromkeys(
+                    [
+                        created_at_field,
+                        *age_fallback_fields,
+                        'event_type',
+                        'available_at',
+                        'status',
+                        'claimed_at',
+                        'lease_expires_at',
+                    ]
+                )
+            )
         )
         for page in range(_STORE_WIDE_MAX_PAGES):
             snapshots = list(query.limit(_STORE_WIDE_PAGE).stream())
             created_ats.extend(
                 _created_ats_from_page(
-                    snapshots, created_at_field=created_at_field, event_type=event_type, now=now, failures=failures
+                    snapshots,
+                    created_at_field=created_at_field,
+                    event_type=event_type,
+                    age_fallback_fields=age_fallback_fields,
+                    now=now,
+                    failures=failures,
                 )
             )
             if len(snapshots) < _STORE_WIDE_PAGE:
@@ -158,9 +186,9 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any], *, now: datetime) 
                 exhausted = False
             else:
                 query = query.start_after(snapshots[-1])
-    # A positive sample is a conservative lower bound if the cap was reached.
-    # Zero requires exhausting every status with no uninspectable documents.
-    if not created_ats and (not exhausted or failures):
+    # Even with ready rows observed, skipped event types can hide older work
+    # beyond the cap. Zero additionally requires no uninspectable documents.
+    if not exhausted or (not created_ats and failures):
         return None
     return created_ats
 
@@ -171,10 +199,10 @@ def sample_store_wide_oldest_ready_ages(
     firestore_client: Any = None,
     finalization_summary: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Optional[float]]:
-    """Store-wide oldest-ready age per queue. Missing key = sampler failed (leave absent).
+    """Store-wide oldest-ready age per queue. Missing key = unknown; the publisher removes stale age and marks unknown.
 
     ``None`` values prove no ready item after exhausting all status queries.
-    Capped positive samples are lower bounds; capped empty samples omit the key.
+    Every capped scan omits the key, even if it found some ready work.
     """
     observed = _utc_timestamp(now) or datetime.now(timezone.utc)
     client = firestore_client if firestore_client is not None else get_firestore_client()
