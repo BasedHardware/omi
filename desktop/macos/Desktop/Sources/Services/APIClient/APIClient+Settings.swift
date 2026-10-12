@@ -474,7 +474,8 @@ enum SubscriptionPlanNames {
     }
     if normalized.contains("plus") { return "plus" }
     if normalized.contains("neo") || normalized.contains("legacy")
-      || normalized == "unlimited plan" || normalized.hasPrefix("omi unlimited")
+      || normalized == "unlimited plan" || normalized.hasPrefix("unlimited plan ")
+      || normalized.hasPrefix("omi unlimited")
     {
       return "unlimited"
     }
@@ -544,6 +545,8 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let eyebrow: String?
   let features: [String]
   let prices: [SubscriptionPriceOption]
+
+  var displayTitle: String { SubscriptionPlanType(rawValue: id).displayName }
 
   init(
     id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,

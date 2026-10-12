@@ -300,7 +300,7 @@ def test_windows_full_catalog_matches_macos_canonical(load_subscription):
     """End-to-end catalog resolution for a Windows client (X-App-Platform: windows).
 
     Pins the fix: a Windows client gets the SAME catalog macOS gets — Operator +
-    Architect visible under their canonical titles, Neo hidden from a new basic
+    Architect visible under their compatible wire titles, Neo hidden from a new basic
     desktop user — and NEVER the legacy 'Omi Pro' / 'Unlimited Plan' rename that
     adapt_plans_for_legacy_client produces for pre-rollout clients.
     """
@@ -313,7 +313,7 @@ def test_windows_full_catalog_matches_macos_canonical(load_subscription):
     assert 'operator' in by_id
     assert 'architect' in by_id
     assert 'unlimited' not in by_id  # Neo hidden on desktop for a new user
-    assert by_id['operator']['title'] == 'Pro'
+    assert by_id['operator']['title'] == 'Operator'
     assert by_id['architect']['title'] == 'Architect'
     titles = [d['title'] for d in filtered]
     assert 'Omi Pro' not in titles
@@ -416,7 +416,7 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
     by_id = {d['plan_id']: d for d in filtered}
     assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
     assert 'unlimited' not in by_id  # Neo hidden
-    assert by_id['operator']['title'] == 'Pro'
+    assert by_id['operator']['title'] == 'Operator'
     assert by_id['architect']['title'] == 'Architect'
     assert by_id['unlimited_v2']['title'] == 'Unlimited'
     titles = [d['title'] for d in filtered]

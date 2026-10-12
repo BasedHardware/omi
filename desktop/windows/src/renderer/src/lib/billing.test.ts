@@ -249,7 +249,12 @@ describe('currentPlanSubtitle', () => {
         sub({ plan: 'operator', status: 'active', current_price_id: 'price_op_m' }),
         CATALOG
       )
-    ).toBe('Operator Monthly • $49/mo')
+    ).toBe('Pro Monthly • $49/mo')
+  })
+  it('uses the price owner id despite a stale legacy title', () => {
+    const catalog = CATALOG.map((p) => ({ ...p, title: p.id === 'architect' ? 'Omi Pro' : p.title }))
+    expect(currentPlanSubtitle(sub({ plan: 'architect', status: 'active', current_price_id: 'price_arch_m' }), catalog))
+      .toBe('Architect Monthly • $99/mo')
   })
   it('shows the free-tier line otherwise', () => {
     expect(currentPlanSubtitle(sub({ plan: 'basic' }), CATALOG)).toBe(

@@ -159,7 +159,7 @@ export function PlanUsageTab(): React.JSX.Element {
   // (or first available) and scroll the grid into view.
   const jumpToOperator = (): void => {
     const operator =
-      catalog.find((p) => p.id === 'operator' || p.title === 'Operator') ?? catalog[0]
+      catalog.find((p) => p.id === 'operator') ?? catalog[0]
     if (operator) setSelectedPlanId(operator.id)
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }

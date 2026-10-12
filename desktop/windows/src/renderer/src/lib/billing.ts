@@ -212,7 +212,7 @@ export function currentPlanSubtitle(
   if (paid && sub.current_price_id) {
     const plan = owningCatalogPlan(sub, availablePlans)
     const price = (plan?.prices ?? []).find((p) => p.id === sub.current_price_id)
-    if (plan && price) return `${plan.title} ${price.title} • ${price.price_string}`
+    if (plan && price) return `${planDisplayName(plan.id)} ${price.title} • ${price.price_string}`
   }
   return paid ? 'Your paid plan is active.' : 'You are currently on the free tier.'
 }

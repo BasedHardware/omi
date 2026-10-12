@@ -12,6 +12,11 @@ final class SubscriptionPlanNamesTests: XCTestCase {
     for (name, id) in names {
       XCTAssertEqual(SubscriptionPlanNames.planId(from: name), id)
     }
+    for interval in ["Monthly", "Annual"] {
+      for (name, id) in names {
+        XCTAssertEqual(SubscriptionPlanNames.planId(from: "\(name) \(interval)"), id)
+      }
+    }
     XCTAssertNil(SubscriptionPlanNames.planId(from: "future_plan_123"))
   }
 
@@ -23,6 +28,7 @@ final class SubscriptionPlanNamesTests: XCTestCase {
     ]
     for (id, name) in names {
       XCTAssertEqual(SubscriptionPlanType(rawValue: id).displayName, name)
+      XCTAssertEqual(SubscriptionPlanOption(id: id, title: "Stale title").displayTitle, name)
     }
   }
 }

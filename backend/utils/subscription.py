@@ -544,7 +544,7 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
         {
             "plan_type": PlanType.operator,
             "plan_id": "operator",
-            "title": "Pro",
+            "title": "Operator",  # Released macOS title parsers infer price ownership from this.
             "subtitle": f"{_chat_allowance_text(PlanType.operator)}",
             "description": f"{_chat_allowance_text(PlanType.operator)}. Shared with mobile and web.",
             "eyebrow": "Most popular",

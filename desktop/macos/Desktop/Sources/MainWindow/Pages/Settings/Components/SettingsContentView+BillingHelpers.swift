@@ -139,7 +139,7 @@ extension SettingsContentView {
 
     for plan in mergedPlanCatalog {
       if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
-        return "\(plan.title) \(price.title) • \(price.priceString)"
+        return "\(plan.displayTitle) \(price.title) • \(price.priceString)"
       }
     }
 
@@ -182,7 +182,7 @@ extension SettingsContentView {
 
   func planSelectionLabel(for plan: SubscriptionPlanOption) -> String {
     SubscriptionPlanPresentation.selectionLabel(
-      planTitle: plan.title,
+      planTitle: plan.displayTitle,
       startingPrice: preferredStartingPrice(for: plan)?.priceString
     )
   }
@@ -362,7 +362,7 @@ extension SettingsContentView {
               .tracking(0.8)
           }
 
-          Text(plan.title)
+          Text(plan.displayTitle)
             .scaledFont(size: OmiType.heading, weight: .bold)
             .foregroundColor(Ink.primary)
 
