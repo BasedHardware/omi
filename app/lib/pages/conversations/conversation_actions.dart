@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -171,20 +172,16 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
 }
 
 /// Shares [conversation]'s link, the same way the conversation page does: a private conversation
-/// first asks ("Anyone with the link can view"), becomes shared, and goes back to private when the
-/// share sheet is dismissed without sharing.
+/// becomes shared for the share sheet, and goes back to private when the share sheet is dismissed
+/// without sharing.
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
   if (wasPrivate) {
-    final confirmed = await showOmiConfirm(
-      context,
-      title: l10n.shareConversationQuestion,
-      message: l10n.anyoneWithLinkCanView,
-      confirmLabel: l10n.share,
-    );
-    if (!confirmed || !context.mounted) return;
-    final ok = await setConversationVisibility(conversation.id);
+    final ok = await setConversationVisibility(conversation.id).catchError((Object e) {
+      Logger.debug('Failed to share conversation: $e');
+      return false;
+    });
     if (!context.mounted) return;
     if (!ok) {
       OmiFeedback.error(context, l10n.conversationUrlNotShared);
