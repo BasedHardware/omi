@@ -130,12 +130,7 @@ def _read_file(path: str) -> bytes:
 class SpeakerMatcher:
     def __init__(self, host: Any):
         self.host = host
-        self.queue = SpeakerMatchQueue(
-            generation=lambda: self._generation,
-            attempts=lambda voice: self._embedding_attempts.get(voice, 0),
-            near_owner=lambda voice: voice in self._voice_decisions and owner_near_miss(self._voice_decisions[voice]),
-            clock=lambda: time.monotonic(),
-        )
+        self.queue = SpeakerMatchQueue(generation=lambda: self._generation)
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
@@ -608,8 +603,6 @@ class SpeakerMatcher:
             await self._load_profiles()
             await self.continuity.start()
         while True:
-            if len(self.tasks) >= 16:
-                await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
@@ -619,29 +612,26 @@ class SpeakerMatcher:
                 if not state.active:
                     break
                 continue
-            spawned = False
-            try:
-                if self._profile_conversation_id is not None and self._owner_load_failed:
-                    await self.refresh_for_conversation(self._profile_conversation_id)
-                speaker_id = segment['speaker_id']
-                if should_spawn_speaker_match(
-                    speaker_already_mapped=speaker_id in self.speaker_to_person,
-                    duration=segment['duration'],
-                    min_audio_seconds=0.0,
-                ):
-                    task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
-                    self.tasks.add(task)
-                    task.add_done_callback(self.tasks.discard)
-                    task.add_done_callback(lambda done, work=segment: self.queue.complete(work))
-                    spawned = True
-                else:
-                    self._record_exit(
-                        'already_mapped' if speaker_id in self.speaker_to_person else 'segment_shorter_than_minimum',
-                        speaker_id,
-                    )
-            finally:
-                if not spawned:
-                    self.queue.complete(segment)
+            if self._profile_conversation_id is not None and self._owner_load_failed:
+                await self.refresh_for_conversation(self._profile_conversation_id)
+            speaker_id = segment['speaker_id']
+            if should_spawn_speaker_match(
+                speaker_already_mapped=speaker_id in self.speaker_to_person,
+                duration=segment['duration'],
+                min_audio_seconds=0.0,
+            ):
+                if len(self.tasks) >= 16:
+                    await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
+                task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
+                self.tasks.add(task)
+                task.add_done_callback(self.tasks.discard)
+            else:
+                # Dropped before a match is attempted; count it with the same
+                # bounded vocabulary the match path uses.
+                self._record_exit(
+                    'already_mapped' if speaker_id in self.speaker_to_person else 'segment_shorter_than_minimum',
+                    speaker_id,
+                )
         state.speaker_id_done.set()
 
     def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
@@ -993,11 +983,7 @@ class SpeakerMatcher:
                 self._record_exit('no_pcm', speaker_id)
                 return
             buffer_start, buffer_end = time_range
-            incoming_ranges = segment.get(
-                '_speaker_audio_ranges',
-                [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
-            )
-            if not any(end > buffer_start and start < buffer_end for start, end in incoming_ranges):
+            if segment['abs_end'] <= buffer_start or segment['abs_start'] >= buffer_end:
                 # The window does not intersect the retained audio at all —
                 # e.g. a provider stream whose timestamps restarted at zero
                 # after a failover while the window was still computed from
@@ -1019,7 +1005,11 @@ class SpeakerMatcher:
             self._covered_audio[speaker_id] = covered
             # Retain interval metadata only; PCM stays in the bounded ring.
             # Coalesce provider repeats before subtracting successful evidence.
-            ranges = self._pending_audio.get(speaker_id, []) + incoming_ranges
+            incoming = (
+                max(buffer_start, segment['abs_start']),
+                min(buffer_end, segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])),
+            )
+            ranges = self._pending_audio.get(speaker_id, []) + [incoming]
             fresh = []
             for start, end in sorted(ranges):
                 start, end = max(start, buffer_start), min(end, buffer_end)
@@ -1084,14 +1074,8 @@ class SpeakerMatcher:
                 return
             # Cover only successful embeddings; failed requests still spend budget.
             covered.extend(selected)
-            # Continue already-queued unselected speech after successful queries;
-            # failures and denials never create retries or exempt reservations.
-            unselected = subtract_audio_ranges(fresh, selected)[-128:]
-            if unselected:
-                self._pending_audio[speaker_id] = unselected
-            else:
-                self._pending_audio.pop(speaker_id, None)
-            self.queue.retain_unselected(segment, unselected)
+            # A subsequent provider update drives the next query, as before #21181.
+            self._pending_audio.pop(speaker_id, None)
             evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
             if speaker_id in self._competition_only and speaker_id not in self._competition_fresh:
                 evidence.clear()
