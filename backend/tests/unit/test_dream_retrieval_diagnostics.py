@@ -234,11 +234,12 @@ def test_reclaimed_targets_stop_at_reasoning_limit_before_reading_overflow(monke
 
 def test_structured_query_terms_survive_long_transcript():
     row = {
+        'user_title': 'Kuvra',
         'structured': {'title': 'Zuvrah boat', 'overview': 'Nuvra factory'},
         'transcript_segments': [{'text': 'sailing mountain river furniture landscape desert ' * 1000}],
     }
     terms = dream_context.query_terms(row)
-    assert 'zuvrah' in terms and 'nuvra' in terms
+    assert 'kuvra' in terms and 'zuvrah' in terms and 'nuvra' in terms
     assert 'title' not in terms and 'overview' not in terms
 
 

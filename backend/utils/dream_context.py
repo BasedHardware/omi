@@ -94,7 +94,8 @@ def fits_pass(records, caps, vocabulary=None):
 def query_terms(row, vocabulary=()):
     # Query content, never the projector's synthetic "title/overview" headers.
     content = ' '.join(
-        [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
+        [str(row.get('user_title') or '')]
+        + [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
         + [str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label')]
         + [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
     )[:3000]

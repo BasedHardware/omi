@@ -9,7 +9,7 @@ Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
 existing Pinecone conversation and canonical memory semantic hits, then nearby
 conversations and screen records. Reads remain owner scoped and visibility checked.
-Queries and result counts are bounded. Structured title/overview terms precede
+Queries and result counts are bounded. User-authored title and structured title/overview terms precede
 long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
 the affected path's failure count and emit shared degraded fallback telemetry;
 remaining paths can still contribute. Missing/locked/hidden hydration results
