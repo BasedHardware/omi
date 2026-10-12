@@ -1364,12 +1364,7 @@ def delete_conversation(
     delete_transcript_chunk_vectors(uid, conversation_id)
 
     record_product_event('conversation_deleted', request=http_request)
-    # Released clients (mobile app/lib/backend/http/api/conversations.dart) gate
-    # delete success on HTTP 204. The 2026-07-04 response_model backfill briefly
-    # turned this into a 200-with-body, which the released app reads as a failed
-    # DELETE: tombstone clearing and server-cursor bookkeeping regress and any
-    # transient server failure resurfaces the deleted conversation on refresh.
-    # 204 No Content restores the released contract (folders/mcp convention).
+    # 204, no body: released mobile clients gate delete success on exactly 204.
 
 
 @router.get(
