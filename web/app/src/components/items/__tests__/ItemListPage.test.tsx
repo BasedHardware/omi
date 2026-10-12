@@ -99,6 +99,27 @@ describe('ItemListPage', () => {
     );
   });
 
+  it('keeps a hidden memory unavailable when the index walk stopped early', async () => {
+    harness.query = 'memory=m-archived';
+    render(
+      <ItemListPage
+        loaders={loaders({
+          memories: async () => ({
+            found: new Map(),
+            hidden: new Set(['m-archived']),
+            complete: false,
+          }),
+        })}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('item-list-unavailable-0').textContent).toContain(
+        'No longer available',
+      ),
+    );
+    expect(screen.queryByText('Open in Memories')).toBeNull();
+  });
+
   it('shows an empty state for a link with no recognised items', () => {
     harness.query = 'foo=bar';
     render(<ItemListPage loaders={loaders()} />);

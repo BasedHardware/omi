@@ -7,6 +7,8 @@ import { findMemoriesByIds, type MemoriesPage } from '@/lib/api';
 import {
   ITEM_LIST_MAX,
   itemListHref,
+  itemListMemoryTitle,
+  itemListTaskPresentation,
   parseItemListQuery,
   readHighlightParam,
   taskListFocus,
@@ -33,6 +35,62 @@ describe('parseItemListQuery', () => {
     );
     expect(items).toHaveLength(ITEM_LIST_MAX);
     expect(items.at(-1)?.id).toBe('m-9');
+  });
+});
+
+describe('item visibility', () => {
+  it('shows short-term and long-term memories and hides archive', () => {
+    expect(itemListMemoryTitle({ content: 'Window seats', layer: 'short_term' })).toBe(
+      'Window seats',
+    );
+    expect(itemListMemoryTitle({ content: 'Window seats', layer: 'long_term' })).toBe(
+      'Window seats',
+    );
+    expect(itemListMemoryTitle({ content: 'Window seats' })).toBe('Window seats');
+    expect(itemListMemoryTitle({ content: 'Old fact', layer: 'archive' })).toBeNull();
+    expect(
+      itemListMemoryTitle({ content: 'Old fact', memory_tier: 'archive' }),
+    ).toBeNull();
+    expect(
+      itemListMemoryTitle({
+        content: 'Old fact',
+        layer: 'long_term',
+        memory_tier: 'archive',
+      }),
+    ).toBeNull();
+    expect(
+      itemListMemoryTitle({ content: 'Locked', is_locked: true, layer: 'long_term' }),
+    ).toBeNull();
+    expect(
+      itemListMemoryTitle({ content: 'Gone', deleted: true, layer: 'long_term' }),
+    ).toBeNull();
+    expect(itemListMemoryTitle({ content: '   ', layer: 'long_term' })).toBeNull();
+  });
+
+  it('opens live and completed tasks, not locked, cancelled, or superseded ones', () => {
+    expect(
+      itemListTaskPresentation({ description: 'Send the deck', completed: false }),
+    ).toEqual({
+      title: 'Send the deck',
+      completed: false,
+    });
+    expect(
+      itemListTaskPresentation({
+        description: 'Sent',
+        status: 'completed',
+        completed: true,
+      }),
+    ).toEqual({ title: 'Sent', completed: true });
+    expect(
+      itemListTaskPresentation({ description: 'Old', status: 'cancelled' }),
+    ).toBeNull();
+    expect(
+      itemListTaskPresentation({ description: 'Replaced', superseded_by: 't-2' }),
+    ).toBeNull();
+    expect(
+      itemListTaskPresentation({ description: 'Paywalled', is_locked: true }),
+    ).toBeNull();
+    expect(itemListTaskPresentation({ description: '   ' })).toBeNull();
   });
 });
 

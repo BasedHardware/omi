@@ -49,6 +49,53 @@ export function parseItemListQuery(query: string | null | undefined): ItemListEn
   return items;
 }
 
+const DEFAULT_MEMORY_TIERS = new Set(['short_term', 'long_term']);
+
+/**
+ * Title of a memory the item list may show. Null hides the row (locked, deleted,
+ * archived, or any tier other than short-term / long-term — INV-MEM-1). A missing
+ * tier is long-term, matching the app decoder. Disagreeing `layer` and
+ * `memory_tier` are hidden too.
+ */
+export function itemListMemoryTitle(memory: {
+  content?: string | null;
+  is_locked?: boolean;
+  deleted?: boolean;
+  layer?: string | null;
+  memory_tier?: string | null;
+}): string | null {
+  if (memory.deleted || memory.is_locked) return null;
+  const layer = memory.layer?.trim() ?? '';
+  const tier = memory.memory_tier?.trim() ?? '';
+  if (layer && tier && layer !== tier) return null;
+  if (
+    (layer && !DEFAULT_MEMORY_TIERS.has(layer)) ||
+    (tier && !DEFAULT_MEMORY_TIERS.has(tier))
+  ) {
+    return null;
+  }
+  const title = memory.content?.trim() ?? '';
+  return title || null;
+}
+
+/**
+ * A task the item list may open: live or completed, not paywalled, not replaced.
+ * There is no 30-day cut-off; the link names the task. Matches the app's
+ * `itemListTaskIsOpenable`.
+ */
+export function itemListTaskPresentation(task: {
+  description?: string | null;
+  is_locked?: boolean;
+  status?: string | null;
+  superseded_by?: string | null;
+  completed?: boolean;
+}): { title: string; completed: boolean } | null {
+  const title = task.description?.trim() ?? '';
+  if (!title || task.is_locked || task.superseded_by?.trim()) return null;
+  if (task.status && task.status !== 'active' && task.status !== 'completed') return null;
+  return { title, completed: Boolean(task.completed) };
+}
+
 /**
  * The closest existing web view for an item: a conversation opens itself;
  * tasks and memories have list pages only, which scroll to and highlight the

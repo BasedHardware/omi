@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { findMemoriesByIds, getActionItem, getConversation } from '@/lib/api';
 import {
   itemListHref,
+  itemListMemoryTitle,
+  itemListTaskPresentation,
   parseItemListQuery,
   type ItemListEntry,
   type ItemListKind,
@@ -25,9 +27,12 @@ export type ItemListRowState =
 export interface ItemListLoaders {
   conversation: (id: string) => Promise<{ title: string } | null>;
   task: (id: string) => Promise<{ title: string; completed: boolean } | null>;
-  memories: (
-    ids: string[],
-  ) => Promise<{ found: Map<string, { title: string }>; complete: boolean }>;
+  memories: (ids: string[]) => Promise<{
+    found: Map<string, { title: string }>;
+    complete: boolean;
+    /** Found, but not default-visible (archived, locked, deleted, empty). */
+    hidden?: ReadonlySet<string>;
+  }>;
 }
 
 const defaultLoaders: ItemListLoaders = {
@@ -38,25 +43,20 @@ const defaultLoaders: ItemListLoaders = {
   },
   task: async (id) => {
     const task = await getActionItem(id);
-    const title = task.description?.trim();
-    if (!title || task.is_locked) return null;
-    if (task.status && task.status !== 'active' && task.status !== 'completed')
-      return null;
-    return { title, completed: Boolean(task.completed) };
+    return itemListTaskPresentation(task);
   },
   memories: async (ids) => {
     const { found, complete } = await findMemoriesByIds(ids);
     const titles = new Map<string, { title: string }>();
+    const hidden = new Set<string>();
     for (const [id, memory] of found) {
       // Default memory access is Short-term + Long-term (INV-MEM-1); an archived
       // memory is not opened from a link, matching the app's single-memory link.
-      if (memory.is_locked) continue;
-      if (memory.layer && memory.layer !== 'short_term' && memory.layer !== 'long_term') {
-        continue;
-      }
-      titles.set(id, { title: memory.content.trim() });
+      const title = itemListMemoryTitle(memory);
+      if (title) titles.set(id, { title });
+      else hidden.add(id);
     }
-    return { found: titles, complete };
+    return { found: titles, hidden, complete };
   },
 };
 
@@ -110,14 +110,19 @@ export function ItemListPage({
     if (memoryItems.length > 0) {
       loaders
         .memories(memoryItems.map((item) => item.id))
-        .then(({ found, complete }) => {
+        .then(({ found, complete, hidden }) => {
           for (const item of memoryItems) {
             const hit = found.get(item.id);
+            // A row we already classified as hidden stays unavailable even when
+            // the index walk stopped early. Only an id we never saw may still exist.
+            const concealed = hidden?.has(item.id) ?? false;
             set(
               rowKey(item),
               hit?.title
                 ? { status: 'ready', title: hit.title }
-                : { status: complete ? 'unavailable' : 'unresolved' },
+                : concealed || complete
+                ? { status: 'unavailable' }
+                : { status: 'unresolved' },
             );
           }
         })
