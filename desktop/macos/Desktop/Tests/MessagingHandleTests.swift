@@ -52,6 +52,7 @@ final class MessagingHandleTests: XCTestCase {
   func testNorthAmericanInternationalPrefix() {
     XCTAssertTrue(same("+447700900123", "011 44 7700 900123", region: "US"))
     XCTAssertFalse(same("+447700900123", "011 44 7700 900123", region: "JP"), "011 is a Sapporo area code in Japan")
+    XCTAssertTrue(same("+81111234567", "011-123-4567", region: "JP"), "a Sapporo number stays national in Japan")
   }
 
   func testBracketedTrunkZeroInsideAnInternationalNumber() {
