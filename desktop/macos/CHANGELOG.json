@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.472",
+      "date": "2026-10-12",
+      "changes": [
+        "Omi now stays quiet while you are sharing your screen, and delivers the suggestion afterwards instead of losing it. On a call without sharing, suggestions still reach you — they just are not read aloud",
+        "You can now silence Omi's suggestions for 1, 4 or 8 hours, or until tomorrow, from Settings, and they resume where they left off"
+      ]
+    },
+    {
       "version": "0.12.471",
       "date": "2026-10-12",
       "changes": [
