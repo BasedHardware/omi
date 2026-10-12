@@ -694,7 +694,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                       onMetricChanged: (value) => setState(() => _selectedMetric = value)),
                 ],
               ],
-              if (stats != null) ..._buildFreeMeters(provider.subscription),
+              if (stats != null) ..._buildAllowanceMeters(provider.subscription),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
@@ -706,8 +706,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  List<Widget> _buildFreeMeters(UserSubscriptionResponse? subscription) {
-    if (subscription == null || subscription.subscription.plan != PlanType.basic) return [];
+  List<Widget> _buildAllowanceMeters(UserSubscriptionResponse? subscription) {
+    if (subscription == null) return [];
     final l10n = context.l10n;
     final format = NumberFormat.decimalPattern(l10n.localeName);
     final rows = <Widget>[];

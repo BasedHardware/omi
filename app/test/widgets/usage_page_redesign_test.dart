@@ -169,6 +169,49 @@ void main() {
     expect(tooltip!.text, contains('30 seconds'));
   });
 
+  for (final plan in [PlanType.plus, PlanType.unlimited]) {
+    testWidgets('finite transcription allowance is visible for ${plan.wireName}', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 1200,
+        transcriptionSecondsLimit: 90000,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 1500);
+      expect(find.text(text), findsOneWidget);
+      await tester.ensureVisible(find.text(text));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('unlimited transcription does not invent a finite meter', (tester) async {
+    final provider = UsageProvider();
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.unlimitedV2, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 1200,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
+    provider.debugSetUsage('today', stats(), []);
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump();
+    await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
   testWidgets('plan card is a child of the period scroll view', (tester) async {
     final provider = UsageProvider();
     final now = DateTime.now().toUtc();
