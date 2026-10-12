@@ -165,7 +165,6 @@ def emit_billing_product_event(
     price = _first_item_price(obj)
     raw_price_id = price.get('id')
     price_id = raw_price_id[:128] if isinstance(raw_price_id, str) and raw_price_id else 'unknown'
-    is_trial = obj.get('status') == 'trialing'
     mrr_cents = _monthly_mrr_cents(price, interval, obj.get('status'))
     try:
         occurred_at = None
@@ -192,8 +191,10 @@ def emit_billing_product_event(
                 'billing_event_id': stripe_event_id[:128],
                 'occurred_at': occurred_at,
                 'billing_source': 'stripe_webhook_authoritative_owner',
-                'billing_measurement': 'trial_plan_entitlement' if is_trial else 'paid_plan_entitlement',
-                'is_trial': is_trial,
+                'billing_measurement': (
+                    'trial_plan_entitlement' if obj.get('status') == 'trialing' else 'paid_plan_entitlement'
+                ),
+                'is_trial': obj.get('status') == 'trialing',
                 'plan': plan,
                 'interval': interval,
                 'reason': reason,
