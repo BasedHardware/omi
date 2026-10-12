@@ -5,9 +5,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/ai_app_generator_page.dart';
-import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -15,43 +15,44 @@ import 'package:omi/utils/platform/platform_manager.dart';
 // larger text sizes (e.g. 1.15x, 1.3x, 1.5x) when the strip height is fixed at 160 pt.
 // The suggestion strip height must scale dynamically with MediaQuery.textScalerOf(context).
 
-class _TestAiAppGeneratorProvider extends AiAppGeneratorProvider {
-  _TestAiAppGeneratorProvider() {
-    _samplePrompts = [
-      'A playful gratitude spinner for daily positivity and reflections',
-      'Mind map organizer for brainstorming deep conversations',
-      'Fitness coach tracking workout discussions and routines',
-    ];
-    _isLoadingPrompts = false;
-  }
-
-  List<String> _samplePrompts = [];
-  bool _isLoadingPrompts = false;
+final class _TestEnvFields implements EnvFields {
+  const _TestEnvFields();
 
   @override
-  List<String> get samplePrompts => _samplePrompts;
+  String? get apiBaseUrl => 'http://127.0.0.1:9/';
 
   @override
-  bool get isLoadingPrompts => _isLoadingPrompts;
+  String? get googleClientId => null;
 
   @override
-  Future<void> fetchSamplePrompts() async {
-    // Keep test prompts stable without making HTTP calls
-    notifyListeners();
-  }
+  String? get googleClientSecret => null;
+
+  @override
+  String? get intercomAppId => null;
+
+  @override
+  String? get intercomIOSApiKey => null;
+
+  @override
+  String? get intercomAndroidApiKey => null;
+
+  @override
+  String? get posthogApiKey => null;
+
+  @override
+  bool? get useAuthCustomToken => false;
+
+  @override
+  bool? get useWebAuth => false;
 }
 
 Widget _buildHarness({
   required Widget child,
   required double textScale,
   required double width,
-  required AiAppGeneratorProvider aiProvider,
 }) {
-  return MultiProvider(
-    providers: [
-      ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
-      ChangeNotifierProvider<AiAppGeneratorProvider>.value(value: aiProvider),
-    ],
+  return ChangeNotifierProvider<AppProvider>.value(
+    value: AppProvider(),
     child: MaterialApp(
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -73,6 +74,7 @@ Widget _buildHarness({
 
 void main() {
   setUpAll(() {
+    Env.init(const _TestEnvFields());
     PlatformManager.initializeForLocalHarness();
   });
 
@@ -87,16 +89,15 @@ void main() {
     const testWidth = 390.0;
 
     for (final scale in textScales) {
-      final aiProvider = _TestAiAppGeneratorProvider();
       await tester.pumpWidget(
         _buildHarness(
           textScale: scale,
           width: testWidth,
-          aiProvider: aiProvider,
           child: const AiAppGeneratorPage(),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(
         tester.takeException(),
@@ -104,7 +105,7 @@ void main() {
         reason: 'AI app generator suggestion strip should not overflow at scale $scale on width $testWidth',
       );
       expect(find.text('Try something like'), findsOneWidget);
-      expect(find.text('A playful gratitude spinner for daily positivity and reflections'), findsOneWidget);
+      expect(find.text('A playful gratitude spinner for daily positivity'), findsOneWidget);
     }
   });
 }
