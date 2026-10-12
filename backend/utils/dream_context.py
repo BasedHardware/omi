@@ -3,14 +3,15 @@
 from datetime import timedelta
 from functools import partial
 from difflib import SequenceMatcher
+import re
+import unicodedata
 
 from database import action_items, vector_db
 from database.dream_context_reads import temporal_neighbours, subject_memory_refs
 from utils.observability.fallback import record_fallback
 from utils.conversations.search import keyword_search_conversation_ids
-from utils.dream_guards import common_words, timestamp, tokens
+from utils.dream_guards import common_words, timestamp, normalized
 from utils.dream_prompt import (
-    fits_triage,
     evidence_message,
     triage_budget,
     mount,
@@ -18,6 +19,7 @@ from utils.dream_prompt import (
     TRIAGE_INSTRUCTIONS,
     person_names,
     text,
+    conversation_summary,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
@@ -25,7 +27,7 @@ from fastapi import HTTPException
 from database import review_store
 from utils.memory.memory_service import MemoryService
 from utils.executors import llm_executor, submit_with_context
-from utils.dream_diagnostics import path_count
+from utils.dream_diagnostics import path_count, path_failure, initialize
 
 
 class EvidenceRecords(dict):
@@ -41,6 +43,7 @@ def target_refs(records):
 
 
 REASONING_TARGET_LIMIT = 8
+CONTEXT_TARGET_LIMIT = 4
 
 
 PROBLEMS = ('spelling', 'duplicates', 'entity', 'tasks', 'quality')
@@ -70,8 +73,6 @@ def cluster_hints(triage, records):
 
 
 def fits_pass(records, caps, vocabulary=None):
-    if not fits_triage(records, caps, vocabulary):
-        return False
     # Reserve the worst case triage input + its completion before admitting context.
     try:
         budget = triage_budget(caps)
@@ -91,22 +92,56 @@ def fits_pass(records, caps, vocabulary=None):
     return True
 
 
-def query_terms(row, vocabulary=()):
+QUERY_STOP_WORDS = frozenset(
+    'a an and are as at be been but by can could did do does for from had has have '
+    'he her here him his how i if in is it its just me my no not of on or our she '
+    'so than that the their them then there these they this those to too us was '
+    'we were what when where which who why will with would yes you your'.split()
+)
+NEGATIVE_CONTRACTIONS = re.compile(
+    r"\b(?:don|doesn|didn|isn|aren|wasn|weren|hasn|haven|hadn|won|wouldn|couldn|shouldn|mustn|shan|ain)['’]t\b",
+    re.IGNORECASE,
+)
+VIETNAMESE_STOP_WORDS = frozenset(
+    'khong cua nay kia do day la va thi ma voi cho tu den trong tren duoi '
+    'o co da dang se duoc bi nhung cac mot nhieu it de neu vi nen nhu khi '
+    'toi minh ban chung ta ho no ay roi cung rat'.split()
+)
+
+
+def query_content(row):
     # Query content, never the projector's synthetic "title/overview" headers.
-    content = ' '.join(
-        [str(row.get('user_title') or '')]
-        + [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
-        + [str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label')]
+    return ' '.join(
+        [text(row.get('user_title'))]
+        + [text((row.get('structured') or {}).get('title')), conversation_summary(row)]
+        + [text(row.get(key)) for key in ('name', 'content', 'description', 'summary', 'label')]
         + [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
     )[:3000]
-    words = list(dict.fromkeys(word for word in tokens(content) if len(word) > 3 and word not in common_words()))
+
+
+def query_terms(row, vocabulary=()):
+    # Normalize only for rarity/stopwords, keeping accented query spellings for
+    # Typesense rather than relying on its locale-specific accent folding.
+    forms = {}
+    content = unicodedata.normalize('NFC', NEGATIVE_CONTRACTIONS.sub('', query_content(row)))
+    stopwords = QUERY_STOP_WORDS | VIETNAMESE_STOP_WORDS
+    for surface in re.findall(r'[^\W_]+', content):
+        word = normalized(surface)
+        if len(word) >= 2 and word not in stopwords:
+            forms.setdefault(word, surface.casefold())
+    words = list(forms)
+    rare = [word for word in words if word not in common_words()]
     near = [
         entry['spelling']
         for entry in vocabulary
         if entry.get('spelling')
-        and any(SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in words)
+        and any(
+            SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in rare if len(word) > 3
+        )
     ]
-    return list(dict.fromkeys([*near[:2], *words]))[:6]
+    # Rarity prioritizes spelling anchors; ordinary speech must still search.
+    preferred = rare or words
+    return list(dict.fromkeys([*near[:2], *(forms[word] for word in preferred)]))[:6]
 
 
 def identities(row):
@@ -132,16 +167,21 @@ def query_candidates(report, path, query):
         rows = list(query())
         path_count(report, path, 'found', len(rows))
         yield from rows
-    except Exception:
-        path_count(report, path, 'failed')
+    except Exception as exc:
+        path_failure(report, path, exc)
         record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
-def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_record, diagnostics=None):
+def context_candidates(
+    uid, targets, vocabulary, *, read_record, read_entity_record, diagnostics=None, excluded_refs=None, pending_refs=()
+):
     """Yield lazily: once the evidence budget is full no later-tier query runs."""
     if not target_refs(targets):
         return
     diagnostics = {} if diagnostics is None else diagnostics
+    # Include unseeded targets and already supplied context in temporal exclusion.
+    excluded = set(targets) if excluded_refs is None else excluded_refs
+    pending = set(pending_refs)
     targets = {ref: row for ref, row in targets.items() if ref in target_refs(targets)}
     subjects = set().union(*(identities(row) for row in targets.values()))
     for entity_id in sorted(subjects)[:8]:
@@ -165,8 +205,11 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
     for subject in sorted(subjects)[:8]:
         for ref in query_candidates(diagnostics, 'links', partial(subject_memory_refs, uid, subject)):
             yield ref, partial(read_record, uid, ref), 'links'
-    queries = list(dict.fromkeys(' '.join(query_terms(row, vocabulary)) for row in targets.values()))[:4]
-    for query in filter(None, queries):
+    lexical = [' '.join(query_terms(row, vocabulary)) for row in targets.values()]
+    semantic = [query_content(row).strip()[:600] for row in targets.values()]
+    path_count(diagnostics, 'lexical', 'query_empty', sum(not query for query in lexical))
+    path_count(diagnostics, 'semantic', 'query_empty', sum(not query for query in semantic))
+    for query in list(dict.fromkeys(filter(None, lexical)))[:4]:
         for key in query_candidates(
             diagnostics,
             'lexical',
@@ -174,7 +217,8 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         ):
             ref = 'conversations/' + key
             yield ref, partial(read_record, uid, ref), 'lexical'
-    for query in filter(None, queries):
+    # Embeddings use bounded natural-language content, independent of rare tokens.
+    for query in list(dict.fromkeys(filter(None, semantic)))[:4]:
         # These existing search APIs include synchronous embedding calls.
         for key in query_candidates(
             diagnostics,
@@ -194,22 +238,44 @@ def context_candidates(uid, targets, vocabulary, *, read_record, read_entity_rec
         time = timestamp(row.get('created_at') or row.get('timestamp'))
         if time is None:
             continue
-        start, end = time - timedelta(hours=2), time + timedelta(hours=2)
         for neighbour in query_candidates(
-            diagnostics, 'temporal', partial(temporal_neighbours, uid, 'conversations', start, time, end)
+            diagnostics,
+            'temporal',
+            partial(
+                temporal_neighbours,
+                uid,
+                'conversations',
+                time - timedelta(hours=24),
+                time,
+                time + timedelta(hours=24),
+                excluded_ids={ref.split('/', 1)[1] for ref in excluded | pending if ref.startswith('conversations/')},
+            ),
         ):
             ref = 'conversations/' + neighbour['id']
             yield ref, partial(read_record, uid, ref), 'temporal'
         for screen in query_candidates(
-            diagnostics, 'temporal', partial(temporal_neighbours, uid, 'screen_activity', start, time, end)
+            diagnostics,
+            'temporal',
+            partial(
+                temporal_neighbours,
+                uid,
+                'screen_activity',
+                time - timedelta(hours=2),
+                time,
+                time + timedelta(hours=2),
+                excluded_ids={ref.split('/', 1)[1] for ref in excluded | pending if ref.startswith('screen/')},
+            ),
         ):
             yield 'screen/' + screen['id'], screen, 'temporal'
 
 
-def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None):
-    diagnostics = {} if diagnostics is None else diagnostics
+def add_context(
+    targets, candidates, caps, vocabulary=None, *, diagnostics=None, excluded_refs=None, reserve_context=False
+):
+    diagnostics = initialize({} if diagnostics is None else diagnostics)
     records = EvidenceRecords(targets, targets=target_refs(targets))
-    seen = set(records)
+    seen = set(records) if excluded_refs is None else excluded_refs
+    seen.update(records)
     for ref, load, path in candidates:
         if ref in seen:
             path_count(diagnostics, path, 'duplicate')
@@ -221,6 +287,15 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None)
             {**records, ref: {}},
             targets=records.targets,
         )
+        # A supplied eight-target dry run must not consume the context slice.
+        # Defer a target before abandoning a real neighbour, retaining its queue
+        # version for the next pass. Record snapshots themselves are untouched.
+        while reserve_context and not fits_pass(probe, caps, vocabulary) and len(records.targets) > 1:
+            drop = next(ref for ref in reversed(records) if ref in records.targets)
+            records = EvidenceRecords(
+                {key: row for key, row in records.items() if key != drop}, targets=records.targets - {drop}
+            )
+            probe = EvidenceRecords({**records, ref: {}}, targets=records.targets)
         if not fits_pass(probe, caps, vocabulary):
             path_count(diagnostics, path, 'budget_skipped')
             break
@@ -233,18 +308,26 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None)
                 path_count(diagnostics, path, 'unavailable')
                 continue
             seen.discard(ref)  # A later bounded path may recover a transient read failure.
-            path_count(diagnostics, path, 'failed')
+            path_failure(diagnostics, path, exc)
             record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
             continue
-        except Exception:
+        except Exception as exc:
             seen.discard(ref)  # A later bounded path may recover a transient read failure.
-            path_count(diagnostics, path, 'failed')
+            path_failure(diagnostics, path, exc)
             record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
             continue
         if not row:
             path_count(diagnostics, path, 'unavailable')
             continue
+        if reserve_context:
+            diagnostics['context_budget_counts']['visible_found'] += 1
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
+        while reserve_context and not fits_pass(candidate, caps, vocabulary) and len(records.targets) > 1:
+            drop = next(key for key in reversed(records) if key in records.targets)
+            records = EvidenceRecords(
+                {key: value for key, value in records.items() if key != drop}, targets=records.targets - {drop}
+            )
+            candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):
             path_count(diagnostics, path, 'budget_skipped')
             break
