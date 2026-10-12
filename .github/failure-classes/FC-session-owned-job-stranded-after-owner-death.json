@@ -6,6 +6,7 @@
   "canonical_prevention_artifact": [
     "backend/database/conversation_finalization_jobs.py",
     "backend/services/conversation_finalization.py",
+    "backend/tests/unit/test_byok_lease_reclaim.py",
     "backend/tests/unit/test_stale_processing_emulator_concurrency.py"
   ],
   "evidence_prs": [],
