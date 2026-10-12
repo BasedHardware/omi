@@ -113,6 +113,14 @@ final class MessagesHistoryFixture: @unchecked Sendable {
     }
   }
 
+  func redate(text: String, to date: Date) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE message SET date = ? WHERE text = ?",
+        arguments: [MessagesReaderService.appleTimestamp(from: date), text])
+    }
+  }
+
   func markDelivered(text: String) throws {
     try queue.write { db in
       try db.execute(sql: "UPDATE message SET is_sent = 1, is_delivered = 1 WHERE text = ?", arguments: [text])
