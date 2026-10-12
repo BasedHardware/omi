@@ -1223,10 +1223,8 @@ def get_user_subscription_endpoint(
     response = _user_subscription_response(
         uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
     )
-    # The same resolver the listen socket enforces, so the client's startup
-    # snapshot and the server's gate cannot disagree about which STT mode to
-    # open. `X-App-Platform` plays the listen `source` role for the paywall,
-    # and the subscription/usage the snapshot already read are reused.
+    # Reuse snapshot reads with the listen resolver so the STT allowance agrees.
+    # X-App-Platform has the listen `source` role for the paywall.
     allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
     return response
