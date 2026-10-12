@@ -10,6 +10,7 @@ credentials and Python 3.10+, so we extract and test the function logic directly
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 from unittest.mock import MagicMock as _MagicMock, patch
@@ -41,6 +42,7 @@ def _get_build_subscription_fn():
         'Dict': Dict,
         'Optional': Optional,
         'cast': _cast,
+        'time': __import__('time'),
         'project_subscription': __import__(
             'utils.subscription_state_machine', fromlist=['project_subscription']
         ).project_subscription,
@@ -157,6 +159,47 @@ class TestBuildSubscriptionFromStripeObject:
         result = self.fn(_make_stripe_sub(status='canceled', cancel_at_period_end=True))
         assert result is not None
         assert result.cancel_at_period_end is False
+
+    def test_immediately_canceled_subscription_keeps_paid_plan_until_period_end(self):
+        """A canceled-now event with a future current_period_end must not strip
+        access the customer already paid for (portal "cancel immediately")."""
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='canceled', price_id='price_known')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.unlimited
+        assert result.status == SubscriptionStatus.active
+        assert result.cancel_at_period_end is True
+        assert result.current_period_end == future
+
+    def test_canceled_paid_through_keeps_basic_without_grant(self):
+        """Schedule/checkout paths keep main's downgrade: no grant, no grace."""
+        sub = _make_stripe_sub(status='canceled', price_id='price_known')
+        sub['current_period_end'] = int(time.time()) + 86_400 * 20
+        result = self.fn(sub)
+        assert result is not None
+        assert result.plan == PlanType.basic
+        assert result.cancel_at_period_end is False
+
+    def test_immediately_canceled_with_unresolvable_price_downgrades_to_basic(self):
+        """Paid-through preservation cannot invent a plan; unknown price stays Basic."""
+        self.ns['get_plan_type_from_price_id'] = MagicMock(side_effect=ValueError("Unknown"))
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='canceled', price_id='price_unknown')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.basic
+
+    def test_unpaid_with_future_period_end_still_downgrades_to_basic(self):
+        """Grace is limited to canceled; unpaid/incomplete_expired keep Basic."""
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='unpaid', price_id='price_known')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.basic
 
     def test_subscription_includes_stripe_id(self):
         """Result always includes the Stripe subscription ID."""

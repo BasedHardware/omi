@@ -227,10 +227,44 @@ class AvailablePlansResponse(BaseModel):
     plans: List[PricingOption]
 
 
-def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | None:
+def _build_subscription_from_stripe_object(
+    stripe_sub: dict, grant_cancel_grace: bool = False, now: int | None = None
+) -> Subscription | None:
     """Builds a Subscription object from a Stripe Subscription object."""
-    # Inactive snapshots always project Basic, regardless of the price binding.
-    if stripe_sub['status'] not in ('active', 'trialing'):
+    stripe_status = stripe_sub['status']
+
+    # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
+    # regardless of price ID — ensures deleted/canceled users don't keep paid access.
+    # Exception (subscription-event paths only): an immediately-canceled subscription
+    # (e.g. the customer portal's "cancel immediately" mode) whose paid period has not
+    # ended yet. The customer paid through current_period_end, so paid access must
+    # survive the early terminal event. The candidate still routes through the
+    # stale-downgrade shield in the webhook handler, so a newer stored paid
+    # subscription or an adopted replacement always wins over this grace.
+    if stripe_status not in ('active', 'trialing'):
+        period_end = stripe_sub.get('current_period_end')
+        if (
+            grant_cancel_grace
+            and stripe_status == 'canceled'
+            and period_end
+            and period_end > (now if now is not None else int(time.time()))
+        ):
+            items = stripe_sub.get('items', {}).get('data', [])
+            price_id = items[0]['price']['id'] if items else None
+            try:
+                paid_plan = get_plan_type_from_price_id(price_id) if price_id else None
+            except ValueError:
+                paid_plan = None
+            if paid_plan is not None:
+                return Subscription(
+                    plan=paid_plan,
+                    status=SubscriptionStatus.active,
+                    current_period_end=period_end,
+                    current_period_start=stripe_sub.get('current_period_start'),
+                    stripe_subscription_id=stripe_sub['id'],
+                    cancel_at_period_end=True,
+                    limits=get_plan_limits(paid_plan),
+                )
         return project_subscription(stripe_sub, None, get_basic_plan_limits())
 
     # Active subscriptions: resolve plan from price ID
@@ -1045,7 +1079,10 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 uid = user['uid']
 
         if uid:
-            new_subscription = _build_subscription_from_stripe_object(subscription_obj)
+            now = int(time.time())
+            new_subscription = _build_subscription_from_stripe_object(
+                subscription_obj, grant_cancel_grace=True, now=now
+            )
             if new_subscription:
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
@@ -1076,10 +1113,13 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 # all customer/storage IO remains in this adapter.
                 current_subscription = None
                 active_paid = None
-                if not is_paid_plan(new_subscription.plan):
+                # A paid-through canceled snapshot (grace) is downgrade-shaped for
+                # the stale shield: a newer stored paid sub or an adoptable active
+                # paid sub must still win over the grace candidate.
+                if not is_paid_plan(new_subscription.plan) or subscription_obj.get('status') == 'canceled':
                     event_sub_id = subscription_obj.get('id')
                     current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
-                    if preserves_current_paid_subscription(current_subscription, event_sub_id, int(time.time())):
+                    if preserves_current_paid_subscription(current_subscription, event_sub_id, now):
                         logger.info(
                             f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
                             f"stored paid sub {current_subscription.stripe_subscription_id} is still valid."
@@ -1091,21 +1131,57 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
                             f"a different active paid sub {active_paid.stripe_subscription_id} exists."
                         )
+                decision_candidate = new_subscription
+                # Paid-through grace applies only when the canceled event belongs
+                # to the user's current subscription (the portal cancel flow). A
+                # canceled snapshot for a different, superseded subscription id
+                # keeps main's downgrade semantics: project Basic and let the
+                # stale guard / replacement adoption decide.
+                grace_candidate = (
+                    subscription_obj.get('status') == 'canceled'
+                    and is_paid_plan(new_subscription.plan)
+                    and (
+                        current_subscription is None
+                        or current_subscription.stripe_subscription_id == subscription_obj.get('id')
+                    )
+                )
+                if (
+                    subscription_obj.get('status') == 'canceled'
+                    and is_paid_plan(new_subscription.plan)
+                    and not grace_candidate
+                ):
+                    decision_candidate = project_subscription(subscription_obj, None, get_basic_plan_limits())
                 decision = transition(
                     None,
                     ResolvedStripeEvent(
                         event['type'],
                         subscription_obj.get('id'),
-                        new_subscription,
-                        int(time.time()),
+                        decision_candidate,
+                        now,
                         active_paid,
                         billing_owner_confirmed,
+                        grace_paid=grace_candidate,
                     ),
                 )
                 if decision.next_state is None:
                     raise ValueError('Subscription transition requires a projected state')
                 new_subscription = decision.next_state
                 adopted_active_paid = decision.adopted_active_paid
+                if adopted_active_paid:
+                    logger.info(
+                        f"Early-cancel paid-through grace for user {uid}: adopted replacement paid sub "
+                        f"{new_subscription.stripe_subscription_id} over canceled event sub "
+                        f"{subscription_obj.get('id')}."
+                    )
+                elif (
+                    is_paid_plan(new_subscription.plan)
+                    and decision.outcome != 'preserved_current'
+                    and subscription_obj.get('status') == 'canceled'
+                ):
+                    logger.info(
+                        f"Early-cancel paid-through grace for user {uid}: keeping plan until period end "
+                        f"for canceled sub {subscription_obj.get('id')}."
+                    )
                 try:
                     if 'unlock_conversations' in decision.effects:
                         # An adopted replacement keeps its own customer identity;

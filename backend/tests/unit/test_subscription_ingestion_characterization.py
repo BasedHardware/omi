@@ -121,20 +121,24 @@ def test_every_lifecycle_status_and_paid_plan_preserves_bytes_and_effect_order(l
     lane.event = event(kind, status, plan)
     assert run(lane) == {'status': 'success'}
     paid = status in ('active', 'trialing')
+    # Portal "cancel immediately" fires canceled while the period is still live;
+    # the paid-through grace (FC-early-terminal-strips-paid-period) keeps the paid
+    # plan until period end instead of downgrading to Basic on the spot.
+    keeps_paid = paid or status == 'canceled'
     expected = Subscription(
-        plan=plan if paid else PlanType.basic,
+        plan=plan if keeps_paid else PlanType.basic,
         status=SubscriptionStatus.active,
         stripe_subscription_id='sub-current',
         current_period_start=NOW - 100,
         current_period_end=NOW + 100,
-        cancel_at_period_end=paid,
-        limits=PlanLimits(transcription_seconds=123 if paid else 7),
+        cancel_at_period_end=keeps_paid,
+        limits=PlanLimits(transcription_seconds=123 if keeps_paid else 7),
     )
     # Includes every model field and default, especially current_price_id=None.
     assert wire(lane.current.model_dump()) == wire(expected.model_dump())
     assert [name for name, _ in lane.calls] == (
         ['customer', 'conversations', 'memories', 'actions', 'write', 'telemetry', 'credits', 'trial_cache', 'fair_use']
-        if paid
+        if keeps_paid
         else ['write', 'telemetry', 'credits', 'trial_cache']
     )
 

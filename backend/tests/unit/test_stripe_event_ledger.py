@@ -312,9 +312,9 @@ def test_real_webhook_unknown_price_is_200_and_same_id_reenters(lane, monkeypatc
     builds = []
     build = payment._build_subscription_from_stripe_object
 
-    def tracking(obj):
+    def tracking(obj, **kwargs):
         builds.append(obj['id'])
-        return build(obj)
+        return build(obj, **kwargs)
 
     monkeypatch.setattr(payment, '_build_subscription_from_stripe_object', tracking)
     assert run_lifecycle(lane) == {'status': 'success'}
