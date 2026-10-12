@@ -948,7 +948,6 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Send an iMessage or SMS through Messages.app after an explicit approval.",
       bullets: [
-      "Only when the person explicitly asked Omi to send it for them; otherwise draft it with propose_message.",
       "Omi asks the person to approve the exact recipient and text itself; never file that approval with create_desktop_dispatch.",
       "Resolve named recipients with search_contacts first.",
       "Leave service unset unless the user explicitly asked for SMS or iMessage.",
