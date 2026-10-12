@@ -3798,6 +3798,40 @@ export interface PhoneNumbersResponse {
   numbers: Array<PhoneNumberResponse>;
 }
 
+export interface PlanIdentitySubscription {
+  cancel_at_period_end?: boolean;
+  current_period_end?: number | null;
+  current_period_start?: number | null;
+  current_price_id?: string | null;
+  deprecated?: boolean;
+  deprecation_message?: string | null;
+  features?: Array<string>;
+  limits?: PlanLimits;
+  plan?: PlanType;
+  status?: SubscriptionStatus;
+  stripe_subscription_id?: string | null;
+}
+
+export interface PlanIdentityUserSubscriptionResponse {
+  available_plans?: Array<SubscriptionPlan>;
+  chat_quota_allowed?: boolean;
+  chat_quota_percent?: number;
+  chat_quota_reset_at?: number | null;
+  chat_quota_unit?: ChatQuotaUnit | null;
+  chat_quota_used?: number;
+  desktop_grandfather_until?: number | null;
+  insights_gained_limit: number;
+  insights_gained_used: number;
+  phone_call_quota?: PhoneCallQuota | null;
+  show_subscription_ui?: boolean;
+  subscription: PlanIdentitySubscription;
+  transcription_allowance?: TranscriptionAllowanceSnapshot | null;
+  transcription_seconds_limit: number;
+  transcription_seconds_used: number;
+  words_transcribed_limit: number;
+  words_transcribed_used: number;
+}
+
 export interface PlanLimits {
   chat_cost_usd_per_month?: number | null;
   chat_questions_per_month?: number | null;
@@ -6367,6 +6401,8 @@ export interface OmiApiSchemas {
   "PhoneMutationResponse": PhoneMutationResponse;
   "PhoneNumberResponse": PhoneNumberResponse;
   "PhoneNumbersResponse": PhoneNumbersResponse;
+  "PlanIdentitySubscription": PlanIdentitySubscription;
+  "PlanIdentityUserSubscriptionResponse": PlanIdentityUserSubscriptionResponse;
   "PlanLimits": PlanLimits;
   "PlanType": PlanType;
   "PlatformMinimumBuild": PlatformMinimumBuild;
@@ -19521,7 +19557,7 @@ export async function claim_referral_v1_users_me_referral_claim_post(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
+export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string, X_Omi_Plan_Identity?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
   const _search = "";
@@ -19534,6 +19570,7 @@ export async function get_user_subscription_endpoint_v1_users_me_subscription_ge
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_Omi_Plan_Identity !== undefined ? { "X-Omi-Plan-Identity": String(header.X_Omi_Plan_Identity) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);

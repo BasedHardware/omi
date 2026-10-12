@@ -187,6 +187,7 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Platform': PlatformManager.instance.platform,
     'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
+    'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
     ...fromHeaders,
   };

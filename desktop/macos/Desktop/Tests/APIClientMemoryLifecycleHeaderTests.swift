@@ -79,6 +79,12 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     return client
   }
 
+  func testPlanDecoderCapabilityDoesNotDependOnAuthentication() async throws {
+    let headers = try await OmiHTTPTransport().buildHeaders(requireAuth: false)
+    XCTAssertEqual(headers["X-Omi-Plan-Identity"], "1")
+    XCTAssertEqual(headers["X-App-Platform"], "macos")
+  }
+
   func testEmptyCanonicalListUsesDeviceScopeCapability() async throws {
     MemoryLifecycleURLStub.headers = [
       "X-Omi-Memory-Device-Scope-Supported": "true",
