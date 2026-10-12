@@ -788,8 +788,8 @@ class WorkflowContractTests(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[2]
         cls.workflow = (cls.root / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
         deploy = cls.workflow.index("- name: Deploy backend stack")
-        provision = cls.workflow.index("- name: Provision backend route 5xx alert")
-        report = cls.workflow.index("- name: Report backend route 5xx alert provisioning failure")
+        provision = cls.workflow.index("- name: Provision backend route and request storm alerts")
+        report = cls.workflow.index("- name: Report backend alert provisioning failure")
         firestore = cls.workflow.index("- name: Provision Firestore missing-index alert")
         assert deploy < provision < report < firestore, "step order: deploy < provision < report < firestore"
         cls.step = cls.workflow[provision:report]
@@ -827,7 +827,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("bash"), "bash is required to execute the reporting step")
     def test_reporting_step_shell_emits_warning_and_summary(self) -> None:
-        block = step_run_block(self.workflow, "Report backend route 5xx alert provisioning failure")
+        block = step_run_block(self.workflow, "Report backend alert provisioning failure")
         self.assertIn("::warning", block)
         with tempfile.TemporaryDirectory() as tmp:
             summary = Path(tmp) / "summary.md"
