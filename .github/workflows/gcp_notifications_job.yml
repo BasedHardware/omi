@@ -125,14 +125,40 @@ jobs:
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
-      - name: Render backend runtime env
+      # The job runs with OMI_LLM_GATEWAY_FEATURE_MODE=gateway, and the manifest's
+      # OMI_LLM_GATEWAY_URL default is the inert sentinel http://127.0.0.1:9. Rendering
+      # without the verified endpoint shipped that sentinel on 2026-10-10 and every
+      # daily recap generation failed with APIConnectionError until redeploy.
+      - name: Get GKE credentials for gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Render backend runtime env from the gated gateway endpoint
         id: runtime-env
         env:
           # Prod network flags are env_var-backed; without these the renderer
           # exits before notifications_job_* outputs are emitted (same as gcp_backend.yml).
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
         run: |
+          set -euo pipefail
+          if [[ -z "$OMI_LLM_GATEWAY_URL" || "$OMI_LLM_GATEWAY_URL" == "http://127.0.0.1:9" ]]; then
+            echo "notifications-job requires a verified non-sentinel LLM gateway endpoint." >&2
+            exit 1
+          fi
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
