@@ -662,6 +662,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _refreshWals(generation);
   }
 
+  Future<void> deleteAllCorruptedWals() async {
+    final generation = _sessionGeneration;
+    await _walService.getSyncs().deleteAllCorruptedWals();
+    await _refreshWals(generation);
+  }
+
   /// Clears every local recording category. Unlike the retryable Pending
   /// action, this deliberately includes terminally corrupted phone WALs.
   Future<void> deleteAllClearableWals() async {
