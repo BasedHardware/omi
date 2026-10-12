@@ -279,6 +279,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
+| `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
@@ -395,6 +396,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
+- `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
 - `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
