@@ -18,6 +18,7 @@ import os
 import re
 
 import av
+from av.error import FFmpegError
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -55,7 +56,8 @@ def _audio_seconds(audio_bytes: bytes) -> int:
     on disk. Decoder errors never enter logs or the response.
     """
     try:
-        with av.open(io.BytesIO(audio_bytes)) as audio:
+        seconds = 0.0
+        with av.open(io.BytesIO(audio_bytes), mode='r') as audio:
             if not audio.streams.audio:
                 raise ValueError('missing audio stream')
             stream = audio.streams.audio[0]
@@ -68,7 +70,7 @@ def _audio_seconds(audio_bytes: bytes) -> int:
         if not math.isfinite(seconds) or seconds <= 0:
             raise ValueError('invalid duration')
         return math.ceil(seconds)
-    except (ValueError, TypeError, av.error.FFmpegError):
+    except (ValueError, TypeError, FFmpegError):
         raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
 
 
