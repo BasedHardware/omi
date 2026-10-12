@@ -126,7 +126,7 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
         self._queue.clear()
         self._queue.extend([*ordinary, *rejectors.values()])
         self._unfinished_tasks -= removed
-        if removed:
+        for _ in range(removed):
             while self._putters:
                 waiter = self._putters.popleft()
                 if not waiter.done():

@@ -298,3 +298,36 @@ def test_targeted_metric_labels_have_closed_cardinality():
             sample for metric in counter.collect() for sample in metric.samples if sample.name.endswith('_total')
         ]
         assert [sample.labels for sample in samples] == labels
+
+
+@pytest.mark.anyio
+async def test_queue_coalescing_releases_all_open_slots_and_preserves_join_accounting(monkeypatch):
+    _clock(monkeypatch)
+    matcher, host, _ = live(monkeypatch, [FAR] * 3)
+    for start in (0, 5):
+        matcher.queue.put_nowait(work(start=start))
+    await serve(matcher, host, monkeypatch, 2)
+    for _ in range(2):
+        matcher.queue.task_done()
+    for index in range(100):
+        matcher.queue.put_nowait(work(start=15 + index * 0.1, seconds=2))
+    putters = [asyncio.create_task(matcher.queue.put(work(voice, 40))) for voice in (3, 4, 5)]
+    try:
+        await asyncio.sleep(0)
+        assert matcher.queue.full() and not any(task.done() for task in putters)
+        # A real third comparison qualifies the queued voice; get collapses
+        # its pending updates and must wake every producer whose slot is freed.
+        await matcher.match(2, work(start=10))
+        assert matcher._rejectors.proven(2)
+        assert matcher.queue.get_nowait()['speaker_id'] == 2
+        matcher.queue.task_done()
+        await asyncio.wait_for(asyncio.gather(*putters), timeout=1)
+        assert matcher.queue.qsize() == 3
+        assert [matcher.queue.get_nowait()['speaker_id'] for _ in range(3)] == [3, 4, 5]
+        for _ in range(3):
+            matcher.queue.task_done()
+        await asyncio.wait_for(matcher.queue.join(), timeout=1)
+    finally:
+        for task in putters:
+            task.cancel()
+        await asyncio.gather(*putters, return_exceptions=True)
