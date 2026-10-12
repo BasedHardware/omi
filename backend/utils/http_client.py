@@ -397,6 +397,10 @@ def get_stt_proxy_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt_proxy', 4)
 
 
+def get_stt_probe_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('stt_probe', 4)
+
+
 def get_tts_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('tts', 32)
 
