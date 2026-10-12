@@ -5,7 +5,7 @@ import XCTest
 
 private actor HangGate {
   private var continuations: [CheckedContinuation<Void, Never>] = []
-  private var parkedWaiters: [CheckedContinuation<Void, Never>] = []
+  private var parkedWaiters: [(count: Int, continuation: CheckedContinuation<Bool, Never>)] = []
   private var released = false
   private(set) var completed = 0
   private(set) var parked = 0
@@ -13,9 +13,9 @@ private actor HangGate {
   func park() async {
     if released { return }
     parked += 1
-    let waiters = parkedWaiters
-    parkedWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    let waiters = parkedWaiters.filter { $0.count <= parked }
+    parkedWaiters.removeAll { $0.count <= parked }
+    waiters.forEach { $0.continuation.resume(returning: true) }
     await withTaskCancellationHandler {
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         if released {
@@ -29,13 +29,16 @@ private actor HangGate {
     }
   }
 
-  func waitUntilParked(_ count: Int) async {
-    if parked >= count { return }
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+  func waitUntilParked(_ count: Int) async -> Bool {
+    if parked >= count { return true }
+    if released { return false }
+    return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
       if parked >= count {
-        continuation.resume()
+        continuation.resume(returning: true)
+      } else if released {
+        continuation.resume(returning: false)
       } else {
-        parkedWaiters.append(continuation)
+        parkedWaiters.append((count, continuation))
       }
     }
   }
@@ -49,6 +52,9 @@ private actor HangGate {
     let pending = continuations
     continuations.removeAll()
     pending.forEach { $0.resume() }
+    let observers = parkedWaiters
+    parkedWaiters.removeAll()
+    observers.forEach { $0.continuation.resume(returning: $0.count <= parked) }
   }
 }
 
@@ -91,7 +97,10 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    await LocalEmbeddingIndexer.shared.drainForTesting()
+    // End the controlled stall and await the real indexing task before closing
+    // its pool. Cancellation/deadline work must not leak into the next fixture.
+    await hangingEngine?.gate.resumeAll()
+    await LocalEmbeddingIndexer.shared.awaitDetachedForTesting()
     hangingEngine = nil
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
@@ -108,6 +117,14 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     }
   }
 
+  private func requireParked(_ engine: HangingEmbeddingEngine, count: Int) async throws {
+    // omi-test-quality: wall-clock-wait -- bound formerly unbounded background observation; the parent operation keeps its separate 400ms deadline
+    let parked = try await LocalEmbeddingCallBound.run(.seconds(5)) {
+      await engine.gate.waitUntilParked(count)
+    }
+    XCTAssertTrue(parked, "the non-blocking assertion requires a still-blocked embedding engine")
+  }
+
   func testSessionAndMemoryCompletionDoNotWaitForEmbedding() async throws {
     let engine = HangingEmbeddingEngine()
     hangingEngine = engine
@@ -117,7 +134,9 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
-    runtime.embedBudget = .milliseconds(20)
+    runtime.thermalState = { .nominal }
+    // Keep the engine parked until teardown. A 20ms embedding deadline can
+    // release it before the non-blocking parent assertions on a slow runner.
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
 
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
@@ -135,7 +154,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       return
     }
     XCTAssertTrue(accepted)
-    await engine.gate.waitUntilParked(1)
+    try await requireParked(engine, count: 1)
     let completedAfterSession = await engine.gate.completed
     XCTAssertEqual(completedAfterSession, 0, "session completion must not await NLCE")
 
@@ -150,7 +169,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       return
     }
     XCTAssertNotNil(inserted.id)
-    await engine.gate.waitUntilParked(2)
+    try await requireParked(engine, count: 2)
     let completedAfterMemory = await engine.gate.completed
     XCTAssertEqual(completedAfterMemory, 0, "memory insert must not await NLCE")
   }
@@ -165,7 +184,9 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
-    runtime.embedBudget = .milliseconds(20)
+    runtime.thermalState = { .nominal }
+    // The parent still has its 400ms deadline; embedding is released explicitly
+    // only after the detached-work assertion, not by a racing 20ms timeout.
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
 
     let memory = ServerMemory(
@@ -202,7 +223,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       XCTFail("batch memory sync awaited embedding")
       return
     }
-    await engine.gate.waitUntilParked(1)
+    try await requireParked(engine, count: 1)
     let completed = await engine.gate.completed
     XCTAssertEqual(completed, 0, "batch memory sync must not await NLCE")
   }
@@ -216,6 +237,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
+    runtime.thermalState = { .nominal }
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
 
     let backendId = "memory-reembed-\(UUID().uuidString)"
@@ -280,6 +302,16 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
     await LocalEmbeddingIndexer.shared.indexFinalizedSession(sessionId: 9_999)
     XCTAssertEqual(reasons.snapshot(), ["missing_session_origin"])
+  }
+
+  func testHangingFixtureReleaseUnblocksAWaitForAnUnreachedParkCount() async throws {
+    let gate = HangGate()
+    await gate.resumeAll()
+    // omi-test-quality: wall-clock-wait -- bound a fixture-lifecycle regression rather than waiting for the suite watchdog
+    let reachedCount = try await LocalEmbeddingCallBound.run(.milliseconds(400)) {
+      await gate.waitUntilParked(1)
+    }
+    XCTAssertFalse(reachedCount, "release must unblock observers without pretending embedding started")
   }
 }
 

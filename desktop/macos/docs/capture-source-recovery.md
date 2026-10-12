@@ -118,5 +118,28 @@ localhost profile, paused memory writes and unrelated screen-evidence/UI checks.
 Those fixtures and their production owners are unchanged by this PR. They are
 reported separately, not weakened or counted as successful recording tests.
 
+### CI fixture verification
+
+Both hosted attempts on `0832a70b4ee7b76d67b68f2a61149f19ee07d333`
+passed 924 of 925 Swift suites. The then-unchanged
+`LocalEmbeddingCapturePathTests` stalled in its missing-session case; this is
+not evidence that the recording recovery regressed. That suite also passed
+with CI's Xcode 26.6 compiler and a fresh Foundation home/temp plus a
+single-worker stress setting, so its hosted hang has not been reproduced.
+
+Its hanging-engine fixture did have a separately reproducible release defect:
+waiting for a park count after release suspended forever. The added regression
+failed before correction. The fixture now reports whether the count was reached,
+releases pending observers and awaits explicitly released indexing before
+closing its database. A racing 20ms engine timeout no longer releases the fake
+engine before non-blocking assertions. Parent operations remain bounded at
+400ms; formerly unbounded background park observation now has a separate
+five-second ceiling, allowing engine readiness without weakening the parent
+deadline. The fixture injects nominal thermal state instead of querying the
+host. Production timeout tests and CI budgets are unchanged.
+The Xcode 26.6 capture/embedding matrix passes all 130 tests. These local passes
+do not substitute for hosted verification, and fixture hardening is not a
+verified cause of the previous hosted missing-session hang.
+
 Customer diagnostic exports can contain transcript text despite their redacted
 header. Never commit the export, its transcript text, or account/session IDs.
