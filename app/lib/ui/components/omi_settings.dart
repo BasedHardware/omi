@@ -56,15 +56,18 @@ class OmiSectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: OmiSpacing.sm,
-            runSpacing: OmiSpacing.xs,
-            children: [
-              Semantics(header: true, child: Text(title, style: OmiType.title3)),
-              if (trailing != null) trailing!,
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: OmiSpacing.sm,
+              runSpacing: OmiSpacing.xs,
+              children: [
+                Semantics(header: true, child: Text(title, style: OmiType.title3)),
+                if (trailing != null) trailing!,
+              ],
+            ),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
