@@ -98,7 +98,11 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
             else:
                 ranges.append((start, end))
         first_arrival = min(pending['_queue_order'], latest['_queue_order'])
+        latest_interval = latest.get(
+            '_speaker_latest_interval', (latest['abs_start'], latest['abs_end'], latest['duration'])
+        )
         pending.update(latest)
+        pending['_speaker_latest_interval'] = latest_interval
         pending['_queue_order'] = first_arrival
         pending['_speaker_audio_ranges'] = ranges[-128:]
         if ranges:
@@ -117,6 +121,10 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
         for work in self._queue:
             if not self._is_rejector(work):
                 work.pop('_rejector_pending', None)
+                latest_interval = work.pop('_speaker_latest_interval', None)
+                if latest_interval is not None:
+                    work.pop('_speaker_audio_ranges', None)
+                    work['abs_start'], work['abs_end'], work['duration'] = latest_interval
                 ordinary.append(work)
                 continue
             key = self._key(work)

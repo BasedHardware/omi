@@ -3215,6 +3215,9 @@ per-update clip selection and initial-evidence cadence.
 Deferred entries retain their earliest enqueue position. If current proof is
 revoked by manual authority or profile re-evaluation, the pending entry returns
 to that position among ordinary work; later arrivals cannot keep overtaking it.
+The entry drops its pooled audio ranges and restores the latest provider update's
+original start, end and duration, so ordinary clip selection uses only that latest
+interval rather than the former rejector pool.
 
 After the existing monotonic socket refill and actual cap checks, a proven
 rejector cannot reserve with two or fewer tokens remaining. Those tokens remain

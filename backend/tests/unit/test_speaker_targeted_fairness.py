@@ -320,16 +320,16 @@ async def test_revoked_rejector_returns_to_earliest_fifo_position_with_latest_id
     _clock(monkeypatch)
     matcher, host, _ = live(monkeypatch, [FAR] * 6)
     await prove(matcher, host, monkeypatch)
-    matcher.queue.put_nowait(work(start=20, segment='earliest'))
-    matcher.queue.put_nowait(work(3, 30, segment='later-ordinary'))
-    matcher.queue.put_nowait(work(start=21, segment='latest-rejector'))
+    matcher.queue.put_nowait(work(start=30, seconds=4, segment='earliest'))
+    matcher.queue.put_nowait(work(3, 50, segment='later-ordinary'))
+    matcher.queue.put_nowait(work(start=40, seconds=4, segment='latest-rejector'))
     assert matcher.queue.qsize() == 2
     if revocation == 'manual':
         host.persistence.call = AsyncMock(
             return_value={'segments': {'manual-2': {'speaker_id': 2, 'is_user': True, 'generation': 1}}}
         )
         # Another real in-flight comparison observes the manual authority.
-        await matcher.match(4, work(4, 40))
+        await matcher.match(4, work(4, 20))
     else:
         direction = FAR / np.linalg.norm(FAR)
         orthogonal = np.array([[1.0, -1.0]], dtype=np.float32) / np.sqrt(2)
@@ -337,8 +337,19 @@ async def test_revoked_rejector_returns_to_earliest_fifo_position_with_latest_id
         await matcher._reevaluate_loaded_owner()
         assert matcher._voice_distances[2]['user'] == pytest.approx(0.68)
     assert not matcher._rejectors.proven(2)
+    windows = []
+    extract = host.state.audio_ring_buffer.extract
+
+    def record(start, end):
+        windows.append((start, end))
+        return extract(start, end)
+
+    monkeypatch.setattr(host.state.audio_ring_buffer, 'extract', record)
     order = await serve(matcher, host, monkeypatch, 2)
     assert order == [(2, 'latest-rejector'), (3, 'later-ordinary')]
+
+    # Revocation restores the latest original clip, not the old rejector pool.
+    assert windows == [(40, 44), (50, 55)]
 
 
 @pytest.mark.anyio
