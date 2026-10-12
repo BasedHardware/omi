@@ -15933,5 +15933,287 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-daily-recap-generation-failing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Daily recaps",
+    "title": "Daily recap generation is failing for most recipients",
+    "condition": "J",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "promQL",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[1h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "60s"
+          },
+          "queryType": "promQL",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "promQL",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "60s"
+          },
+          "queryType": "promQL",
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "promQL",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "60s"
+          },
+          "queryType": "promQL",
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "promQL",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "60s"
+          },
+          "queryType": "promQL",
+          "refId": "D"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "expression": "A",
+          "reducer": "last",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "F",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F",
+          "expression": "B",
+          "reducer": "last",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "G",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "G",
+          "expression": "C",
+          "reducer": "last",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "H",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "H",
+          "expression": "D",
+          "reducer": "last",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "I",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "I",
+          "expression": "($E >= 10 && $F / ($E + $F) < 0.5) || ($G >= 20 && $H == 0)",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "J",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "J",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "J"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "I",
+          "reducer": "last",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-12T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "73",
+      "summary": "Most daily recaps due in the last hour failed to generate, or none generated in 3 hours while recipients kept failing.",
+      "user_impact": "Users who recorded conversations today get no daily recap notification and no recap in the app for this day until generation recovers and the backfill walk fills the hole.",
+      "scope": "notifications-job current-day recap generation (daily_summary_generated and daily_summary_user_failed log lines, as Cloud Logging metrics daily_summary_recap_generated and daily_summary_user_failed). Excludes DailySummaryDeliveryError, where the recap was generated and only the push failed. Failures are counted per cohort pass, so one recipient retried every 15 minutes counts up to four times per hour.",
+      "verification": "Open the Core Features Daily recap stats and the Recap outcomes graph. Then read notifications-job daily_summary_user_failed lines for the dominant error_type, and daily_summary_job_summary for attempted and failed counts.",
+      "safe_next_action": "For APIConnectionError or provider errors, check the LLM gateway endpoint the notifications job is deployed with (OMI_LLM_GATEWAY_URL) and the gateway lane health, then redeploy the job from main. Do not clear cohort cursors or re-run generation by hand; failed recipients are retried and later backfilled. Runbook: backend/docs/runbooks/daily-summary-cutover.md.",
+      "runbook": "backend/docs/runbooks/daily-summary-cutover.md",
+      "threshold": "($E >= 10 && $F / ($E + $F) < 0.5) || ($G >= 20 && $H == 0) for 15m. E/F: generation failures/generated over 1h; G/H: over 3h.",
+      "evaluated_bad": "2026-10-10 05:33 UTC to 2026-10-12: every generation failed with APIConnectionError (gateway URL sentinel). Measured from daily_summary_user_failed logs: 8 to 516 failures per hour, 0 generated. Busy hours trip the 1h ratio branch within the first hour; the quietest hours (08 UTC: 8 to 20 failures per hour) trip the 3h branch.",
+      "evaluated_good": "2026-10-08 00:00 to 2026-10-09 00:00 UTC: 96 daily_summary_user_failed lines, all DailySummaryDeliveryError from one persistently failing recipient (4 per hour) and therefore excluded; zero generation failures. Generated volume was not logged before this change, so the generated branch has no measured baseline yet."
+    },
+    "labels": {
+      "alert_identity": "omi-daily-recap-generation-failing",
+      "component": "daily-recap",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "api"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

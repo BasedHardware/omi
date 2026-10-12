@@ -849,6 +849,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # recap can also fail delivery; these are distinct recipient outcomes.
     if created:
         daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
+        # Durable outcome token for the daily_summary_recap_generated log metric. The
+        # job's in-process counters depend on a scrape sidecar; this line does not.
+        logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
     elif summary_data:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
     pending_webhook: Optional[dict] = None
