@@ -140,6 +140,12 @@ final class ItemLinkPresenter: ObservableObject {
   @Published private(set) var pendingGeneration: UInt = 0
   @Published var sheet: ItemLinkSheetState?
 
+  /// Bumped each time a consumed link reaches its terminal state (detail
+  /// opened, or sheet rows shown). Automation waits on it instead of a timer.
+  private(set) var settledCount: UInt = 0
+  /// The last record this presenter opened, for automation snapshots.
+  private(set) var lastOpened: ItemLinkReference?
+
   private var pendingRoute: ItemLinkRoute?
   private var activeGeneration: UInt = 0
   private let resolver: ItemLinkResolver
@@ -153,12 +159,14 @@ final class ItemLinkPresenter: ObservableObject {
   /// Handles an app-scheme URL if it is an item link. Returns false for every
   /// other URL (the auth callback, the onboarding return) so the caller's
   /// existing routing runs unchanged.
+  /// `revealsWindow: false` is for the automation bridge, which drives the
+  /// app without taking focus.
   @discardableResult
-  func receive(_ url: URL) -> Bool {
+  func receive(_ url: URL, revealsWindow: Bool = true) -> Bool {
     guard let route = ItemLinkParser.parse(url) else { return false }
     pendingRoute = route
     pendingGeneration &+= 1
-    navigator.revealMainWindow()
+    if revealsWindow { navigator.revealMainWindow() }
     return true
   }
 
@@ -182,20 +190,26 @@ final class ItemLinkPresenter: ObservableObject {
       let rows = await resolver.resolve(references)
       guard generation == activeGeneration else { return }
       guard !Task.isCancelled else { return requeue(route) }
-      if let item = rows.first?.item {
+      if let row = rows.first, let item = row.item {
+        lastOpened = row.reference
         navigator.open(item)
       } else {
         sheet = ItemLinkSheetState(id: generation, references: references, rows: rows)
       }
+      settledCount &+= 1
       return
     }
 
     sheet = ItemLinkSheetState(id: generation, references: references, rows: references.isEmpty ? [] : nil)
-    guard !references.isEmpty else { return }
+    guard !references.isEmpty else {
+      settledCount &+= 1
+      return
+    }
     let rows = await resolver.resolve(references)
     guard generation == activeGeneration, sheet?.id == generation else { return }
     guard !Task.isCancelled else { return requeue(route) }
     sheet?.rows = rows
+    settledCount &+= 1
   }
 
   /// The shell went away mid-resolution (sign-out, window teardown). A
@@ -211,6 +225,7 @@ final class ItemLinkPresenter: ObservableObject {
   func open(_ row: ItemLinkRow) {
     guard let item = row.item else { return }
     sheet = nil
+    lastOpened = row.reference
     navigator.open(item)
   }
 

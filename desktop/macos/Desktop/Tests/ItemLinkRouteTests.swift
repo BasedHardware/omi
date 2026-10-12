@@ -203,6 +203,17 @@ final class ItemLinkPresenterTests: XCTestCase {
     await presenter.consumePending()
     XCTAssertNil(presenter.sheet)
     XCTAssertEqual(recorder.openedConversations, ["c1"])
+    XCTAssertEqual(presenter.lastOpened, ref(.conversation, "c1"))
+    XCTAssertEqual(presenter.settledCount, 1)
+  }
+
+  /// Automation drives links without taking focus; the URL handler always reveals.
+  func testRevealIsSkippableForAutomationOnly() async throws {
+    let (presenter, recorder) = makePresenter()
+    try presenter.receive(link("omi-computer://task/t1"), revealsWindow: false)
+    XCTAssertEqual(recorder.reveals, 0)
+    try presenter.receive(link("omi-computer://task/t1"))
+    XCTAssertEqual(recorder.reveals, 1)
   }
 
   func testOneItemListAlsoOpensDirectly() async throws {
