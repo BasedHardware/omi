@@ -26,6 +26,16 @@ grafana:
   imageRenderer:
     enabled: true
   grafana.ini:
+    # Grafana v12.1.0 conf/defaults.ini [database] and
+    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v12.1.0).
+    # 2026-10-12 prod lock bursts: 03:02Z (11 lines), 09:02Z (67 lines);
+    # evaluation ticks dropped, API 500/502 (32.7s GET), probes failed.
+    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/5.
+    # Keep the existing sqlite3 type, grafana.db path and PVC. No busy_timeout INI option.
+    database:
+      wal: true
+      query_retries: 10
+      transaction_retries: 10
     rendering:
       server_url: http://dev-kube-prometheus-stack-grafana-image-renderer:8081/render
       callback_url: http://dev-kube-prometheus-stack-grafana:80/
