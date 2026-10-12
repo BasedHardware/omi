@@ -98,6 +98,7 @@ function FallbackView({
             href={macDeepLink}
             // iPadOS Safari reports a Mac user agent; on a touch screen open the iOS app.
             touchHref={getOmiPlatformDeepLink(IPAD_USER_AGENT, appPath)}
+            touchInstallHref={getOmiInstallLink(IPAD_USER_AGENT)}
           />
         ) : isMobile ? (
           <>

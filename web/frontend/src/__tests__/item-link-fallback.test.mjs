@@ -174,6 +174,20 @@ describe('private item lists (/items)', () => {
     assert.ok(!isMacDesktopUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'));
     assert.match(macButton, /maxTouchPoints/);
     assert.match(macButton, /Open in Omi for Mac/);
+    assert.match(macButton, /touchInstallHref/);
+    assert.match(macButton, /Download on the App Store/);
+    assert.match(
+      fallbackSource,
+      /touchInstallHref=\{getOmiInstallLink\(IPAD_USER_AGENT\)\}/,
+    );
+    assert.ok(!isMacDesktopUserAgent('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)'));
+    assert.equal(
+      getOmiPlatformDeepLink(
+        'Mozilla/5.0 (Linux; Android 14)',
+        'items?task=t-1&conversation=c-1',
+      ),
+      'intent://h.omi.me/items?task=t-1&conversation=c-1#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.friend.ios;end',
+    );
   });
 
   it('give link previews generic Omi metadata with the count only', () => {
