@@ -183,6 +183,7 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
             response.status_code == 429 or failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}
         ):
             await dream_capacity.mark_saturated(reservation_model)
+            dream_capacity.log_wait(reservation_model, source='gateway_response')
             raise CapacityWait('dream_capacity_wait') from exc
         raise PreTokenFailure('dream_gateway_rejected') from exc
     body = response.json()
