@@ -48,7 +48,12 @@ const defaultLoaders: ItemListLoaders = {
     const { found, complete } = await findMemoriesByIds(ids);
     const titles = new Map<string, { title: string }>();
     for (const [id, memory] of found) {
+      // Default memory access is Short-term + Long-term (INV-MEM-1); an archived
+      // memory is not opened from a link, matching the app's single-memory link.
       if (memory.is_locked) continue;
+      if (memory.layer && memory.layer !== 'short_term' && memory.layer !== 'long_term') {
+        continue;
+      }
       titles.set(id, { title: memory.content.trim() });
     }
     return { found: titles, complete };
