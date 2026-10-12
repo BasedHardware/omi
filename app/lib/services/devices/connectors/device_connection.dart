@@ -191,7 +191,18 @@ class DeviceConnectionFactory {
 
 class DeviceConnectionException implements Exception {
   String cause;
-  DeviceConnectionException(this.cause);
+  final Object? error;
+
+  DeviceConnectionException(this.cause, [this.error]);
+
+  bool get isTimeout =>
+      this is DeviceConnectionTimeoutException ||
+      error is TimeoutException ||
+      cause.toLowerCase().contains('timeout');
+}
+
+class DeviceConnectionTimeoutException extends DeviceConnectionException {
+  DeviceConnectionTimeoutException(super.cause, [super.error]);
 }
 
 abstract class DeviceConnection {
@@ -273,7 +284,10 @@ abstract class DeviceConnection {
       // Update device info
       device = await device.getDeviceInfo(this);
     } catch (e) {
-      throw DeviceConnectionException("Transport connection failed: ${e.toString()}");
+      if (e is TimeoutException || e is DeviceConnectionTimeoutException) {
+        throw DeviceConnectionTimeoutException("Transport connection failed: ${e.toString()}", e);
+      }
+      throw DeviceConnectionException("Transport connection failed: ${e.toString()}", e);
     }
   }
 
