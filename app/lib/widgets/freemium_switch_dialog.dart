@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
@@ -50,11 +51,15 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) => showOmiSheet<void>(
-        context: promptContext,
-        padding: EdgeInsets.zero,
-        builder: (_) => _PlansSheetWrapper(),
-      ),
+      show: (promptContext) {
+        final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+        PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
+        return showOmiSheet<void>(
+          context: promptContext,
+          padding: EdgeInsets.zero,
+          builder: (_) => const _PlansSheetWrapper(),
+        );
+      },
     );
   }
 
@@ -83,6 +88,8 @@ class FreemiumSwitchHandler {
 
 /// Wrapper widget to create animation controllers for PlansSheet
 class _PlansSheetWrapper extends StatefulWidget {
+  const _PlansSheetWrapper();
+
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
 }
@@ -120,6 +127,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _waveController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
+      analyticsSource: 'freemium_switch',
     );
   }
 }

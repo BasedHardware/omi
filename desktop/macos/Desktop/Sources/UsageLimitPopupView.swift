@@ -93,6 +93,11 @@ struct UsageLimitPopupView: View {
       .inkGlassPanel()
     }
     .transition(.opacity.animation(OmiMotion.gated(.easeInOut(duration: 0.2))))
+    .onAppear {
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_usage_limit",
+        currentPlan: UserDefaults.standard.string(forKey: .floatingBarCachedPlan) ?? "unknown")
+    }
   }
 }
 

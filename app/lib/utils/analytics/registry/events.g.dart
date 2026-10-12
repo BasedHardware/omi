@@ -1913,3 +1913,278 @@ final class ChatAppWaitlistJoined extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {};
 }
+
+enum PaywallOpenedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown");
+  const PaywallOpenedSource(this.wireName);
+  final String wireName;
+}
+
+enum PaywallOpenedCurrentPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const PaywallOpenedCurrentPlan(this.wireName);
+  final String wireName;
+}
+
+final class PaywallOpened extends RegisteredEvent {
+  const PaywallOpened({required this.source, required this.currentPlan});
+  final PaywallOpenedSource source;
+  final PaywallOpenedCurrentPlan currentPlan;
+  @override
+  String get wireName => "Paywall Opened";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
+}
+
+enum UpgradePlanSelectedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const UpgradePlanSelectedPlan(this.wireName);
+  final String wireName;
+}
+
+enum UpgradePlanSelectedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradePlanSelectedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum UpgradePlanSelectedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown");
+  const UpgradePlanSelectedSource(this.wireName);
+  final String wireName;
+}
+
+final class UpgradePlanSelected extends RegisteredEvent {
+  const UpgradePlanSelected({required this.plan, required this.billingInterval, required this.source});
+  final UpgradePlanSelectedPlan plan;
+  final UpgradePlanSelectedBillingInterval billingInterval;
+  final UpgradePlanSelectedSource source;
+  @override
+  String get wireName => "Upgrade Plan Selected";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName, "source": source.wireName};
+}
+
+enum UpgradeSucceededAttributedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const UpgradeSucceededAttributedPlan(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeSucceededAttributedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeSucceededAttributedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeSucceededAttributed extends RegisteredEvent {
+  const UpgradeSucceededAttributed({required this.plan, required this.billingInterval});
+  final UpgradeSucceededAttributedPlan plan;
+  final UpgradeSucceededAttributedBillingInterval billingInterval;
+  @override
+  String get wireName => "Upgrade Succeeded Attributed";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName};
+}
+
+enum SubscriptionPlanChangedPreviousPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const SubscriptionPlanChangedPreviousPlan(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedNewPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const SubscriptionPlanChangedNewPlan(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const SubscriptionPlanChangedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedChangeSource {
+  mobileCheckout("mobile_checkout"),
+  macosCheckout("macos_checkout"),
+  windowsCheckout("windows_checkout"),
+  webCheckout("web_checkout");
+  const SubscriptionPlanChangedChangeSource(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPlanChanged extends RegisteredEvent {
+  const SubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.billingInterval, required this.changeSource});
+  final SubscriptionPlanChangedPreviousPlan previousPlan;
+  final SubscriptionPlanChangedNewPlan newPlan;
+  final SubscriptionPlanChangedBillingInterval billingInterval;
+  final SubscriptionPlanChangedChangeSource changeSource;
+  @override
+  String get wireName => "Subscription Plan Changed";
+  @override
+  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "billing_interval": billingInterval.wireName, "change_source": changeSource.wireName};
+}
+
+enum SubscriptionCancelReasonSelectedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelReasonSelectedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelReasonSelected extends RegisteredEvent {
+  const SubscriptionCancelReasonSelected({required this.reason});
+  final SubscriptionCancelReasonSelectedReason reason;
+  @override
+  String get wireName => "Subscription Cancel Reason Selected";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+enum SubscriptionCancelConfirmedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelConfirmedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelConfirmed extends RegisteredEvent {
+  const SubscriptionCancelConfirmed({required this.reason, required this.hasDetails});
+  final SubscriptionCancelConfirmedReason reason;
+  final bool hasDetails;
+  @override
+  String get wireName => "Subscription Cancel Confirmed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "has_details": hasDetails};
+}
+
+enum SubscriptionCancelKeptPlanReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelKeptPlanReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelKeptPlan extends RegisteredEvent {
+  const SubscriptionCancelKeptPlan({required this.step, required this.reason});
+  final int step;
+  final SubscriptionCancelKeptPlanReason reason;
+  @override
+  String get wireName => "Subscription Cancel Kept Plan";
+  @override
+  Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
+}
+
+enum SubscriptionCancelAbandonedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelAbandonedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelAbandoned extends RegisteredEvent {
+  const SubscriptionCancelAbandoned({required this.step, required this.reason});
+  final int step;
+  final SubscriptionCancelAbandonedReason reason;
+  @override
+  String get wireName => "Subscription Cancel Abandoned";
+  @override
+  Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
+}

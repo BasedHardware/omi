@@ -73,11 +73,11 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | importMemories | Dev Mode Import Memories | none | active | mobile-instrumentation-presence |
 | importedMemories | Dev Mode Imported Memories | none | active | mobile-instrumentation-presence |
 | supportContacted | Support Contacted | none | active | mobile-instrumentation-presence |
-| upgradeSucceeded | Upgrade Succeeded | none | active | mobile-instrumentation-presence |
-| upgradeCancelled | Upgrade Cancelled | none | active | mobile-instrumentation-presence |
-| upgradeModalDismissed | Upgrade Modal Dismissed | none | active | mobile-instrumentation-presence |
-| upgradeModalClicked | Upgrade Modal Clicked | none | active | mobile-instrumentation-presence |
-| subscriptionCancelFlowStarted | Subscription Cancel Flow Started | none | active | mobile-instrumentation-presence |
+| upgradeSucceeded | Upgrade Succeeded | none | active | mobile-instrumentation-presence, subscription-funnel |
+| upgradeCancelled | Upgrade Cancelled | none | active | mobile-instrumentation-presence, subscription-funnel |
+| upgradeModalDismissed | Upgrade Modal Dismissed | none | active | mobile-instrumentation-presence, app-update-prompt |
+| upgradeModalClicked | Upgrade Modal Clicked | none | active | mobile-instrumentation-presence, app-update-prompt |
+| subscriptionCancelFlowStarted | Subscription Cancel Flow Started | none | active | mobile-instrumentation-presence, subscription-funnel |
 | connectFriendClicked | Connect Friend Clicked | none | active | mobile-instrumentation-presence |
 | disconnectFriendClicked | Disconnect Friend Clicked | none | active | mobile-instrumentation-presence |
 | batteryIndicatorClicked | Battery Indicator Clicked | none | active | mobile-instrumentation-presence |
@@ -155,6 +155,14 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | chatAppConnected | Chat App Connected | channel | active | chat-apps-funnel |
 | chatAppDisconnected | Chat App Disconnected | channel | active | chat-apps-funnel |
 | chatAppWaitlistJoined | Chat App Waitlist Joined | none | active | chat-apps-funnel |
+| paywallOpened | Paywall Opened | source, current_plan | active | subscription-funnel |
+| upgradePlanSelected | Upgrade Plan Selected | plan, billing_interval, source | active | subscription-funnel |
+| upgradeSucceededAttributed | Upgrade Succeeded Attributed | plan, billing_interval | active | subscription-funnel |
+| subscriptionPlanChanged | Subscription Plan Changed | previous_plan, new_plan, billing_interval, change_source | active | subscription-funnel |
+| subscriptionCancelReasonSelected | Subscription Cancel Reason Selected | reason | active | subscription-funnel |
+| subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
+| subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
+| subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
 
 ## App Review Opportunity decisions
 
