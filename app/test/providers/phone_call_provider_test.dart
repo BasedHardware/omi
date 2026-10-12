@@ -427,16 +427,13 @@ void main() {
     await emitEvent({'type': 'callStateChanged', 'state': 'active'});
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    // Simulate 9 failed reconnect cycles
-    for (var i = 0; i < 9; i++) {
+    // Simulate 10 failed reconnect cycles to reach max attempts and trigger failed status
+    for (var i = 0; i < 10; i++) {
       socket.incoming.close();
       await Future<void>.delayed(const Duration(milliseconds: 50));
       provider.wsReconnectTimerForTesting?.cancel();
       await provider.connectTranscriptionSocketForTesting();
     }
-
-    // 10th failure reaches max (10) and transitions to failed
-    socket.incoming.close();
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
     expect(provider.transcriptionStatus, TranscriptionStatus.failed);
