@@ -398,11 +398,11 @@ struct NotificationSettingsResponse: Codable {
 enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
   case plus
-  case unlimited  // legacy — display "Unlimited (legacy)"
+  case unlimited  // legacy — display "Neo"
   case unlimitedV2
   case architect  // display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
-  case `operator`  // new — display "Operator"
+  case `operator`  // display "Pro"
   case unknown(String)
 
   init(rawValue: String) {
@@ -446,10 +446,10 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     switch self {
     case .basic: return "Free"
     case .plus: return "Plus"
-    case .unlimited: return "Unlimited (legacy)"
+    case .unlimited: return "Neo"
     case .unlimitedV2: return "Unlimited"
     case .architect, .pro: return "Architect"
-    case .operator: return "Operator"
+    case .operator: return "Pro"
     case .unknown: return "Plan unavailable"
     }
   }

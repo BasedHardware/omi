@@ -155,7 +155,7 @@ export function isCurrentSubscriptionOperator(
   const priceId = sub.current_price_id
   if (!priceId) return false
   return (availablePlans ?? [])
-    .filter((p) => p.title === 'Operator')
+    .filter((p) => p.id === 'operator')
     .some((p) => (p.prices ?? []).some((price) => price.id === priceId))
 }
 
@@ -176,7 +176,7 @@ export function resolvePlanTitle(
   if (!planId) return planDisplayName(sub.plan)
   if ((sub.features ?? []).includes('byok')) return 'Free (BYOK)'
   const owning = owningCatalogPlan(sub, availablePlans)
-  if (owning) return owning.title
+  if (owning) return planDisplayName(owning.id)
   return planDisplayName(planId)
 }
 

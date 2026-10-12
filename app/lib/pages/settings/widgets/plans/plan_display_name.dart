@@ -13,17 +13,17 @@ String? planTitleForTier(String tierId, List<SubscriptionPlan> availablePlans) {
   return (title == null || title.isEmpty) ? null : title;
 }
 
-/// The name to show for [plan]: the backend's title for that tier when the subscription response
-/// lists it, otherwise the product name this client knows ("Plus", "Operator", …). The free plan
-/// is always the localized "Free Plan"; product names are not translated.
+/// Canonical product names for known IDs, even when a cached catalog has an old title.
+/// Future plans may use their server title. Product names are not translated.
 String planDisplayName(PlanType plan, List<SubscriptionPlan> availablePlans, AppLocalizations l10n) {
-  if (plan == PlanType.basic) return l10n.basicPlan;
+  if (plan == PlanType.basic) return l10n.free;
+  if (plan == PlanType.plus) return 'Plus';
+  if (plan == PlanType.operator) return 'Pro';
+  if (plan == PlanType.architect) return 'Architect';
+  if (plan == PlanType.unlimited) return 'Neo';
+  if (plan == PlanType.unlimitedV2) return 'Unlimited';
   final fromBackend = planTitleForTier(plan.wireName, availablePlans);
   if (fromBackend != null) return fromBackend;
-  if (plan == PlanType.plus) return 'Plus';
-  if (plan == PlanType.operator) return 'Operator';
-  if (plan == PlanType.architect) return 'Architect';
-  if (plan == PlanType.unlimited || plan == PlanType.unlimitedV2) return l10n.unlimitedPlan;
   // A plan this client does not know yet: show its id readably rather than calling it Free.
   return plan.wireName
       .split(RegExp(r'[_\s-]+'))

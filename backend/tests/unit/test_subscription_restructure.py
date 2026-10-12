@@ -304,7 +304,7 @@ def test_windows_full_catalog_matches_macos_canonical(load_subscription):
     assert 'operator' in by_id
     assert 'architect' in by_id
     assert 'unlimited' not in by_id  # Neo hidden on desktop for a new user
-    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['operator']['title'] == 'Pro'
     assert by_id['architect']['title'] == 'Architect'
     titles = [d['title'] for d in filtered]
     assert 'Omi Pro' not in titles
@@ -407,7 +407,7 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
     by_id = {d['plan_id']: d for d in filtered}
     assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
     assert 'unlimited' not in by_id  # Neo hidden
-    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['operator']['title'] == 'Pro'
     assert by_id['architect']['title'] == 'Architect'
     assert by_id['unlimited_v2']['title'] == 'Unlimited'
     titles = [d['title'] for d in filtered]
@@ -510,6 +510,6 @@ def test_plan_features_differentiate_operator_neo(monkeypatch, load_subscription
 def test_plan_display_names(load_subscription):
     with load_subscription() as sub_mod:
         assert sub_mod.get_plan_display_name(PlanType.basic) == 'Free'
-        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Operator'
+        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Pro'
         assert sub_mod.get_plan_display_name(PlanType.architect) == 'Architect'
         assert sub_mod.get_plan_display_name(PlanType.unlimited) == 'Neo'

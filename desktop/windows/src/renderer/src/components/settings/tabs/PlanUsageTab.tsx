@@ -155,7 +155,7 @@ export function PlanUsageTab(): React.JSX.Element {
     }
   }
 
-  // Deprecation "Try Operator" + trial "View Plans": select the Operator card
+  // Deprecation "Try Pro" + trial "View Plans": select the Operator card
   // (or first available) and scroll the grid into view.
   const jumpToOperator = (): void => {
     const operator =
@@ -226,12 +226,12 @@ export function PlanUsageTab(): React.JSX.Element {
           title="Plan Retiring"
           subtitle={
             subscription.deprecation_message ??
-            `Your Unlimited plan is being retired. Try the new Operator plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
+            `Your Unlimited plan is being retired. Try the new Pro plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
           }
           trailing={
             showCatalog ? (
               <button onClick={jumpToOperator} className="btn-ghost">
-                Try Operator
+                Try Pro
               </button>
             ) : undefined
           }

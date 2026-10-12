@@ -15,20 +15,21 @@ void main() {
 
   group('planDisplayName', () {
     test('the free plan is always the localized Free Plan', () {
-      expect(planDisplayName(PlanType.basic, catalog, l10n), l10n.basicPlan);
+      expect(planDisplayName(PlanType.basic, catalog, l10n), l10n.free);
     });
 
-    test('uses the backend title for the tier', () {
+    test('uses the canonical name even with a stale backend title', () {
       expect(planDisplayName(PlanType.unlimited, catalog, l10n), 'Neo');
-      expect(planDisplayName(PlanType.operator, catalog, l10n), 'Operator');
+      expect(planDisplayName(PlanType.operator, catalog, l10n), 'Pro');
       // The legacy `pro` id is canonicalized to Architect.
       expect(planDisplayName(PlanType.fromWire('pro'), catalog, l10n), 'Architect');
     });
 
     test('falls back to the known product name when the backend does not list the tier', () {
       expect(planDisplayName(PlanType.plus, const [], l10n), 'Plus');
-      expect(planDisplayName(PlanType.operator, const [], l10n), 'Operator');
-      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), l10n.unlimitedPlan);
+      expect(planDisplayName(PlanType.operator, const [], l10n), 'Pro');
+      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), 'Unlimited');
+      expect(planDisplayName(PlanType.unlimited, const [], l10n), 'Neo');
     });
 
     test('an unknown future plan shows its id readably, never "Free Plan"', () {

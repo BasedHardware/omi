@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -105,11 +106,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
-  /// "Pro" on the Plan & Usage row for a paid plan.
+  /// Show the subscriber's actual tier on the Plan & Usage row.
   String? _planValue(UsageProvider usage) {
     final plan = usage.subscription?.subscription.plan;
     if (plan == null || !plan.isPaid) return null;
-    return context.l10n.pro;
+    return currentPlanDisplayName(context, usage.subscription);
   }
 
   Widget _buildSettings(BuildContext context) {
