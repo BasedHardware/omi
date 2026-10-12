@@ -53,6 +53,8 @@ const FUNNEL_SOURCES = new Set([
   'locked_memory',
   'chat_apps',
   'usage_page',
+  'transcription_settings',
+  'unlimited_deeplink',
   'macos_billing',
   'macos_usage_limit',
   'macos_chat_quota_banner',

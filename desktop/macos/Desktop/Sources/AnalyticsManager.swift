@@ -1707,8 +1707,8 @@ enum SubscriptionFunnelWire {
   static func source(_ raw: String) -> String {
     switch raw {
     case "chat_quota_exceeded", "freemium_switch", "locked_conversation", "locked_memory", "chat_apps",
-      "usage_page", "macos_billing", "macos_usage_limit", "macos_chat_quota_banner", "windows_billing",
-      "windows_usage_limit", "web_plans", "unknown":
+      "usage_page", "transcription_settings", "unlimited_deeplink", "macos_billing", "macos_usage_limit",
+      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans", "unknown":
       return raw
     default:
       return "unknown"

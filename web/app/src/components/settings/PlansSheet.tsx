@@ -166,7 +166,8 @@ export function PlansSheet({
         // New subscription or reactivation
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          // Open Stripe checkout in new tab
+          // Checkout opens in a new tab. This page cannot tell a paid tab from an
+          // abandoned one, so it does not emit Upgrade Cancelled here.
           window.open(result.url, '_blank');
           onOpenChange(false);
           // Listen for window focus to refresh subscription

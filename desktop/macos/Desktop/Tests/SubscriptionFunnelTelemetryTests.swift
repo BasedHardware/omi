@@ -10,6 +10,8 @@ final class SubscriptionFunnelTelemetryTests: XCTestCase {
     XCTAssertEqual(SubscriptionFunnelWire.interval("Monthly"), "month")
     XCTAssertEqual(SubscriptionFunnelWire.interval("Annual"), "year")
     XCTAssertEqual(SubscriptionFunnelWire.source("Usage Page Plan Sheet"), "unknown")
+    XCTAssertEqual(SubscriptionFunnelWire.source("transcription_settings"), "transcription_settings")
+    XCTAssertEqual(SubscriptionFunnelWire.source("unlimited_deeplink"), "unlimited_deeplink")
   }
 
   func testPaywallAndUpgradePropertiesUseTheRegisteredNames() {

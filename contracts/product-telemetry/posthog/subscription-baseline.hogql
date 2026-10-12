@@ -1,10 +1,18 @@
 -- Weekly subscription baseline (spec §1 / workstream W2). Read-only aggregate.
 -- A 2026-10-12 read-only run of this file against PostHog project 302298
 -- (2026-09-14 through 2026-10-12) hit the API max execution time. The non-`$`
--- activity scan is the expensive input. Over the prior 365 days that project
--- had zero Billing Subscription Started, Churned, or Cancellation Scheduled
--- rows, so dollar ARPMAU and payer net MRR retention stay insufficient
--- evidence until those webhook events arrive with mrr_cents.
+-- activity scan is the expensive input. Component HogQL on 2026-10-13, same
+-- project, read-only:
+--   Billing Subscription Started / Churned / Cancellation Scheduled: 0 rows
+--   in [2025-10-13 00:00 UTC, 2026-10-13 00:00 UTC).
+--   MAU: 21969 distinct coalesce(person_id, distinct_id) with a non-`$` event
+--   in [2026-09-12 00:00 UTC, 2026-10-12 00:00 UTC). That is the trailing-30-day
+--   window for the week ending 2026-10-12.
+--   First `Product Value` (activation) by Monday week: 222 (2026-09-21, partial;
+--   the event begins 2026-09-22), 1243 (2026-09-28), 1247 (2026-10-05),
+--   129 (2026-10-12 through 17:39 UTC, incomplete). None of those weeks is
+--   mature (week_start + 37 days). With zero billing rows, ARPMAU, paid
+--   conversion, and payer net MRR retention are NULL, not zero.
 -- One row per UTC Monday week that overlaps [{date_from}, {date_to}).
 -- Dollar columns are NULL when the evidence is missing. Do not treat NULL as zero.
 --

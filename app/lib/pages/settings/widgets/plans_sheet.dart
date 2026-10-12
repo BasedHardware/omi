@@ -343,7 +343,10 @@ class _PlansSheetState extends State<PlansSheet> {
         message: l10n.planSwitchingDescriptionWithTitle(selectedPrice.title),
         confirmLabel: l10n.changePlan,
       );
-      if (!confirmed) return;
+      if (!confirmed) {
+        PlatformManager.instance.analytics.upgradeCancelled();
+        return;
+      }
     }
 
     setState(() => _isUpgrading = true);
@@ -369,6 +372,11 @@ class _PlansSheetState extends State<PlansSheet> {
           setState(() => _promoCodeError = null);
           _promoCodeController.clear();
           if (mounted) OmiFeedback.confirm(context, l10n.planUpgradeScheduledMessage);
+          PlatformManager.instance.analytics.upgradeSucceeded(
+            previousPlan: currentSub.plan.wireName,
+            newPlan: targetPlan,
+            billingInterval: billingInterval,
+          );
         } else {
           if (mounted) OmiFeedback.error(context, l10n.couldNotSchedulePlanChange);
         }

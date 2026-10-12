@@ -37,7 +37,7 @@
       "omiDoubleTap": 5,
       "onboardingStepCompleted": 11,
       "pageOpened": 31,
-      "paywallOpened": 7,
+      "paywallOpened": 9,
       "permissionChanged": 5,
       "permissionsSettingsOpened": 2,
       "phoneMicRecordingStarted": 4,
@@ -53,7 +53,8 @@
       "track": 29,
       "transcriptionSourceSelected": 4,
       "uncheckedActionItem": 2,
-      "upgradeSucceeded": 2,
+      "upgradeCancelled": 2,
+      "upgradeSucceeded": 3,
       "whatsNewOpened": 2,
       "wrappedGenerationFailed": 2,
       "wrappedShareFailed": 3
