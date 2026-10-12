@@ -94,7 +94,7 @@ def cached_reader():
     return read
 
 
-def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnostics=None):
+def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnostics=None, pending_refs=()):
     diagnostics = initialize({} if diagnostics is None else diagnostics)
     seeds = set([ref for ref in records if ref in records.targets][:4])
     diagnostics['target_context_counts'].update(retrieval_seeded=len(seeds), contextless=len(records.targets - seeds))
@@ -112,6 +112,7 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
             read_entity_record=read_entity_record,
             diagnostics=diagnostics,
             excluded_refs=excluded,
+            pending_refs=pending_refs,
         ),
         caps,
         vocabulary,
@@ -180,7 +181,15 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         if admit(dirty[position]) == 'budget':
             break
         position += 1
-    records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics)
+    # Potential targets 5–8 have not been hydrated/admitted yet. Exclude the
+    # bounded pending queue window from temporal selection before those reads;
+    # exclusion itself neither consumes a version nor adds a product read.
+    pending = {
+        f"{item['collection']}/{item['id']}"
+        for snapshot in dirty[position:]
+        if (item := snapshot.to_dict())['last_changed_at'] <= lease['started_at']
+    }
+    records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics, pending_refs=pending)
     # Return unspent neighbourhood capacity to dirty targets. Only admitted
     # target versions are consumed; unavailable versions settle separately.
     while position < len(dirty) and len(records.targets) < REASONING_TARGET_LIMIT:

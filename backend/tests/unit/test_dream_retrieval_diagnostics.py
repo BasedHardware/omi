@@ -465,3 +465,61 @@ def test_temporal_exclusion_precedes_top_four_selection_with_bounded_overfetch()
     )
     assert [row['id'] for row in rows] == [f'context-{i}' for i in range(4)]
     assert len(db.shapes) == 2 and all(shape.limit == 12 for shape in db.shapes)
+
+
+@pytest.mark.parametrize('contraction', ["don't", "isn't", "didn't", "wouldn't", 'don’t'])
+def test_contraction_fragments_do_not_suppress_ordinary_content_query(contraction):
+    terms = dream_context.query_terms({'content': f'We {contraction} work in the garden with the boat'})
+    assert {'work', 'garden', 'boat'} <= set(terms)
+    assert not {'don', 'isn', 'didn', 'wouldn'} & set(terms)
+
+
+def test_common_word_fallback_does_not_fuzzy_match_all_500_vocabulary_entries(monkeypatch):
+    matcher = Mock(side_effect=AssertionError('ordinary tokens entered rare-term fuzzy matcher'))
+    monkeypatch.setattr(dream_context, 'SequenceMatcher', matcher)
+    vocabulary = [{'spelling': f'Zuvra-{i}'} for i in range(500)]
+    terms = dream_context.query_terms({'content': 'garden boat window office computer ' * 100}, vocabulary)
+    assert terms == ['garden', 'boat', 'window', 'office', 'computer']
+    matcher.assert_not_called()
+
+
+def test_scheduled_pending_targets_are_excluded_before_first_seed_temporal_selection(monkeypatch):
+    from datetime import timedelta
+    from database.dream_context_reads import temporal_neighbours
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    dirty, now = snapshots(8)
+    calls, exclusions = [], []
+    monkeypatch.setattr(dream_reads.dream_store, 'dirty_refs', lambda *a, **k: dirty)
+    monkeypatch.setattr(dream_context.action_items, 'get_action_items', lambda *a, **k: [])
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **k: [])
+    monkeypatch.setattr(dream_context, 'semantic_conversation_refs', lambda *a: [])
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(search=lambda *a, **k: []))
+
+    def read(uid, ref, **kwargs):
+        calls.append(ref)
+        # Other seeds are a month away: they cannot repair the first window.
+        offset = int(ref.split('/')[1]) if ref.split('/')[1].isdigit() else 0
+        return {'created_at': now - timedelta(days=30 * offset), 'content': 'garden boat'}
+
+    monkeypatch.setattr(dream_reads, 'read_record', read)
+
+    def temporal(uid, collection, start, anchor, end, **kwargs):
+        if collection != 'conversations' or anchor != now:
+            return []
+        assert calls == [f'conversations/{i}' for i in range(4)]
+        exclusions.append(kwargs['excluded_ids'])
+        db = RecordingFirestore()
+        db.queue_results(
+            [db.snapshot(f'users/synthetic/conversations/{i}', {'created_at': now}) for i in range(4, 8)]
+            + [db.snapshot('users/synthetic/conversations/neighbour', {'created_at': now - timedelta(minutes=1)})]
+        )
+        db.queue_results([])
+        return temporal_neighbours(uid, collection, start, anchor, end, firestore_client=db, **kwargs)
+
+    monkeypatch.setattr(dream_context, 'temporal_neighbours', temporal)
+    rows, consumed = dream_reads.read_changes('synthetic', {'started_at': now}, Caps(tokens=100000))
+    assert exclusions == [{str(i) for i in range(8)}]
+    assert 'conversations/neighbour' in rows and 'conversations/neighbour' not in rows.targets
+    assert rows.targets == {f'conversations/{i}' for i in range(8)} and len(consumed) == 8
+    assert len(calls) == 9  # Four initial targets, one neighbour, four reclaimed targets.

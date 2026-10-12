@@ -15,6 +15,12 @@ record text independently of lexical rarity. Temporal conversation queries use a
 direction reads at most 12 documents and each lookup returns at most four nearest
 rows after excluding every ref already supplied to retrieval, including unseeded
 targets 5–8. This prevents the pass's own targets occupying the neighbour slots.
+Scheduled retrieval also excludes the bounded pending dirty window before
+hydrating potential targets 5–8. Those exclusions neither consume queue versions
+nor add product reads. The fixed 12-row scans remain bounded rather than exhaustive.
+Negative contractions are removed from lexical term extraction so fragments such
+as `don` cannot suppress ordinary-word fallback; vocabulary fuzzy matching still
+considers rare tokens only. Semantic text retains the original speech.
 Screen rows still require `captureEligible is True` and the current task-control
 `accountGeneration`. Reads remain owner scoped and visibility checked.
 Queries and result counts are bounded. User-authored title and structured title/overview terms precede

@@ -3,6 +3,7 @@
 from datetime import timedelta
 from functools import partial
 from difflib import SequenceMatcher
+import re
 
 from database import action_items, vector_db
 from database.dream_context_reads import temporal_neighbours, subject_memory_refs
@@ -97,6 +98,10 @@ QUERY_STOP_WORDS = frozenset(
     'so than that the their them then there these they this those to too us was '
     'we were what when where which who why will with would yes you your'.split()
 )
+NEGATIVE_CONTRACTIONS = re.compile(
+    r"\b(?:don|doesn|didn|isn|aren|wasn|weren|hasn|haven|hadn|won|wouldn|couldn|shouldn|mustn|shan|ain)['’]t\b",
+    re.IGNORECASE,
+)
 
 
 def query_content(row):
@@ -110,13 +115,15 @@ def query_content(row):
 
 
 def query_terms(row, vocabulary=()):
-    words = list(dict.fromkeys(word for word in tokens(query_content(row)) if len(word) >= 3))
+    words = list(
+        dict.fromkeys(word for word in tokens(NEGATIVE_CONTRACTIONS.sub('', query_content(row))) if len(word) >= 3)
+    )
     rare = [word for word in words if word not in common_words()]
     near = [
         entry['spelling']
         for entry in vocabulary
         if entry.get('spelling')
-        and any(SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in words)
+        and any(SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in rare)
     ]
     # Rarity prioritizes spelling anchors; ordinary speech must still search.
     preferred = rare or [word for word in words if word not in QUERY_STOP_WORDS]
@@ -152,7 +159,7 @@ def query_candidates(report, path, query):
 
 
 def context_candidates(
-    uid, targets, vocabulary, *, read_record, read_entity_record, diagnostics=None, excluded_refs=None
+    uid, targets, vocabulary, *, read_record, read_entity_record, diagnostics=None, excluded_refs=None, pending_refs=()
 ):
     """Yield lazily: once the evidence budget is full no later-tier query runs."""
     if not target_refs(targets):
@@ -160,6 +167,7 @@ def context_candidates(
     diagnostics = {} if diagnostics is None else diagnostics
     # Include unseeded targets and already supplied context in temporal exclusion.
     excluded = set(targets) if excluded_refs is None else excluded_refs
+    pending = set(pending_refs)
     targets = {ref: row for ref, row in targets.items() if ref in target_refs(targets)}
     subjects = set().union(*(identities(row) for row in targets.values()))
     for entity_id in sorted(subjects)[:8]:
@@ -226,7 +234,7 @@ def context_candidates(
                 time - timedelta(hours=24),
                 time,
                 time + timedelta(hours=24),
-                excluded_ids={ref.split('/', 1)[1] for ref in excluded if ref.startswith('conversations/')},
+                excluded_ids={ref.split('/', 1)[1] for ref in excluded | pending if ref.startswith('conversations/')},
             ),
         ):
             ref = 'conversations/' + neighbour['id']
@@ -241,7 +249,7 @@ def context_candidates(
                 time - timedelta(hours=2),
                 time,
                 time + timedelta(hours=2),
-                excluded_ids={ref.split('/', 1)[1] for ref in excluded if ref.startswith('screen/')},
+                excluded_ids={ref.split('/', 1)[1] for ref in excluded | pending if ref.startswith('screen/')},
             ),
         ):
             yield 'screen/' + screen['id'], screen, 'temporal'
