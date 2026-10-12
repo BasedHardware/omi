@@ -1223,10 +1223,10 @@ def get_user_subscription_endpoint(
     response = _user_subscription_response(
         uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
     )
-    # Reuse snapshot reads with the listen resolver so the STT allowance agrees.
-    # X-App-Platform has the listen `source` role for the paywall.
     allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    response.transcription_seconds_limit = allowance.limit_seconds or 0
+    response.subscription.limits.transcription_seconds = allowance.limit_seconds
     return response
 
 
@@ -1247,11 +1247,7 @@ def _user_subscription_response(
     byok_active = users_db.is_byok_active(uid)
     already_read['byok_active'] = byok_active
     if byok_active and request_has_llm_byok_key():
-        # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
-        # backend transcription credits still flow through Omi's Deepgram, so the
-        # transcription/words fields stay metered on the free tier unless this
-        # request also carries a validated Deepgram key (same predicate as
-        # has_transcription_credits).
+        # Preserve synthetic Neo feature access; the outer resolver supplies the STT budget.
         if get_byok_key('deepgram'):
             return UserSubscriptionResponse(
                 subscription=_byok_unlimited_subscription(),

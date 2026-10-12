@@ -433,7 +433,7 @@ def test_update_person_name_existing_returns_ok():
 def _managed_allowance():
     from utils.subscription import TranscriptionAllowance
 
-    return TranscriptionAllowance('managed', None, 'byok')
+    return TranscriptionAllowance('managed', None, 'byok', limit_seconds=None)
 
 
 @pytest.fixture(autouse=True)
@@ -449,11 +449,10 @@ def _stub_transcription_allowance():
         yield
 
 
-def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
-    # Snapshot split: a validated LLM BYOK key unlocks unlimited chat/insights,
-    # but without a Deepgram header on the request the transcription/words
-    # fields must stay metered on the free-tier limits (Omi still pays for STT),
-    # not the 0/0 unlimited sentinel.
+def test_byok_llm_only_subscription_meters_the_resolved_transcription_budget():
+    # The LLM identity does not determine the resolved transcription budget.
+    from utils.subscription import TranscriptionAllowance
+
     basic_limits = users_router.PlanLimits(transcription_seconds=600, words_transcribed=8000)
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
         users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
@@ -463,6 +462,10 @@ def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
         users_router,
         'get_monthly_usage_for_subscription',
         MagicMock(return_value={'transcription_seconds': 120, 'words_transcribed': 500}),
+    ), patch.object(
+        users_router,
+        'resolve_transcription_allowance',
+        MagicMock(return_value=TranscriptionAllowance('managed', 480, 'plan_within_allowance', limit_seconds=600)),
     ):
         response = users_router.get_user_subscription_endpoint(
             request=Request({'type': 'http', 'headers': []}), uid='uid1'
@@ -474,7 +477,7 @@ def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
     assert response.subscription.limits.insights_gained is None
     assert response.insights_gained_used == 0
     assert response.insights_gained_limit == 0
-    # Transcription/words are metered on the real free-tier usage.
+    # Transcription comes from the resolver; the existing words budget is preserved.
     assert response.subscription.limits.transcription_seconds == 600
     assert response.transcription_seconds_used == 120
     assert response.transcription_seconds_limit == 600

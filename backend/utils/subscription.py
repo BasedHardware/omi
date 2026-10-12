@@ -1613,31 +1613,6 @@ TRANSCRIPTION_MODE_BLOCKED = 'blocked'
 _UNRESOLVED: Any = object()
 
 
-@dataclass(frozen=True)
-class TranscriptionAllowance:
-    """The one answer to "may this user's audio be transcribed on Omi's managed STT right now?".
-
-    ``mode`` is what the client should open: ``managed`` (Omi-billed socket),
-    ``on_device`` (no managed minutes to spend — the plan's are used up, the
-    subscription is not active, or the answer could not be resolved; the local
-    engine is free on every plan), or ``blocked`` (the desktop trial paywall;
-    nothing opens). ``remaining_seconds`` is ``None`` when the allowance is
-    unlimited (unlimited plans, BYOK, reviewers), else the managed seconds
-    left this month. ``reason`` is a low-cardinality label for logs and tests.
-    """
-
-    mode: str
-    remaining_seconds: Optional[int]
-    reason: str
-
-    @property
-    def managed(self) -> bool:
-        return self.mode == TRANSCRIPTION_MODE_MANAGED
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {'mode': self.mode, 'remaining_seconds': self.remaining_seconds, 'reason': self.reason}
-
-
 def _closed(reason: str) -> TranscriptionAllowance:
     """No managed minutes: the free local path, never a billed socket."""
     return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
@@ -1677,6 +1652,7 @@ def _usage_seconds(usage: Any) -> Optional[int]:
 
 
 from utils.marketplace_reviewers import is_marketplace_reviewer
+from utils.transcription_allowance import TranscriptionAllowance
 
 
 def resolve_transcription_allowance(
@@ -1712,7 +1688,7 @@ def resolve_transcription_allowance(
         # The reviewer identities the subscription snapshot already treats as
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,
@@ -1725,7 +1701,7 @@ def resolve_transcription_allowance(
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
         if byok_active and get_byok_key('deepgram'):
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
@@ -1734,7 +1710,7 @@ def resolve_transcription_allowance(
         # The catalog's explicit unlimited marker projects to None. A finite
         # zero is a real zero allowance and must therefore fail closed.
         if allowance is None:
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited', limit_seconds=None)
         if usage is _UNRESOLVED:
             usage = get_monthly_usage_for_subscription(uid)
         used = _usage_seconds(usage)
@@ -1743,8 +1719,12 @@ def resolve_transcription_allowance(
             return _closed('usage_invalid')
         remaining = max(0, allowance - used)
         if remaining > 0:
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance')
-        return _closed('plan_allowance_exhausted')
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
+            )
+        return TranscriptionAllowance(
+            TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance
+        )
     except Exception as exc:  # fail closed: a billed socket is never the default
         logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
         return _closed('allowance_unavailable')

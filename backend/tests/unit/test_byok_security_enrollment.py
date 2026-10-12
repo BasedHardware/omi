@@ -169,7 +169,8 @@ class TestBYOKSubscriptionEntitlements:
         )
 
         assert response.subscription.plan == PlanType.basic
-        assert response.transcription_seconds_limit == 37
+        assert response.transcription_seconds_limit == 18000
+        assert response.subscription.limits.transcription_seconds == 18000
 
     def test_validated_llm_byok_gets_unlimited_subscription(self, monkeypatch):
         from models.users import PlanType
@@ -225,7 +226,41 @@ class TestBYOKSubscriptionEntitlements:
         )
 
         assert response.subscription.plan == PlanType.basic
-        assert response.transcription_seconds_limit == 37
+        assert response.transcription_seconds_limit == 18000
+        assert response.subscription.limits.transcription_seconds == 18000
+
+    @pytest.mark.parametrize('plan,cap', [('plus', 90000), ('unlimited_v2', None)])
+    @pytest.mark.parametrize('used', [1200, 96000])
+    def test_llm_byok_snapshot_preserves_access_and_enforced_transcription_budget(self, monkeypatch, plan, cap, used):
+        from models.users import PlanType, Subscription, SubscriptionStatus
+        from routers import users
+        from utils import subscription as enforcement
+
+        paid = Subscription(plan=PlanType(plan), status=SubscriptionStatus.active)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
+        monkeypatch.setattr(users, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
+        monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid: paid)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
+        monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
+        # A divergent free-tier overlay must not replace the actual paid budget.
+        monkeypatch.setattr(users, 'get_basic_plan_limits', lambda: users.PlanLimits(transcription_seconds=18000))
+
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='synthetic'
+        )
+        assert response.subscription.plan == PlanType.unlimited
+        assert response.subscription.features == ['byok']
+        assert response.subscription.limits.insights_gained is None
+        assert response.phone_call_quota.has_access and response.phone_call_quota.is_paid
+        assert response.available_plans == [] and not response.show_subscription_ui
+        assert response.transcription_seconds_used == used
+        assert response.transcription_seconds_limit == (cap or 0)
+        assert response.subscription.limits.transcription_seconds == cap
+        assert response.transcription_allowance.remaining_seconds == (None if cap is None else max(0, cap - used))
 
     def test_usage_quota_requires_validated_desktop_provider_capability(self, monkeypatch):
         from models.users import PlanType
