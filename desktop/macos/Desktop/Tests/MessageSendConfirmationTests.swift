@@ -225,7 +225,8 @@ final class MessageSendConfirmationTests: XCTestCase {
 
   func testRowDatedWithinTheToleranceCounts() async throws {
     let (history, chat) = try makeHistory()
-    let skewed = Self.sendStart.addingTimeInterval(-MessageSendConfirmer.clockTolerance / 2)
+    // Half a second early: inside a 1-second tolerance, outside none at all.
+    let skewed = Self.sendStart.addingTimeInterval(-0.5)
     let confirmation = try await confirm("ok", in: history) {
       try history.addOutgoing(chat: chat, text: "ok", at: skewed, sent: true, delivered: true)
     }
