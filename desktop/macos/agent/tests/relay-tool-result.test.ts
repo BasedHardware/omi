@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import {
   finalizeRelayToolResult,
+  finalizedToolInvocationLedgerOutcome,
   finalizedToolResultOutcome,
   MAX_RELAY_TOOL_RESULT_BYTES,
   type RelayToolResultIdentity,
@@ -273,5 +274,29 @@ describe("normal pending stdio tool-result boundary", () => {
       fullOutputRef: null,
       provenance: { toolName: "get_conversations" },
     });
+  });
+});
+
+describe("executor-reported unknown outcomes", () => {
+  const sendIdentity: RelayToolResultIdentity = { ...identity, toolName: "send_message" };
+  const unconfirmed = {
+    ok: true,
+    status: "unconfirmed",
+    outcome_unknown: true,
+    unconfirmed_reason: "history_unreadable",
+    summary: "Unconfirmed: Omi asked Messages to send this, but could not confirm it. Do not send it again; ask the person to check Messages first.",
+  };
+
+  it("records an unconfirmed send as outcome_unknown, never succeeded, and keeps the summary for the model", () => {
+    const result = finalize(JSON.stringify(unconfirmed), "succeeded", sendIdentity);
+    expect(finalizedToolInvocationLedgerOutcome(result)).toBe("outcome_unknown");
+    expect(JSON.parse(result)).toMatchObject({ status: "unconfirmed", summary: unconfirmed.summary });
+  });
+
+  it("leaves confirmed sends succeeded and failures failed", () => {
+    const delivered = finalize(JSON.stringify({ ok: true, status: "delivered" }), "succeeded", sendIdentity);
+    expect(finalizedToolInvocationLedgerOutcome(delivered)).toBe("succeeded");
+    const failed = finalize(JSON.stringify({ ok: false, outcome_unknown: true, reason: "x" }), "succeeded", sendIdentity);
+    expect(finalizedToolInvocationLedgerOutcome(failed)).toBe("failed");
   });
 });
