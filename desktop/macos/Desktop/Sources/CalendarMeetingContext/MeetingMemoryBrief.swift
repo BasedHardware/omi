@@ -164,7 +164,7 @@ enum MeetingMemoryBriefComposer {
       guard let (section, text) = byHeading ?? byLine else { return }
       facts.append(
         MeetingMemoryBriefFact(
-          kind: kind, text: String(text.prefix(cardTextLimit)), sourceConversationID: conversation.id,
+          kind: kind, text: cardExcerpt(text), sourceConversationID: conversation.id,
           sourceSegmentIDs: section.sourceSegmentIDs))
     }
 
@@ -177,7 +177,7 @@ enum MeetingMemoryBriefComposer {
     }), let text = firstLine(action.description) {
       facts.append(
         MeetingMemoryBriefFact(
-          kind: .followUp, text: String(text.prefix(cardTextLimit)), sourceConversationID: conversation.id,
+          kind: .followUp, text: cardExcerpt(text), sourceConversationID: conversation.id,
           sourceSegmentIDs: action.sourceSegmentIDs))
     }
     appendSection(
@@ -188,6 +188,14 @@ enum MeetingMemoryBriefComposer {
 
   /// Card lines are compact; classification always reads the whole line first.
   private static let cardTextLimit = 240
+
+  /// A long line is cut at the last word that fits and marked with an ellipsis, never mid-word.
+  static func cardExcerpt(_ text: String) -> String {
+    guard text.count > cardTextLimit else { return text }
+    let cut = text.prefix(cardTextLimit - 1)
+    let atWord = cut.lastIndex(where: \.isWhitespace).map { cut[..<$0] } ?? cut
+    return atWord.trimmingCharacters(in: .whitespaces.union(.punctuationCharacters)) + "\u{2026}"
+  }
   private static let openQuestionPhrases = ["open question", "unresolved", "undecided", "left open", "still open"]
   private static let outcomeWords = ["decided", "agreed", "decision"]
   /// Verbs that report an outcome as settled. "decision" alone is not one: "We will discuss

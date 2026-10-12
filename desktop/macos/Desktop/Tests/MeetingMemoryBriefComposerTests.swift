@@ -383,6 +383,21 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
     XCTAssertEqual(fromHeading.first { $0.kind == .decision }?.text, "They agreed not to ship the beta.")
   }
 
+  func testLongCardLinesEndAtAWordWithAnEllipsis() {
+    let line =
+      "The team agreed not to ask for calendar access at first launch. The prompt will appear only when "
+      + "someone enables meeting briefs in settings, with a brief explanation of why access is needed. The "
+      + "concern was that another launch-time permission prompt could feel overwhelming."
+    let excerpt = MeetingMemoryBriefComposer.cardExcerpt(line)
+    XCTAssertLessThanOrEqual(excerpt.count, 240)
+    XCTAssertTrue(excerpt.hasSuffix("launch-time\u{2026}"), excerpt)
+    XCTAssertTrue(line.hasPrefix(String(excerpt.dropLast())))
+    XCTAssertEqual(MeetingMemoryBriefComposer.cardExcerpt("Ship Thursday."), "Ship Thursday.")
+    XCTAssertEqual(
+      MeetingMemoryBriefComposer.cardExcerpt(String(repeating: "x", count: 300)),
+      String(repeating: "x", count: 239) + "\u{2026}", "one unbroken word is still bounded")
+  }
+
   func testALateNegationInALongLineStillVetoesTheDecision() {
     let line =
       "We agreed to " + String(repeating: "align on the launch checklist and ", count: 8)
