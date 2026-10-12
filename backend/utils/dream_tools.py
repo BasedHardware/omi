@@ -17,6 +17,7 @@ from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItemV2
 from utils.entity_pages import resolve_entity
 from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
+from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 
 
 def edit_key(edit, records=None):
@@ -305,6 +306,65 @@ def apply_edit(uid, edit, records, *, expected_records=None):
     return 'applied'
 
 
+def apply_grounded_edit(uid, edit, records):
+    """Automatic spelling alone requires current independent support and fences.
+
+    Explicit user acceptance keeps using apply_edit through the Review path.
+    """
+    validate_edit(edit, records)
+    sources = {ref: records[ref] for ref in {edit.target, *edit.evidence}}
+    fences = proposal_fences(uid, {'records': sources})
+    raw_vocabulary = review_store.user(uid).collection('dream_vocabulary').document('current').get().to_dict()
+    revalidate_proposal(uid, {'records': sources})
+    vocabulary = (review_store.decode_doc(uid, raw_vocabulary) or {}).get('source', [])
+    reason = spelling_grounding_rejection(edit, sources, vocabulary)
+    if reason:
+        raise ValueError('dream_' + reason)
+    # Fence the current vocabulary snapshot too; a concurrent removal must win.
+    fences['dream_vocabulary/current'] = raw_vocabulary
+    return apply_edit(uid, edit, sources, expected_records=fences)
+
+
+def suggest_spelling(uid, edit, records, run_id):
+    validate_edit(edit, records)
+    source: dict[str, Any] = {
+        'records': {ref: records[ref] for ref in {edit.target, *edit.evidence}},
+        'edit_key': edit_key(edit, records),
+        'spelling_edit': edit.model_dump(mode='python'),
+    }
+    source['fences'] = proposal_fences(uid, source)
+    revalidate_proposal(uid, source)
+    validate_canonical_proposal(uid, edit)
+    return review_store.enqueue_review_proposal(
+        uid,
+        spelling_question(edit),
+        edit_key=edit_key(edit, records),
+        source=source,
+        dream_run_id=run_id,
+        evidence_version=review_store.fingerprint(source),
+    )
+
+
+def answer_spelling(uid, source, value):
+    """Apply the user's chosen spelling through the existing fenced Review seam."""
+    from models.dream_agent import Edit
+
+    edit = Edit.model_validate(source['spelling_edit'])
+    if not value.strip() or len(value) > 50:
+        raise review_store.ReviewConflict('Dream spelling answer is invalid')
+    if value == edit.before:
+        return False
+    records = revalidate_proposal(uid, source)
+    selected = edit.model_copy(update={'after': value})
+    try:
+        status = apply_edit(uid, selected, records, expected_records=source.get('fences'))
+    except ValueError as exc:
+        raise review_store.ReviewConflict('Dream spelling proposal no longer valid') from exc
+    if status == 'suppressed':
+        raise review_store.ReviewConflict('Dream spelling proposal was suppressed')
+    return status == 'applied'
+
+
 def proposal_record(uid, ref, snapshot):
     from utils import dream_reads
 
@@ -457,7 +517,9 @@ def vocabulary_key(term):
     )
 
 
-def apply_vocabulary(uid, terms, *, expected_records=None):
+def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False):
+    if not user_accepted:
+        raise ValueError('dream_vocabulary_requires_acceptance')
     status = 'unchanged'
     for term in terms:
         if vocabulary_rejection(term):
@@ -473,7 +535,7 @@ def apply_vocabulary(uid, terms, *, expected_records=None):
         # This policy owns additions; never overwrite an existing user term.
         if term.spelling.casefold() in merged:
             continue
-        merged[term.spelling.casefold()] = term.model_dump()
+        merged[term.spelling.casefold()] = {**term.model_dump(), 'authorship': 'user_accepted'}
         change = ReviewChange(
             change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
             kind='other',
@@ -538,7 +600,7 @@ def answer_proposal(uid, proposal, source, decision):
         status = (
             apply_edit(uid, proposal.edit, records, expected_records=source.get('fences'))
             if proposal.edit
-            else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'))
+            else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'), user_accepted=True)
         )
     except ValueError as exc:
         raise review_store.ReviewConflict('Dream proposal no longer valid') from exc

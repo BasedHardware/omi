@@ -958,6 +958,7 @@ def test_manual_speaker_routes_with_stored_scores(manual_score_routes, monkeypat
     path = ('users', 'u', 'conversations', 'c')
     segment = dict(id='s', text='synthetic', speaker_id=1, is_user=operation == 'rejection', start=0, end=6)
     data = conversation([segment], data_protection_level=level).model_dump()
+    data['user_corrections'] = [{'note': 'Owner confirmed the film was The Substance'}]
     data[scores.FIELD] = [row()]
     store.rows[path] = db.encode_conversation_for_write('u', data, level)
     if corrupt:
@@ -981,6 +982,7 @@ def test_manual_speaker_routes_with_stored_scores(manual_score_routes, monkeypat
         response = client.post('/v1/conversations/c/speakers/1/reject', json={'kind': 'not_me', 'segment_ids': ['s']})
     assert response.status_code == 200, response.text
     assert response.json()['transcript_segments'][0]['is_user'] == (operation == 'assignment')
+    assert response.json()['user_corrections'] == data['user_corrections']
     assert scores.FIELD not in response.json()
     assert store.rows[path][scores.FIELD] == blob
     assert returned[0].get(scores.FIELD) == (None if corrupt else [row()])

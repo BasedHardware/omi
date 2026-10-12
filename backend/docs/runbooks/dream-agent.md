@@ -1,5 +1,221 @@
 # Dream agent phase 1
 
+## Target neighbourhoods and read-only planning
+
+Spelling auto-apply additionally requires the corrected form in a cited
+independent record or existing persisted vocabulary. The target itself, aliases
+of the same record, and facts derived from the target conversation cannot supply
+independent support. Matching preserves accents and whole-word boundaries.
+Proposed vocabulary from the same model response does not count.
+Unsupported corrections become spelling questions with a custom-answer option,
+sharing the three-suggestion daily budget. Capped questions remain visible as
+suggestions in the run report, with an explicit cap outcome. The guard reports
+`ungrounded_spelling` counts. Automatic spelling revalidates evidence and fences
+its records and vocabulary snapshot in the existing Review journal transaction.
+
+Once this change is deployed and owner dry runs pass, spelling can return to the
+production AUTO allowlist. This series does not change production configuration.
+
+Dirty reads and the supplied-record retrieval dry run reserve 30% of the triage
+ceiling for context before admitting at most four editable targets. Initial
+target admission must fit the remaining 70%, including instructions/schema and
+completion reserve. Neighbour admission can defer more targets to keep the
+complete triage-plus-reasoning input within the existing token cap. Deferred dirty
+versions stay queued and never enter the settlement's consumed list.
+Only a neighbourhood with no visible context and no budget-blocked candidate
+releases the slice to additional targets (up to the existing eight-target limit).
+Short/missing/hidden neighbours can use less than the reserved capacity; reports
+distinguish capacity from actual excerpt bytes rather than padding evidence.
+Triage targets have at most 600-character excerpts and context at most 300;
+reasoning keeps the existing 1500-character target floor and uses 300–600 characters
+for context. All framing, roles, schema, vocabulary and completion bytes still
+enter the transport's conservative budget gate. No token budget is increased.
+Retrieval adds explicit people/entities and conversation tasks,
+same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits
+(ordinary content words excluding a small stopword set when no rare tokens exist),
+existing Pinecone conversation and canonical memory semantic hits, then nearby
+conversations and screen records. Semantic queries use up to 600 characters of real
+record text independently of lexical rarity. Temporal conversation queries use a
+24-hour window on either side; screen queries retain the two-hour window. Each
+direction reads at most 12 documents and each lookup returns at most four nearest
+rows after excluding every ref already supplied to retrieval, including unseeded
+targets 5–8. This prevents the pass's own targets occupying the neighbour slots.
+Conversation queries project `discarded`, `deleted` and `is_locked` alongside
+`created_at` and filter unavailable rows before the nearest-four cut. Missing
+flags on healthy legacy rows remain eligible. Hydration still applies the full
+authoritative visibility and transcript verification checks.
+Scheduled retrieval also excludes the bounded pending dirty window before
+hydrating potential targets 5–8. Those exclusions neither consume queue versions
+nor add product reads. The fixed 12-row scans remain bounded rather than exhaustive.
+Negative contractions are removed from lexical term extraction so fragments such
+as `don` cannot suppress ordinary-word fallback; vocabulary fuzzy matching still
+considers rare tokens longer than three characters only. Lexical content accepts
+two-character words so short Vietnamese syllables remain searchable. Semantic
+text retains the original speech and has no language or minimum-word-length gate.
+Lexical selection excludes a small normalized Vietnamese function-word list
+(including `khong`, `cua`, `nay`) before rarity selection. Query terms retain
+their original accents in NFC form, rather than depending on Typesense's accent
+folding; the existing Typesense search forwards these spellings unchanged.
+Screen rows still require `captureEligible is True` and the current task-control
+`accountGeneration`. Reads remain owner scoped and visibility checked.
+Queries and result counts are bounded. User-authored title and structured title/overview or section text precede
+long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
+the affected path's failure count and emit shared degraded fallback telemetry;
+remaining paths can still contribute. Missing/locked/hidden hydration results
+count as unavailable rather than provider failures.
+
+Context is evidence only in both stages. Guards reject context targets and
+merges whose second operand is context. All role and eligibility metadata enters
+the shared byte-based budget gate. Context admission also reserves worst-case
+triage input/completion before fitting reasoning. Reports include role counts;
+diagnostics never include record contents.
+
+Conversation evidence uses a single full owner-scoped raw document read with no
+photo subcollection. The stored transcript is verified with the canonical codec
+before the normal read/decrypt projection runs; a corrupt or wrong-key blob raises
+`DreamTranscriptReadError` instead of becoming empty speech. Plain, compressed
+standard and encrypted enhanced transcripts all retain `transcript_segments[].text`.
+The existing photo-free bulk reader also reads full documents; it does not strip
+speech. Both retrieval queries and prompt evidence now recognize the real
+section-only notes shape, `structured.sections[].heading/body_markdown`, through
+the shared summary renderer. They do not invent queries for genuinely empty text
+or serialize arbitrary metadata as text.
+
+Encrypted pass reports and the counts-only pass log include `retrieval_counts`
+for `links`, `lexical`, `semantic`, and `temporal`. Each path has `attempted`
+(provider/query and reference-hydration calls), `found` (returned candidate refs,
+including duplicates), `added` (unique visible context admitted), and `failed`
+(query/hydration errors). Additional counts are `duplicate`, `unavailable`, and
+`budget_skipped` and `query_empty` (seed records without an applicable query).
+A zero attempted count means that path was not reached or had
+no applicable query; it does not certify provider health. A budget stop leaves
+later tiers unattempted. Final `role_counts` describes the model input after
+target deferral for context.
+`retrieval_failure_counts` breaks failures down by path and exception class name
+only. Names are allowlisted; unknown/custom classes collapse to `Exception`.
+Provider exception messages, module paths and tracebacks never enter these counters.
+
+`dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
+`failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
+`permanent_acknowledged` and `transient_expired`. A pass fetches and inspects at
+most 32 dirty refs, oldest first rather than the full 500-ref queue. This lets
+older refs progress even while new refs arrive faster than the inspection window.
+Refs outside this window
+remain queued without product reads. Budget-deferred versions also remain queued,
+including initially read targets later deferred to admit context. `dirty_read`
+counts only versions admitted as editable targets.
+
+Authoritative missing/404, deleted, discarded, soft-deleted, merged-away,
+wrong-generation and non-pending results are permanent for the observed version.
+Settlement acknowledges these separately from model targets, even on an idle
+refunded pass. HTTP 402, locked (423) and unverifiable transcript results are transient: the observed
+version remains queued for up to three attempts using `failed_passes`, then
+expires. Product writes re-mark the ref with a new version and reset that counter.
+Transcript verification failures increment `dirty_counts.failed` and
+`input_content_counts.transcript_decode_failed`; admission continues to later refs.
+Provider errors never classify a ref as permanent. Every acknowledgement and
+retry update rechecks the exact dirty version in the transaction; concurrent
+refreshes survive, and ambiguous retained leases do not settle unavailable refs.
+There is no unavailable-only account pause.
+
+Settlement rereads only inspected refs, plus at most `acknowledged + 1` oldest
+queue rows to maintain the diagnostic watermark, instead of rescanning all
+500 dirty documents. Counts-only reports and logs describe permanent settlement
+and transient expiry separately from model failure poisoning.
+
+`target_context_counts` contains `retrieval_seeded` and `contextless`. Retrieval
+runs for the initially admitted targets (at most four). Reclaimed targets 5–8 are explicitly reported
+as contextless (no retrieval for their neighbourhood); they can still see the
+shared evidence set, but no second search round is purchased. Zero added context
+does not mean that a seeded target received useful grounding.
+
+`input_content_counts` reports supplied conversations with scalar title, overview,
+section text or transcript text, plus empty/missing transcripts, empty query
+content and failed transcript decoding. `context_budget_counts` reports supplied
+and deferred targets, reserved triage bytes, the target triage limit, visible
+neighbours found, whether the reservation was kept or reclaimed, final triage
+input bytes and target/context excerpt bytes. Counters contain no text, refs,
+field values or provider bodies. With the default 24000-token cap the triage
+ceiling is 12000, of which 3600 is reserved and targets must fit 8400.
+
+Prometheus exports `omi_dream_retrieval_total{path,count}` and
+`omi_dream_dirty_read_total{count}` and `omi_dream_target_context_total{coverage}`
+with only these closed labels. These diagnostics
+and the dry-run result contain no refs, IDs, provider messages or user text.
+`omi_dream_retrieval_failure_total{path,exception_class}` exports the same
+allowlisted class breakdown.
+`omi_dream_input_content_total{count}` and `omi_dream_context_budget_total{count}`
+export the same closed content-availability/allocation fields.
+
+For the counts-only owner investigation, use the retrieval entrypoint inside a pod
+running this source, with `uid` and `records` already obtained by the authorized
+owner through visibility-aware readers:
+
+```python
+import asyncio
+import json
+from utils.dream_agent import dry_run_retrieval
+
+counts = asyncio.run(dry_run_retrieval(uid, records))
+print(json.dumps(counts, sort_keys=True))
+```
+
+This runs the pass's linked, lexical, semantic and temporal retrieval with the
+same budget and hydration checks, and returns only `role_counts`, `triage_fits`,
+`retrieval_counts`, `retrieval_failure_counts`, `target_context_counts`,
+`input_content_counts`, `context_budget_counts` and zero-initialized `dirty_counts`. It does not acquire a
+lease, admit a pass, call the planning model, settle dirty versions, mutate
+product records or persist a report. It reads vocabulary unless explicitly
+supplied; semantic retrieval can make ordinary embedding-provider calls with
+their normal infrastructure usage accounting. `targets=[...]` can mark a subset
+of supplied records editable. The existing `dry_run` below still plans supplied
+evidence without retrieval. The implementing agent uses synthetic fixtures only.
+
+Use a fresh Python process against one coherent source revision. If investigating
+with the current main `dream_*` files overlaid on a pre-#21237 image, also overlay
+`database/task_intelligence_control.py` from that same revision. #21237 added its
+keyword-only `firestore_client` injection; `database/dream_context_reads.py` calls
+that keyword for screen generation checks. The old helper raises `TypeError`
+before any screen query. Missing/ineligible screens instead return zero hits,
+not failures. Eligible owner screen data must have synced rows under
+`users/{uid}/screen_activity`, a sortable UTC `timestamp` string
+(`YYYY-MM-DD HH:MM:SS.mmm`), `captureEligible: true`, and `accountGeneration`
+matching `users/{uid}/task_intelligence_control/state.account_generation` (zero
+by default). Legacy/unattested captures remain excluded; do not rewrite them to
+bypass eligibility.
+Also include `utils/conversations/summary_selection.py` from the same source when
+using an overlay; Dream uses its section renderer. Rebuild the eight records with
+the new `read_record` in a fresh process. An undecodable transcript is now an
+explicit failure when selecting readable records; do not reuse a dict whose
+speech was already lost by a previous tolerant decoder.
+
+With `uid` and the eight newest readable conversations already held locally in
+`records` as `{ "conversations/<id>": read_record(uid, ref), ... }`, rerun the exact
+call above. No new target-selection or cap override is needed. Check
+`retrieval_counts.lexical/semantic.attempted` and `query_empty`, then
+`retrieval_failure_counts.temporal`, `input_content_counts`,
+`context_budget_counts` and final `role_counts`. Supplied targets can be deferred
+by the context slice; the input dict is not mutated. Seeded targets describe
+queried neighbourhoods, not a guaranteed useful context set or four queries from every path: identical
+text queries are deduplicated and the evidence budget can stop later queries.
+
+Listen and Cloud Run use the same backend Dockerfile, but are separately deployed.
+The listen Helm workflow with a blank image tag explicitly keeps its running
+image; a Cloud Run release does not prove the listen pod has the same source.
+An overlay changes Python files, not image dependencies, environment, IAM or
+already imported modules. Do not use an old interactive Python session after
+copying files. No live image comparison or production account read is required
+to identify the signature mismatch above.
+
+The owner's agent can call `await utils.dream_agent.dry_run(uid, records,
+targets=[...], vocabulary=[...])` inside a pod with authorized, decrypted,
+visibility-checked records. This function performs no database reads, admission,
+product mutations, or report persistence. It returns a plan, guard rejection
+counts, role counts and tokens. The configured inference gateway retains its
+ordinary usage accounting. Supply `turn` for a fully offline replay. Do not print
+or publish the returned private plan. The implementing agent runs synthetic
+fixtures only and does not access production customer records.
+
 The worker defaults off in code. The production runtime declarations enable shadow
 for David's two allowlisted UIDs only; TestFlight stays disabled. Prod backend and
 backend-sync declare 24 scheduled passes/user/day, 20 manual runs/user/day and a
@@ -82,13 +298,13 @@ reads and deletes. Coalescing reduces pass reads and retained documents for
 repeated writes; it does not claim fewer billed writes for multi-reference batches.
 
 Drain considers the highest weighted score first, at most 100 users per
-invocation. A pass reads distinct queued references newest first, at most 400
+invocation. A pass reads distinct queued references oldest first, at most 32
 before enrichment, stopping when their conservatively encoded triage excerpts
 would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
-versions actually selected; failed passes retain the queue. Missing or invisible
-records are acknowledged without purchasing inference. A pass with no visible
+versions actually selected; failed passes retain the queue. Permanent unavailable versions are acknowledged separately; 402/locked/unverifiable versions
+remain queued until their third attempt expires. A pass with no visible
 records returns `not_admitted` and refunds its provisional admission/reservation.
 
 The dirty set is authoritative. The timestamp `watermark` is a diagnostic
@@ -108,7 +324,7 @@ gate. Triage gets `min(12000, Caps.tokens // 2)`; reasoning gets the pass budget
 observed triage tokens. Per-record character allowances use the space left after
 schema, framing, refs and completion reserve, then halve until the encoded request
 fits. Triage retains an allowance of at least 600 characters per record; reasoning
-retains at least 1,500. Additional records that cannot fit at the triage floor stay
+retains at least 1,500. Additional records beyond the eight-target reasoning limit or that cannot fit at the triage floor stay
 queued for a later pass. A single triage record may shrink below its floor with
 head/tail retention if needed to fit the transport gate, preventing oversized
 records from blocking the queue. Short source text is never padded. Conversation summary fields retain space before transcript text
@@ -407,7 +623,7 @@ folder's README for the verified dev tunnel procedure.
 
 ## Tiered apply policy
 
-When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
+When mode is `on`, only `title`, `overview` and grounded `spelling` edits
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
 become `agent_proposal` items in the existing Review queue, exposed through
@@ -429,6 +645,9 @@ Accept revalidates all evidence and the current task generation, then the existi
 writer fences storage in its transaction; stale accepts return 409. New
 suggestions share Dream question attention accounting, capped at three per pass
 and UTC day, and also respect the per-pass edit cap and remaining answer headroom.
+Attention-capped spelling targets stay queued with `deferred_until` set to the
+next UTC midnight. Later passes skip them before hydration and model reasoning;
+product updates preserve the deferral, and the next UTC day permits retry.
 Retries of unchanged proposals use no new slot. Shadow mode continues to record
 proposals without enqueueing or applying anything; each edit and vocabulary term
 in its report is labeled `auto` or `suggest`.
@@ -437,3 +656,6 @@ The OpenAPI schema and Review/Dream Dart DTOs are regenerated from source. Mobil
 rendering of `agent_proposal` is separate owner work, detailed in
 `backend/docs/review_surface.mdx`. This source change does not enable flags,
 change cohorts/schedules, or deploy anything.
+
+
+Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.

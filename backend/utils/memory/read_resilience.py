@@ -223,10 +223,16 @@ class MemoryReadResilience:
                 # the same process allowance before executing the operation.
                 allowance = self.allowance or _retry_allowance
                 with self._lock:
+                    # First admission gates on TIME headroom only: an
+                    # exhausted document budget is a normal truncated page
+                    # (the charge path flags budget.truncated downstream),
+                    # not an admission failure; the retry check below keeps
+                    # the full budget-aware headroom.
+                    time_headroom = state.deadline - self.clock() > 0.05
                     admitted = (
                         generation == self._generation
                         and (probing or self._open_until == 0)
-                        and self._headroom(state, budget) > 0.05
+                        and time_headroom
                         and state.used < 2
                         and allowance.take()
                     )

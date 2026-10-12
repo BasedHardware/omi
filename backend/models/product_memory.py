@@ -375,6 +375,8 @@ def effective_short_term_expiry(item: MemoryItem) -> datetime:
 
 
 def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datetime) -> Optional[AccessDecision]:
+    if (item.promotion or {}).get('chat_deleted') is True:
+        return AccessDecision(False, 'owner_removed_from_chat')
     if item.status != MemoryItemStatus.active:
         return AccessDecision(False, "not_active")
     if item.processing_state == ProcessingState.blocked:

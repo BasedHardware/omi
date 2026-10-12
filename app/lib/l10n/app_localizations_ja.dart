@@ -9629,6 +9629,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatBlockMemory => 'メモリー';
 
   @override
+  String get chatBlockPerson => '人物';
+
+  @override
+  String get chatBlockUndone => '元に戻しました';
+
+  @override
+  String get chatBlockUndoFailed => 'この変更を元に戻せませんでした';
+
+  @override
   String get chatBlockQuestion => '質問';
 
   @override

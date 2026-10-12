@@ -9784,6 +9784,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get chatBlockMemory => 'স্মৃতি';
 
   @override
+  String get chatBlockPerson => 'ব্যক্তি';
+
+  @override
+  String get chatBlockUndone => 'পূর্বাবস্থায় ফেরানো হয়েছে';
+
+  @override
+  String get chatBlockUndoFailed => 'এই পরিবর্তনটি পূর্বাবস্থায় ফেরানো যায়নি';
+
+  @override
   String get chatBlockQuestion => 'প্রশ্ন';
 
   @override

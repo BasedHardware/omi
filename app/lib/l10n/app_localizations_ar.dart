@@ -9722,6 +9722,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatBlockMemory => 'ذكرى';
 
   @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'تم التراجع';
+
+  @override
+  String get chatBlockUndoFailed => 'تعذّر التراجع عن هذا التغيير';
+
+  @override
   String get chatBlockQuestion => 'سؤال';
 
   @override

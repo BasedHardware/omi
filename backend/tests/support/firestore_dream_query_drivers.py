@@ -29,6 +29,20 @@ def admission_state(client, args, trial):
 
 def entries():
     return (
+        DriverEntry(
+            'database.dream_context_reads.subject_memory_refs', base={'uid': UID, 'subject': 'person:synthetic'}
+        ),
+        DriverEntry(
+            'database.dream_context_reads.temporal_neighbours',
+            base={
+                'uid': UID,
+                'start': datetime(2026, 10, 9, tzinfo=timezone.utc),
+                'anchor': datetime(2026, 10, 9, 1, tzinfo=timezone.utc),
+                'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
+            },
+            domains={'collection': ['conversations', 'screen_activity']},
+            neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
+        ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
         DriverEntry(
@@ -73,9 +87,16 @@ def entries():
                 },
                 'report': {'status': 'complete'},
             },
-            domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
+            domains={
+                'success': [True, False],
+                'refund': [True, False],
+                'count_failure': [True, False],
+                'deferred': [[], ['conversations/one']],
+            },
             neutrals={
-                'consumed': ([], 'post-query acknowledgement versions'),
+                'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
+                'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
+                'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
             },
             setup=finish_state,
@@ -83,7 +104,7 @@ def entries():
         DriverEntry(
             'database.dream_store.dirty_refs',
             base={'uid': UID},
-            domains={'limit': [1, 400, 500], 'newest': [True, False]},
+            domains={'limit': [1, 32, 33, 400, 500], 'newest': [True, False]},
             neutrals={'transaction': (None, 'transaction binding does not change query shape')},
         ),
         DriverEntry(

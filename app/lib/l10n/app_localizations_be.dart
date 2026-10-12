@@ -9813,6 +9813,15 @@ class AppLocalizationsBe extends AppLocalizations {
   String get chatBlockMemory => 'Успамін';
 
   @override
+  String get chatBlockPerson => 'Чалавек';
+
+  @override
+  String get chatBlockUndone => 'Адменена';
+
+  @override
+  String get chatBlockUndoFailed => 'Не ўдалося адмяніць гэтую змену';
+
+  @override
   String get chatBlockQuestion => 'Пытанне';
 
   @override

@@ -2269,7 +2269,9 @@ sequenceDiagram
 
 ### Offline upload status ownership
 
-`GET /v2/sync-local-files/{job_id}` reads the job without mutating it, checks
+`GET /v2/sync-local-files/{job_id}` first applies the per-UID hot-loop ceiling
+(40 polls per 20 seconds, HTTP 429 with `Retry-After: 20`), then reads the job
+without mutating it, checks
 the authenticated owner, and only then attempts stale Cloud Tasks recovery
 under the worker's run lease. An old progress timestamp alone cannot fail
 an active worker, override standby, or replace a concurrent completed result.

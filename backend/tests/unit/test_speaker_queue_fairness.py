@@ -309,11 +309,11 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     host.state.speaker_id_enabled = True
     host.state.speaker_id_done = asyncio.Event()
     host.request.uid = 'test-owner'
-    rejected_finished = asyncio.Event()
+    rejector_finished = asyncio.Event()
 
     async def authority(*args):
         # Force the cheaper rejected task to finish while owner authority awaits.
-        await rejected_finished.wait()
+        await rejector_finished.wait()
         return {}
 
     host.persistence = SimpleNamespace(call=AsyncMock(side_effect=authority))
@@ -323,16 +323,26 @@ async def test_real_runner_late_untried_owner_gets_last_token_before_rejector(mo
     for i in range(80):
         matcher.queue.put_nowait(_work(1, start=0, seconds=5, segment=f'rejector-{i}'))
     matcher.queue.put_nowait(_work(2, start=6, seconds=5))
-    order, completed = [], []
+    order = []
+    completed = []
     original = matcher.match
     finished = asyncio.Event()
+    extract_query = matcher._extract_query
+
+    async def delayed_query(pcm):
+        # The owner reserves the last token before embedding awaits; the denied
+        # rejector can finish first on a busy runner. Exercise that order explicitly.
+        await rejector_finished.wait()
+        return await extract_query(pcm)
+
+    monkeypatch.setattr(matcher, '_extract_query', delayed_query)
 
     async def match(voice, work):
         order.append(voice)
         await original(voice, work)
         completed.append(voice)
         if voice == 1:
-            rejected_finished.set()
+            rejector_finished.set()
         if len(completed) == 2:
             finished.set()
 

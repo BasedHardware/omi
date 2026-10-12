@@ -580,6 +580,9 @@ class Conversation(BaseModel):
     # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
+    user_corrections: List[Dict] = Field(default_factory=list)
+    user_overview: Optional[str] = None
+
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.

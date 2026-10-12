@@ -610,6 +610,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         'structured',
         'client_processing',
+        # Authenticated owner-confirmed edits, not device-authored display projections.
+        # Corrections deliberately enter summarization; overview is the owned override.
+        'user_corrections',
+        'user_overview',
         # S3 (§1.7): server-authored, NOT projection-family. It says why
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.

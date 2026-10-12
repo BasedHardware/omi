@@ -9869,6 +9869,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get chatBlockMemory => 'Alaala';
 
   @override
+  String get chatBlockPerson => 'Tao';
+
+  @override
+  String get chatBlockUndone => 'Na-undo';
+
+  @override
+  String get chatBlockUndoFailed => 'Hindi ma-undo ang pagbabagong iyon';
+
+  @override
   String get chatBlockQuestion => 'Tanong';
 
   @override

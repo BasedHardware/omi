@@ -9723,6 +9723,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatBlockMemory => 'ความทรงจำ';
 
   @override
+  String get chatBlockPerson => 'บุคคล';
+
+  @override
+  String get chatBlockUndone => 'เลิกทำแล้ว';
+
+  @override
+  String get chatBlockUndoFailed => 'ไม่สามารถเลิกทำการเปลี่ยนแปลงนี้ได้';
+
+  @override
   String get chatBlockQuestion => 'คำถาม';
 
   @override

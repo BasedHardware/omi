@@ -9815,6 +9815,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String get chatBlockMemory => 'ನೆನಪು';
 
   @override
+  String get chatBlockPerson => 'ವ್ಯಕ್ತಿ';
+
+  @override
+  String get chatBlockUndone => 'ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get chatBlockUndoFailed => 'ಈ ಬದಲಾವಣೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
   String get chatBlockQuestion => 'ಪ್ರಶ್ನೆ';
 
   @override

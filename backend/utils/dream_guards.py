@@ -64,6 +64,13 @@ def spelling_rejection(edit):
     collection, separator, key = edit.target.partition('/')
     if collection not in SPELLING_COLLECTIONS or not separator or not key or '/' in key:
         return 'bad_target'
+    if (
+        not edit.before.strip()
+        or not edit.after.strip()
+        or edit.before.strip() == edit.after.strip()
+        or max(len(edit.before), len(edit.after)) > 50
+    ):
+        return 'invalid_spelling'
     return None
 
 
@@ -125,19 +132,54 @@ RECORD_REF = re.compile(
 )
 
 
+def has_summary_speech(speech, minimum):
+    count, in_word = 0, False
+    if minimum <= 0:
+        return True
+    # Normalize one character at a time, stopping at the threshold. Combining
+    # accents disappear without splitting words or scanning a whole recording.
+    for char in speech:
+        for letter in normalized(char):
+            word = letter.isalnum()
+            if word and not in_word:
+                count += 1
+                if count >= minimum:
+                    return True
+            in_word = word
+    return False
+
+
+def summary_field_rejection(kind, row, *, min_words=None):
+    """Storage eligibility shared by prompt projection and the effect backstop."""
+    if kind not in {'title', 'overview'}:
+        return None
+    current = (row.get('structured') or {}).get(kind) or ''
+    has_content = bool(current) if kind == 'title' else bool(current.strip())
+    if has_content or (kind == 'title' and row.get('user_title')):
+        return 'nonempty_field'
+    # Sections can be the visible overview even when its compatibility field is blank.
+    if kind == 'overview' and (row.get('structured') or {}).get('sections'):
+        return 'nonempty_field'
+    speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
+    minimum = MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words
+    # Count only enough words to decide admission, rather than normalizing and
+    # allocating every token of a long recording for each prompt projection.
+    if not has_summary_speech(speech, minimum):
+        return 'insufficient_speech'
+    return None
+
+
+def summary_eligibility(row):
+    return {kind: summary_field_rejection(kind, row) or 'editable' for kind in ('title', 'overview')}
+
+
 def summary_rejection(edit, row, *, min_words=None):
     if edit.kind not in {'title', 'overview'}:
         return None
-    current = (row.get('structured') or {}).get(edit.kind) or ''
-    has_content = bool(current) if edit.kind == 'title' else bool(current.strip())
-    if has_content or (edit.kind == 'title' and row.get('user_title')):
-        return 'nonempty_field'
-    # Sections can be the visible overview even when its compatibility field is blank.
-    if edit.kind == 'overview' and (row.get('structured') or {}).get('sections'):
-        return 'nonempty_field'
+    reason = summary_field_rejection(edit.kind, row, min_words=min_words)
+    if reason:
+        return reason
     speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
-    if len(tokens(speech)) < (MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words):
-        return 'insufficient_speech'
     after_words = tokens(edit.after)
     if len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words)):
         return 'placeholder'
@@ -166,10 +208,11 @@ def feedback_rejection(feedback):
     return None
 
 
-def filter_plan(plan: Plan, records, *, usage_sink=None):
+def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     """Drop unsafe proposals before any report persistence; diagnostics contain counts only."""
     rejected = Counter()
     edits = []
+    targets = set(records) if targets is None else set(targets)
     for edit in plan.edits:
         reason = spelling_rejection(edit)
         if edit.kind in {'close_task', 'retire_task'}:
@@ -184,10 +227,33 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
                 if edit.target not in records or any(ref not in records for ref in edit.evidence)
                 else summary_rejection(edit, records[edit.target])
             )
+        if not reason and (
+            edit.target not in targets
+            or (edit.kind in {'merge_people', 'merge_memories'} and edit.other not in targets)
+        ):
+            reason = 'context_target'
         if reason:
             rejected[reason] += 1
         else:
             edits.append(edit)
+    entities = {
+        records[ref].get('entity_id') or ('person:' + ref.split('/', 1)[1] if ref.startswith('people/') else '')
+        for ref in targets
+        if ref in records
+    } - {''}
+    questions = []
+    for question in plan.questions:
+        if (
+            question.same_person
+            and not {question.same_person.left.entity_id, question.same_person.right.entity_id} <= entities
+        ):
+            rejected['context_target'] += 1
+        elif question.speaker and 'conversations/' + question.speaker.conversation_id not in targets:
+            rejected['context_target'] += 1
+        elif question.task and 'candidates/' + question.task.candidate_id not in targets:
+            rejected['context_target'] += 1
+        else:
+            questions.append(question)
     vocabulary = []
     for term in plan.vocabulary:
         reason = vocabulary_rejection(term)
@@ -206,7 +272,9 @@ def filter_plan(plan: Plan, records, *, usage_sink=None):
         counts = Counter(usage_sink.get('rejected', {}))
         counts.update(rejected)
         usage_sink['rejected'] = dict(counts)
-    return plan.model_copy(update={'edits': edits, 'vocabulary': vocabulary, 'feedback': feedback})
+    return plan.model_copy(
+        update={'edits': edits, 'questions': questions, 'vocabulary': vocabulary, 'feedback': feedback}
+    )
 
 
 def cap_feedback(feedback, *, usage_sink):

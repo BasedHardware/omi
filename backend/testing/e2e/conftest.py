@@ -99,6 +99,15 @@ def _set_e2e_env():
     os.environ["BUCKET_DESKTOP_UPDATES"] = "desktop-updates"
     os.environ["DEV_WEBHOOK_RETRY_DELAYS"] = "0,0,0"
     os.environ["SYNC_DISPATCH_MODE"] = "inline"
+    # 113 in-process e2e tests hammer MemoryService through the real admission
+    # path; the process-wide RetryAllowance (8 tokens, 1/s refill) sheds
+    # legitimate bursts as 503 "Memory read admission exhausted". Raise the
+    # burst and reset the shared allowance for the harness, mirroring the
+    # cursor-suite isolation.
+    import utils.memory.read_resilience as _rr
+
+    os.environ["OMI_MEMORY_READ_RETRY_BURST"] = "64"
+    _rr._retry_allowance = _rr.RetryAllowance()
     os.environ["AUDIO_MERGE_DISPATCH_MODE"] = "inline"
     # Disable Stripe validation so startup doesn't fail.
     os.environ["STRIPE_SECRET_KEY"] = ""

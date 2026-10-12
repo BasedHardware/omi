@@ -9856,6 +9856,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get chatBlockMemory => 'நினைவு';
 
   @override
+  String get chatBlockPerson => 'நபர்';
+
+  @override
+  String get chatBlockUndone => 'செயல்தவிர்க்கப்பட்டது';
+
+  @override
+  String get chatBlockUndoFailed => 'இந்த மாற்றத்தைச் செயல்தவிர்க்க முடியவில்லை';
+
+  @override
   String get chatBlockQuestion => 'கேள்வி';
 
   @override
