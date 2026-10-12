@@ -340,7 +340,8 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.confirmPlanChange,
-        message: l10n.planSwitchingDescriptionWithTitle(selectedPrice.title),
+        message:
+            '${currentPlanDisplayName(context, provider.subscription)} → ${planDisplayName(PlanType.fromWire(targetPlan), plans, l10n)} (${selectedPrice.title})',
         confirmLabel: l10n.changePlan,
       );
       if (!confirmed) {

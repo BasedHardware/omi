@@ -94,6 +94,7 @@ async def test_exit_reasons_are_enumerated():
             'voice_capacity',
             'embedding_budget',
             'authority_unavailable',
+            'rejector_tail_reserved',
         }
     )
     assert any(

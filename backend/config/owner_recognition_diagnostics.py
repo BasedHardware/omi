@@ -13,7 +13,7 @@ MAX_SCOPES = 8
 MAX_COUNT = 2**31 - 1
 REASONS = frozenset('''other enqueued no_prints unplaced queue_full already_labeled already_mapped missing_speaker
     no_pcm window_outside_buffer segment_shorter_than_minimum no_fresh_audio window_shorter_than_minimum
-    stale_generation rejected manual_decision voice_capacity embedding_budget authority_unavailable
+    stale_generation rejected manual_decision voice_capacity embedding_budget authority_unavailable rejector_tail_reserved
     profile_invalid profile_ineligible profile_missing profile_failed profile_loaded evidence_pending extraction_failed cancelled
     comparison published scores_disabled scores_generated scores_failed flush_failed rollover finalized drain
     disabled empty_transcript private_cloud_disabled endpoint_unconfigured no_audio no_eligible all_short

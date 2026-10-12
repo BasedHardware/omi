@@ -59,7 +59,8 @@ from utils.observability.speaker_embedding_budget import (
     BUDGET_SOCKETS,
     EMBEDDING_ATTEMPTS,
 )
-from routers.listen.speaker_queue import SpeakerMatchQueue, subtract_audio_ranges
+from routers.listen.speaker_queue import SpeakerMatchQueue, subtract_audio_ranges, pending_audio_ranges
+from routers.listen.speaker_rejector import RejectorHistory
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'voice_capacity',
         'embedding_budget',
         'authority_unavailable',
+        'rejector_tail_reserved',
     }
 )
 
@@ -131,7 +133,8 @@ def _read_file(path: str) -> bytes:
 class SpeakerMatcher:
     def __init__(self, host: Any):
         self.host = host
-        self.queue = SpeakerMatchQueue(generation=lambda: self._generation)
+        self._rejectors = RejectorHistory(self)
+        self.queue = SpeakerMatchQueue(generation=lambda: self._generation, rejector=self._rejectors.proven)
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
@@ -779,6 +782,8 @@ class SpeakerMatcher:
                 segment,
             )
             return False
+        if self._rejectors.deny_tail(speaker_id, self._socket_embedding_tokens):
+            return False
         self._socket_embedding_tokens -= 1
         self._embedding_attempts[speaker_id] += 1
         EMBEDDING_ATTEMPTS.labels(outcome='reserved').inc()
@@ -918,6 +923,7 @@ class SpeakerMatcher:
         Callers must fence the matcher generation before entering this gate.
         """
         rejected = manual_rejected_speakers(authority.receipt)
+        self._rejectors.observe_manual(authority.receipt)
         for voice in rejected:
             self._retract_rejected_voice(voice, segment_id if voice == speaker_id else self._voice_segments.get(voice))
         if rejected:
@@ -1019,20 +1025,7 @@ class SpeakerMatcher:
             self._covered_audio[speaker_id] = covered
             # Retain interval metadata only; PCM stays in the bounded ring.
             # Coalesce provider repeats before subtracting successful evidence.
-            incoming = (
-                max(buffer_start, segment['abs_start']),
-                min(buffer_end, segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])),
-            )
-            ranges = self._pending_audio.get(speaker_id, []) + [incoming]
-            fresh = []
-            for start, end in sorted(ranges):
-                start, end = max(start, buffer_start), min(end, buffer_end)
-                if end <= start:
-                    continue
-                if fresh and start <= fresh[-1][1]:
-                    fresh[-1] = (fresh[-1][0], max(fresh[-1][1], end))
-                else:
-                    fresh.append((start, end))
+            fresh = pending_audio_ranges(segment, self._pending_audio.get(speaker_id, []), buffer_start, buffer_end)
             fresh = subtract_audio_ranges(fresh, covered)
             if not fresh:
                 # Zero fresh seconds left after subtracting embedded audio.
@@ -1232,6 +1225,7 @@ class SpeakerMatcher:
                 voice_groups=voice_groups,
             )
             decision = decisions.get(speaker_id)
+            self._rejectors.comparison(speaker_id, decision, evidence_seconds)
             decision_kind = 'rejected'
             if decision is not None:
                 decision_target, decision_kind = live_decision_labels(
@@ -1479,6 +1473,7 @@ class SpeakerMatcher:
         self._covered_audio.clear()
         self._pending_audio.clear()
         self._embedding_attempts.clear()
+        self._rejectors.clear()
         self._budget_blocked_voices.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

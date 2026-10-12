@@ -83,7 +83,7 @@ extension SettingsContentView {
       // `operator` enum. Distinguish by matching current_price_id against
       // an Operator-titled plan in the catalog.
       if isCurrentSubscriptionOperator() {
-        return "Operator"
+        return "Pro"
       }
       return "Neo"
     case .unlimitedV2:
@@ -91,7 +91,7 @@ extension SettingsContentView {
     case .architect, .pro:
       return "Architect"
     case .operator:
-      return "Operator"
+      return "Pro"
     case .unknown:
       return subscription.plan.displayName
     }
@@ -105,7 +105,7 @@ extension SettingsContentView {
       let currentPriceId = subscription.currentPriceId
     else { return false }
     for plan in mergedPlanCatalog {
-      guard plan.title == "Operator" else { continue }
+      guard plan.id == "operator" else { continue }
       if plan.prices.contains(where: { $0.id == currentPriceId }) {
         return true
       }
@@ -139,7 +139,7 @@ extension SettingsContentView {
 
     for plan in mergedPlanCatalog {
       if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
-        return "\(plan.title) \(price.title) • \(price.priceString)"
+        return "\(plan.displayTitle) \(price.title) • \(price.priceString)"
       }
     }
 
@@ -182,7 +182,7 @@ extension SettingsContentView {
 
   func planSelectionLabel(for plan: SubscriptionPlanOption) -> String {
     SubscriptionPlanPresentation.selectionLabel(
-      planTitle: plan.title,
+      planTitle: plan.displayTitle,
       startingPrice: preferredStartingPrice(for: plan)?.priceString
     )
   }
@@ -288,20 +288,7 @@ extension SettingsContentView {
   }
 
   func normalizedPlanId(from title: String) -> String? {
-    let normalized = title.lowercased()
-    // Match the three plan families by title keyword. Neo is the post-rename
-    // display name for the legacy "unlimited" plan and still maps to that id
-    // because Stripe/backend PlanType enum is unchanged.
-    if normalized.contains("unlimited") || normalized.contains("neo") {
-      return "unlimited"
-    }
-    if normalized.contains("operator") {
-      return "operator"
-    }
-    if normalized.contains("architect") || normalized.contains("pro") {
-      return "architect"
-    }
-    return nil
+    SubscriptionPlanNames.planId(from: title)
   }
 
   func planCatalog(from prices: [AvailablePlanPriceOption]) -> [SubscriptionPlanOption] {
@@ -317,9 +304,13 @@ extension SettingsContentView {
       case "unlimited":
         title = "Neo"
       case "operator":
-        title = "Operator"
+        title = "Pro"
       case "architect":
         title = "Architect"
+      case "plus":
+        title = "Plus"
+      case "unlimited_v2":
+        title = "Unlimited"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -371,7 +362,7 @@ extension SettingsContentView {
               .tracking(0.8)
           }
 
-          Text(plan.title)
+          Text(plan.displayTitle)
             .scaledFont(size: OmiType.heading, weight: .bold)
             .foregroundColor(Ink.primary)
 
