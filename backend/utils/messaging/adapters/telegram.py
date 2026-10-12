@@ -8,6 +8,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from utils.messaging.adapters.base import BaseAdapter
+from utils.observability.fallback import record_fallback
 from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.delivery_context import send_markup
 from utils.messaging.adapters.media import MEDIA_TYPES
@@ -155,8 +156,6 @@ class TelegramAdapter(BaseAdapter):
             )
         except ProviderError as exc:
             if body.get('reply_parameters') and exc.status_code in (400, 404, 422) and not exc.rendering_rejected:
-                from utils.observability.fallback import record_fallback
-
                 record_fallback(
                     component='other',
                     from_mode='threaded_reply',
@@ -171,8 +170,6 @@ class TelegramAdapter(BaseAdapter):
             # remain ambiguous and must never duplicate a delivered message.
             if not exc.rendering_rejected or body.get('parse_mode') != 'HTML' or not body.get('text'):
                 raise
-            from utils.observability.fallback import record_fallback
-
             record_fallback(
                 component='other', from_mode='telegram_html', to_mode='plain_text', reason='other', outcome='degraded'
             )

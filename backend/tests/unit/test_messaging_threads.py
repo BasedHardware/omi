@@ -13,7 +13,7 @@ from testing.messaging.store import MemoryStore
 from utils.messaging import gateway as gateway_module
 from utils.messaging.adapters.linq import IMessageAdapter, LinqProvider
 from utils.messaging.adapters.telegram import TelegramAdapter
-from utils.messaging.adapters.transport import DeliveryUncertain, ProviderError
+from utils.messaging.adapters.transport import DeliveryUncertain
 from utils.messaging.contracts import ChannelMessage
 from utils.messaging.gateway import Gateway
 from utils.messaging.outbound import ChannelReplySink
