@@ -333,7 +333,8 @@ def _seed_queue(store, uid: str, items: dict) -> None:
         store[f"{base}/{doc_id}"] = payload
 
 
-def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, review_queue):
+@pytest.mark.parametrize('resolved_status', ['accepted', 'expired'])
+def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, review_queue, resolved_status):
     uid = "uid-review-purge"
     store = {}
     _seed_queue(
@@ -365,7 +366,7 @@ def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, revie
                 "review_id": "review-resolved",
                 "fact_id": "mem_deleted",
                 "conflict_with": [],
-                "status": "accepted",
+                "status": resolved_status,
                 "reason": "private legacy review explanation",
             },
         },

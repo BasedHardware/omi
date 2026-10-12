@@ -11,16 +11,25 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 """
 
 import asyncio
+import errno
 import logging
+import math
 import os
 import re
+from typing import BinaryIO
 
+import av
+from av.error import FFmpegError
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.analytics import record_usage
+from utils.executors import db_executor, storage_executor, run_blocking
+from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +43,51 @@ _MAX_UPLOAD_BYTES = 200_000_000
 # 503. Waiters hold no RAM (the body stays in starlette's disk spool until a
 # slot is acquired), so this only bounds client-perceived latency.
 _UPSTREAM_WAIT_SECS = 30.0
+_PROBE_TIMEOUT_SECS = 20.0
 
 _SAFE_FILENAME_RE = re.compile(r'[^A-Za-z0-9._-]')
 _MAX_FILENAME_LEN = 64
 _MAX_EXTENSION_LEN = 8
+
+
+def _audio_seconds(audio_file: BinaryIO) -> int:
+    """Probe the uploaded media, rather than billing transcript timestamp gaps.
+
+    PyAV is the existing FFmpeg binding used by voice-duration accounting.
+    The existing seekable upload spool supports containers whose metadata is
+    at the end, without an external ffprobe binary or a resident body copy
+    while waiting for a provider slot. Decoder errors never enter logs or the response.
+    """
+    try:
+        seconds = 0.0
+        with av.open(audio_file, mode='r') as audio:
+            if not audio.streams.audio:
+                raise ValueError('missing audio stream')
+            stream = audio.streams.audio[0]
+            if audio.duration is not None:
+                seconds = float(audio.duration) / 1_000_000
+            elif stream.duration is not None and stream.time_base is not None:
+                seconds = float(stream.duration * stream.time_base)
+            else:
+                raise ValueError('missing duration')
+        if not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError('invalid duration')
+        return math.ceil(seconds)
+    except FFmpegError as error:
+        if error.errno == errno.ETIMEDOUT:
+            raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
+        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+
+
+async def _admit(uid: str, source: str | None, seconds: int) -> None:
+    # This route calls Omi-paid Parakeet; Deepgram BYOK cannot exempt it.
+    allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid, source=source, byok_active=False)
+    if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
+        raise HTTPException(status_code=503, detail='Transcription allowance temporarily unavailable')
+    if not allowance.managed or (allowance.remaining_seconds is not None and seconds > allowance.remaining_seconds):
+        raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
 
 
 def _safe_upstream_filename(filename) -> str:
@@ -81,6 +131,29 @@ async def stt_transcribe(
     if file.size is not None and file.size > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
+    if file.size == 0:
+        raise HTTPException(status_code=400, detail='No audio data provided')
+    if file.size is None:
+        # Defense in depth for callers without Starlette's multipart size.
+        sample = await file.read(_MAX_UPLOAD_BYTES + 1)
+        size = len(sample)
+        del sample
+        if size > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
+        if not size:
+            raise HTTPException(status_code=400, detail='No audio data provided')
+        await file.seek(0)
+
+    try:
+        seconds = await asyncio.wait_for(
+            run_blocking(storage_executor, _audio_seconds, file.file), timeout=_PROBE_TIMEOUT_SECS
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
+    await file.seek(0)
+    source = request.headers.get('x-app-platform')
+    await _admit(uid, source, seconds)
+
     upstream_url = api_url.rstrip('/') + '/v2/transcribe'
     client = get_stt_proxy_client()
     semaphore = get_stt_proxy_semaphore()
@@ -92,6 +165,10 @@ async def stt_transcribe(
         raise HTTPException(status_code=503, detail='Transcription service busy — try again shortly')
 
     try:
+        # Initial admission precedes the slot. Recheck after queueing so
+        # stale admissions cannot escape the in-flight accounting bound.
+        await _admit(uid, source, seconds)
+
         # Buffer only after holding a slot, so at most 4 request bodies are
         # resident in RAM at once — waiters keep theirs in the disk spool.
         # The bounded read is defense-in-depth should file.size be absent.
@@ -112,28 +189,38 @@ async def stt_transcribe(
         finally:
             del files
             del audio_bytes
+        if resp.status_code >= 400:
+            # 413 (audio too long) and 503 (model loading / overloaded) carry
+            # client-actionable details — forward them as-is. Anything else is an
+            # internal upstream failure the client can't act on.
+            if resp.status_code in (413, 503):
+                detail = 'Transcription failed upstream'
+                try:
+                    payload = resp.json()
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and payload.get('detail'):
+                    detail = str(payload['detail'])
+                logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
+                raise HTTPException(status_code=resp.status_code, detail=detail)
+            logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')
+            raise HTTPException(status_code=502, detail='Transcription failed upstream')
+
+        try:
+            payload = resp.json()
+        except ValueError:
+            logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
+            raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
+
+        # Keep completed-but-unaccounted calls inside the four-slot bound too.
+        # This is not a distributed monthly-quota reservation.
+        try:
+            await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+        except Exception as error:
+            # No idempotency key: withholding a completed transcript encourages
+            # a retry and another paid provider call. Do not log exception text.
+            logger.error('stt_transcribe: usage write failed exception_type=%s', type(error).__name__)
+            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+        return payload
     finally:
         semaphore.release()
-
-    if resp.status_code >= 400:
-        # 413 (audio too long) and 503 (model loading / overloaded) carry
-        # client-actionable details — forward them as-is. Anything else is an
-        # internal upstream failure the client can't act on.
-        if resp.status_code in (413, 503):
-            detail = 'Transcription failed upstream'
-            try:
-                payload = resp.json()
-            except ValueError:
-                payload = None
-            if isinstance(payload, dict) and payload.get('detail'):
-                detail = str(payload['detail'])
-            logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
-            raise HTTPException(status_code=resp.status_code, detail=detail)
-        logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')
-        raise HTTPException(status_code=502, detail='Transcription failed upstream')
-
-    try:
-        return resp.json()
-    except ValueError:
-        logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
-        raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
