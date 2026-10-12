@@ -188,7 +188,7 @@ import {
   type RunToolExecutionLease,
   type RunToolCapabilityRevocationReason,
 } from "./run-tool-capability.js";
-import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
+import type { ToolInvocationCompletionOutcome, ToolInvocationIdentity } from "./tool-invocation-ledger.js";
 import { normalizeOmiToolName } from "./omi-tool-manifest.js";
 import { routeExternalSurfaceTool } from "./external-surface-tool-policy.js";
 import type { ChatFirstCapabilityProjection } from "./chat-first-capability.js";
@@ -499,7 +499,7 @@ export class KernelCore {
   completeRunToolInvocation(input: ToolInvocationIdentity & {
     capabilityRef: string;
     activeOwnerId: string;
-    outcome: "succeeded" | "failed";
+    outcome: ToolInvocationCompletionOutcome;
     result: string;
   }): void {
     this.toolCapabilities.completeInvocation(input);

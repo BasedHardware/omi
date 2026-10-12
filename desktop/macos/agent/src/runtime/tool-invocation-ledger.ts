@@ -135,19 +135,26 @@ export function markToolInvocationDispatched(
   return readToolInvocation(store, identity.invocationId);
 }
 
+/** How a dispatched invocation can end when its executor reports back. */
+export type ToolInvocationCompletionOutcome = "succeeded" | "failed" | "outcome_unknown";
+
+/** Recorded when the executor itself reports that it could not observe the effect. */
+export const EXECUTOR_REPORTED_OUTCOME_UNKNOWN = "executor_reported_outcome_unknown";
+
 export function completeToolInvocation(
   store: AgentStore,
-  input: ToolInvocationIdentity & { outcome: "succeeded" | "failed"; result: string; nowMs: number },
+  input: ToolInvocationIdentity & { outcome: ToolInvocationCompletionOutcome; result: string; nowMs: number },
 ): ToolInvocationLedgerRecord {
   const changed = store.execute(
     `UPDATE tool_invocation_ledger
-     SET status = ?, result_hash = ?, completed_at_ms = ?, updated_at_ms = ?
+     SET status = ?, result_hash = ?, error_code = COALESCE(?, error_code), completed_at_ms = ?, updated_at_ms = ?
      WHERE invocation_id = ? AND owner_id = ? AND session_id = ? AND run_id = ? AND attempt_id = ?
        AND profile_generation = ? AND manifest_version = ? AND manifest_digest = ? AND daemon_boot_epoch = ?
        AND execution_generation = ? AND input_hash = ? AND status = 'dispatched'`,
     [
       input.outcome,
       resultHash(input.result),
+      input.outcome === "outcome_unknown" ? EXECUTOR_REPORTED_OUTCOME_UNKNOWN : null,
       input.nowMs,
       input.nowMs,
       input.invocationId,

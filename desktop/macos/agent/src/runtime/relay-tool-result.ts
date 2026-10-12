@@ -187,6 +187,21 @@ export function finalizedToolResultOutcome(result: string): "succeeded" | "faile
   return payload?.ok === true ? "succeeded" : "failed";
 }
 
+/**
+ * The ledger status for a finalized Swift executor result.
+ *
+ * An executor that ran but could not observe its effect (an unconfirmed
+ * `send_message`) marks its payload `outcome_unknown: true`. That records the
+ * invocation as `outcome_unknown` instead of `succeeded`, so later receipts
+ * never describe it as a completed send. The flag can only lower a success to
+ * unknown; it never turns a failure into anything else.
+ */
+export function finalizedToolInvocationLedgerOutcome(result: string): "succeeded" | "failed" | "outcome_unknown" {
+  const outcome = finalizedToolResultOutcome(result);
+  if (outcome !== "succeeded") return outcome;
+  return parseObject(result)?.outcome_unknown === true ? "outcome_unknown" : "succeeded";
+}
+
 function parseObject(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;

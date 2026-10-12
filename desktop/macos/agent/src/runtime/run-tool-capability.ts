@@ -25,6 +25,7 @@ import {
   prepareToolInvocation,
   readToolInvocation,
   terminalizeRevokedToolInvocation,
+  type ToolInvocationCompletionOutcome,
   type ToolInvocationEffectClass,
   type ToolInvocationIdentity,
   type ToolInvocationRetryPolicy,
@@ -610,7 +611,7 @@ export class RunToolCapabilityBroker {
   completeInvocation(input: ToolInvocationIdentity & {
     capabilityRef: string;
     activeOwnerId: string;
-    outcome: "succeeded" | "failed";
+    outcome: ToolInvocationCompletionOutcome;
     result: string;
   }): void {
     const state = this.states.get(input.capabilityRef);
