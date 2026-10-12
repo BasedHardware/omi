@@ -114,8 +114,10 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
+        final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
         PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
-        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+        PlatformManager.instance.analytics.paywallOpened('unlimited_deeplink', currentPlan: plan);
+        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'unlimited_deeplink'));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback

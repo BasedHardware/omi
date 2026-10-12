@@ -298,8 +298,10 @@ void main() {
     final adapter = _DeliveryAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
-    AnalyticsManager().track('Capture Wedge Detected',
-        properties: {'app_version': null, 'app_build': 'observed-build', 'build': null});
+    AnalyticsManager().track(
+      'Capture Wedge Detected',
+      properties: {'app_version': null, 'app_build': 'observed-build', 'build': null},
+    );
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.single.properties.containsKey('app_version'), false);
     expect(adapter.events.single.properties.containsKey('build'), false);
@@ -500,14 +502,39 @@ void main() {
     await AnalyticsManager.init();
 
     AnalyticsManager().upgradeSucceeded(previousPlan: 'basic', newPlan: 'plus', billingInterval: 'year');
+    AnalyticsManager().paywallOpened('Action Item', currentPlan: 'pro');
+    AnalyticsManager().upgradePlanSelected(plan: 'yearly', billingInterval: 'yearly', source: 'Usage Page Plan Sheet');
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events.map((event) => event.eventName), ['Subscription Plan Changed', 'Upgrade Succeeded']);
+    expect(adapter.events.map((event) => event.eventName), [
+      'Subscription Plan Changed',
+      'Upgrade Succeeded Attributed',
+      'Upgrade Succeeded',
+      'Paywall Opened',
+      'Upgrade Plan Selected',
+    ]);
     expect(adapter.events.first.properties, {
       'previous_plan': 'basic',
       'new_plan': 'plus',
       'billing_interval': 'year',
       'change_source': 'mobile_checkout',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
+    });
+    expect(adapter.events[1].properties, {
+      'plan': 'plus',
+      'billing_interval': 'year',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
+    });
+    expect(adapter.events[3].properties['source'], 'unknown');
+    expect(adapter.events[3].properties['current_plan'], 'unknown');
+    expect(adapter.events[4].properties, {
+      'plan': 'unknown',
+      'billing_interval': 'year',
+      'source': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',

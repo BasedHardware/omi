@@ -176,8 +176,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-      routeToPage(context, const UsagePage(showUpgradeDialog: true));
+      PlatformManager.instance.analytics.paywallOpened(
+        'locked_conversation',
+        currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+      );
+      routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_conversation'));
       return;
     }
     HapticFeedback.selectionClick();
@@ -851,8 +854,11 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-    routeToPage(context, const UsagePage(showUpgradeDialog: true));
+    PlatformManager.instance.analytics.paywallOpened(
+      'locked_conversation',
+      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+    );
+    routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_conversation'));
   }
 
   @override
