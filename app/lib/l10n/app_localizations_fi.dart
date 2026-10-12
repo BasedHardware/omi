@@ -1686,7 +1686,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get enableBluetooth => 'Ota Bluetooth käyttöön';
 
   @override
-  String get bluetoothNeeded => 'Yhdistä Omi laittamalla Bluetooth päälle.';
+  String get bluetoothNeeded => 'Omi yhdistyy puhelimeesi Bluetoothilla. Laita se päälle jatkaaksesi.';
 
   @override
   String get contactSupport => 'Ota yhteyttä tukeen?';

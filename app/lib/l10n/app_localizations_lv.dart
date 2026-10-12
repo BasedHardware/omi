@@ -1690,7 +1690,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get enableBluetooth => 'Iespējot Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Ieslēdziet Bluetooth, lai savienotu Omi.';
+  String get bluetoothNeeded => 'Omi ar tālruni savienojas, izmantojot Bluetooth. Ieslēdziet to, lai turpinātu.';
 
   @override
   String get contactSupport => 'Sazināties ar atbalstu?';

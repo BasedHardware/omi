@@ -30,7 +30,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enable Bluetooth'), findsOneWidget);
-    expect(find.text('Turn on Bluetooth to connect your Omi.'), findsOneWidget);
+    expect(find.text('Omi connects to your phone over Bluetooth. Turn it on to continue.'), findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();

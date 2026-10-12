@@ -1688,7 +1688,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth inschakelen';
 
   @override
-  String get bluetoothNeeded => 'Zet Bluetooth aan om je Omi te verbinden.';
+  String get bluetoothNeeded => 'Omi maakt via Bluetooth verbinding met je telefoon. Zet het aan om door te gaan.';
 
   @override
   String get contactSupport => 'Contact opnemen met support?';

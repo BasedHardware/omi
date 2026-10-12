@@ -520,7 +520,7 @@
     "dontShowAgain": "Tekrar gösterme",
     "iUnderstand": "Anlıyorum",
     "enableBluetooth": "Bluetooth'u Etkinleştir",
-    "bluetoothNeeded": "Omi'yi bağlamak için Bluetooth'u açın.",
+    "bluetoothNeeded": "Omi telefonuna Bluetooth ile bağlanır. Devam etmek için açın.",
     "contactSupport": "Desteğe Başvur?",
     "connectLater": "Sonra Bağlan",
     "grantPermissions": "İzinleri ver",

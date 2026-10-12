@@ -1678,7 +1678,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get enableBluetooth => 'เปิดใช้งาน Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'เปิด Bluetooth เพื่อเชื่อมต่อ Omi';
+  String get bluetoothNeeded => 'Omi เชื่อมต่อกับโทรศัพท์ผ่าน Bluetooth เปิดเพื่อดำเนินการต่อ';
 
   @override
   String get contactSupport => 'ติดต่อฝ่ายสนับสนุน?';

@@ -1691,7 +1691,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get enableBluetooth => 'Включите Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Включите Bluetooth, чтобы подключить Omi.';
+  String get bluetoothNeeded => 'Omi подключается к телефону по Bluetooth. Включите его, чтобы продолжить.';
 
   @override
   String get contactSupport => 'Связаться с поддержкой?';

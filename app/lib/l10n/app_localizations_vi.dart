@@ -1694,7 +1694,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enableBluetooth => 'Bật Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Bật Bluetooth để kết nối Omi.';
+  String get bluetoothNeeded => 'Omi kết nối với điện thoại qua Bluetooth. Hãy bật để tiếp tục.';
 
   @override
   String get contactSupport => 'Liên hệ hỗ trợ?';

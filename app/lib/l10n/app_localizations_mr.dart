@@ -1687,7 +1687,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth सक्षम करा';
 
   @override
-  String get bluetoothNeeded => 'Omi कनेक्ट करण्यासाठी Bluetooth सुरू करा.';
+  String get bluetoothNeeded => 'Omi तुमच्या फोनशी Bluetooth द्वारे जोडतो. पुढे जाण्यासाठी ते सुरू करा.';
 
   @override
   String get contactSupport => 'समर्थन संपर्क करायचे?';

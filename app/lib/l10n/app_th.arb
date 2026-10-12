@@ -520,7 +520,7 @@
     "dontShowAgain": "ไม่ต้องแสดงอีก",
     "iUnderstand": "เข้าใจแล้ว",
     "enableBluetooth": "เปิดใช้งาน Bluetooth",
-    "bluetoothNeeded": "เปิด Bluetooth เพื่อเชื่อมต่อ Omi",
+    "bluetoothNeeded": "Omi เชื่อมต่อกับโทรศัพท์ผ่าน Bluetooth เปิดเพื่อดำเนินการต่อ",
     "contactSupport": "ติดต่อฝ่ายสนับสนุน?",
     "connectLater": "เชื่อมต่อภายหลัง",
     "grantPermissions": "ให้สิทธิ์",

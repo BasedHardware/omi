@@ -515,7 +515,7 @@
     "dontShowAgain": "不再显示",
     "iUnderstand": "我理解",
     "enableBluetooth": "启用蓝牙",
-    "bluetoothNeeded": "打开蓝牙以连接 Omi。",
+    "bluetoothNeeded": "Omi 通过蓝牙连接你的手机。打开蓝牙以继续。",
     "contactSupport": "联系支持？",
     "connectLater": "稍后连接",
     "grantPermissions": "授予权限",

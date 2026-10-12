@@ -1690,7 +1690,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get enableBluetooth => 'Povoliť Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Zapnite Bluetooth a pripojte Omi.';
+  String get bluetoothNeeded => 'Omi sa k telefónu pripája cez Bluetooth. Zapnite ho a pokračujte.';
 
   @override
   String get contactSupport => 'Kontaktovať podporu?';

@@ -520,7 +520,7 @@
     "dontShowAgain": "Visa inte igen",
     "iUnderstand": "Jag förstår",
     "enableBluetooth": "Aktivera Bluetooth",
-    "bluetoothNeeded": "Slå på Bluetooth för att ansluta din Omi.",
+    "bluetoothNeeded": "Omi ansluter till din telefon via Bluetooth. Slå på det för att fortsätta.",
     "contactSupport": "Kontakta support?",
     "connectLater": "Anslut senare",
     "grantPermissions": "Bevilja behörigheter",

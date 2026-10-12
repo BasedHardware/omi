@@ -515,7 +515,7 @@
     "dontShowAgain": "No mostrar de nuevo",
     "iUnderstand": "Entiendo",
     "enableBluetooth": "Activar Bluetooth",
-    "bluetoothNeeded": "Activa el Bluetooth para conectar tu Omi.",
+    "bluetoothNeeded": "Omi se conecta a tu teléfono por Bluetooth. Actívalo para continuar.",
     "contactSupport": "¿Contactar soporte?",
     "connectLater": "Conectar más tarde",
     "grantPermissions": "Conceder permisos",

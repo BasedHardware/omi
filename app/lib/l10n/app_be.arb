@@ -1586,7 +1586,7 @@
     "@enableBluetooth": {
         "description": "Title for dialog prompting user to enable Bluetooth"
     },
-    "bluetoothNeeded": "Уключыце Bluetooth, каб падключыць Omi.",
+    "bluetoothNeeded": "Omi падключаецца да тэлефона праз Bluetooth. Уключыце яго, каб працягнуць.",
     "@bluetoothNeeded": {
         "description": "Explanation text for why Bluetooth is required"
     },

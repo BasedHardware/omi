@@ -1690,7 +1690,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get enableBluetooth => 'Dayakan Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Hidupkan Bluetooth untuk menyambung Omi.';
+  String get bluetoothNeeded => 'Omi bersambung ke telefon anda melalui Bluetooth. Hidupkannya untuk meneruskan.';
 
   @override
   String get contactSupport => 'Hubungi Sokongan?';

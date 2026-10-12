@@ -300,7 +300,7 @@
     "bleSpeed": "~30 KB/s per BLE",
     "bluetooth": "Bluetooth",
     "bluetoothMethodDescription": "Naudoja standartinį Bluetooth Low Energy ryšį. Lėčiau, bet neturi įtakos WiFi ryšiui.",
-    "bluetoothNeeded": "Įjunkite Bluetooth, kad prijungtumėte Omi.",
+    "bluetoothNeeded": "Omi prie telefono jungiasi per Bluetooth. Įjunkite jį, kad tęstumėte.",
     "bluetoothSyncEnabled": "Bluetooth sinchronizavimas įjungtas",
     "bringYourOwn": "Naudokite savo",
     "browseInstallCreateApps": "Naršykite, įdiekite ir kurkite programas",

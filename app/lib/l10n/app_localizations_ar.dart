@@ -1673,7 +1673,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get enableBluetooth => 'تمكين البلوتوث';
 
   @override
-  String get bluetoothNeeded => 'شغّل البلوتوث لتوصيل Omi.';
+  String get bluetoothNeeded => 'يتصل Omi بهاتفك عبر البلوتوث. شغّله للمتابعة.';
 
   @override
   String get contactSupport => 'الاتصال بالدعم؟';

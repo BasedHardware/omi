@@ -1696,7 +1696,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth ஐ இயக்கவும்';
 
   @override
-  String get bluetoothNeeded => 'Omi-ஐ இணைக்க Bluetooth-ஐ இயக்கவும்.';
+  String get bluetoothNeeded => 'Omi உங்கள் போனுடன் Bluetooth மூலம் இணைகிறது. தொடர அதை இயக்கவும்.';
 
   @override
   String get contactSupport => 'ஆதரவுடன் যোগாசையை கொள்ளவா?';

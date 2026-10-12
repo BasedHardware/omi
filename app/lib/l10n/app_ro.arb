@@ -520,7 +520,7 @@
     "dontShowAgain": "Nu mai afișa",
     "iUnderstand": "Înțeleg",
     "enableBluetooth": "Activare Bluetooth",
-    "bluetoothNeeded": "Activează Bluetooth pentru a conecta Omi.",
+    "bluetoothNeeded": "Omi se conectează la telefon prin Bluetooth. Activează-l pentru a continua.",
     "contactSupport": "Contactează suportul?",
     "connectLater": "Conectează mai târziu",
     "grantPermissions": "Acordați permisiuni",

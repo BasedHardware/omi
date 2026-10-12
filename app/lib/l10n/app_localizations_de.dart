@@ -1700,7 +1700,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth aktivieren';
 
   @override
-  String get bluetoothNeeded => 'Schalte Bluetooth ein, um dein Omi zu verbinden.';
+  String get bluetoothNeeded => 'Omi verbindet sich über Bluetooth mit deinem Handy. Schalte es ein, um fortzufahren.';
 
   @override
   String get contactSupport => 'Support kontaktieren?';

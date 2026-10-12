@@ -520,7 +520,7 @@
     "dontShowAgain": "Ära näita uuesti",
     "iUnderstand": "Ma mõistan",
     "enableBluetooth": "Luba Bluetooth",
-    "bluetoothNeeded": "Lülita Bluetooth sisse, et Omi ühendada.",
+    "bluetoothNeeded": "Omi ühendub telefoniga Bluetoothi kaudu. Lülita see jätkamiseks sisse.",
     "contactSupport": "Võta ühendust toega?",
     "connectLater": "Ühenda hiljem",
     "grantPermissions": "Anna load",

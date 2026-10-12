@@ -520,7 +520,7 @@
     "dontShowAgain": "Ne plus afficher",
     "iUnderstand": "Je comprends",
     "enableBluetooth": "Activer le Bluetooth",
-    "bluetoothNeeded": "Activez le Bluetooth pour connecter votre Omi.",
+    "bluetoothNeeded": "Omi se connecte à votre téléphone en Bluetooth. Activez-le pour continuer.",
     "contactSupport": "Contacter le support ?",
     "connectLater": "Se connecter plus tard",
     "grantPermissions": "Accorder les autorisations",

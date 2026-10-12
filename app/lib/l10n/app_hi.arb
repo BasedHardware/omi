@@ -515,7 +515,7 @@
     "dontShowAgain": "दोबारा न दिखाएं",
     "iUnderstand": "मैं समझता हूं",
     "enableBluetooth": "ब्लूटूथ सक्षम करें",
-    "bluetoothNeeded": "Omi कनेक्ट करने के लिए Bluetooth चालू करें।",
+    "bluetoothNeeded": "Omi आपके फ़ोन से Bluetooth के ज़रिए जुड़ता है। जारी रखने के लिए इसे चालू करें।",
     "contactSupport": "संपर्क करें?",
     "connectLater": "बाद में कनेक्ट करें",
     "grantPermissions": "अनुमतियां दें",

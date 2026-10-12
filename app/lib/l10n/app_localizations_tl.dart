@@ -1695,7 +1695,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get enableBluetooth => 'Paganahin ang Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'I-on ang Bluetooth para ikonekta ang Omi.';
+  String get bluetoothNeeded => 'Kumokonekta ang Omi sa iyong phone gamit ang Bluetooth. I-on ito para magpatuloy.';
 
   @override
   String get contactSupport => 'Makipag-ugnayan sa Support?';

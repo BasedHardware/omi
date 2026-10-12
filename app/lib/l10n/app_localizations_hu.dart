@@ -1697,7 +1697,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth engedélyezése';
 
   @override
-  String get bluetoothNeeded => 'Kapcsold be a Bluetooth-t az Omi csatlakoztatásához.';
+  String get bluetoothNeeded => 'Az Omi Bluetooth-on csatlakozik a telefonodhoz. Kapcsold be a folytatáshoz.';
 
   @override
   String get contactSupport => 'Ügyfélszolgálat elérése?';

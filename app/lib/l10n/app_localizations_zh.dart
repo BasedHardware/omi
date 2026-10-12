@@ -1661,7 +1661,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enableBluetooth => '启用蓝牙';
 
   @override
-  String get bluetoothNeeded => '打开蓝牙以连接 Omi。';
+  String get bluetoothNeeded => 'Omi 通过蓝牙连接你的手机。打开蓝牙以继续。';
 
   @override
   String get contactSupport => '联系支持？';

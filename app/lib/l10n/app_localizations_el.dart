@@ -1697,7 +1697,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get enableBluetooth => 'Ενεργοποίηση Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Ενεργοποιήστε το Bluetooth για να συνδέσετε το Omi.';
+  String get bluetoothNeeded =>
+      'Το Omi συνδέεται με το τηλέφωνό σας μέσω Bluetooth. Ενεργοποιήστε το για να συνεχίσετε.';
 
   @override
   String get contactSupport => 'Επικοινωνία με Υποστήριξη;';

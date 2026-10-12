@@ -520,7 +520,7 @@
     "dontShowAgain": "Не показвай отново",
     "iUnderstand": "Разбирам",
     "enableBluetooth": "Активирай Bluetooth",
-    "bluetoothNeeded": "Включете Bluetooth, за да свържете Omi.",
+    "bluetoothNeeded": "Omi се свързва с телефона ви чрез Bluetooth. Включете го, за да продължите.",
     "contactSupport": "Свържете се с поддръжката?",
     "connectLater": "Свържи по-късно",
     "grantPermissions": "Предоставяне на разрешения",

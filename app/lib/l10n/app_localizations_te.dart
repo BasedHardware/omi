@@ -1692,7 +1692,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get enableBluetooth => 'బ్లూటూత్ ప్రారంభించండి';
 
   @override
-  String get bluetoothNeeded => 'Omiని కనెక్ట్ చేయడానికి Bluetooth ఆన్ చేయండి.';
+  String get bluetoothNeeded => 'Omi మీ ఫోన్‌కు Bluetooth ద్వారా కనెక్ట్ అవుతుంది. కొనసాగడానికి దాన్ని ఆన్ చేయండి.';
 
   @override
   String get contactSupport => 'సపోర్టుకు సంబంధం?';

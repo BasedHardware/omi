@@ -1683,7 +1683,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enableBluetooth => 'Luba Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Lülita Bluetooth sisse, et Omi ühendada.';
+  String get bluetoothNeeded => 'Omi ühendub telefoniga Bluetoothi kaudu. Lülita see jätkamiseks sisse.';
 
   @override
   String get contactSupport => 'Võta ühendust toega?';

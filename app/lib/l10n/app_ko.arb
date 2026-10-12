@@ -520,7 +520,7 @@
     "dontShowAgain": "다시 표시하지 않기",
     "iUnderstand": "이해했습니다",
     "enableBluetooth": "블루투스 활성화",
-    "bluetoothNeeded": "Omi를 연결하려면 Bluetooth를 켜세요.",
+    "bluetoothNeeded": "Omi는 Bluetooth로 휴대폰에 연결돼요. 계속하려면 켜 주세요.",
     "contactSupport": "지원팀에 문의하시겠습니까?",
     "connectLater": "나중에 연결",
     "grantPermissions": "권한 부여",
