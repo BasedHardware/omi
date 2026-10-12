@@ -10,6 +10,7 @@ import pytest
 
 from config.dream_agent import Caps
 from utils import dream_agent, dream_context, dream_diagnostics, dream_metrics, dream_reads
+from utils.dream_guards import tokens
 
 
 def snapshots(count):
@@ -346,7 +347,7 @@ def test_eight_ordinary_speech_targets_search_without_rare_tokens_and_exclude_al
     now = datetime(2030, 1, 1, tzinfo=timezone.utc)
     # Every word was filtered out by the old rarity gate.
     speech = ['We work in the garden with the boat ' + word for word in ('one', 'two', 'three', 'four')]
-    assert all(set(dream_context.tokens(words)) <= dream_context.common_words() for words in speech)
+    assert all(set(tokens(words)) <= dream_context.common_words() for words in speech)
     records = {
         f'conversations/target-{i}': {'created_at': now, 'transcript_segments': [{'text': speech[i % 4]}]}
         for i in range(8)

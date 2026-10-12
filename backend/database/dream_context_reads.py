@@ -31,13 +31,18 @@ def temporal_neighbours(uid, collection, start, anchor, end, *, excluded_ids=(),
             .order_by(field, direction=direction)
         )
         if not screen:
-            query = query.select(['created_at'])
+            query = query.select(['created_at', 'discarded', 'deleted', 'is_locked'])
         # Eight supplied targets cannot monopolize the four output slots.
         # Exclusion happens before nearest selection, with fixed read bounds.
         for snapshot in query.limit(TEMPORAL_SCAN_LIMIT).stream(timeout=3):
             if snapshot.id in excluded:
                 continue
             row = dict(snapshot.to_dict() or {}, id=snapshot.id)
+            # Invisible fragments cannot occupy the four neighbour slots.
+            # Missing flags on healthy legacy rows mean False; hydration still
+            # performs the complete authoritative visibility/decryption check.
+            if not screen and any(row.get(flag) for flag in ('discarded', 'deleted', 'is_locked')):
+                continue
             if screen and (row.get('captureEligible') is not True or row.get('accountGeneration', 0) != generation):
                 continue
             value = row.get(field)

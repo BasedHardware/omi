@@ -26,6 +26,10 @@ record text independently of lexical rarity. Temporal conversation queries use a
 direction reads at most 12 documents and each lookup returns at most four nearest
 rows after excluding every ref already supplied to retrieval, including unseeded
 targets 5–8. This prevents the pass's own targets occupying the neighbour slots.
+Conversation queries project `discarded`, `deleted` and `is_locked` alongside
+`created_at` and filter unavailable rows before the nearest-four cut. Missing
+flags on healthy legacy rows remain eligible. Hydration still applies the full
+authoritative visibility and transcript verification checks.
 Scheduled retrieval also excludes the bounded pending dirty window before
 hydrating potential targets 5–8. Those exclusions neither consume queue versions
 nor add product reads. The fixed 12-row scans remain bounded rather than exhaustive.
@@ -34,6 +38,10 @@ as `don` cannot suppress ordinary-word fallback; vocabulary fuzzy matching still
 considers rare tokens longer than three characters only. Lexical content accepts
 two-character words so short Vietnamese syllables remain searchable. Semantic
 text retains the original speech and has no language or minimum-word-length gate.
+Lexical selection excludes a small normalized Vietnamese function-word list
+(including `khong`, `cua`, `nay`) before rarity selection. Query terms retain
+their original accents in NFC form, rather than depending on Typesense's accent
+folding; the existing Typesense search forwards these spellings unchanged.
 Screen rows still require `captureEligible is True` and the current task-control
 `accountGeneration`. Reads remain owner scoped and visibility checked.
 Queries and result counts are bounded. User-authored title and structured title/overview or section text precede
@@ -76,7 +84,9 @@ Provider exception messages, module paths and tracebacks never enter these count
 `dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
 `failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
 `permanent_acknowledged` and `transient_expired`. A pass fetches and inspects at
-most 32 dirty refs, rather than the full 500-ref queue. Refs outside this window
+most 32 dirty refs, oldest first rather than the full 500-ref queue. This lets
+older refs progress even while new refs arrive faster than the inspection window.
+Refs outside this window
 remain queued without product reads. Budget-deferred versions also remain queued,
 including initially read targets later deferred to admit context. `dirty_read`
 counts only versions admitted as editable targets.
@@ -84,9 +94,11 @@ counts only versions admitted as editable targets.
 Authoritative missing/404, deleted, discarded, soft-deleted, merged-away,
 wrong-generation and non-pending results are permanent for the observed version.
 Settlement acknowledges these separately from model targets, even on an idle
-refunded pass. HTTP 402 and locked (423) results are transient: the observed
+refunded pass. HTTP 402, locked (423) and unverifiable transcript results are transient: the observed
 version remains queued for up to three attempts using `failed_passes`, then
 expires. Product writes re-mark the ref with a new version and reset that counter.
+Transcript verification failures increment `dirty_counts.failed` and
+`input_content_counts.transcript_decode_failed`; admission continues to later refs.
 Provider errors never classify a ref as permanent. Every acknowledgement and
 retry update rechecks the exact dirty version in the transaction; concurrent
 refreshes survive, and ambiguous retained leases do not settle unavailable refs.
@@ -272,12 +284,12 @@ reads and deletes. Coalescing reduces pass reads and retained documents for
 repeated writes; it does not claim fewer billed writes for multi-reference batches.
 
 Drain considers the highest weighted score first, at most 100 users per
-invocation. A pass reads distinct queued references newest first, at most 32
+invocation. A pass reads distinct queued references oldest first, at most 32
 before enrichment, stopping when their conservatively encoded triage excerpts
 would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
-versions actually selected; failed passes retain the queue. Permanent unavailable versions are acknowledged separately; 402/locked versions
+versions actually selected; failed passes retain the queue. Permanent unavailable versions are acknowledged separately; 402/locked/unverifiable versions
 remain queued until their third attempt expires. A pass with no visible
 records returns `not_admitted` and refunds its provisional admission/reservation.
 

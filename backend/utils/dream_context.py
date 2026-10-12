@@ -4,12 +4,13 @@ from datetime import timedelta
 from functools import partial
 from difflib import SequenceMatcher
 import re
+import unicodedata
 
 from database import action_items, vector_db
 from database.dream_context_reads import temporal_neighbours, subject_memory_refs
 from utils.observability.fallback import record_fallback
 from utils.conversations.search import keyword_search_conversation_ids
-from utils.dream_guards import common_words, timestamp, tokens
+from utils.dream_guards import common_words, timestamp, normalized
 from utils.dream_prompt import (
     evidence_message,
     triage_budget,
@@ -101,6 +102,11 @@ NEGATIVE_CONTRACTIONS = re.compile(
     r"\b(?:don|doesn|didn|isn|aren|wasn|weren|hasn|haven|hadn|won|wouldn|couldn|shouldn|mustn|shan|ain)['’]t\b",
     re.IGNORECASE,
 )
+VIETNAMESE_STOP_WORDS = frozenset(
+    'khong cua nay kia do day la va thi ma voi cho tu den trong tren duoi '
+    'o co da dang se duoc bi nhung cac mot nhieu it de neu vi nen nhu khi '
+    'toi minh ban chung ta ho no ay roi cung rat'.split()
+)
 
 
 def query_content(row):
@@ -114,9 +120,16 @@ def query_content(row):
 
 
 def query_terms(row, vocabulary=()):
-    words = list(
-        dict.fromkeys(word for word in tokens(NEGATIVE_CONTRACTIONS.sub('', query_content(row))) if len(word) >= 2)
-    )
+    # Normalize only for rarity/stopwords, keeping accented query spellings for
+    # Typesense rather than relying on its locale-specific accent folding.
+    forms = {}
+    content = unicodedata.normalize('NFC', NEGATIVE_CONTRACTIONS.sub('', query_content(row)))
+    stopwords = QUERY_STOP_WORDS | VIETNAMESE_STOP_WORDS
+    for surface in re.findall(r'[^\W_]+', content):
+        word = normalized(surface)
+        if len(word) >= 2 and word not in stopwords:
+            forms.setdefault(word, surface.casefold())
+    words = list(forms)
     rare = [word for word in words if word not in common_words()]
     near = [
         entry['spelling']
@@ -127,8 +140,8 @@ def query_terms(row, vocabulary=()):
         )
     ]
     # Rarity prioritizes spelling anchors; ordinary speech must still search.
-    preferred = rare or [word for word in words if word not in QUERY_STOP_WORDS]
-    return list(dict.fromkeys([*near[:2], *preferred]))[:6]
+    preferred = rare or words
+    return list(dict.fromkeys([*near[:2], *(forms[word] for word in preferred)]))[:6]
 
 
 def identities(row):

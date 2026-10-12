@@ -13,9 +13,104 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from config.dream_agent import Caps
-from database import dream_store
+from database import _client, conversations, dream_store
+from utils import dream_reads
 
 pytestmark = pytest.mark.integration
+
+
+def test_unverifiable_speech_retries_without_blocking_and_fences_refresh(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
+    database.collection('users').document(uid).set({})
+    source = database.collection('users').document(uid).collection('conversations')
+    source.document('bad').set(
+        {
+            'transcript_segments': 'invented-undecodable-speech',
+            'transcript_segments_compressed': True,
+            'data_protection_level': 'enhanced',
+        }
+    )
+    source.document('healthy').set({'transcript_segments': [{'text': 'Garden boat'}]})
+    dream_store.mark_dirty(uid, [('conversations', 'bad'), ('conversations', 'healthy')], firestore_client=database)
+    caps = Caps(passes=10)
+    for attempt in range(5):
+        lease = dream_store.acquire(uid, caps, firestore_client=database)
+        report, unavailable = {}, []
+        records, consumed = dream_reads.read_changes(uid, lease, caps, diagnostics=report, unavailable=unavailable)
+        assert report['dirty_counts']['failed'] == report['dirty_counts']['transient'] == 1
+        assert report['input_content_counts']['transcript_decode_failed'] == 1
+        assert records.targets == ({'conversations/healthy'} if attempt == 0 else set())
+        assert len(unavailable) == 1 and unavailable[0]['transient'] is True
+        if attempt == 1:
+            # A refreshed version cannot inherit this pass's observed failure.
+            dream_store.mark_dirty(uid, [('conversations', 'bad')], firestore_client=database)
+        dream_store.finish(
+            uid,
+            lease,
+            report,
+            success=bool(consumed),
+            refund=True,
+            consumed=consumed,
+            unavailable=unavailable,
+            firestore_client=database,
+        )
+        assert report['dirty_counts']['transient_expired'] == int(attempt == 4)
+        queued = dream_store.dirty_refs(uid, firestore_client=database)
+        if attempt < 4:
+            assert len(queued) == 1 and queued[0].to_dict()['id'] == 'bad'
+            assert queued[0].to_dict()['failed_passes'] == [1, 0, 1, 2][attempt]
+        else:
+            assert not queued
+    # A later product write restores a fresh, readable dirty version.
+    source.document('bad').set({'transcript_segments': [{'text': 'Garden boat restored'}]})
+    dream_store.mark_dirty(uid, [('conversations', 'bad')], firestore_client=database)
+    lease = dream_store.acquire(uid, caps, firestore_client=database)
+    records, consumed = dream_reads.read_changes(uid, lease, caps)
+    assert records.targets == {'conversations/bad'} and len(consumed) == 1
+    dream_store.finish(uid, lease, {}, success=True, refund=True, consumed=consumed, firestore_client=database)
+
+
+def test_oldest_inspection_progresses_under_35_new_refs_per_pass(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
+    database.collection('users').document(uid).set({})
+    initial = {f'initial-{i}' for i in range(35)}
+    dream_store.mark_dirty(uid, [('conversations', key) for key in sorted(initial)], firestore_client=database)
+    inspected = set()
+
+    def read(uid, ref, **kwargs):
+        inspected.add(ref.split('/')[1])
+        return {'transcript_segments': [{'text': 'Garden boat'}]}
+
+    monkeypatch.setattr(dream_reads, 'read_record', read)
+    caps = Caps(passes=10)
+    for hour in range(5):
+        arrivals = [('conversations', f'hour-{hour}-{i}') for i in range(35)]
+        dream_store.mark_dirty(uid, arrivals, firestore_client=database)
+        lease = dream_store.acquire(uid, caps, firestore_client=database)
+        report = {}
+        records, consumed = dream_reads.read_changes(uid, lease, caps, diagnostics=report)
+        assert report['dirty_counts']['fetched'] == 32
+        assert 1 <= len(consumed) <= 8 and len(records.targets) == len(consumed)
+        dream_store.finish(uid, lease, report, success=True, refund=True, consumed=consumed, firestore_client=database)
+        assert dream_store.dirty_count(uid, firestore_client=database) < 500
+    assert initial <= inspected
+    assert not dream_store.state_ref(database, uid).get().to_dict().get('dirty_dropped', 0)
 
 
 def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
@@ -227,6 +322,11 @@ def test_temporal_neighbours_exclude_eight_inputs_before_nearest_selection(colle
     if collection == 'screen_activity':
         put('ineligible', 0, captureEligible=False)
         put('old-generation', 0, accountGeneration=1)
+    else:
+        put('discarded', -8, discarded=True)
+        put('deleted', -9, deleted=True)
+        put('locked', 1, is_locked=True)
+        put('discarded-right', 2, discarded=True)
     window = timedelta(hours=24 if collection == 'conversations' else 2)
     rows = temporal_neighbours(
         uid,

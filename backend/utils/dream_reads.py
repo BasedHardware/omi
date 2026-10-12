@@ -23,6 +23,7 @@ from models.dream_agent import Triage
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT, CONTEXT_TARGET_LIMIT, query_content
 from utils.dream_diagnostics import initialize
+from utils.observability.fallback import record_fallback
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
@@ -237,7 +238,9 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
     counts = diagnostics['dirty_counts']
     read = cached_reader(diagnostics)
 
-    dirty = dream_store.dirty_refs(uid, limit=dream_store.DIRTY_INSPECTION_LIMIT)[: dream_store.DIRTY_INSPECTION_LIMIT]
+    dirty = dream_store.dirty_refs(uid, limit=dream_store.DIRTY_INSPECTION_LIMIT, newest=False)[
+        : dream_store.DIRTY_INSPECTION_LIMIT
+    ]
     records = EvidenceRecords()
     consumed = []
     assessed = {}
@@ -258,6 +261,13 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
                 assessed[ref] = read(uid, ref)
             except review_store.ReviewNotFound:
                 assessed[ref] = None
+            except DreamTranscriptReadError:
+                counts['failed'] += 1
+                assessed[ref] = None
+                transient = True
+                record_fallback(
+                    component='other', from_mode='none', to_mode='none', reason='malformed_doc', outcome='degraded'
+                )
             except HTTPException as exc:
                 if exc.status_code not in {402, 404, 423}:
                     counts['failed'] += 1
@@ -274,7 +284,7 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         row = assessed[ref]
         if not row:
             # Settlement independently fences permanent misses and bounds
-            # retries for 402/locked versions; neither counts as model evidence.
+            # retries for 402/locked/unverifiable versions; none is model evidence.
             return 'unavailable'
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets | {ref})
         has_context = len(candidate) > len(candidate.targets)
