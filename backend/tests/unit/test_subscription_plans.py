@@ -382,3 +382,59 @@ def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscripti
     assert '10 minutes of listening per month' in features
     assert '7 words transcribed per month' in features
     assert '9 insights per month' in features
+
+
+@pytest.mark.parametrize(
+    'platform,version,capable',
+    [
+        ('macos', '0.12.196', False),
+        ('macos', '0.12.197', True),
+        ('macos', '0.12.198', True),
+        ('macos', None, False),
+        ('windows', '1.0.35', False),
+        ('windows', None, False),
+        ('ios', '1.0.552', False),
+        ('android', '1.0.552', False),
+        ('web', '0.1.0', True),
+        ('web', '0.0.9', False),
+        ('web', None, False),
+        ('web', 'invalid', False),
+        (None, '0.1.0', False),
+        ('desktop', '99.0.0', False),
+    ],
+)
+def test_true_plan_wire_capability_boundaries(subscription_module, monkeypatch, platform, version, capable):
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    monkeypatch.setattr(subscription_module, 'compare_versions', compare)
+    for plan in (PlanType.plus, PlanType.unlimited_v2):
+        expected = plan if capable else PlanType.unlimited
+        assert subscription_module.wire_plan_for_client(plan, platform, version) == expected
+
+
+def test_macos_capability_floor_remains_operator_configurable(subscription_module, monkeypatch):
+    from utils import plan_wire_capabilities
+
+    monkeypatch.setattr(plan_wire_capabilities, 'MIN_MACOS_VERSION', '99.0.0')
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'macos', '0.12.197') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web'])
+@pytest.mark.parametrize('plan', [PlanType.plus, PlanType.unlimited_v2])
+def test_declared_safe_decoder_receives_true_plan_before_version_resolves(subscription_module, platform, plan):
+    assert subscription_module.wire_plan_for_client(plan, platform, None, '1') == plan
+
+
+@pytest.mark.parametrize('capability', [None, '', '0', '2', 'true'])
+def test_absent_or_unrecognized_capability_keeps_old_clients_safe(subscription_module, monkeypatch, capability):
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'ios', '1.0.0', capability) == PlanType.unlimited
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'unknown', '1.0.0', '1') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('plan', [PlanType.basic, PlanType.unlimited, PlanType.operator, PlanType.architect])
+def test_capability_never_changes_plan_membership(subscription_module, plan):
+    assert subscription_module.wire_plan_for_client(plan, 'ios', None, '1') == plan

@@ -7,7 +7,7 @@ import types
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from routers import users as users_router
@@ -464,7 +464,9 @@ def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
         'get_monthly_usage_for_subscription',
         MagicMock(return_value={'transcription_seconds': 120, 'words_transcribed': 500}),
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.features == ['byok']
@@ -488,7 +490,9 @@ def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
     ), patch.object(
         users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.features == ['byok']
@@ -504,7 +508,9 @@ def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='reviewer-uid')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='reviewer-uid'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.limits.words_transcribed is None
@@ -534,7 +540,10 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
         MagicMock(return_value={'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None}),
     ):
         response = users_router.get_user_subscription_endpoint(
-            uid='uid-without-subscription', x_app_platform='ios', x_app_version='1.0.0'
+            request=Request({'type': 'http', 'headers': []}),
+            uid='uid-without-subscription',
+            x_app_platform='ios',
+            x_app_version='1.0.0',
         )
 
     assert response.subscription.plan == users_router.PlanType.basic
@@ -736,7 +745,9 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
     ), patch.object(
         users_router, 'resolve_transcription_allowance', resolver
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='desktop')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='desktop'
+        )
 
     assert seen == [('uid1', 'desktop')]
     assert response.transcription_allowance is not None
@@ -747,7 +758,8 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
     }
 
 
-def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance():
+@pytest.mark.parametrize('identity_version', [None, '1'])
+def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(identity_version):
     """The ordinary branch reads the valid subscription and the monthly usage once; the resolver
     gets exactly those, so the snapshot and the allowance cannot come from different reads."""
     from utils.subscription import TranscriptionAllowance
@@ -789,7 +801,17 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance():
     ), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': ''}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='ios', x_app_version='1.0.0')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request(
+                {'type': 'http', 'headers': [] if identity_version is None else [(b'x-omi-plan-identity', b'1')]}
+            ),
+            uid='uid1',
+            x_app_platform='ios',
+            x_app_version='1.0.0',
+        )
+        users_router.wire_plan_for_client.assert_called_once_with(
+            users_router.PlanType.plus, 'ios', '1.0.0', identity_version
+        )
 
     assert [sorted(read) for read in seen] == [['byok_active', 'subscription', 'usage']]
     assert seen[0]['byok_active'] is False
@@ -813,7 +835,9 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
     ), patch.object(
         subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='desktop')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='desktop'
+        )
 
     assert response.subscription.features == ['byok']  # the snapshot itself is intact
     assert response.transcription_allowance.model_dump() == {
@@ -899,7 +923,9 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
     ), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': ''}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='ios')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='ios'
+        )
 
     assert usage_reads.call_count == 1
     assert response.transcription_seconds_used == 17_000

@@ -28,6 +28,7 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.plan_wire_capabilities import understands_plan_identity
 from utils.observability.fallback import record_fallback
 import logging
 
@@ -735,36 +736,13 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     return False
 
 
-# Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
-# any shipped build so every current client is remapped today (see
-# wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
-PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
-PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
-
-
-def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
-    if not platform or not app_version:
-        return False
-    platform_lower = platform.lower()
-    if platform_lower in _MOBILE_PLATFORM_TOKENS:
-        floor = PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION
-    elif platform_lower in DESKTOP_PLATFORMS:
-        floor = PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION
-    else:
-        return False
-    try:
-        return compare_versions(app_version, floor) >= 0
-    except Exception:
-        return False
-
-
-def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: Optional[str]) -> PlanType:
-    """Serialize `plus`/`max` as `unlimited` for clients whose enum predates them.
-
-    Only the label is remapped — real entitlement/limits are computed from the
-    true plan before this is called. Mirrors the `operator`→`unlimited` remap.
-    """
-    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_unlimited_v2(platform, app_version):
+def wire_plan_for_client(
+    plan: PlanType, platform: Optional[str], app_version: Optional[str], plan_identity_version: Optional[str] = None
+) -> PlanType:
+    """Remap labels for old decoders; entitlement/limits use the true plan."""
+    if plan in MOBILE_PLAN_TYPES and not understands_plan_identity(
+        platform, app_version, plan_identity_version, compare_versions
+    ):
         return PlanType.unlimited
     return plan
 

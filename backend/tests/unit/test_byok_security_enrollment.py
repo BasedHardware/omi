@@ -8,6 +8,7 @@ from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import Request
 
 from tests.unit._byok_fixtures import _SHA256_HEX_RE
 from tests.unit._byok_fixtures import _byok_isolation  # noqa: F401
@@ -161,9 +162,11 @@ class TestBYOKSubscriptionEntitlements:
             lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
         )
         monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
-        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version, _identity_version: plan)
 
-        response = users.get_user_subscription_endpoint(uid='llm-byok-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='llm-byok-user'
+        )
 
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
@@ -175,7 +178,9 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
 
-        response = users.get_user_subscription_endpoint(uid='validated-byok-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='validated-byok-user'
+        )
 
         assert response.subscription.plan == PlanType.unlimited
         assert response.subscription.features == ['byok']
@@ -213,9 +218,11 @@ class TestBYOKSubscriptionEntitlements:
             lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
         )
         monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
-        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version, _identity_version: plan)
 
-        response = users.get_user_subscription_endpoint(uid='deepgram-only-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='deepgram-only-user'
+        )
 
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
