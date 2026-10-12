@@ -7,7 +7,7 @@ final class SubscriptionPlanNamesTests: XCTestCase {
     let names = [
       "Plus": "plus", "Pro": "operator", "Operator": "operator",
       "Architect": "architect", "Omi Pro": "architect", "Neo": "unlimited",
-      "Unlimited (legacy)": "unlimited", "Unlimited": "unlimited_v2",
+      "Unlimited (legacy)": "unlimited", "Unlimited Plan": "unlimited", "Unlimited": "unlimited_v2",
     ]
     for (name, id) in names {
       XCTAssertEqual(SubscriptionPlanNames.planId(from: name), id)

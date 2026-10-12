@@ -10,7 +10,11 @@ enum SubscriptionPlanNames {
       return "operator"
     }
     if normalized.contains("plus") { return "plus" }
-    if normalized.contains("neo") || normalized.contains("legacy") { return "unlimited" }
+    if normalized.contains("neo") || normalized.contains("legacy")
+      || normalized == "unlimited plan" || normalized.hasPrefix("omi unlimited")
+    {
+      return "unlimited"
+    }
     if normalized.contains("unlimited") { return "unlimited_v2" }
     return nil
   }
