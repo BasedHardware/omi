@@ -617,12 +617,11 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
         for path in reversed(paths):
             assert not await gateway.process(path)
         assert not seen
-        # No TTL advances ownership. An explicit release is needed even much later.
+        # A fresh lease stays exclusive until its holder releases it.
         assert store.leases
         store.release('test', session['surface'], held)
-        assert not await gateway.process(paths[2])
-        for path in paths:
-            assert await gateway.process(path)
+        assert await gateway.process(paths[2])
+        assert all(store.jobs[path]['status'] == 'done' for path in paths)
 
     asyncio.run(run())
     assert seen == list(zip(['0', '1', '2'], times))
@@ -865,8 +864,10 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
         assert not await gateway.process(first)
         assert store.jobs[first]['status'] == 'running'
         assert store.jobs[first]['fifo_settled_at']
+        assert store.jobs[second]['fifo_settled_at']
         denied[0] = False
-        assert await gateway.process(second)
+        third = store.enqueue(replace(message, provider_message_id='third'))
+        assert await gateway.process(third)
 
     asyncio.run(run())
     assert not store.leases
@@ -931,7 +932,7 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
     following = store.enqueue(replace(message, provider_message_id='next'))
 
     async def run():
-        assert not await gateway.process(failed)
+        assert await gateway.process(failed)  # settled failure drains callback and next message
         assert store.jobs[failed]['status'] == 'running'
         assert store.jobs[failed]['fifo_settled_at']
         assert 'payload' in store.jobs[failed]
@@ -941,8 +942,9 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
             e['id'] == 'reply:' + gateway_module.key('telegram', 'first') for e in store.events('test', session['id'])
         )
         assert not await gateway.process(failed)  # retained evidence is never replayed
-        assert await gateway.process(callback)
-        assert await gateway.process(following)
+        assert not await gateway.process(callback)
+        assert not await gateway.process(following)
+        assert store.jobs[callback]['status'] == store.jobs[following]['status'] == 'done'
         assert not store.leases
 
     asyncio.run(run())

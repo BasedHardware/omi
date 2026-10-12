@@ -8,6 +8,7 @@ from threading import RLock
 from uuid import uuid4
 
 from utils.messaging.identity import key
+from database.messaging import STALE_SECONDS, PENDING_MAX_SECONDS
 
 
 class MemoryStore:
@@ -52,27 +53,61 @@ class MemoryStore:
                 return None
             payload = asdict(message)
             payload['received_at'] = message.received_at.isoformat()
-            self.jobs[path] = dict(payload=payload, status='pending', created_at=datetime.now(timezone.utc))
+            self.jobs[path] = dict(
+                payload=payload,
+                status='pending',
+                created_at=datetime.now(timezone.utc),
+                identity=(message.channel, message.provider, message.external_user_id),
+            )
         return path
 
-    def claim(self, path):
+    def claim(self, path, *, now=None):
+        result = self._claim(path, False, now)
+        return result[1] if result else None
+
+    def claim_next(self, path, *, now=None):
+        return self._claim(path, True, now)
+
+    def _claim(self, path, take_head, now):
+        now = now or datetime.now(timezone.utc)
+        identity = self.jobs[path].get('identity')
         with self.lock:
-            row = self.jobs[path]
-            if row['status'] != 'pending':
-                return None
-            unfinished = [
-                r for r in self.jobs.values() if r['status'] in ('pending', 'running') and not r.get('fifo_settled_at')
-            ]
-            if min(unfinished, key=lambda r: r['created_at']) is not row:
-                return None
-            row['status'] = 'running'
-            return copy.deepcopy(row['payload'])
+            for candidate, row in sorted(self.jobs.items(), key=lambda pair: pair[1].get('created_at', now)):
+                if (
+                    row.get('identity') != identity
+                    or row['status'] not in ('pending', 'running')
+                    or row.get('fifo_settled_at')
+                ):
+                    continue
+                age = (now - (row.get('started_at') or row['created_at'])).total_seconds()
+                if row['status'] == 'running' and age >= STALE_SECONDS:
+                    row['fifo_settled_at'] = now
+                    continue
+                if row['status'] == 'pending' and (now - row['created_at']).total_seconds() >= PENDING_MAX_SECONDS:
+                    row.update(status='done', fifo_settled_at=now)
+                    row.pop('payload', None)
+                    continue
+                if row['status'] == 'running' or (not take_head and candidate != path):
+                    return None
+                row.update(status='running', started_at=now)
+                return candidate, copy.deepcopy(row['payload'])
+        return None
+
+    def assert_running(self, path):
+        row = self.jobs[path]
+        if row['status'] != 'running' or row.get('fifo_settled_at'):
+            raise PermissionError('Inbox turn expired')
+
+    def assert_lease(self, uid, surface, token):
+        if self.leases.get((uid, surface)) != token:
+            raise PermissionError('Lost surface lease')
 
     def retry(self, path):
         self.jobs[path]['status'] = 'pending'
 
     def complete(self, path):
-        self.jobs[path] = {'status': 'done'}
+        self.jobs[path].update(status='done')
+        self.jobs[path].pop('payload', None)
 
     def settle(self, path):
         if self.jobs[path]['status'] == 'running':

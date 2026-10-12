@@ -2637,7 +2637,6 @@ for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
-    ('claim', {'path': 'channel_identities/link/inbox/job'}, _messaging_claim),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):
@@ -2649,6 +2648,16 @@ for method, base, setup in (
             patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore._claim',
+        base={'self': _messaging_store, 'path': 'channel_identities/link/inbox/job'},
+        neutrals={'now': _NOW},
+        domains={'take_head': [False, True]},
+        setup=_messaging_claim,
+        patchers=(_messaging_cleanup, _messaging_decryption),
+    )
+)
 _add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
 
 _add(

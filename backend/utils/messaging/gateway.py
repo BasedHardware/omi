@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from database.messaging import MessagingStore
+from database.messaging import MessagingStore, TURN_TIMEOUT_SECONDS
 from utils.messaging.identity import key
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
@@ -74,9 +74,18 @@ class Gateway:
         self.admission(link['uid'])
 
     async def process(self, path):
+        completed = False
+        while True:
+            result = await self._process_one(path)
+            if result is False:
+                break
+            completed = completed or result is True
+        return completed
+
+    async def _process_one(self, path):
         try:
             return await self._process(path)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
             # Task.cancel() means executor work may still be running. A
             # CancelledError raised inside a finished turn does not.
             if _worker_shutting_down():
@@ -84,34 +93,40 @@ class Gateway:
                     'Messaging job stopped provider=%s reason=worker_cancelled', self.adapter.provider
                 )
                 raise
-            logging.getLogger(__name__).error(
-                'Messaging job failed provider=%s reason=turn_cancelled error_type=CancelledError status_code=None',
-                self.adapter.provider,
-            )
+            self._log_failure(error)
             return False
         except Exception as error:
-            # Settled failures are already fenced. Do not re-raise: the wake
-            # batch must continue, and exception text can contain user content.
-            logging.getLogger(__name__).error(
-                'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',
-                self.adapter.provider,
-                getattr(error, 'reason', 'outbound_gate' if isinstance(error, PermissionError) else 'worker_error'),
-                type(error).__name__,
-                getattr(error, 'status_code', None),
-            )
+            self._log_failure(error)
             return False
 
+    def _log_failure(self, error):
+        # Exception text can contain user content; report only bounded metadata.
+        reason = getattr(error, 'reason', 'outbound_gate' if isinstance(error, PermissionError) else 'worker_error')
+        if isinstance(error, asyncio.CancelledError):
+            reason = 'turn_cancelled'
+        logging.getLogger(__name__).error(
+            'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',
+            self.adapter.provider,
+            reason,
+            type(error).__name__,
+            getattr(error, 'status_code', None),
+        )
+
     async def _process(self, path):
-        payload = await run_blocking(db_executor, self.store.claim, path)
-        if payload is None:
+        claimed = await run_blocking(db_executor, self.store.claim_next, path)
+        if claimed is None:
             return False
+        path, payload = claimed
         try:
-            return await self._process_claimed(path, payload)
+            async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
+                return await self._process_claimed(path, payload)
         except BaseException as error:
             if not _worker_shutting_down() and isinstance(error, (Exception, asyncio.CancelledError)):
                 # Retain the running row and its reconciliation evidence, but a
                 # fully unwound failure must no longer block newer FIFO jobs.
                 await run_blocking(db_executor, self.store.settle, path)
+                self._log_failure(error)
+                return None  # settled failure: drain the next head, without replay
             raise
         finally:
             # A lease miss puts this head back to pending. Waking it here spins
@@ -136,6 +151,10 @@ class Gateway:
         payload['media'] = tuple(Artifact(**a) for a in payload['media'])
         payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
         message = ChannelMessage(**payload)
+
+        async def inbox_guard():
+            await run_blocking(db_executor, self.store.assert_running, path)
+
         if hasattr(self.adapter, 'admitted'):
             await self.adapter.admitted(message)
         if hasattr(self.adapter, 'acknowledge'):
@@ -157,14 +176,16 @@ class Gateway:
                 )
                 # Same fixed reply as an unknown sender. Do not distinguish a bad,
                 # expired, or unauthorized proof.
-                await ChannelReplySink(self.adapter, message).finish('Link your account in Omi to chat here.')
+                await ChannelReplySink(self.adapter, message, guard=inbox_guard).finish(
+                    'Link your account in Omi to chat here.'
+                )
                 await run_blocking(db_executor, self.store.complete, path)
                 return True
         if not link or not link.get('active'):
             logging.getLogger(__name__).info(
                 'Messaging reply provider=%s reason=unlinked_sender', self.adapter.provider
             )
-            sink = ChannelReplySink(self.adapter, message)
+            sink = ChannelReplySink(self.adapter, message, guard=inbox_guard)
             await sink.finish('Link your account in Omi to chat here.')
             await run_blocking(db_executor, self.store.complete, path)
             return True
@@ -176,12 +197,20 @@ class Gateway:
             return True
         await run_blocking(db_executor, self.admission, uid)
         if message.link_proof:
-            await ChannelReplySink(self.adapter, message).finish('Account linked. You can chat with Omi here.')
+            await ChannelReplySink(self.adapter, message, guard=inbox_guard).finish(
+                'Account linked. You can chat with Omi here.'
+            )
             await run_blocking(db_executor, self.store.complete, path)
             return True
 
+        def turn_guard():
+            self._assert_link(message, link)
+            self.store.assert_running(path)
+            if token is not None and session is not None:
+                self.store.assert_lease(uid, session['surface'], token)
+
         async def guard():
-            await run_blocking(db_executor, self._assert_link, message, link)
+            await run_blocking(db_executor, turn_guard)
 
         sink = ChannelReplySink(self.adapter, message, guard=guard)
         session = token = None
@@ -239,8 +268,13 @@ class Gateway:
                                     + '. Cleanup may be pending; verify state with tools before claiming it succeeded.',
                                 },
                             )
+
+                            async def undo_guard():
+                                await run_blocking(db_executor, self._assert_link, message, link)
+
+                            undo_sink = ChannelReplySink(self.adapter, message, guard=undo_guard)
                             start_background_task(
-                                self._undo_action(uid, session, message, sink), name='messaging-undo-action'
+                                self._undo_action(uid, session, message, undo_sink), name='messaging-undo-action'
                             )
                 else:
                     if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
@@ -257,11 +291,13 @@ class Gateway:
                     else:
                         if hasattr(self.adapter, 'prepare'):
                             message = await self.adapter.prepare(message, uid, session, guard)
-                        await self._turn(uid, session, message, link, Principal(uid), reply_sink=sink)
+                        await self._turn(
+                            uid, session, message, link, Principal(uid), reply_sink=sink, turn_guard=turn_guard
+                        )
             except BaseException as error:
                 # Keep the inbox row running: its effects still need reconciliation.
                 # A task that is still cancelling may have executor work in flight,
-                # so that lease stays until an operator proves the worker stopped.
+                # so that lease stays until bounded stale recovery fences it.
                 if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
                     raise
                 await stop_typing()
@@ -334,13 +370,26 @@ class Gateway:
             await self._wake_pending(message)
             return
 
+        def reentry_guard():
+            self._assert_link(message, link)
+            self.store.assert_lease(principal.uid, session['surface'], token)
+
         async def send_guard():
-            await run_blocking(db_executor, self._assert_link, message, link)
+            await run_blocking(db_executor, reentry_guard)
 
         sink = ChannelReplySink(self.adapter, message, kind='deferred_reply', guard=send_guard)
         try:
             async with _typing(sink):
-                await self._turn(principal.uid, session, message, link, principal, event=event, reply_sink=sink)
+                await self._turn(
+                    principal.uid,
+                    session,
+                    message,
+                    link,
+                    principal,
+                    event=event,
+                    reply_sink=sink,
+                    turn_guard=reentry_guard,
+                )
         except BaseException as error:
             if _worker_shutting_down() or not isinstance(error, (Exception, asyncio.CancelledError)):
                 raise
@@ -371,9 +420,11 @@ class Gateway:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             await self._wake_pending(message)
 
-    async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None):
+    async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None, turn_guard=None):
         def guard():
             self._assert_link(message, link)
+            if turn_guard is not None:
+                turn_guard()
 
         async def send_guard():
             await run_blocking(db_executor, guard)

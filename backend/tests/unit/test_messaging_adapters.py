@@ -639,7 +639,7 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'Found [1].',
+                'text': 'Found Daily standup [1].',
                 'conversations': [{'id': 'conv-1', 'title': 'Daily standup'}],
                 'follow_up_suggestions': ['Explain more', 'x' * 80],
             }
@@ -654,7 +654,7 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         }
         assert '[1]' not in payload['text']
     else:
-        assert 'Open in Omi: https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
 
 
@@ -665,23 +665,23 @@ def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
     async def run():
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
-            {'text': 'Tasks [#1][#2].', 'conversations': conversations}
+            {'text': ', '.join(item['title'] for item in conversations) + ' [#1][#2].', 'conversations': conversations}
         )
 
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
         rows = payload['reply_markup']['inline_keyboard']
-        assert len(rows) == 6
-        assert rows[-1] == [{'text': 'Open in Omi', 'url': 'https://h.omi.me'}]
-        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows[:-1])
+        assert len(rows) == 5
+        assert all(row[0]['url'] != 'https://h.omi.me' for row in rows)
+        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows)
         assert '[#1]' not in payload['text']
         assert payload['text'].count('https://') == 0
     else:
         body = payload['message']['parts'][0]['value']
-        assert body.count('https://') == 1
-        assert 'Open in Omi: https://h.omi.me' in body
-        assert '/task/' not in body
+        assert body.count('https://') == 5
+        assert 'Open in Omi' not in body
+        assert '/task/' in body
         assert '[#1]' not in body
 
 
@@ -705,7 +705,7 @@ def test_real_followup_wire_block_and_source_title(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'See [1].',
+                'text': 'See Team meeting [1].',
                 'memories': [{'id': 'conv-1', 'structured': {'title': 'Team meeting'}}],
                 'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
             }
@@ -719,7 +719,7 @@ def test_real_followup_wire_block_and_source_title(adapter):
         assert payload['reply_markup']['inline_keyboard'][0][0]['url'] == 'https://h.omi.me/conversation/conv-1'
     else:
         assert 'What changed?' not in str(payload)
-        assert 'Open in Omi: https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):

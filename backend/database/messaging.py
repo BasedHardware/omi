@@ -5,6 +5,7 @@ training or analytics. No raw webhook body is retained.
 """
 
 import json
+import logging
 import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ from uuid import uuid4
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from google.cloud import firestore
+from prometheus_client import Counter
 from google.api_core.exceptions import AlreadyExists
 
 from database._client import get_firestore_client
@@ -19,6 +21,25 @@ from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils import encryption
 from utils.messaging.identity import key
+from utils.observability.fallback import record_fallback
+
+# A worker is bounded to 180s; allow 120s for cancellation/provider cleanup.
+TURN_TIMEOUT_SECONDS = 180
+STALE_SECONDS = 300
+PENDING_MAX_SECONDS = 1800
+_QUEUE_EVENTS = Counter('omi_messaging_queue_events_total', 'Messaging queue decisions', ['reason'])
+
+
+def _queue_event(reason, path, age):
+    _QUEUE_EVENTS.labels(reason=reason).inc()
+    if reason in {'stale_running', 'stale_pending', 'stale_lease'}:
+        record_fallback(component='other', from_mode='channel_turn', to_mode='none', reason='other', outcome='degraded')
+    logging.getLogger(__name__).warning('Messaging queue reason=%s path=%s head_age_seconds=%.1f', reason, path, age)
+
+
+def _age(row, now, field='created_at'):
+    return (now - (row.get(field) or row['created_at'])).total_seconds()
+
 
 _LINK_SETTINGS = ('visible_in_app', 'voice_notes', 'keep_private_memories_in_app', 'insights')
 _SETTING_DEFAULTS = {
@@ -175,34 +196,70 @@ class MessagingStore:
             return None
         return ref.path
 
-    def claim(self, path):
+    def claim(self, path, *, now=None):
+        result = self._claim(path, take_head=False, now=now)
+        return result[1] if result else None
+
+    def claim_next(self, path, *, now=None):
+        """A wake identifies an inbox, not necessarily the row to run."""
+        return self._claim(path, take_head=True, now=now)
+
+    def _claim(self, path, *, take_head, now=None):
         ref = self.db.document(path)
+        now = now or datetime.now(timezone.utc)
 
         @firestore.transactional
         def apply(tx):
-            row = ref.get(transaction=tx).to_dict()
-            if not row or row['status'] != 'pending':
-                return None
-            # The query participates in the transaction: only the oldest admitted
-            # unfinished update may run. Unsettled running/ambiguous heads are never skipped.
-            head = next(
-                (
-                    candidate
-                    for candidate in (
-                        ref.parent.where('status', 'in', ['pending', 'running'])
-                        .order_by('created_at')
-                        .stream(transaction=tx)
-                    )
-                    if not candidate.to_dict().get('fifo_settled_at')
-                ),
-                None,
+            # Materialize all reads before any write (Firestore transaction rule).
+            rows = list(
+                ref.parent.where('status', 'in', ['pending', 'running']).order_by('created_at').stream(transaction=tx)
             )
-            if head is None or head.reference.path != path:
-                return None
-            tx.update(ref, {'status': 'running'})
-            return json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
+            retired, head = [], None
+            for candidate in rows:
+                row = candidate.to_dict()
+                if row.get('fifo_settled_at'):
+                    continue
+                age = _age(row, now, 'started_at' if row['status'] == 'running' else 'created_at')
+                if row['status'] == 'running' and age >= STALE_SECONDS:
+                    retired.append((candidate, 'stale_running', age))
+                elif row['status'] == 'pending' and age >= PENDING_MAX_SECONDS:
+                    retired.append((candidate, 'stale_pending', age))
+                else:
+                    head = candidate
+                    break
+            payload = None
+            if head is not None:
+                row = head.to_dict()
+                if head.reference.path != path:
+                    _queue_event(
+                        'head_redirect' if take_head and row['status'] == 'pending' else 'non_head',
+                        path,
+                        _age(row, now),
+                    )
+                if row['status'] == 'pending' and (take_head or head.reference.path == path):
+                    payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
+            for candidate, reason, age in retired:
+                # Ambiguous running effects must never be replayed.
+                patch = {'fifo_settled_at': now, 'retired_reason': reason}
+                if reason == 'stale_pending':
+                    patch.update(status='done', payload=firestore.DELETE_FIELD)
+                tx.update(candidate.reference, patch)
+                _queue_event(reason, candidate.reference.path, age)
+            if payload is not None and head is not None:
+                tx.update(head.reference, {'status': 'running', 'started_at': now})
+                return head.reference.path, payload
+            return None
 
         return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+
+    def assert_running(self, path):
+        row = self.db.document(path).get().to_dict() or {}
+        if (
+            row.get('status') != 'running'
+            or row.get('fifo_settled_at')
+            or _age(row, datetime.now(timezone.utc), 'started_at') >= STALE_SECONDS
+        ):
+            raise PermissionError('Inbox turn expired')
 
     def complete(self, path):
         # Content-free dedup tombstone survives retries; unlink removes its parent.
@@ -221,14 +278,29 @@ class MessagingStore:
 
         run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
-    def acquire(self, uid, surface):
+    def acquire(self, uid, surface, *, now=None):
         ref = self.user(uid).collection('channel_turn_leases').document(key(surface))
         token = str(uuid4())
-        try:
-            ref.create({'token': token, 'created_at': datetime.now(timezone.utc)})
-        except AlreadyExists:
-            return None
-        return token
+        now = now or datetime.now(timezone.utc)
+
+        @firestore.transactional
+        def apply(tx):
+            row = ref.get(transaction=tx).to_dict()
+            if row:
+                age = _age(row, now)
+                if age < STALE_SECONDS:
+                    _queue_event('lease_busy', ref.path, age)
+                    return None
+                _queue_event('stale_lease', ref.path, age)
+            tx.set(ref, {'token': token, 'created_at': now})
+            return token
+
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_lease')
+
+    def assert_lease(self, uid, surface, token):
+        row = self.user(uid).collection('channel_turn_leases').document(key(surface)).get().to_dict()
+        if not row or row['token'] != token or _age(row, datetime.now(timezone.utc)) >= STALE_SECONDS:
+            raise PermissionError('Lost surface lease')
 
     def release(self, uid, surface, token):
         ref = self.user(uid).collection('channel_turn_leases').document(key(surface))
@@ -276,7 +348,7 @@ class MessagingStore:
 
     def append_event(self, uid, session_id, event):
         ref = self.user(uid).collection('chat_sessions').document(session_id)
-        # Called under a non-stealable surface lease. Prefix is never modified.
+        # Called under a fenced surface lease. Prefix is never modified.
         events = self.events(uid, session_id)
         if any(e['id'] == event['id'] for e in events):
             return

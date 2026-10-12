@@ -1,6 +1,9 @@
 """Durable outbound/undo transactions against a loopback-only Firestore emulator."""
 
 import json
+import asyncio
+import base64
+from dataclasses import replace
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -10,11 +13,12 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from database import action_items
-from database.messaging import MessagingStore
+from database.messaging import MessagingStore, STALE_SECONDS, PENDING_MAX_SECONDS
 from testing.messaging.loopback import LoopbackAdapter
 from utils.messaging.adapters.delivery import DeliveryLedger
 from utils.messaging.undo import UndoStore
-from utils.messaging import undo
+from utils.messaging import undo, history
+from utils.messaging.gateway import Gateway
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
 from utils.messaging.contracts import Principal
 
@@ -210,7 +214,6 @@ def test_expired_receipts_cleanup_is_bounded_and_preserves_recent_tombstones(sto
 
 
 def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
-    from dataclasses import replace
 
     incoming = message()
     items = [replace(incoming, provider_message_id=str(i)) for i in range(3)]
@@ -231,7 +234,6 @@ def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
 
 
 def test_settled_failed_head_retains_evidence_without_blocking_fifo(store):
-    from dataclasses import replace
 
     incoming = message()
     failed = store.enqueue(incoming)
@@ -243,3 +245,65 @@ def test_settled_failed_head_retains_evidence_without_blocking_fifo(store):
     assert row['status'] == 'running' and row['payload'] and row['fifo_settled_at']
     assert store.claim(failed) is None
     assert store.claim(following) is not None
+
+
+def test_stale_heads_and_pending_retirement_never_replay(store, caplog):
+
+    incoming = message()
+    stale = store.enqueue(incoming)
+    old_pending = store.enqueue(replace(incoming, provider_message_id='old'))
+    fresh = store.enqueue(replace(incoming, provider_message_id='fresh'))
+    now = datetime.now(timezone.utc)
+    store.db.document(stale).update({'status': 'running', 'created_at': now - timedelta(seconds=STALE_SECONDS + 1)})
+    store.db.document(old_pending).update({'created_at': now - timedelta(seconds=PENDING_MAX_SECONDS + 1)})
+    claimed = store.claim_next(fresh, now=now)
+    assert claimed[0] == fresh
+    stale_row = store.db.document(stale).get().to_dict()
+    assert stale_row['fifo_settled_at'] and stale_row['retired_reason'] == 'stale_running'
+    assert store.db.document(old_pending).get().to_dict()['status'] == 'done'
+    assert store.claim(stale) is None
+    assert store.claim_next(fresh) is None  # fresh running turn remains exclusive
+    with pytest.raises(PermissionError):
+        store.assert_running(stale)
+    assert 'reason=stale_running' in caplog.text and 'head_age_seconds=' in caplog.text
+
+
+def test_expired_lease_reclaim_fences_old_owner_and_release(store):
+
+    now = datetime.now(timezone.utc)
+    old = store.acquire('test', 'surface', now=now - timedelta(seconds=STALE_SECONDS + 1))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tokens = list(pool.map(lambda _: store.acquire('test', 'surface', now=now), range(2)))
+    assert sum(token is not None for token in tokens) == 1
+    current = next(token for token in tokens if token)
+    with pytest.raises(PermissionError):
+        store.assert_lease('test', 'surface', old)
+    with pytest.raises(PermissionError):
+        store.release('test', 'surface', old)
+    store.assert_lease('test', 'surface', current)
+    store.release('test', 'surface', current)
+
+
+def test_newest_wake_drains_older_pending_in_order_once(store, monkeypatch):
+
+    adapter = LoopbackAdapter()
+    incoming = message()
+    link = store.mint('test', incoming.channel, incoming.provider, 'token')['proof']
+    store.consume(link, incoming)
+    paths = [store.enqueue(replace(incoming, provider_message_id=str(i), text=str(i))) for i in range(3)]
+    seen = []
+    monkeypatch.setattr(history, 'recent_activity', lambda *args, **kwargs: [])
+
+    def turn(uid, surface, session, request, sink, **kwargs):
+        seen.append(request.text)
+
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'answer ' + request.text}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    assert asyncio.run(gateway.process(paths[-1]))
+    assert seen == ['0', '1', '2'] and len(adapter.sent) == 3
+    assert not asyncio.run(gateway.process(paths[-1]))
+    assert len(adapter.sent) == 3

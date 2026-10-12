@@ -2,7 +2,6 @@
 
 import html
 import re
-import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import quote, urlparse
 
@@ -18,7 +17,7 @@ CITATION_PATTERN = (
 CITATIONS = re.compile(CITATION_PATTERN)
 _MARKDOWN_LINK = re.compile(r'\[([^\]\n]*)\]\(([^)\n]*)\)')
 _UNSAFE_SCHEME = re.compile(r'(?i)(?:javascript|data|vbscript|file)\s*:[^\s<>()]*|\bhttp(?!s)\s*:[^\s<>()]*')
-_BUTTON_LABEL_LIMIT = 32
+_BUTTON_LABEL_LIMIT = 30
 
 
 def item_link(kind, item_id):
@@ -54,7 +53,7 @@ def source_phrases(text, sources=()):
 
 def linked_items(response):
     items, seen = [], set()
-    sources = response.get('conversations', response.get('memories', ()))
+    sources = (*response.get('conversations', ()), *response.get('memories', ()))
     for source in sources:
         kind = source.get('kind', 'conversation')
         item_id = source.get('id') or source.get('conversation_id')
@@ -100,23 +99,37 @@ def linked_items(response):
                         'url': item_link(kind, item_id),
                     }
                 )
-    return items
+    # Tool results are candidates, not evidence that the answer recommended them.
+    answer = ' '.join(plain(response.get('text', '')).casefold().split())
+    referenced = []
+    for item in items:
+        title = ' '.join(plain(item['title']).casefold().split())
+        needles = [item['url'].casefold(), str(item['id']).casefold()]
+        if title and title not in {'task', 'memory', 'conversation'}:
+            needles.append(title)
+        positions = []
+        for needle in needles:
+            match = re.search(r'(?<!\w)' + re.escape(needle) + r'(?!\w)', answer)
+            if match:
+                positions.append(match.start())
+        if positions:
+            referenced.append((min(positions), item))
+    return [item for _, item in sorted(referenced, key=lambda pair: pair[0])][:5]
 
 
 def button_label(title):
-    """Truncate on code points without leaving a dangling joiner or combining mark."""
+    """Keep complete words within a phone-sized row, including the ellipsis."""
     text = ' '.join(str(title or '').split())
     if len(text) > _BUTTON_LABEL_LIMIT:
-        text = text[:_BUTTON_LABEL_LIMIT]
-        while text and (unicodedata.combining(text[-1]) or text[-1] in {'\u200d', '\ufe0f'}):
-            text = text[:-1]
+        prefix = text[: _BUTTON_LABEL_LIMIT - 1]
+        if text[_BUTTON_LABEL_LIMIT - 1] != ' ':
+            prefix = prefix.rsplit(' ', 1)[0] if ' ' in prefix else ''
+        text = prefix.rstrip() + '…' if prefix else 'Item…'
     return text or 'Item'
 
 
 def item_buttons(items):
     rows = [[{'text': button_label(item['title']), 'url': item['url']}] for item in items[:5]]
-    if len(items) > 5:
-        rows.append([{'text': 'Open in Omi', 'url': 'https://h.omi.me'}])
     return {'inline_keyboard': rows} if rows else None
 
 
@@ -136,6 +149,7 @@ def _spoiler(state, silent):
 
 def _tokens(text):
     parser = MarkdownIt('commonmark', {'html': False})
+    parser.enable(['table', 'strikethrough'])
     parser.inline.ruler.before('text', 'spoiler', _spoiler)
     return parser.parse(source_phrases(text))
 
@@ -158,8 +172,8 @@ def _inline(tokens, rich):
             out.append('<code>' + value + '</code>' if rich else value)
         elif token.type in {'softbreak', 'hardbreak'}:
             out.append('\n')
-        elif token.type in {'strong_open', 'strong_close', 'em_open', 'em_close'} and rich:
-            tag = 'b' if token.type.startswith('strong') else 'i'
+        elif token.type in {'strong_open', 'strong_close', 'em_open', 'em_close', 's_open', 's_close'} and rich:
+            tag = 'b' if token.type.startswith('strong') else ('s' if token.type.startswith('s_') else 'i')
             out.append('<' + ('/' if token.nesting == -1 else '') + tag + '>')
         elif token.type == 'link_open':
             link_urls.append(_https_url(token.attrGet('href') or ''))
@@ -177,22 +191,70 @@ def _inline(tokens, rich):
     return ''.join(out)
 
 
+def _render_table(tokens, rich):
+    rows, row = [], []
+    for token in tokens:
+        if token.type == 'tr_open':
+            row = []
+        elif token.type == 'inline':
+            row.append((_inline(token.children, False), _inline(token.children, rich)))
+        elif token.type == 'tr_close':
+            rows.append(row)
+    if not rows:
+        return ''
+    columns = max(len(row) for row in rows)
+    widths = [max(len(row[i][0]) if i < len(row) else 0 for row in rows) for i in range(columns)]
+    if rich and sum(widths) + 2 * (columns - 1) <= 40:
+        lines = ['  '.join(cell[0].ljust(widths[i]) for i, cell in enumerate(row)).rstrip() for row in rows]
+        return '<pre>' + html.escape('\n'.join(lines), quote=False) + '</pre>\n'
+    headers = [cell[0] for cell in rows[0]]
+    blocks = []
+    for row in rows[1:]:
+        lines = []
+        for i, cell in enumerate(row):
+            if i == 0:
+                lines.append('<b>' + html.escape(cell[0], quote=False) + '</b>' if rich else cell[0])
+            else:
+                header = headers[i] if i < len(headers) else 'Column ' + str(i + 1)
+                lines.append((html.escape(header, quote=False) if rich else header) + ': ' + cell[1])
+        blocks.append('\n'.join(lines))
+    return '\n\n'.join(blocks) + '\n'
+
+
 def render_markdown(text, *, rich):
-    out = []
-    for token in _tokens(text):
-        if token.type == 'inline':
+    out, lists = [], []
+    tokens = iter(_tokens(text))
+    for token in tokens:
+        if token.type == 'table_open':
+            table = []
+            for cell in tokens:
+                if cell.type == 'table_close':
+                    break
+                table.append(cell)
+            out.append(_render_table(table, rich))
+        elif token.type == 'inline':
             out.append(_inline(token.children, rich))
         elif token.type in {'fence', 'code_block'}:
             value = html.escape(token.content.rstrip('\n'), quote=False) if rich else token.content.rstrip('\n')
             out.append('<pre><code>' + value + '</code></pre>\n' if rich else value + '\n')
         elif token.type in {'paragraph_close', 'heading_close'}:
             out.append('\n')
+        elif token.type in {'ordered_list_open', 'bullet_list_open'}:
+            lists.append(int(token.attrGet('start') or 1) if token.type == 'ordered_list_open' else None)
+        elif token.type in {'ordered_list_close', 'bullet_list_close'}:
+            lists.pop()
         elif token.type == 'list_item_open':
-            out.append('• ')
+            if lists and lists[-1] is not None:
+                out.append(str(lists[-1]) + '. ')
+                lists[-1] += 1
+            else:
+                out.append('• ')
         elif token.type == 'blockquote_open':
-            out.append('<blockquote>' if rich else '> ')
+            out.append('<blockquote>' if rich else '')
         elif token.type == 'blockquote_close' and rich:
             out.append('</blockquote>')
+        elif token.type == 'hr':
+            out.append('\n')
     return ''.join(out).strip()
 
 

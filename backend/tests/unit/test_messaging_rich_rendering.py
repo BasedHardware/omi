@@ -109,16 +109,16 @@ def test_link_builder_has_ruling_domain_and_encoded_id_only(kind):
 def test_item_buttons_bounded_labels_and_overflow():
     items = [dict(title='Long title ' * 10, url=rendering.item_link('task', str(i))) for i in range(7)]
     rows = rendering.item_buttons(items)['inline_keyboard']
-    assert len(rows) == 6
+    assert len(rows) == 5
     assert all(len(row[0]['text']) <= 32 for row in rows)
-    assert rows[-1] == [dict(text='Open in Omi', url='https://h.omi.me')]
+    assert all(row[0]['url'] != 'https://h.omi.me' for row in rows)
     assert all('callback_data' not in row[0] for row in rows)
 
 
 def test_links_from_existing_blocks_deduplicated():
     items = rendering.linked_items(
         dict(
-            text='Task',
+            text='Task a and Memory b',
             content_blocks=[
                 dict(type='taskCard', task_id='a'),
                 dict(type='taskCard', task_id='a'),
@@ -173,3 +173,63 @@ def test_button_labels_do_not_split_joiners_or_leak_into_urls():
 def test_adversarial_unclosed_citation_does_not_backtrack():
     text = '[0,' + ' 0,' * 20000
     assert rendering.source_phrases(text) == text
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_tables_strip_pipes_and_inline_markdown(rich):
+    text = '| Name | State |\n|---|---|\n| **Alpha** | `Ready` |\n| Beta | Done |'
+    result = rendering.render_markdown(text, rich=rich)
+    assert '|' not in result and '**' not in result and '`' not in result
+    if rich:
+        assert result == '<pre>Name   State\nAlpha  Ready\nBeta   Done</pre>'
+    else:
+        assert result == 'Alpha\nState: Ready\n\nBeta\nState: Done'
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_wide_table_uses_row_lists(rich):
+    value = 'A long description that exceeds the phone width'
+    result = rendering.render_markdown('| Task | Detail |\n|---|---|\n| **Alpha** | ' + value + ' |', rich=rich)
+    assert '<pre>' not in result and '|' not in result
+    assert ('<b>Alpha</b>' if rich else 'Alpha') in result
+    assert 'Detail: ' + value in result
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_common_block_markdown_does_not_leak(rich):
+    result = rendering.render_markdown(
+        '# Title\n\n> quote\n\n3. first\n4. second\n\n---\n\n```python\ncode\n```', rich=rich
+    )
+    assert '# ' not in result and '> quote' not in result and '```' not in result and '---' not in result
+    assert '3. first' in result and '4. second' in result and 'code' in result
+
+
+def test_item_selection_matches_answer_in_order_and_rejects_unmentioned_tools():
+    sources = [
+        dict(kind='task', id=str(i), title=title)
+        for i, title in enumerate(
+            [
+                'Make a prediction market about the election',
+                'Send both documents out for Signature',
+                'Set up a session with the team',
+                'Do YC application with Nick',
+                'Try the double-click-to-mute feature',
+            ]
+        )
+    ]
+    result = rendering.linked_items(
+        dict(
+            text='**Set up a session with the team**, then Send both documents out for Signature.',
+            conversations=sources,
+        )
+    )
+    assert [item['id'] for item in result] == ['2', '1']
+    assert rendering.linked_items(dict(text='Nothing useful.', conversations=sources)) == []
+    assert rendering.linked_items(dict(text='Open task 0.', conversations=sources))[0]['id'] == '0'
+    assert rendering.button_label(sources[0]['title']) == 'Make a prediction market…'
+    assert rendering.button_label(sources[1]['title']) == 'Send both documents out for…'
+
+
+def test_gfm_strikethrough_does_not_leak_markers():
+    assert rendering.telegram('~~retired~~') == ('<s>retired</s>',)
+    assert rendering.plain('~~retired~~') == 'retired'

@@ -165,7 +165,7 @@ class ChannelReplySink:
             if hasattr(self.adapter, 'item_buttons'):
                 markup = self.adapter.item_buttons(items)
             else:
-                text += '\nOpen in Omi: ' + (items[0]['url'] if len(items) == 1 else 'https://h.omi.me')
+                text += '\n' + '\n'.join(item['title'] + ': ' + item['url'] for item in items[:5])
         token = send_markup.set(markup)
         try:
             await self.finish(text)
