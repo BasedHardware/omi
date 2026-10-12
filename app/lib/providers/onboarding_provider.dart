@@ -458,6 +458,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
+  /// Ends a search screen's session: stops scanning and clears "nothing found", so the next search
+  /// screen (onboarding's Connect Omi or the in-app pairing page, which share this provider) starts
+  /// fresh instead of opening on a stale "No Omi Found".
+  void endSearch() {
+    cancelActiveScan();
+    enableInstructions = false;
+  }
+
   void cancelActiveScan() {
     _scanEpoch++;
     _didNotMakeItTimer?.cancel();

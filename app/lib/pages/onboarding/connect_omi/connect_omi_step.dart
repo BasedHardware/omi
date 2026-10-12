@@ -110,7 +110,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
   void dispose() {
     _landingTap?.cancel();
     _entrance.dispose();
-    _provider?.cancelActiveScan();
+    _provider?.endSearch();
     _provider = null;
     super.dispose();
   }
