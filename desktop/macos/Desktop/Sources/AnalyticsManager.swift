@@ -1685,7 +1685,7 @@ enum SubscriptionFunnelWire {
     case "free":
       return "basic"
     case "pro":
-      return "architect"
+      return "unknown"
     case "basic", "plus", "unlimited", "unlimited_v2", "operator", "architect", "unknown":
       return (raw ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
     default:
@@ -1708,7 +1708,8 @@ enum SubscriptionFunnelWire {
     switch raw {
     case "chat_quota_exceeded", "freemium_switch", "locked_conversation", "locked_memory", "chat_apps",
       "usage_page", "transcription_settings", "unlimited_deeplink", "macos_billing", "macos_usage_limit",
-      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans", "unknown":
+      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans",
+      "macos_settings_view", "windows_settings_view", "unknown":
       return raw
     default:
       return "unknown"

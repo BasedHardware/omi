@@ -971,7 +971,7 @@ extension SettingsContentView {
     pendingCheckoutPlanId = selection.plan
     pendingCheckoutInterval = selection.interval
     AnalyticsManager.shared.upgradePlanSelected(
-      plan: selection.plan, billingInterval: selection.interval, source: "macos_billing")
+      plan: selection.plan, billingInterval: selection.interval, source: "macos_settings_view")
 
     let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
     let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
@@ -991,6 +991,8 @@ extension SettingsContentView {
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
             self.upgradePromotionCode = ""
+            // Scheduled change: the API accepted it. The current price id does not
+            // move until the period rolls, so this is not a refreshed-price proof.
             AnalyticsManager.shared.upgradeSucceeded(plan: selection.plan, billingInterval: selection.interval)
             loadSubscriptionInfo()
           }
@@ -1142,8 +1144,8 @@ extension SettingsContentView {
               userSubscription = subscription
               subscriptionError =
                 "Payment completed, but plan refresh is still catching up. Please try reloading this page in a moment."
-              AnalyticsManager.shared.upgradeSucceeded(
-                plan: pendingCheckoutPlanId, billingInterval: pendingCheckoutInterval)
+              // The refreshed subscription has not shown the new price, so this
+              // is not Upgrade Succeeded.
               pendingSubscriptionPriceId = nil
               pendingCheckoutSessionId = nil
             }

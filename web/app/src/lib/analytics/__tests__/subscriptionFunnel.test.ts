@@ -19,11 +19,12 @@ describe('subscription funnel wires', () => {
   });
 
   it('collapses legacy plan and interval aliases onto the closed vocabulary', () => {
-    expect(subscriptionPlanWire('pro')).toBe('architect');
+    expect(subscriptionPlanWire('pro')).toBe('unknown');
     expect(subscriptionPlanWire('free')).toBe('basic');
     expect(subscriptionPlanWire('not-a-plan')).toBe('unknown');
     expect(subscriptionIntervalWire('yearly')).toBe('year');
     expect(subscriptionIntervalWire('Annual')).toBe('year');
+    expect(subscriptionIntervalWire('Plus Yearly Monthly')).toBe('year');
   });
 
   it('emits the paywall and the attributed checkout success', () => {

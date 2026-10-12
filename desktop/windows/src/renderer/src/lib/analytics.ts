@@ -61,28 +61,25 @@ const FUNNEL_SOURCES = new Set([
   'windows_billing',
   'windows_usage_limit',
   'web_plans',
+  'macos_settings_view',
+  'windows_settings_view',
   'unknown'
 ])
 
 function subscriptionPlanWire(raw: string | null | undefined): string {
   const value = raw?.trim() ?? ''
   if (value === 'free') return 'basic'
-  if (value === 'pro') return 'architect'
+  if (value === 'pro') return 'unknown'
   return FUNNEL_PLANS.has(value) ? value : 'unknown'
 }
 
 function subscriptionIntervalWire(raw: string | null | undefined): string {
   const value = raw?.trim().toLowerCase() ?? ''
-  if (value === 'month' || value === 'monthly' || value.includes('month')) return 'month'
-  if (
-    value === 'year' ||
-    value === 'yearly' ||
-    value === 'annual' ||
-    value.includes('year') ||
-    value.includes('annual')
-  ) {
+  // Year before month so a title that contains both words is not labeled monthly.
+  if (value === 'year' || value === 'yearly' || value === 'annual' || value.includes('year') || value.includes('annual')) {
     return 'year'
   }
+  if (value === 'month' || value === 'monthly' || value.includes('month')) return 'month'
   return 'unknown'
 }
 

@@ -1929,6 +1929,8 @@ enum PaywallOpenedSource {
   windowsBilling("windows_billing"),
   windowsUsageLimit("windows_usage_limit"),
   webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
   unknown("unknown");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
@@ -1991,6 +1993,8 @@ enum UpgradePlanSelectedSource {
   windowsBilling("windows_billing"),
   windowsUsageLimit("windows_usage_limit"),
   webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
   unknown("unknown");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;

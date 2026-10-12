@@ -3005,7 +3005,7 @@ String _planWire(String? raw) {
     case 'free':
       return 'basic';
     case 'pro':
-      return 'architect';
+      return 'unknown';
     default:
       return raw?.trim() ?? '';
   }

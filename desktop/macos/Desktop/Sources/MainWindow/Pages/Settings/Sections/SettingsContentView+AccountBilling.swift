@@ -392,8 +392,11 @@ extension SettingsContentView {
       overageExplainerSheet
     }
     .onAppear {
+      // The plan grid is part of this settings section, so this is a settings
+      // impression, not a blocked purchase gate. Quota and usage-limit surfaces
+      // keep their own sources.
       AnalyticsManager.shared.paywallOpened(
-        source: "macos_billing",
+        source: "macos_settings_view",
         currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown")
     }
   }

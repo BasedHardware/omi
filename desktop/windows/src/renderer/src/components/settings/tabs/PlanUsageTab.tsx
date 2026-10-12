@@ -70,7 +70,9 @@ export function PlanUsageTab(): React.JSX.Element {
   useEffect(() => {
     if (paywallTracked.current || !sub?.subscription) return
     paywallTracked.current = true
-    trackPaywallOpened('windows_billing', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
+    // The plan grid lives on this settings tab. This is a settings impression,
+    // not a blocked purchase gate. The usage-limit popup keeps its own source.
+    trackPaywallOpened('windows_settings_view', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
   }, [sub])
 
   const load = useCallback(async (): Promise<void> => {
@@ -134,7 +136,7 @@ export function PlanUsageTab(): React.JSX.Element {
     )
     const priceTitle = selected?.prices?.find((price) => price.id === priceId)?.title ?? 'unknown'
     const tier = selected?.id ?? 'unknown'
-    trackUpgradePlanSelected(tier, priceTitle, 'windows_billing')
+    trackUpgradePlanSelected(tier, priceTitle, 'windows_settings_view')
     try {
       const result = await startCheckout(
         { priceId, promotionCode, currentSubscription: subscription },
@@ -157,9 +159,13 @@ export function PlanUsageTab(): React.JSX.Element {
           return
         case 'refresh_lagging':
           toast('Payment received', { tone: 'warn', body: REFRESH_LAGGING_MSG })
-          break
+          setSelectedPlanId(null)
+          await load()
+          return
         case 'upgraded':
           toast('Plan updated', { tone: 'success' })
+          // In-place upgrade: the API accepted a scheduled change. The current
+          // price id does not move until the period rolls.
           break
         case 'reactivated':
           toast('Subscription reactivated', { tone: 'success' })

@@ -150,6 +150,7 @@ def test_scheduled_cancellation_carries_price_mrr_and_legacy_marker(monkeypatch)
                         'price': {
                             'id': _PLUS_MONTHLY,
                             'unit_amount': 1999,
+                            'currency': 'usd',
                             'recurring': {'interval': 'month'},
                         }
                     }
@@ -166,13 +167,14 @@ def test_scheduled_cancellation_carries_price_mrr_and_legacy_marker(monkeypatch)
     assert properties['plan'] == 'plus'
     assert properties['interval'] == 'month'
     assert properties['price_id'] == _PLUS_MONTHLY
+    assert properties['currency'] == 'usd'
     assert properties['mrr_cents'] == 1999
     assert properties['price_generation'] == 'legacy'
     assert properties['reason'] == 'none'
     assert 'sub-secret' not in properties.values()
 
 
-def test_yearly_mrr_is_unit_amount_divided_by_twelve(monkeypatch):
+def test_yearly_mrr_uses_round_half_up(monkeypatch):
     emitted = []
     monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
 
@@ -190,6 +192,7 @@ def test_yearly_mrr_is_unit_amount_divided_by_twelve(monkeypatch):
                         'price': {
                             'id': 'price_not_in_catalog',
                             'unit_amount': 19990,
+                            'currency': 'USD',
                             'recurring': {'interval': 'year'},
                         }
                     }
@@ -202,10 +205,46 @@ def test_yearly_mrr_is_unit_amount_divided_by_twelve(monkeypatch):
 
     properties = emitted[0]['properties']
     assert properties['interval'] == 'year'
-    assert properties['mrr_cents'] == 19990 // 12
+    assert properties['currency'] == 'usd'
+    # 19990 / 12 = 1665.833..., round-half-up, not integer division.
+    assert properties['mrr_cents'] == 1666
     assert properties['price_generation'] == 'unknown'
     assert subscription_events.price_catalog_generation(_PLUS_MONTHLY) == 'legacy'
     assert subscription_events.price_catalog_generation('price_not_in_catalog') == 'unknown'
+
+
+def test_trialing_usd_omits_mrr_cents(monkeypatch):
+    emitted = []
+    monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
+
+    subscription_events.emit_billing_product_event(
+        uid='uid-1',
+        stripe_event_id='evt-trial',
+        stripe_event_created=1_758_700_800,
+        stripe_event_type='customer.subscription.created',
+        subscription_obj={
+            'status': 'trialing',
+            'id': 'sub-secret',
+            'items': {
+                'data': [
+                    {
+                        'price': {
+                            'id': _PLUS_MONTHLY,
+                            'unit_amount': 1999,
+                            'currency': 'usd',
+                            'recurring': {'interval': 'month'},
+                        }
+                    }
+                ]
+            },
+        },
+        previous_paid_subscription_id=None,
+        resulting_paid_subscription_id='sub-secret',
+    )
+
+    properties = emitted[0]['properties']
+    assert properties['currency'] == 'usd'
+    assert 'mrr_cents' not in properties
 
 
 def test_update_without_cancel_transition_does_not_emit_scheduled_cancellation(monkeypatch):

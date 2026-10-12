@@ -60,19 +60,26 @@ describe('analytics capture contract', () => {
 
     trackPaywallOpened('Usage Page Plan Sheet', 'pro')
     trackUpgradePlanSelected('free', 'Annual', 'windows_billing')
+    trackUpgradePlanSelected('plus', 'Plus Yearly Monthly', 'windows_settings_view')
 
     const bodies = fetchMock.mock.calls.map((call) =>
       JSON.parse(String((call[1] as RequestInit).body))
     )
     expect(bodies.map((body: { event: string }) => body.event)).toEqual([
       'Paywall Opened',
+      'Upgrade Plan Selected',
       'Upgrade Plan Selected'
     ])
-    expect(bodies[0].properties).toMatchObject({ source: 'unknown', current_plan: 'architect' })
+    expect(bodies[0].properties).toMatchObject({ source: 'unknown', current_plan: 'unknown' })
     expect(bodies[1].properties).toMatchObject({
       plan: 'basic',
       billing_interval: 'year',
       source: 'windows_billing'
+    })
+    expect(bodies[2].properties).toMatchObject({
+      plan: 'plus',
+      billing_interval: 'year',
+      source: 'windows_settings_view'
     })
   })
 })

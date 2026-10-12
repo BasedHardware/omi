@@ -4,7 +4,7 @@ import XCTest
 
 final class SubscriptionFunnelTelemetryTests: XCTestCase {
   func testPlanIntervalAndSourceCollapseOntoTheClosedVocabulary() {
-    XCTAssertEqual(SubscriptionFunnelWire.plan("pro"), "architect")
+    XCTAssertEqual(SubscriptionFunnelWire.plan("pro"), "unknown")
     XCTAssertEqual(SubscriptionFunnelWire.plan("free"), "basic")
     XCTAssertEqual(SubscriptionFunnelWire.plan("not-a-plan"), "unknown")
     XCTAssertEqual(SubscriptionFunnelWire.interval("Monthly"), "month")
@@ -23,9 +23,9 @@ final class SubscriptionFunnelTelemetryTests: XCTestCase {
       SubscriptionFunnelWire.planSelectedProperties(
         plan: "operator",
         billingInterval: "yearly",
-        source: "macos_billing"
+        source: "macos_settings_view"
       ),
-      ["plan": "operator", "billing_interval": "year", "source": "macos_billing"]
+      ["plan": "operator", "billing_interval": "year", "source": "macos_settings_view"]
     )
     XCTAssertEqual(
       SubscriptionFunnelWire.upgradeSucceededProperties(plan: "plus", billingInterval: "month"),

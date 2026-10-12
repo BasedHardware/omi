@@ -530,7 +530,7 @@ void main() {
       'app_build': '567',
     });
     expect(adapter.events[3].properties['source'], 'unknown');
-    expect(adapter.events[3].properties['current_plan'], 'architect');
+    expect(adapter.events[3].properties['current_plan'], 'unknown');
     expect(adapter.events[4].properties, {
       'plan': 'unknown',
       'billing_interval': 'year',

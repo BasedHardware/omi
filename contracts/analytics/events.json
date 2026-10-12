@@ -2992,6 +2992,8 @@
             "windows_billing",
             "windows_usage_limit",
             "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
             "unknown"
           ]
         },
@@ -3062,6 +3064,8 @@
             "windows_billing",
             "windows_usage_limit",
             "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
             "unknown"
           ]
         }
