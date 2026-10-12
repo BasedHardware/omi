@@ -244,6 +244,51 @@ void main() {
     });
   }
 
+  for (final unlimited in [true, false]) {
+    testWidgets('pre-21315 BYOK snapshot respects unlimited=$unlimited enforcement', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse.fromJson({
+        'subscription': {
+          'plan': 'unlimited',
+          'status': 'active',
+          'features': ['byok'],
+          'limits': {'transcription_seconds': 18000, 'words_transcribed': 8000, 'insights_gained': null},
+        },
+        'show_subscription_ui': false,
+        'transcription_seconds_used': unlimited ? 17000 : 1200,
+        'transcription_seconds_limit': 18000,
+        'words_transcribed_used': 0,
+        'words_transcribed_limit': 8000,
+        'insights_gained_used': 0,
+        'insights_gained_limit': 0,
+        'transcription_allowance': {
+          'mode': 'managed',
+          'remaining_seconds': unlimited ? null : 88800,
+          'reason': unlimited ? 'plan_unlimited' : 'plan_within_allowance',
+        },
+      }));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      if (unlimited) {
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.textContaining('300 min'), findsNothing);
+      } else {
+        // Remaining is not a total. Plus-BYOK's 300-min snapshot stays incorrect
+        // until #21315 deploys; this is why the backend must precede mobile release.
+        final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 300);
+        expect(find.text(text), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      }
+      expect(provider.subscription!.subscription.plan, PlanType.unlimited);
+      expect(provider.subscription!.subscription.features, ['byok']);
+      expect(provider.subscription!.showSubscriptionUi, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('plan card is a child of the period scroll view', (tester) async {
     final provider = UsageProvider();
     final now = DateTime.now().toUtc();
