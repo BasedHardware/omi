@@ -68,7 +68,14 @@ void main() {
 
     test('decodes percent-encoded ids and ignores malformed pairs', () {
       expect(
-          HomeDeepLink.parseItemList('conversation=a%2Fb&%zz=1&memory=%E0&task'), [(kind: 'conversation', id: 'a/b')]);
+        HomeDeepLink.parseItemList('conversation=a%2Db&%zz=1&memory=%E0&task&conversation=a%2Fb'),
+        [(kind: 'conversation', id: 'a-b')],
+      );
+      // Slashes and `..` must not survive into the conversation URL path.
+      expect(
+        HomeDeepLink.parseItemList('conversation=..%2F..%2Fusers&task=%3Cscript%3E&memory=m-1'),
+        [(kind: 'memory', id: 'm-1')],
+      );
     });
 
     test('h.omi.me/items routes into Home with only the recognised pairs', () {
@@ -82,6 +89,10 @@ void main() {
         '/items?memory=m-1&task=t-1',
       );
       expect(HomeDeepLink.itemRouteFromAppLink(Uri.parse('https://h.omi.me/items?foo=bar')), '/items');
+      expect(
+        HomeDeepLink.itemRouteFromAppLink(Uri.parse('https://h.omi.me/items?conversation=..%2F..%2Fx&task=t-1')),
+        '/items?task=t-1',
+      );
       for (final raw in [
         'https://evil.example/items?task=t-1',
         'http://h.omi.me/items?task=t-1',

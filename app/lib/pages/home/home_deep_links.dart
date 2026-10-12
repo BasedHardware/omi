@@ -101,9 +101,13 @@ class HomeDeepLink {
   /// Most items one `/items` link lists; later pairs are ignored.
   static const maxListItems = 10;
 
+  /// Opaque server ids, the same charset as `web/frontend/src/lib/item-link.mjs`.
+  /// Anything else is dropped so an id cannot retarget `v1/conversations/$id`.
+  static final RegExp itemLinkIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+
   /// The `(kind, id)` pairs of an `/items` query in the order they appear: repeated keys, one per
-  /// item, kinds from [itemLinkKinds]. Unknown keys, empty ids and repeats are dropped, and the
-  /// list stops at [maxListItems].
+  /// item, kinds from [itemLinkKinds]. Unknown keys, ids outside [itemLinkIdPattern], and repeats
+  /// are dropped, and the list stops at [maxListItems].
   static List<ItemLinkRef> parseItemList(String query) {
     final items = <ItemLinkRef>[];
     final seen = <String>{};
@@ -121,7 +125,7 @@ class HomeDeepLink {
       } on FormatException {
         continue;
       }
-      if (!itemLinkKinds.contains(kind) || id.isEmpty || id.length > 128) continue;
+      if (!itemLinkKinds.contains(kind) || !itemLinkIdPattern.hasMatch(id)) continue;
       if (!seen.add('$kind\u0000$id')) continue;
       items.add((kind: kind, id: id));
     }
