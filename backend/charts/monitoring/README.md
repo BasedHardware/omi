@@ -816,6 +816,23 @@ Place alert YAML in the `alerts/` directory and configure Grafana sidecar to loa
 
 ### Metrics Contract
 
+`omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
+the four bounded providers plus the `unknown` fallback, crossed with the eleven
+bounded close reasons in `utils/stt/stream_close.py`. Initialization runs on that
+module's import (including direct Soniox users) and beside the connect initializer
+in `utils/stt/streaming.py`. It is idempotent and never resets a count. A zero
+must be scraped before a close for `increase()` to observe the first event;
+events before the first scrape still cannot be recovered by this initialization.
+
+`tests/unit/test_monitoring_stt_metric_zero_init.py` checks every Prometheus
+expression in `alerts/*.json` against the metrics defined in `utils/metrics.py`
+and `llm_gateway/gateway/metrics.py`. Gauges and unlabelled metrics qualify;
+labelled counters and histograms must expose startup children or have an explicit
+one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
+must shrink as initialization is added. Exporter/GPU/other service registries and
+full selector coverage are outside this family-level contract; stream-close
+selector coverage has its own unit test.
+
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
 | Field | Example |
