@@ -162,7 +162,9 @@ class LinqProvider:
         )
 
     async def send(self, chat, parts, operation, *, reply_to=None):
-        message = {'parts': parts, 'idempotency_key': operation, 'preferred_service': 'iMessage'}
+        message = {'parts': parts, 'idempotency_key': operation}
+        # Preserve the chat-scoped envelope proven by the October 11 repair.
+        body = {'message': message, 'preferred_service': 'iMessage'}
         if reply_to:
             message['reply_to'] = {'message_id': reply_to}
         path = '/chats/' + quote(chat, safe='') + '/messages'
@@ -178,9 +180,7 @@ class LinqProvider:
                 message.pop('reply_to', None)
 
         try:
-            return await self.api(
-                'POST', path, body={'message': message}, idempotent=True, before_request=prepare_thread
-            )
+            return await self.api('POST', path, body=body, idempotent=True, before_request=prepare_thread)
         except ProviderError as error:
             if not message.get('reply_to') or error.status_code not in (400, 404, 422):
                 raise  # ambiguous delivery must not change the request or replay
@@ -189,7 +189,7 @@ class LinqProvider:
             )
             message.pop('reply_to')
             message['idempotency_key'] = operation + ':unthreaded'
-            return await self.api('POST', path, body={'message': message}, idempotent=True)
+            return await self.api('POST', path, body=body, idempotent=True)
 
     async def typing(self, chat, active):
         await self.api('POST' if active else 'DELETE', '/chats/' + quote(chat, safe='') + '/typing', idempotent=True)

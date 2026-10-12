@@ -132,9 +132,10 @@ def test_split_reply_threads_only_first_chunk_and_resolves_after_pacing(adapter)
     assert all(target(adapter, body) is None for body in bodies[1:])
 
 
-def test_rejected_thread_falls_back_to_plain_without_spending_another_ratio_credit(adapter):
+@pytest.mark.parametrize('status', [400, 404, 422])
+def test_rejected_thread_falls_back_to_plain_without_spending_another_ratio_credit(adapter, status):
     message = incoming(adapter)
-    adapter.transport.responses = [(400, {'description': 'reply target missing', 'error': 'invalid_reply_to'}, {})]
+    adapter.transport.responses = [(status, {'description': 'reply target missing', 'error': 'invalid_reply_to'}, {})]
 
     async def resolver():
         return message.provider_message_id
@@ -149,6 +150,9 @@ def test_rejected_thread_falls_back_to_plain_without_spending_another_ratio_cred
     assert target(adapter, bodies[0]) == expected_target(adapter)
     assert target(adapter, bodies[1]) is None
     assert adapter.ledger.sent == 1
+    if adapter.channel == 'imessage':
+        assert all(body['preferred_service'] == 'iMessage' for body in bodies)
+        assert all('preferred_service' not in body['message'] for body in bodies)
     if adapter.channel == 'imessage':
         assert bodies[1]['message']['idempotency_key'] == bodies[0]['message']['idempotency_key'] + ':unthreaded'
 
@@ -187,8 +191,8 @@ def test_imessage_zero_single_and_many_item_navigation(adapter, count, prior):
 
     asyncio.run(run())
     bodies = sends(adapter)
-    assert 'preferred_service' not in bodies[0]
-    assert bodies[0]['message']['preferred_service'] == 'iMessage'
+    assert bodies[0]['preferred_service'] == 'iMessage'
+    assert 'preferred_service' not in bodies[0]['message']
     assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': text}]
     if count and prior:
         assert len(bodies) == 2

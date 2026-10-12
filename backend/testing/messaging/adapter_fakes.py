@@ -21,15 +21,15 @@ class FixtureTransport:
             return httpx.Response(status, json=body, headers=headers)
         if urlparse(url).hostname == 'api.linqapp.com' and url.endswith('/messages') and method == 'POST':
             # Replay the v3 boundary, not an unconditional success: the message
-            # container is required by Linq's public SendMessage contract.
+            # container and top-level service match the proven chat-scoped envelope.
             body = kwargs.get('json', {})
             message = body.get('message', {})
             parts = message.get('parts', ())
             if (
                 not parts
                 or not message.get('idempotency_key')
-                or message.get('preferred_service') != 'iMessage'
-                or 'preferred_service' in body
+                or body.get('preferred_service') != 'iMessage'
+                or 'preferred_service' in message
                 or 'reply_to' in body
                 or (any(part.get('type') == 'link' for part in parts) and len(parts) != 1)
             ):

@@ -281,7 +281,10 @@ Only the first chunk is threaded when text splits. A known rate-limit rejection
 rechecks the pointer before retrying; an ambiguous outcome freezes the original
 request rather than changing a possibly accepted message. Telegram uses `reply_parameters`
 with `allow_sending_without_reply`; Linq uses `message.reply_to` beside `parts` on
-`POST /api/partner/v3/chats/{chatId}/messages`. Definite 400/404/422 rejections can retry
+`POST /api/partner/v3/chats/{chatId}/messages`. This chat-scoped endpoint retains the
+top-level `preferred_service: "iMessage"` envelope proven by PR #21172 on October 11;
+`parts` and `idempotency_key` stay inside `message`. `message.reply_to` follows the
+sending-messages guide but is unverified live. Definite 400/404/422 rejections can retry
 without the thread target, with observable fallback telemetry. Ambiguous transport
 outcomes keep the original request/idempotency identity and never switch to a plain
 send. Existing scoped receipt callbacks keep their receipt target.
