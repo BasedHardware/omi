@@ -223,13 +223,12 @@ def evidence_message(records, schema, budget, *, clusters=None, vocabulary=None,
     if clusters is not None:
         payload['clusters'] = clusters
     instructions = TRIAGE_INSTRUCTIONS if schema is Triage else INSTRUCTIONS
+    json_schema = schema.model_json_schema()
 
     def message():
         return [{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}]
 
-    empty_ceiling = dream_transport.input_ceiling(
-        mount(schema, budget, instructions).messages(message()), schema.model_json_schema()
-    )
+    empty_ceiling = dream_transport.input_ceiling(mount(schema, budget, instructions).messages(message()), json_schema)
     # The transport's byte upper bound is conservative even for multibyte text.
     # Allocate only the space left after refs, schema, framing and completion.
     # Stop queue admission before further dilution would starve each record.
@@ -247,7 +246,7 @@ def evidence_message(records, schema, budget, *, clusters=None, vocabulary=None,
         payload['records'] = excerpts(records, chars=chars, names=names, context_chars=context_chars)
         messages = message()
         framed = mount(schema, budget, instructions).messages(messages)
-        if dream_transport.input_ceiling(framed, schema.model_json_schema()) + COMPLETION_RESERVE <= budget:
+        if dream_transport.input_ceiling(framed, json_schema) + COMPLETION_RESERVE <= budget:
             return messages
         if chars <= minimum:
             if set(records) - targets and context_chars > CONTEXT_RECORD_FLOOR:

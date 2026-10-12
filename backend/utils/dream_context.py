@@ -11,7 +11,6 @@ from utils.observability.fallback import record_fallback
 from utils.conversations.search import keyword_search_conversation_ids
 from utils.dream_guards import common_words, timestamp, tokens
 from utils.dream_prompt import (
-    fits_triage,
     evidence_message,
     triage_budget,
     mount,
@@ -73,8 +72,6 @@ def cluster_hints(triage, records):
 
 
 def fits_pass(records, caps, vocabulary=None):
-    if not fits_triage(records, caps, vocabulary):
-        return False
     # Reserve the worst case triage input + its completion before admitting context.
     try:
         budget = triage_budget(caps)
