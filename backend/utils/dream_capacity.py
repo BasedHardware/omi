@@ -2,8 +2,12 @@
 
 import asyncio
 import os
+from functools import lru_cache
 from uuid import uuid4
 
+from llm_gateway.gateway.providers import VertexAccessTokenSupplier
+from utils.http_client import get_desktop_gemini_client
+from utils.llm.vertex_reservation_probe import probe_reservation
 from utils.llm.vertex_reservation_state import reservation_state
 from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT, reserved_generation_model
 
@@ -11,8 +15,17 @@ SLOT_SECONDS = 240  # Longer than Dream's bounded 180-second pass.
 RELEASE = "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end"
 
 
+@lru_cache(maxsize=1)
+def _vertex_tokens():
+    return VertexAccessTokenSupplier()
+
+
+async def _probe(model, location):
+    return await probe_reservation(get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location)
+
+
 async def available_model():
-    states = await reservation_state.refresh()
+    states = await reservation_state.refresh(_probe)
     try:
         model = reserved_generation_model(PT_MODEL_CURRENT, states, override=os.getenv('OMI_VERTEX_PT_MODEL', ''))
         client = reservation_state.client()
@@ -24,6 +37,11 @@ async def available_model():
         return model
     except Exception:
         return None
+
+
+async def mark_saturated(model):
+    # Reuse the shared bounded writer and 120-second TTL; no provider fallback.
+    await reservation_state.record(model, 'dedicated', 429, None)
 
 
 async def claim(limit):

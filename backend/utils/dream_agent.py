@@ -24,8 +24,6 @@ from utils.dream_prompt import mount, evidence_message, evidence_chars, person_n
 
 async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
     async def invoke(uid, lane, mount, messages):
-        if turn is None and lane == dream_transport.MAIN_LANE and await dream_capacity.available_model() is None:
-            raise dream_transport.CapacityWait("dream_capacity_wait")
         if usage_sink is not None:
             key = 'triage_evidence_chars' if lane == dream_transport.TRIAGE_LANE else 'reasoning_evidence_chars'
             usage_sink[key] = evidence_chars(messages)
@@ -474,7 +472,9 @@ async def drain(*, limit=100):
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             if await dream_capacity.available_model() is None:
-                return [{'status': 'waiting', 'reason': 'reserved_capacity'}]
+                report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+                record_pass(report)
+                return [report]
             page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100))
             owners = iter(page)
 

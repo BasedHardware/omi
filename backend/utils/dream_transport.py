@@ -11,6 +11,7 @@ from models.dream_agent import Plan, Triage
 
 import httpx
 
+from utils import dream_capacity
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.shaped_agent import Turn
@@ -144,6 +145,11 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
     if remaining < 128:
         raise ValueError('dream_input_token_budget')
     completion = min(4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    reservation_model = None
+    if lane == MAIN_LANE:
+        reservation_model = await dream_capacity.available_model()
+        if reservation_model is None:
+            raise CapacityWait('dream_capacity_wait')
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
     # Resolve local configuration before marking the provider outcome unknown.
@@ -173,7 +179,10 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
             failure = response.json().get('error', {}).get('failure_class')
         except (ValueError, AttributeError):
             failure = None
-        if lane == MAIN_LANE and failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}:
+        if lane == MAIN_LANE and (
+            response.status_code == 429 or failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}
+        ):
+            await dream_capacity.mark_saturated(reservation_model)
             raise CapacityWait('dream_capacity_wait') from exc
         raise PreTokenFailure('dream_gateway_rejected') from exc
     body = response.json()
