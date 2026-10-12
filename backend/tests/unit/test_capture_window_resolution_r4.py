@@ -101,6 +101,8 @@ def _base_resolution(monkeypatch, base_stage, conversation, session):
 def _assert_base_identity_projection(candidate, baseline, *, rejected_owner=False):
     # The pinned stage predates optional score instrumentation. Validate that
     # metadata separately; it must never alter the client identity projection.
+    # Owner diagnostics are likewise internal, excluded from JSON/schema and
+    # covered by their own metadata-contract suite; keep all identity checks.
     assert baseline.speaker_match_scores is None
     if stage.match_scores.enabled() and rejected_owner:
         assert len(candidate.speaker_match_scores) == 1
@@ -111,9 +113,9 @@ def _assert_base_identity_projection(candidate, baseline, *, rejected_owner=Fals
         assert not any(s.is_user for s in candidate.transcript_segments)
     else:
         assert candidate.speaker_match_scores == ([] if stage.match_scores.enabled() else None)
-    assert candidate.model_dump(exclude={'speaker_match_scores'}) == baseline.model_dump(
-        exclude={'speaker_match_scores'}
-    )
+    assert candidate.model_dump(
+        exclude={'speaker_match_scores', 'owner_recognition_diagnostics'}
+    ) == baseline.model_dump(exclude={'speaker_match_scores', 'owner_recognition_diagnostics'})
 
 
 @pytest.mark.parametrize('scores_enabled', [False, True])
