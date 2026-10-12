@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
+from types import SimpleNamespace
 import random
 import string
 from bisect import bisect_left
@@ -12,7 +13,7 @@ import pytest
 from config.dream_agent import Caps
 from database import dream_history, dream_store
 from tests.support.dream_firestore import DreamFirestore
-from utils import dream_cleanup as cleanup
+from utils import dream_cleanup as cleanup, dream_reads, dream_prompt, dream_context
 from utils.dream_context import EvidenceRecords, add_context
 
 NOW = datetime(2026, 10, 12, tzinfo=timezone.utc)
@@ -55,8 +56,6 @@ def test_pinned_people_never_seed_or_partner_cleanup():
 
 
 def test_review_cooldowns_use_one_bounded_batch():
-    from types import SimpleNamespace
-
     refs = ['people/a', 'people/b']
 
     def get_all(documents, *, timeout):
@@ -193,7 +192,7 @@ def test_seed_duplicate_operands_and_context_roles(monkeypatch):
     )
     assert records.targets == {'people/a', 'people/b'}
     assert records.target_sources == {'people/a': 'seeded', 'people/b': 'seeded'}
-    combined = add_context(records, [('screen/context', {'text': 'synthetic'})], Caps())
+    combined = add_context(records, [('screen/context', {'text': 'synthetic'}, 'temporal')], Caps())
     assert combined.targets == records.targets
     assert combined.target_sources == records.target_sources
     assert combined.cleanup_cursor == {'people': 'b'}
@@ -354,3 +353,137 @@ def test_weighted_cooldown_precedes_hydration_and_seed_errors_keep_dirty(monkeyp
     monkeypatch.setattr(cleanup, 'add_seed', outage)
     assert cleanup.add_seed_safely('synthetic', records, {}, Caps(), [], read_record=read) is records
     assert records.seed_errors == 1 and records.targets == {'people/dirty'}
+
+
+@pytest.mark.parametrize('source', ['seeded', 'random'])
+def test_older_seed_retrieves_context_with_reserved_budget_and_bounded_dirty_settlement(monkeypatch, source):
+    uid = 'synthetic-cleanup-budget'
+    db = DreamFirestore()
+    db.rows[('users', uid)] = {}
+    db.rows[('dream_users', uid)] = {'score': 1, 'watermark': OLD}
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '1' if source == 'random' else '0')
+    monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
+    for i in range(35):
+        key = f'fragment-{i}'
+        db.rows[('dream_users', uid, 'dirty', dream_store.dirty_id('conversations', key))] = {
+            'collection': 'conversations',
+            'id': key,
+            'version': key,
+            'last_changed_at': OLD + timedelta(minutes=i),
+        }
+
+    real_dirty_refs = dream_store.dirty_refs
+    windows = []
+
+    def dirty_refs(owner, **kwargs):
+        if kwargs.get('transaction') is None:
+            windows.append((kwargs['limit'], kwargs['newest']))
+        kwargs.pop('firestore_client', None)
+        return real_dirty_refs(owner, firestore_client=db, **kwargs)
+
+    monkeypatch.setattr(dream_store, 'dirty_refs', dirty_refs)
+    monkeypatch.setattr(cleanup, 'uniform_ref', lambda *a: 'conversations/older')
+    monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['fragment-0', 'older'])
+    monkeypatch.setattr(dream_history, 'review_states', lambda *a, **k: {})
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'conversations'
+    rng.choices.return_value = ['conversations/older']
+    monkeypatch.setattr(cleanup.random, 'SystemRandom', lambda: rng)
+    reads = []
+    speech = 'Garden boat planning. ' * 200
+
+    def read(owner, ref, **kwargs):
+        reads.append(ref)
+        if ref == 'conversations/fragment-0':
+            raise dream_reads.DreamTranscriptReadError('Synthetic unreadable transcript')
+        if ref.startswith('conversations/fragment-'):
+            return None
+        return {'created_at': OLD, 'transcript_segments': [{'text': speech}]}
+
+    monkeypatch.setattr(dream_reads, 'read_record', read)
+    seen_targets = []
+
+    def candidates(owner, records, *args, **kwargs):
+        seen_targets.extend(records.targets)
+        return [
+            (f'conversations/context-{i}', {'transcript_segments': [{'text': speech}]}, 'semantic') for i in range(4)
+        ]
+
+    monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
+    lease = dream_store.acquire(uid, Caps(), now=NOW, firestore_client=db)
+    diagnostics, unavailable = {}, []
+    records, consumed = dream_reads.read_changes(uid, lease, Caps(), diagnostics=diagnostics, unavailable=unavailable)
+    assert windows == [(32, False)]
+    assert len(unavailable) == 32 and not consumed
+    assert records.targets == {'conversations/older'} == set(seen_targets)
+    assert records.target_sources == {'conversations/older': source}
+    assert len(records) > len(records.targets)
+    assert diagnostics['context_budget_counts']['reservation_kept'] == 1
+    assert diagnostics['context_budget_counts']['slice_reclaimed'] == 0
+    assert dream_prompt.fits_triage(records, Caps()) and dream_context.fits_pass(records, Caps())
+    assert len([ref for ref in reads if '/fragment-' in ref]) == 32
+    assert 'conversations/fragment-32' not in reads
+    dream_store.finish(
+        uid,
+        lease,
+        diagnostics,
+        success=True,
+        unavailable=unavailable,
+        deferred=records.targets,
+        seeded=records.targets,
+        reviewed=records.targets,
+        now=NOW,
+        firestore_client=db,
+    )
+    assert diagnostics['dirty_counts']['permanent_acknowledged'] == 31
+    assert dream_store.dirty_count(uid, firestore_client=db) == 4
+    state = db.rows[('dream_users', uid, 'reviews', dream_history.review_id('conversations/older'))]
+    assert state == {'deferred_until': NOW + timedelta(days=1)}
+
+
+@pytest.mark.parametrize('targets, pending', [(4, set()), (0, {'action_items/a'})])
+def test_seed_cannot_take_reserved_slots_or_pending_dirty_version(monkeypatch, targets, pending):
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '1')
+    monkeypatch.setattr(cleanup, 'uniform_ref', lambda *a: 'action_items/a')
+    history = Mock(return_value={})
+    monkeypatch.setattr(dream_history, 'review_states', history)
+    read = Mock(side_effect=AssertionError('seed hydrated a full or pending target set'))
+    records = EvidenceRecords({f'conversations/dirty-{i}': {} for i in range(targets)})
+    result = cleanup.add_seed(
+        'synthetic',
+        records,
+        {'started_at': NOW, 'cleanup_selected': True},
+        Caps(),
+        [],
+        read_record=read,
+        pending_refs=pending,
+        rng=random.Random(0),
+    )
+    assert result is records
+    read.assert_not_called()
+    history.assert_not_called()
+
+
+def test_duplicate_pair_cannot_overfill_initial_context_target_slots(monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
+    monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['a', 'b'])
+    monkeypatch.setattr(dream_history, 'review_states', lambda *a: {})
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'people'
+    rng.choices.return_value = ['people/a']
+    dirty = EvidenceRecords({f'people/dirty-{i}': {'created_at': OLD, 'name': 'Synthetic'} for i in range(3)})
+    result = cleanup.add_seed(
+        'synthetic',
+        dirty,
+        {'started_at': NOW, 'cleanup_selected': True},
+        Caps(),
+        [],
+        read_record=lambda *a: {'created_at': OLD, 'name': 'Mira Holloway'},
+        rng=rng,
+    )
+    assert result is dirty and len(result.targets) == 3

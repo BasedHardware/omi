@@ -9,7 +9,8 @@ from difflib import SequenceMatcher
 
 from config.dream_agent import backfill_share, random_seed_share
 from database import dream_history
-from utils.dream_context import EvidenceRecords, fits_pass, identities, query_terms
+from utils.dream_context import EvidenceRecords, fits_pass, identities, query_terms, CONTEXT_TARGET_LIMIT
+from utils.dream_prompt import fits_triage
 from utils.dream_guards import MIN_RETIRE_TASK_DAYS, normalized, summary_eligibility, timestamp
 
 REVIEW_DAYS = 30
@@ -120,16 +121,21 @@ def uniform_ref(uid, rng):
     return None
 
 
-def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
+def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None, pending_refs=()):
     rng = rng or random.SystemRandom()
     cursor = dict(lease.get('cleanup_cursor') or {})
     records.target_sources = dict(getattr(records, 'target_sources', {ref: 'dirty' for ref in records.targets}))
     records.cleanup_cursor = cursor
     if lease.get('canary') or not lease.get('cleanup_selected', rng.random() < backfill_share()):
         return records
+    if len(records.targets) >= CONTEXT_TARGET_LIMIT:
+        return records
+    pending_refs = set(pending_refs)
     source = 'random' if rng.random() < random_seed_share() else 'seeded'
     if source == 'random':
         ref = uniform_ref(uid, rng)
+        if ref in pending_refs:
+            return records
         states = dream_history.review_states(uid, [ref] if ref else [])
         pool = {ref: read_record(uid, ref)} if ref and not is_deferred(states.get(ref, {}), lease['started_at']) else {}
         pool = {ref: row for ref, row in pool.items() if row}
@@ -147,7 +153,7 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
         pool = {}
         for key in ids:
             ref = collection + '/' + key
-            if is_deferred(states.get(ref, {}), lease['started_at']):
+            if ref in pending_refs or is_deferred(states.get(ref, {}), lease['started_at']):
                 continue
             previous = timestamp(reviewed.get(ref))
             if reviewed.get(ref) is not None and (
@@ -176,16 +182,21 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None):
         candidate = EvidenceRecords(
             {**records, **{key: pool[key] for key in seeds}}, targets={*records.targets, *seeds}
         )
-        if fits_pass(candidate, caps, vocabulary):
+        if (
+            len(candidate.targets) <= CONTEXT_TARGET_LIMIT
+            and fits_triage(candidate, caps, vocabulary, reserve_context=True)
+            and fits_pass(candidate, caps, vocabulary)
+        ):
             candidate.target_sources = {**records.target_sources, **{key: source for key in seeds}}
             candidate.cleanup_cursor = cursor
+            candidate.seed_errors = records.seed_errors
             return candidate
     return records
 
 
-def add_seed_safely(uid, records, lease, caps, vocabulary, *, read_record):
+def add_seed_safely(uid, records, lease, caps, vocabulary, *, read_record, pending_refs=()):
     try:
-        return add_seed(uid, records, lease, caps, vocabulary, read_record=read_record)
+        return add_seed(uid, records, lease, caps, vocabulary, read_record=read_record, pending_refs=pending_refs)
     except Exception:
         records.seed_errors = getattr(records, 'seed_errors', 0) + 1
         record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')

@@ -41,6 +41,7 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(storage, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
     monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))

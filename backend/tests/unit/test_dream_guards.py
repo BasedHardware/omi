@@ -246,7 +246,7 @@ def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, 
     monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: {'run_id': 'synthetic', 'mode': 'shadow'})
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(plan, 100)))
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(review_store, 'remaining_today', lambda *a: 3)
