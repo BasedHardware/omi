@@ -62,9 +62,10 @@ final class SubscriptionPlanCatalogMergerTests: XCTestCase {
         id: "architect", title: "Architect",
         prices: [SubscriptionPriceOption(id: "price_arch", title: "Monthly", description: nil, priceString: "$99")]),
     ]
-    let fallback = ["Monthly", "Annual"].map { interval in
-      SubscriptionPlanOption(
-        id: SubscriptionPlanNames.planId(from: "Operator \(interval)")!, title: "Operator",
+    let fallback = try ["Monthly", "Annual"].map { interval in
+      let id = try XCTUnwrap(SubscriptionPlanNames.planId(from: "Operator \(interval)"))
+      return SubscriptionPlanOption(
+        id: id, title: "Operator",
         prices: [
           SubscriptionPriceOption(id: "price_op_\(interval)", title: interval, description: nil, priceString: "$49")
         ])
