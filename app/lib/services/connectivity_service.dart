@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 class ConnectivityService {
@@ -11,13 +12,10 @@ class ConnectivityService {
 
   ConnectivityService._internal();
 
-  final InternetConnection _internetConnection = InternetConnection.createInstance(
-    useDefaultOptions: false,
-    checkInterval: const Duration(seconds: 10),
-    customCheckOptions: connectivityProbeOptions(
-      physicalQualification: PhysicalQualification.enabled,
-      apiBaseUrl: PhysicalQualification.enabled ? Env.apiBaseUrl : null,
-    ),
+  final InternetConnection _internetConnection = createConnectivityChecker(
+    physicalQualification: PhysicalQualification.enabled,
+    profile: Env.profile,
+    apiBaseUrl: Env.apiBaseUrl!,
   );
   InternetConnection get internetConnection => _internetConnection;
   final Connectivity _connectivity = Connectivity();
@@ -79,16 +77,48 @@ class ConnectivityService {
   }
 }
 
-/// Connectivity consumers need internet access, not backend readiness. Never
-/// spend the unauthenticated Omi edge budget on a fleet-wide periodic probe.
-/// Capture-only physical qualification deliberately probes its local fixture.
+/// Ordinary production consumers need internet access, not backend readiness.
+/// Any successful non-Omi HEAD is enough. Baidu and Taobao provide independent
+/// China-oriented alternatives when Cloudflare is blocked. Local/non-prod
+/// profiles instead check their configured backend so a private offline fixture
+/// cannot be made "online" by an unrelated public host.
+InternetConnection createConnectivityChecker({
+  required bool physicalQualification,
+  required AppEnvironmentProfile profile,
+  required String apiBaseUrl,
+}) =>
+    InternetConnection.createInstance(
+      useDefaultOptions: false,
+      enableStrictCheck: false,
+      checkInterval: const Duration(seconds: 10),
+      customCheckOptions: connectivityProbeOptions(
+        physicalQualification: physicalQualification,
+        profile: profile,
+        apiBaseUrl: apiBaseUrl,
+      ),
+    );
+
 List<InternetCheckOption> connectivityProbeOptions({
   required bool physicalQualification,
-  String? apiBaseUrl,
-}) =>
-    [
+  required AppEnvironmentProfile profile,
+  required String apiBaseUrl,
+}) {
+  final base = Uri.parse(apiBaseUrl.endsWith('/') ? apiBaseUrl : '$apiBaseUrl/');
+  final privateProbe = physicalQualification || profile != AppEnvironmentProfile.production;
+  // Even a dev override must not restore the production edge's periodic load.
+  final uris = privateProbe && base.host != 'api.omi.me'
+      ? [base.resolve('v1/health')]
+      : [
+          Uri.parse('https://one.one.one.one'),
+          Uri.parse('https://www.baidu.com/'),
+          Uri.parse('https://www.taobao.com/'),
+        ];
+  return [
+    for (final uri in uris)
       InternetCheckOption(
-        uri: Uri.parse(physicalQualification ? '${apiBaseUrl}v1/health' : 'https://one.one.one.one'),
+        uri: uri,
         timeout: const Duration(seconds: 3),
+        responseStatusFn: (response) => response.statusCode == 200,
       ),
-    ];
+  ];
+}

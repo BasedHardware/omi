@@ -121,13 +121,18 @@ def ensure_json_policy(
     """Reconcile a JSON policy, including ratio conditions, without resetting dwell.
 
     Built-in metrics need no log-metric propagation retry. Read-before-write and
-    preserve the sole condition resource name on updates. Ignore output-only and
+    preserve existing condition resource names on updates. Ignore output-only and
     default fields returned by Monitoring, but verify every declared field.
     """
     desired = copy.deepcopy(body)
     display_name = desired["displayName"]
-    if len(desired.get("conditions", [])) != 1:
-        raise ValueError("JSON policy must have exactly one condition")
+    desired_conditions = desired.get("conditions", [])
+    if not (len(desired_conditions) == 1 or (len(desired_conditions) == 2 and desired.get("combiner") == "AND")):
+        raise ValueError("JSON policy requires one condition or two conditions combined with AND")
+    if any(not isinstance(c.get("conditionThreshold"), dict) for c in desired_conditions):
+        raise ValueError("JSON policy conditions must be metric thresholds")
+    if len({c["displayName"] for c in desired_conditions}) != len(desired_conditions):
+        raise ValueError("JSON policy condition display names must be unique")
 
     def run(args):
         result = _run_gcloud(runner, ["monitoring", "policies", *args, f"--project={project}"])
@@ -148,36 +153,57 @@ def ensure_json_policy(
         candidate = copy.deepcopy(actual)
         candidate["notificationChannels"] = sorted(candidate.get("notificationChannels", []))
         conditions = candidate.get("conditions", [])
-        if len(conditions) != 1:
+        if len(conditions) != len(desired_conditions):
             return False
-        threshold = conditions[0].get("conditionThreshold")
-        expected_threshold = desired["conditions"][0].get("conditionThreshold")
-        if not isinstance(threshold, dict) or not isinstance(expected_threshold, dict):
-            return False
-        # A stale denominator or forecast changes semantics even when the
-        # numerator matches. Ignore only absent/default optional API fields.
-        for key in ("denominatorFilter", "denominatorAggregations", "forecastOptions", "disableMetricValidation"):
-            if key not in expected_threshold and threshold.get(key) in (None, "", [], {}, False):
-                threshold.pop(key, None)
-        if threshold != expected_threshold:
-            return False
-        return managed(candidate, desired)
+        conditions.sort(key=lambda c: c.get("displayName", ""))
+        expected = copy.deepcopy(desired)
+        expected["conditions"].sort(key=lambda c: c["displayName"])
+        for condition, expected_condition in zip(conditions, expected["conditions"]):
+            threshold = condition.get("conditionThreshold")
+            expected_threshold = expected_condition["conditionThreshold"]
+            if not isinstance(threshold, dict):
+                return False
+            # A stale denominator or forecast changes semantics. Ignore only
+            # absent/default optional API fields, for every condition.
+            for key in ("denominatorFilter", "denominatorAggregations", "forecastOptions", "disableMetricValidation"):
+                if key not in expected_threshold and threshold.get(key) in (None, "", [], {}, False):
+                    threshold.pop(key, None)
+            if threshold != expected_threshold:
+                return False
+        return managed(candidate, expected)
 
     desired["notificationChannels"] = sorted(desired["notificationChannels"])
     names = run(["list", f'--filter=displayName="{display_name}"', "--format=value(name)"]).split()
     if len(names) > 1:
         raise RuntimeError(f"Duplicate {display_name} alert policies; reconcile manually")
-    condition_name = None
+    preserved_names = {}
     if names:
         name = names[0]
         existing = json.loads(run(["describe", name, "--format=json"]))
         if matches(existing):
             return name
         conditions = existing.get("conditions", [])
-        if len(conditions) != 1 or not conditions[0].get("name"):
-            raise RuntimeError("Existing JSON policy must have one named condition")
-        condition_name = conditions[0]["name"]
-        desired["conditions"][0]["name"] = condition_name
+        if not conditions or len(conditions) > len(desired_conditions) or any(not c.get("name") for c in conditions):
+            raise RuntimeError("Existing JSON policy has an unexpected condition shape or unnamed conditions")
+        by_display = {c["displayName"]: c["name"] for c in conditions}
+        if len(by_display) != len(conditions) or len(set(by_display.values())) != len(conditions):
+            raise RuntimeError("Existing JSON policy conditions must have unique names")
+        used = set()
+        for index, condition in enumerate(desired_conditions):
+            # Display names identify conditions even if Monitoring reorders them.
+            # For a display-name-only rename with unchanged cardinality, retain
+            # the corresponding position rather than replace the condition.
+            old_name = by_display.get(condition["displayName"])
+            if old_name is None and len(conditions) == len(desired_conditions):
+                old_name = conditions[index]["name"]
+            if old_name is not None:
+                if old_name in used:
+                    raise RuntimeError("Ambiguous existing condition identity")
+                condition["name"] = old_name
+                used.add(old_name)
+                preserved_names[condition["displayName"]] = old_name
+        if len(used) != len(conditions):
+            raise RuntimeError("Cannot preserve all existing condition identities")
         run(["update", name, "--quiet", f"--policy={json.dumps(desired)}"])
     else:
         # A lost create response fails this run; the next deploy re-lists before
@@ -188,7 +214,8 @@ def ensure_json_policy(
     verified = json.loads(run(["describe", name, "--format=json"]))
     if not matches(verified):
         raise RuntimeError(f"Monitoring policy drift after reconciliation: {display_name}")
-    if condition_name and verified["conditions"][0].get("name") != condition_name:
+    verified_names = {c["displayName"]: c.get("name") for c in verified["conditions"]}
+    if any(verified_names.get(display) != name for display, name in preserved_names.items()):
         raise RuntimeError("Monitoring condition name changed across update")
     return name
 

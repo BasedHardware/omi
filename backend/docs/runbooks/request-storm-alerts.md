@@ -12,7 +12,8 @@ The production step in `.github/workflows/gcp_backend.yml` invokes
 `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` variable. There is no manual
 production mutation in this change. The shared JSON reconciler lists by
 display name, rejects duplicates, creates absent policies, and repairs managed
-field drift while preserving the existing condition resource name. An unchanged
+field drift while preserving existing condition resource names (including the
+ratio when adding a volume condition). An unchanged
 deploy makes no write and preserves dwell. Provisioning failure warns in the
 deploy summary; rerun the production deploy to retry, and confirm both policies
 and their notification channels in Monitoring.
@@ -21,17 +22,23 @@ and their notification channels in Monitoring.
   `response_code=429`, production project and the three explicit API / sync /
   listen backend names in `.github/monitoring/api_edge_429_policy.json`.
   ALIGN_RATE over 300s, REDUCE_SUM, grouped by backend_target_name. Any backend
-  above **1,000/min (16.6667/s) for 1,800s** pages. Backends are never summed together.
+  above **2,000/min (33.3333/s) for 1,800s** pages. Backends are never summed together.
 - **Prod sync duplicate upload share:** same metric on
   `custom-domains-api-omi-me-backend-sync-49a4-be`. The native ratio condition
-  divides 409 count by **all** request count, with identical 3,600s ALIGN_SUM /
-  REDUCE_SUM aggregations and grouping. A rolling one-hour share **above 10%
-  for 3,600s** pages. It is a ratio of counts, not an average of percentages.
-  Both conditions treat missing data as inactive.
+  divides 409 count by **all** request count, with identical 300s ALIGN_SUM /
+  REDUCE_SUM aggregations and grouping. A five-minute share **above 10%
+  for 3,600s**, AND **more than 100 total requests per five-minute window
+  for 3,600s**, pages. It is a ratio of counts, not an average of percentages.
+  All threshold conditions treat missing data as inactive. The count floor
+  prevents tiny-denominator incidents; both sync conditions select the same
+  single backend.
 
 The [Monitoring ratio API](https://docs.cloud.google.com/monitoring/alerts/policies-in-json)
 supports numerator/denominator filters directly; neither MQL nor PromQL is
-needed. The ratio policy body is checked in at
+needed. The sync policy has two conditions with combiner AND. The reconciler
+accepts one threshold condition or two threshold conditions combined with AND,
+refuses ambiguous identities, preserves names on migration, and compares both
+conditions before deciding whether a write is needed. The ratio policy body is checked in at
 `.github/monitoring/sync_upload_409_policy.json`.
 
 ## Triage
@@ -60,7 +67,16 @@ needed. The ratio policy body is checked in at
    At most one event per template per five minutes per process (shared across
    methods) is sent through AnalyticsManager's existing consent/queue/PostHog
    path. Process restart resets the limiter. These sampled events are not
-   request counts, and WebSocket handshake errors are outside this HTTP hook.
+   request counts. WebSocket handshake errors are outside this HTTP hook.
+   Raw `http.post` authentication/token exchange (including the local-dev
+   custom-token path), dedicated audio-download clients, and custom-STT clients
+   are also excluded: they do not traverse the shared API HTTP layer. Token
+   exchange is an interactive startup/auth flow, not a sustained job poll;
+   download and custom-STT requests commonly go to signed storage or third-party
+   authorities. The shared-layer hook deliberately does not expand into those
+   auth/media flows. If one of these raw clients targets an official Omi host,
+   its 429 is still absent from this telemetry. The LB alert remains fleet-wide
+   coverage for official-host HTTP throttling.
 
 ## Read-only measurement and replay
 
@@ -91,12 +107,22 @@ larger window if needed. Evidence is aggregate-only and belongs outside Git.
 Read-only production history collected on 2026-10-12 covers 21 days:
 **2026-09-21 04:00 to 2026-10-12 04:00 UTC**. Metric queries use 300s
 alignment, sum across LB labels, and retain the response code or backend name.
-No pagination token was returned. The replay constructs matching rolling
-one-hour totals for the ratio, checks every five-minute sample, resets dwell
-on gaps or recovery, and requires the full dwell between violating samples.
-These are conservative sampled eligibility times, not a claim about an actual
-Monitoring incident, notification delivery or exact continuously evaluated
-minute. Metric ingestion can add delay.
+No pagination token was returned. The replay consumes the same five-minute ALIGN_SUM counts that the revised sync
+policy uses; it does not reconstruct a rolling hour. Ratio and volume are
+checked together for the full 3,600-second duration, with strict greater-than
+comparisons and dwell reset on gaps or recovery. Edge rate and thresholds/durations
+come from the checked-in policy JSON as well.
+
+The independent review assumed native 3,600s alert alignment was a fixed
+clock-hour bucket. Google documents that metric-alert alignment windows
+[slide at evaluator time](https://docs.cloud.google.com/monitoring/alerts/concepts-indepth#alignment_period).
+Rather than retain that ambiguity, the policy now uses 300s sums directly,
+matching the sampled REST evidence and replay. Both sync conditions retain the
+one-hour retest duration. Historical REST output contains non-overlapping 300s
+samples; Monitoring also evaluates sliding windows between those samples.
+Reported times are **five-minute sampled eligibility estimates**, not exact
+Monitoring incident or notification timestamps. Unsampled intra-bucket dips,
+ingestion delay and evaluator scheduling can alter the live first-alert time.
 
 Baseline = Sep 21 04:00–Oct 7 12:00; incident = Oct 7 12:00–Oct 11 17:00;
 post-fix = Oct 11 17:00–Oct 12 04:00 (all UTC).
@@ -106,35 +132,66 @@ post-fix = Oct 11 17:00–Oct 12 04:00 (all UTC).
 | baseline | custom-domains-api-omi-me-backend-49a4-be | 960.6/min | none |
 | baseline | custom-domains-api-omi-me-backend-listen-49a4-be | 463.0/min | none |
 | baseline | custom-domains-api-omi-me-backend-sync-49a4-be | 123.8/min | none |
-| baseline | sync 409 share (1h) | 9.38% | none |
-| incident | custom-domains-api-omi-me-backend-49a4-be | 21329.6/min | 2026-10-07T15:55:00Z |
+| baseline | sync 409 share (5m; volume-qualified) | 31.09% | none |
+| incident | custom-domains-api-omi-me-backend-49a4-be | 21329.6/min | 2026-10-07T17:55:00Z |
 | incident | custom-domains-api-omi-me-backend-listen-49a4-be | 283.0/min | none |
 | incident | custom-domains-api-omi-me-backend-sync-49a4-be | 12.8/min | none |
-| incident | sync 409 share (1h) | 51.04% | 2026-10-08T23:10:00Z |
+| incident | sync 409 share (5m; volume-qualified) | 63.83% | 2026-10-09T00:15:00Z |
 | post-fix | custom-domains-api-omi-me-backend-49a4-be | 26508.4/min | 2026-10-11T17:30:00Z |
 | post-fix | custom-domains-api-omi-me-backend-listen-49a4-be | 114.2/min | none |
 | post-fix | custom-domains-api-omi-me-backend-sync-49a4-be | 8.0/min | none |
-| post-fix | sync 409 share (1h) | 7.15% | none |
+| post-fix | sync 409 share (5m; volume-qualified) | 11.01% | none |
 
+The edge threshold is **2.08×** the observed baseline maximum of 960.6/min,
+with 30-minute dwell. It still meets the October 7 detection objective at
+17:55 UTC in the sampled replay. The scout estimated health noise around
+1,900 denials/hour (32/min); that noise cannot approach 2,000/min.
+The post-fix edge policy deliberately still fires on old-build storms:
+**there is no observed healthy fleet rollout window yet**.
 
-The edge threshold exceeds the entire observed baseline (including existing
-health probes). The scout estimated health noise around 1,900 denials/hour,
-about 32/min; removing that noise cannot by itself approach 1,000/min.
-There is little headroom over the baseline's rare peak of 960.6/min, but the
-30-minute dwell guards isolated bursts. The post-fix edge policy deliberately
-still fires on old-build storms: **there is no observed healthy fleet rollout
-window yet**, and subtracting health noise does not remove those storms.
-Read-only data cannot prove the future post-adoption steady state.
+For the volume floor, >100 requests per five-minute window corresponds to
+>1,200/hour if sustained. The baseline median was 217 requests/five minutes;
+567 of 4,702 baseline buckets had at most 100 requests. Every incident and
+post-fix bucket cleared the floor; the first-alert retest hour had 1,269–2,111
+requests per bucket. The floor therefore suppresses low-volume ratios without
+delaying this incident. It excludes a ratio such as one 409 out of two requests.
+Synthetic replay tests pin the low-volume case, exact count boundary, and
+one-hour qualified dwell. The table reports peaks only in volume-qualified
+buckets. Even the baseline's 31.09% and post-fix 11.01% five-minute spikes do not
+last for the one-hour duration, so neither window pages.
 
 The requested 10% ratio could **not** have fired by October 7 evening:
 that day's upload 409 share was only 0.93%, and five-minute peaks after 12:00
-were 8.53%. The first sustained one-hour ratio violation replayed on October 8,
-with full dwell eligible at 23:10 UTC. The edge policy does meet the October 7
-detection objective at 15:55 UTC. Keeping 10% avoids paging the observed post-fix
-3–7% old-build duplicate uploads (rolling peak 7.15%).
+were 8.53%. With the revised policy, the first full ratio-plus-volume retest
+window is eligible at October 9 00:15 UTC. The old October 8 23:10 replay time
+used a reconstructed rolling-hour statistic and no longer applies.
 
-Ordinary mobile connectivity callers consume general internet state for offline
-capture and sync wake-ups. They now retain the existing Cloudflare HEAD probe,
-without a production Omi API fallback; an isolated Cloudflare outage can thus
-report offline. Explicit capture-only physical qualification retains its local
-backend health probe. Backend routes and Cloud Armor configuration are unchanged.
+## Connectivity probe verification
+
+`internet_connection_checker_plus` **2.7.2** was read from the pub cache:
+`lib/src/internet_connection.dart` sends `http.head`, catches transport errors
+as failure, and returns online as soon as any host succeeds when
+`enableStrictCheck=false`. `lib/src/internet_check_option.dart` defaults to
+exactly HTTP 200. We explicitly keep that status rule, three-second timeout,
+no default host additions, and non-strict checks.
+
+Production checks Cloudflare, Baidu and Taobao; Baidu and Taobao are independent
+China-oriented operators, rather than two hostnames sharing Cloudflare.
+Unauthenticated HEADs to Baidu and Taobao returned 200 from the validation
+machine on 2026-10-12. That validates HEAD/status behavior here, not reachability
+from every Chinese/corporate network. Geography-specific device testing was not
+performed. A failed single host cannot force offline state.
+
+Non-production profiles (`local_dev`, `local_prod`, `mobile_beta`) and
+physical qualification check only `v1/health` relative to the configured API
+base. A private fixture cannot be made online by a healthy public endpoint.
+An accidental `api.omi.me` override falls back to public probes rather than
+putting that production edge back on the timer.
+
+The hermetic connectivity test calls the real package through a mocked HTTP
+client. A successful Baidu or Taobao HEAD preserves live transport even with
+Cloudflare blocked. All failed HEADs feed the actual capture reducer and produce
+`phoneBatchLive`, a batch session and `StartPhoneSessionStage(batch)`.
+This proves transport selection at unit level; it does not claim microphone or
+filesystem acceptance on a physical phone. Backend routes and Cloud Armor
+configuration are unchanged.

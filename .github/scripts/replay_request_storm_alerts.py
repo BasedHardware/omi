@@ -58,12 +58,25 @@ def replay(edge, sync, windows=None):
             totals[time] = totals.get(time, 0) + value
             if series["metric"]["labels"]["response_code"] == "409":
                 duplicates[time] = duplicates.get(time, 0) + value
-    # Ratio of matching one-hour SUMs, not mean of per-series percentages.
-    ratios = {}
-    for time in sorted(totals):
-        window = [time - STEP * i for i in range(12)]
-        denominator = sum(totals.get(t, 0) for t in window)
-        ratios[time] = 100 * sum(duplicates.get(t, 0) for t in window) / denominator if denominator else None
+    # Use exactly the 300s ALIGN_SUM counts returned by Monitoring, with
+    # no homemade one-hour rolling reconstruction. Both ratio and volume
+    # conditions have the same one-hour duration, so their AND is equivalent
+    # to requiring both thresholds for the entire sampled retest interval.
+    configs = Path(__file__).resolve().parent.parent / "monitoring"
+    edge_threshold = json.loads((configs / "api_edge_429_policy.json").read_text())["conditions"][0]["conditionThreshold"]
+    sync_policy = json.loads((configs / "sync_upload_409_policy.json").read_text())
+    ratio_threshold, volume_threshold = [c["conditionThreshold"] for c in sync_policy["conditions"]]
+    if sync_policy["combiner"] != "AND":
+        raise ValueError("Replay requires ratio AND denominator volume")
+    for condition in (edge_threshold, ratio_threshold, volume_threshold):
+        if condition["aggregations"][0]["alignmentPeriod"] != "300s":
+            raise ValueError("Replay requires 300s Monitoring aggregates")
+    if ratio_threshold["duration"] != volume_threshold["duration"]:
+        raise ValueError("Replay requires matching ratio and volume durations")
+    ratios = {time: 100 * duplicates.get(time, 0) / total if total else None for time, total in totals.items()}
+    qualified = {
+        time: ratio if totals[time] > volume_threshold["thresholdValue"] else None for time, ratio in ratios.items()
+    }
     windows = windows or [
         ("baseline", "2026-09-21T04:00:00Z", "2026-10-07T12:00:00Z"),
         ("incident", "2026-10-07T12:00:00Z", "2026-10-11T17:00:00Z"),
@@ -76,11 +89,12 @@ def replay(edge, sync, windows=None):
         for backend, points in edges.items():
             values = [v for t, v in points.items() if start <= t < end]
             peak = max(values, default=0)
-            fire = first_fire(points, 1000, dt.timedelta(minutes=30), start, end)
+            fire = first_fire(points, edge_threshold["thresholdValue"] * 60, dt.timedelta(seconds=int(edge_threshold["duration"][:-1])), start, end)
             print(f"| {label} | {backend} | {peak:.1f}/min | {fire} |")
-        values = [v for t, v in ratios.items() if start <= t < end and v is not None]
-        fire = first_fire(ratios, 10, dt.timedelta(hours=1), start, end)
-        print(f"| {label} | sync 409 share (1h) | {max(values, default=0):.2f}% | {fire} |")
+        eligible_values = [v for t, v in qualified.items() if start <= t < end and v is not None]
+        fire = first_fire(qualified, ratio_threshold["thresholdValue"] * 100,
+                          dt.timedelta(seconds=int(ratio_threshold["duration"][:-1])), start, end)
+        print(f"| {label} | sync 409 share (5m; volume-qualified) | {max(eligible_values, default=0):.2f}% | {fire} |")
 
 
 def main():

@@ -1,11 +1,11 @@
 {
   "displayName": "Prod sync duplicate upload share",
   "documentation": {
-    "content": "The sync backend 409/request_count ratio (rolling one-hour totals, all response codes in denominator) stays above 10% for one hour. This backend-wide metric is a duplicate-upload proxy, not a route-specific sync_content_in_progress count. Inspect upload 409 reason, owner/job hints, old app builds, job polling and pending/completion ages. Use the read-only Monitoring REST and measure.sh approach in the runbook. No traffic or missing data does not page. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/request-storm-alerts.md.",
+    "content": "The sync backend 409/request_count ratio (matching five-minute ALIGN_SUM counts, all response codes in denominator) stays above 10% for one hour. This backend-wide metric is a duplicate-upload proxy, not a route-specific sync_content_in_progress count. Inspect upload 409 reason, owner/job hints, old app builds, job polling and pending/completion ages. Use the read-only Monitoring REST and measure.sh approach in the runbook. The AND volume condition requires more than 100 total requests per five-minute window for the same one-hour duration. Low volume or missing data does not page. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/request-storm-alerts.md.",
     "mimeType": "text/markdown"
   },
   "enabled": true,
-  "combiner": "OR",
+  "combiner": "AND",
   "notificationChannels": [],
   "conditions": [
     {
@@ -18,7 +18,7 @@
         "duration": "3600s",
         "aggregations": [
           {
-            "alignmentPeriod": "3600s",
+            "alignmentPeriod": "300s",
             "perSeriesAligner": "ALIGN_SUM",
             "crossSeriesReducer": "REDUCE_SUM",
             "groupByFields": [
@@ -28,7 +28,30 @@
         ],
         "denominatorAggregations": [
           {
-            "alignmentPeriod": "3600s",
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.backend_target_name"
+            ]
+          }
+        ],
+        "trigger": {
+          "count": 1
+        },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    },
+    {
+      "displayName": "Sync denominator exceeds 100 requests per five minutes for one hour",
+      "conditionThreshold": {
+        "filter": "metric.type=\"loadbalancing.googleapis.com/https/request_count\" AND resource.type=\"https_lb_rule\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-sync-49a4-be\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 100,
+        "duration": "3600s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
             "perSeriesAligner": "ALIGN_SUM",
             "crossSeriesReducer": "REDUCE_SUM",
             "groupByFields": [
