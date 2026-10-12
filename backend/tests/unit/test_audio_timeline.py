@@ -230,6 +230,26 @@ class TestSendMap:
         # audio maps to capture 10s..11s).
         assert sm.map_interval(RATE, RATE + RATE // 2) == (10 * RATE, 10 * RATE + RATE // 2)
 
+    def test_start_boundary_after_vad_skip_is_placed(self):
+        """Regression: a segment starting exactly on the post-gap send boundary
+        must be placed in the post-gap send, not kept unplaced.
+
+        Provider time is continuous across a VAD skip while capture time jumps,
+        so the segment's inclusive start lands exactly on the exclusive end of
+        the pre-gap span. One sample earlier still straddles the gap.
+        """
+        timeline = CaptureTimeline(sample_rate=RATE)
+        timeline.accept(_pcm(RATE // 2), arrival_wall=1.0, arrival_monotonic=0.0)
+        translator = ProviderEpochTranslator(timeline, RATE)
+        translator.note_accepted(0, 8000)
+        translator.note_accepted(11200, 4800)
+        placed = translator.translate([{'start': 0.5, 'end': 0.6, 'text': 'boundary'}])
+        assert placed and placed[0].get('_capture_start_sample') == 11200
+        assert not placed[0].get('_capture_unplaced')
+        # One sample earlier genuinely straddles the capture gap: still refused.
+        earlier = translator.translate([{'start': 0.4999, 'end': 0.6, 'text': 'straddle'}])
+        assert earlier[0].get('_capture_unplaced')
+
 
 class TestTwoRolloversWithIdentifiablePhrases:
     """End-to-end pure-module scenario: >30 min rollovers, distinct phrases, provider reset."""
