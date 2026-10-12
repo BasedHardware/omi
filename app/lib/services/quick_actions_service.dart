@@ -84,7 +84,7 @@ class QuickActionsService {
     _quickActions.setShortcutItems(items);
   }
 
-  void _handleShortcut(String shortcutType) {
+  Future<void> _handleShortcut(String shortcutType) async {
     final navigator = globalNavigatorKey.currentState;
     final context = globalNavigatorKey.currentContext;
     if (navigator == null || context == null) return;
@@ -101,10 +101,10 @@ class QuickActionsService {
         openChatSheet(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
-        unawaited(_toggleMute(context, mute: true));
+        await _toggleMute(context, mute: true);
         break;
       case _kUnmute:
-        unawaited(_toggleMute(context, mute: false));
+        await _toggleMute(context, mute: false);
         break;
       case _kConnectDevice:
         Provider.of<DeviceProvider>(context, listen: false).initiateConnection('QuickActions');
@@ -145,36 +145,7 @@ class QuickActionsService {
   }
 
   @visibleForTesting
-  Future<void> handleShortcutForTesting(String shortcutType) async {
-    final navigator = globalNavigatorKey.currentState;
-    final context = globalNavigatorKey.currentContext;
-    if (navigator == null || context == null) return;
-
-    switch (shortcutType) {
-      case _kAddTask:
-        _navigateToTasksAndOpenSheet(navigator, context);
-        break;
-      case _kAskOmi:
-        openChatSheet(context, const ChatPage(isPivotBottom: false));
-        break;
-      case _kVoiceMode:
-        openChatSheet(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
-        break;
-      case _kMute:
-        await _toggleMute(context, mute: true);
-        break;
-      case _kUnmute:
-        await _toggleMute(context, mute: false);
-        break;
-      case _kConnectDevice:
-        Provider.of<DeviceProvider>(context, listen: false).initiateConnection('QuickActions');
-        routeToPage(context, const DeviceSettings());
-        break;
-      case _kDeviceSettings:
-        routeToPage(context, const DeviceSettings());
-        break;
-    }
-  }
+  Future<void> handleShortcutForTesting(String shortcutType) => _handleShortcut(shortcutType);
 
   @visibleForTesting
   Future<void> toggleMuteForTesting(BuildContext context, {required bool mute}) =>
