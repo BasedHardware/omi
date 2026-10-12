@@ -34,8 +34,9 @@ class DeveloperApiKeysSection extends StatelessWidget {
           children: [
             OmiSectionHeader(
               context.l10n.developerApi,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+              trailing: Wrap(
+                spacing: OmiSpacing.xs,
+                runSpacing: OmiSpacing.xs,
                 children: [
                   OmiButton.secondary(
                     label: context.l10n.docs,
@@ -45,7 +46,6 @@ class DeveloperApiKeysSection extends StatelessWidget {
                       PlatformManager.instance.analytics.pageOpened('Developer API Docs');
                     },
                   ),
-                  const SizedBox(width: OmiSpacing.xs),
                   OmiButton.secondary(
                     label: context.l10n.createKey,
                     leading: const FaIcon(FontAwesomeIcons.plus),
