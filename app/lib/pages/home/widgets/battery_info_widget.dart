@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -245,7 +247,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       builder: (sheetContext) => RecordOptionsSheet(
         onPickPhoneMic: () {
           Navigator.pop(sheetContext);
-          _startRecording(context);
+          unawaited(_startRecording(context));
         },
         onPickPhoneCall: () {
           Navigator.pop(sheetContext);
@@ -291,7 +293,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       builder: (sheetContext) => PendantListeningSheet(
         onRecordWithPhone: () {
           Navigator.pop(sheetContext);
-          _startPhoneRecording(context);
+          unawaited(_startPhoneRecording(context));
         },
         onPhoneCall: PhoneCallsFeature.visible
             ? () {
@@ -316,7 +318,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       _showPendantListening(context);
       return;
     }
-    await _startPhoneRecording(context);
+    try {
+      await _startPhoneRecording(context);
+    } catch (_) {
+      if (context.mounted) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+    }
   }
 
   Future<void> _startPhoneRecording(BuildContext context) async {
@@ -325,7 +333,14 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      try {
+        await captureProvider.finishCapture();
+      } catch (_) {
+        if (context.mounted) {
+          OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        }
+        return;
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
@@ -375,13 +390,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
           enabled: !isInitialising,
           // The child's gestures are excluded below, so the actions (tap, and long-press for the
           // record options) are declared here where assistive tech can reach them.
-          onTap: isInitialising ? null : () => _startRecording(context),
+          onTap: isInitialising ? null : () => unawaited(_startRecording(context)),
           onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
           onLongPressHint: canShowOptions ? l10n.moreOptions : null,
           excludeSemantics: true,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _startRecording(context),
+            onTap: () => unawaited(_startRecording(context)),
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
             // "Record with this phone": a neutral circle with a white dot, a stop square while the
             // phone records. The ⌄ badge opens the other ways to record.
