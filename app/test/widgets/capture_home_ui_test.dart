@@ -53,7 +53,9 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
+  int finishCaptures = 0;
   Object? phoneStartFailure;
+  Object? finishCaptureFailure;
 
   @override
   String? get liveCaptureSource => switch (live) {
@@ -135,6 +137,12 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   Future<void> streamRecording({bool resumeCapture = true}) async {
     phoneStarts++;
     final failure = phoneStartFailure;
+    if (failure != null) throw failure;
+  }
+  @override
+  Future<void> finishCapture() async {
+    finishCaptures++;
+    final failure = finishCaptureFailure;
     if (failure != null) throw failure;
   }
 
@@ -616,6 +624,23 @@ void main() {
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));
       expect(find.bySemanticsLabel(en.stopRecording), findsOneWidget);
       expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
+    });
+
+    testWidgets('tapping stop while recording invokes finishCapture', (tester) async {
+      final capture = _Capture(_Live.phone);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.pump();
+      expect(capture.finishCaptures, 1);
+    });
+
+    testWidgets('a stop that fails says so and catches the failure gracefully', (tester) async {
+      final capture = _Capture(_Live.phone)..finishCaptureFailure = StateError('finish failed');
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.pump();
+      expect(capture.finishCaptures, 1);
+      expect(find.text(en.somethingWentWrong), findsOneWidget);
     });
   });
 
