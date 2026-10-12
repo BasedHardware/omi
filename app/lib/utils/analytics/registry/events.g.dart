@@ -1770,17 +1770,59 @@ enum BillingSubscriptionPlanChangedInterval {
   final String wireName;
 }
 
+enum BillingSubscriptionPlanChangedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedReason {
+  cancellationRequested("cancellation_requested"),
+  paymentFailure("payment_failure"),
+  paymentDisputed("payment_disputed"),
+  none("none");
+  const BillingSubscriptionPlanChangedReason(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedPriceGeneration {
+  legacy("legacy"),
+  ladderV1("ladder_v1"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPriceGeneration(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedBillingMeasurement {
+  trialPlanEntitlement("trial_plan_entitlement"),
+  paidPlanEntitlement("paid_plan_entitlement");
+  const BillingSubscriptionPlanChangedBillingMeasurement(this.wireName);
+  final String wireName;
+}
+
 final class BillingSubscriptionPlanChanged extends RegisteredEvent {
-  const BillingSubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.interval, required this.mrrBeforeCents, required this.mrrAfterCents});
+  const BillingSubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.interval, required this.mrrBeforeCents, required this.mrrAfterCents, required this.plan, required this.reason, required this.priceGeneration, required this.isTrial, required this.billingMeasurement, required this.mrrCents});
   final BillingSubscriptionPlanChangedPreviousPlan previousPlan;
   final BillingSubscriptionPlanChangedNewPlan newPlan;
   final BillingSubscriptionPlanChangedInterval interval;
   final int mrrBeforeCents;
   final int mrrAfterCents;
+  final BillingSubscriptionPlanChangedPlan plan;
+  final BillingSubscriptionPlanChangedReason reason;
+  final BillingSubscriptionPlanChangedPriceGeneration priceGeneration;
+  final bool isTrial;
+  final BillingSubscriptionPlanChangedBillingMeasurement billingMeasurement;
+  final int mrrCents;
   @override
   String get wireName => "Billing Subscription Plan Changed";
   @override
-  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "interval": interval.wireName, "mrr_before_cents": mrrBeforeCents, "mrr_after_cents": mrrAfterCents};
+  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "interval": interval.wireName, "mrr_before_cents": mrrBeforeCents, "mrr_after_cents": mrrAfterCents, "plan": plan.wireName, "reason": reason.wireName, "price_generation": priceGeneration.wireName, "is_trial": isTrial, "billing_measurement": billingMeasurement.wireName, "mrr_cents": mrrCents};
 }
 
 final class SpeakerTagPromptsClosed extends RegisteredEvent {

@@ -24,6 +24,21 @@ DART_RESERVED = frozenset({
     'while', 'with', 'bool', 'int', 'double', 'dynamic', 'typedef', 'abstract', 'covariant',
 })
 
+# Backend-only delivery/catalog fields are documented, never exposed as free
+# strings in the portable Dart API. Keep this inventory closed to billing.
+BILLING_BACKEND_PROPERTIES = {
+    '$insert_id': {'type': 'uuid'},
+    'billing_event_id': {'type': 'bounded_string', 'max_length': 128},
+    'occurred_at': {'type': 'iso8601', 'nullable': True},
+    'billing_source': {'type': 'constant', 'value': 'stripe_webhook_authoritative_owner'},
+    'price_id': {'type': 'bounded_string', 'max_length': 128},
+    'currency': {'type': 'bounded_string', 'max_length': 16},
+}
+BILLING_EVENT_IDS = frozenset({
+    'billingSubscriptionStarted', 'billingSubscriptionChurned',
+    'billingSubscriptionCancellationScheduled', 'billingSubscriptionPlanChanged',
+})
+
 
 def git(ref, path):
     result = subprocess.run(['git', 'show', f'{ref}:{path}'], cwd=ROOT, capture_output=True, text=True)
@@ -76,6 +91,11 @@ def validate(doc, root=ROOT, prior=None):
                 errors.append(f'{label}: terminal events require outcome, failure and duration')
         else:
             errors.append(f'{label}: unknown event phase')
+        backend = event.get('backend_properties', {})
+        if backend and (label not in BILLING_EVENT_IDS or backend != BILLING_BACKEND_PROPERTIES):
+            errors.append(f'{label}: backend properties must match the closed billing delivery/catalog inventory')
+        if set(backend) & {p.get('wire_name') for p in event['properties'].values()}:
+            errors.append(f'{label}: backend and portable property wire names must be distinct')
         for key, spec in event['properties'].items():
             errors.extend(property_errors(label, key, spec))
         if len({p.get('wire_name') for p in event['properties'].values()}) != len(event['properties']):
@@ -210,11 +230,15 @@ def render(doc):
             for key, spec in fields.items()
         ]
         dart += ['  @override', f'  String get wireName => {dart_string(e["wire_name"])};', '  @override', '  Map<String, Object> get properties => {' + ', '.join(entries) + '};', '}']
-        plan.append(f"| {e['id']} | {e['wire_name']} | {', '.join(p['wire_name'] for p in fields.values()) or 'none'} | {e['status']} | {', '.join(e['consumers'])} |")
+        plan.append(f"| {e['id']} | {e['wire_name']} | {', '.join([p['wire_name'] for p in fields.values()] + list(e.get('backend_properties', {}))) or 'none'} | {e['status']} | {', '.join(e['consumers'])} |")
     review_event = next(e for e in doc['events'] if e['id'] == 'appReviewOpportunity')
     decisions = review_event['properties']['decision']['values']
     plan += ['', '## App Review Opportunity decisions', '', ', '.join(f'`{decision}`' for decision in decisions)]
     plan += [
+        '',
+        '## Backend billing payload fields',
+        '',
+        '`backend_properties` documents the closed Stripe webhook delivery/catalog inventory; these fields are not portable Dart constructor arguments. `$insert_id` is a UUID, `billing_event_id` and `price_id` are bounded to 128 characters, `currency` to 16, `occurred_at` is a nullable ISO 8601 timestamp, and `billing_source` is `stripe_webhook_authoritative_owner`. Portable properties retain the boolean/integer/closed-enum rules.',
         '',
         '## Integer sentinel conventions',
         '',

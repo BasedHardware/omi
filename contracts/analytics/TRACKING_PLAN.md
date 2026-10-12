@@ -143,10 +143,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speakerTagPromptsViewed | Speaker Tag Prompts Viewed | prompt_count, first_time | active | speaker-tag-prompts-funnel |
 | speakerTagPromptClipPlayed | Speaker Tag Prompt Clip Played | kind, loaded | active | speaker-tag-prompts-funnel |
 | speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
-| billingSubscriptionStarted | Billing Subscription Started | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
-| billingSubscriptionChurned | Billing Subscription Churned | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
-| billingSubscriptionCancellationScheduled | Billing Subscription Cancellation Scheduled | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
-| billingSubscriptionPlanChanged | Billing Subscription Plan Changed | previous_plan, new_plan, interval, mrr_before_cents, mrr_after_cents | active | billing-plan-changes |
+| billingSubscriptionStarted | Billing Subscription Started | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents, $insert_id, billing_event_id, occurred_at, billing_source, price_id, currency | active | billing-lifecycle-events |
+| billingSubscriptionChurned | Billing Subscription Churned | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents, $insert_id, billing_event_id, occurred_at, billing_source, price_id, currency | active | billing-lifecycle-events |
+| billingSubscriptionCancellationScheduled | Billing Subscription Cancellation Scheduled | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents, $insert_id, billing_event_id, occurred_at, billing_source, price_id, currency | active | billing-lifecycle-events |
+| billingSubscriptionPlanChanged | Billing Subscription Plan Changed | previous_plan, new_plan, interval, mrr_before_cents, mrr_after_cents, plan, reason, price_generation, is_trial, billing_measurement, mrr_cents, $insert_id, billing_event_id, occurred_at, billing_source, price_id, currency | active | billing-plan-changes |
 | speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
 | voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |
 | voiceReplyPlayback | Voice Reply Playback | outcome, skip_reason, mode, output_route, chunks_requested, chunks_played, chunks_dropped, fallback_reason, first_audio_latency_ms, interrupt_source | active | mobile-instrumentation-presence |
@@ -171,6 +171,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 ## App Review Opportunity decisions
 
 `eligible`, `not_ios_or_android`, `storage_error`, `not_familiar`, `migration_cooldown`, `cooldown`, `budget_exhausted`, `version_already_attempted`, `session_already_attempted`, `lifecycle_not_appropriate`, `lifecycle_changed`, `availability_error`, `unavailable`, `request_error`, `recent_bad_experience`
+
+## Backend billing payload fields
+
+`backend_properties` documents the closed Stripe webhook delivery/catalog inventory; these fields are not portable Dart constructor arguments. `$insert_id` is a UUID, `billing_event_id` and `price_id` are bounded to 128 characters, `currency` to 16, `occurred_at` is a nullable ISO 8601 timestamp, and `billing_source` is `stripe_webhook_authoritative_owner`. Portable properties retain the boolean/integer/closed-enum rules.
 
 ## Integer sentinel conventions
 
