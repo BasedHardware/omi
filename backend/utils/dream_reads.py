@@ -99,6 +99,9 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
     seeds = set([ref for ref in records if ref in records.targets][:4])
     diagnostics['target_context_counts'].update(retrieval_seeded=len(seeds), contextless=len(records.targets - seeds))
     read = cached_reader() if read is None else read
+    # Shared with the lazy candidate generator so earlier-tier admissions also
+    # stop occupying later temporal output slots.
+    excluded = set(records)
     return add_context(
         records,
         context_candidates(
@@ -108,10 +111,12 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
             read_record=read,
             read_entity_record=read_entity_record,
             diagnostics=diagnostics,
+            excluded_refs=excluded,
         ),
         caps,
         vocabulary,
         diagnostics=diagnostics,
+        excluded_refs=excluded,
     )
 
 

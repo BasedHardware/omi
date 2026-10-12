@@ -6,8 +6,10 @@ from database._client import get_firestore_client
 from database.screen_activity import normalize_screen_activity_timestamp
 from database.task_intelligence_control import get_task_workflow_control
 
+TEMPORAL_SCAN_LIMIT = 12
 
-def temporal_neighbours(uid, collection, start, anchor, end, *, firestore_client=None):
+
+def temporal_neighbours(uid, collection, start, anchor, end, *, excluded_ids=(), firestore_client=None):
     if collection not in {'conversations', 'screen_activity'}:
         raise ValueError('dream_temporal_collection')
     database = firestore_client if firestore_client is not None else get_firestore_client()
@@ -16,6 +18,7 @@ def temporal_neighbours(uid, collection, start, anchor, end, *, firestore_client
     source = database.collection('users').document(uid).collection(collection)
     generation = get_task_workflow_control(uid, firestore_client=database).account_generation if screen else None
     rows = {}
+    excluded = set(excluded_ids)
     for lower, upper, direction in ((start, anchor, 'DESCENDING'), (anchor, end, 'ASCENDING')):
         bounds = (
             (normalize_screen_activity_timestamp(lower), normalize_screen_activity_timestamp(upper))
@@ -29,7 +32,11 @@ def temporal_neighbours(uid, collection, start, anchor, end, *, firestore_client
         )
         if not screen:
             query = query.select(['created_at'])
-        for snapshot in query.limit(4).stream(timeout=3):
+        # Eight supplied targets cannot monopolize the four output slots.
+        # Exclusion happens before nearest selection, with fixed read bounds.
+        for snapshot in query.limit(TEMPORAL_SCAN_LIMIT).stream(timeout=3):
+            if snapshot.id in excluded:
+                continue
             row = dict(snapshot.to_dict() or {}, id=snapshot.id)
             if screen and (row.get('captureEligible') is not True or row.get('accountGeneration', 0) != generation):
                 continue

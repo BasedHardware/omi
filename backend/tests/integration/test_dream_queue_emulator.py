@@ -188,3 +188,55 @@ def test_unavailable_settlement_fences_versions_and_expires_transients(monkeypat
     assert dream_store.own_state(uid, firestore_client=database)['score'] == 0
     dream_store.mark_dirty(uid, [('conversations', 'unavailable')], firestore_client=database)
     assert dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()['version'] != item['version']
+
+
+@pytest.mark.parametrize('collection', ['conversations', 'screen_activity'])
+def test_temporal_neighbours_exclude_eight_inputs_before_nearest_selection(collection):
+    from datetime import timedelta
+    from database.dream_context_reads import temporal_neighbours
+    from database.screen_activity import normalize_screen_activity_timestamp
+
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uid = 'synthetic-' + str(uuid4())
+    now = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
+    source = database.collection('users').document(uid).collection(collection)
+    database.collection('users').document(uid).collection('task_intelligence_control').document('state').set(
+        {'account_generation': 2}
+    )
+
+    def put(key, minutes, **extra):
+        when = now + timedelta(minutes=minutes)
+        row = (
+            {'created_at': when}
+            if collection == 'conversations'
+            else {
+                'timestamp': normalize_screen_activity_timestamp(when),
+                'captureEligible': True,
+                'accountGeneration': 2,
+            }
+        )
+        source.document(key).set({**row, **extra})
+
+    for i in range(8):
+        put(f'target-{i}', -i)
+    for i, minutes in enumerate((-10, -20, -600, 5, 30, 1800)):
+        put(f'context-{i}', minutes)
+    if collection == 'screen_activity':
+        put('ineligible', 0, captureEligible=False)
+        put('old-generation', 0, accountGeneration=1)
+    window = timedelta(hours=24 if collection == 'conversations' else 2)
+    rows = temporal_neighbours(
+        uid,
+        collection,
+        now - window,
+        now,
+        now + window,
+        excluded_ids={f'target-{i}' for i in range(8)},
+        firestore_client=database,
+    )
+    assert [row['id'] for row in rows] == ['context-3', 'context-0', 'context-1', 'context-4']
+    # No targets, wrong-generation/opted-out screens or out-of-window rows.
+    assert all(row['id'].startswith('context-') for row in rows)

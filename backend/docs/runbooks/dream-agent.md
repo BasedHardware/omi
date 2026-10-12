@@ -6,9 +6,17 @@ Dirty reads initially admit up to four editable targets for neighbourhood retrie
 then return unused context capacity to additional dirty targets under the existing
 triage budget and eight-target reasoning limit. This is an initial allocation, not a four-target pass cap.
 Retrieval adds explicit people/entities and conversation tasks,
-same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
+same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits
+(ordinary content words excluding a small stopword set when no rare tokens exist),
 existing Pinecone conversation and canonical memory semantic hits, then nearby
-conversations and screen records. Reads remain owner scoped and visibility checked.
+conversations and screen records. Semantic queries use up to 600 characters of real
+record text independently of lexical rarity. Temporal conversation queries use a
+24-hour window on either side; screen queries retain the two-hour window. Each
+direction reads at most 12 documents and each lookup returns at most four nearest
+rows after excluding every ref already supplied to retrieval, including unseeded
+targets 5–8. This prevents the pass's own targets occupying the neighbour slots.
+Screen rows still require `captureEligible is True` and the current task-control
+`accountGeneration`. Reads remain owner scoped and visibility checked.
 Queries and result counts are bounded. User-authored title and structured title/overview terms precede
 long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
 the affected path's failure count and emit shared degraded fallback telemetry;
@@ -26,10 +34,14 @@ for `links`, `lexical`, `semantic`, and `temporal`. Each path has `attempted`
 (provider/query and reference-hydration calls), `found` (returned candidate refs,
 including duplicates), `added` (unique visible context admitted), and `failed`
 (query/hydration errors). Additional counts are `duplicate`, `unavailable`, and
-`budget_skipped`. A zero attempted count means that path was not reached or had
+`budget_skipped` and `query_empty` (seed records without an applicable query).
+A zero attempted count means that path was not reached or had
 no applicable query; it does not certify provider health. A budget stop leaves
 later tiers unattempted. Context added during retrieval may subsequently become
 a dirty target; final `role_counts` describes the model input.
+`retrieval_failure_counts` breaks failures down by path and exception class name
+only. Names are allowlisted; unknown/custom classes collapse to `Exception`.
+Provider exception messages, module paths and tracebacks never enter these counters.
 
 `dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
 `failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
@@ -64,6 +76,8 @@ Prometheus exports `omi_dream_retrieval_total{path,count}` and
 `omi_dream_dirty_read_total{count}` and `omi_dream_target_context_total{coverage}`
 with only these closed labels. These diagnostics
 and the dry-run result contain no refs, IDs, provider messages or user text.
+`omi_dream_retrieval_failure_total{path,exception_class}` exports the same
+allowlisted class breakdown.
 
 For the counts-only owner investigation, use the retrieval entrypoint inside a pod
 running this source, with `uid` and `records` already obtained by the authorized
@@ -87,6 +101,35 @@ supplied; semantic retrieval can make ordinary embedding-provider calls with
 their normal infrastructure usage accounting. `targets=[...]` can mark a subset
 of supplied records editable. The existing `dry_run` below still plans supplied
 evidence without retrieval. The implementing agent uses synthetic fixtures only.
+
+Use a fresh Python process against one coherent source revision. If investigating
+with the current main `dream_*` files overlaid on a pre-#21237 image, also overlay
+`database/task_intelligence_control.py` from that same revision. #21237 added its
+keyword-only `firestore_client` injection; `database/dream_context_reads.py` calls
+that keyword for screen generation checks. The old helper raises `TypeError`
+before any screen query. Missing/ineligible screens instead return zero hits,
+not failures. Eligible owner screen data must have synced rows under
+`users/{uid}/screen_activity`, a sortable UTC `timestamp` string
+(`YYYY-MM-DD HH:MM:SS.mmm`), `captureEligible: true`, and `accountGeneration`
+matching `users/{uid}/task_intelligence_control/state.account_generation` (zero
+by default). Legacy/unattested captures remain excluded; do not rewrite them to
+bypass eligibility.
+
+With `uid` and the eight newest readable conversations already held locally in
+`records` as `{ "conversations/<id>": read_record(uid, ref), ... }`, rerun the exact
+call above. No new target-selection or cap override is needed. Check
+`retrieval_counts.lexical/semantic.attempted` and `query_empty`, then
+`retrieval_failure_counts.temporal` and final `role_counts`. Four seeded targets
+still means four target neighbourhoods, not four queries from every path: identical
+text queries are deduplicated and the evidence budget can stop later queries.
+
+Listen and Cloud Run use the same backend Dockerfile, but are separately deployed.
+The listen Helm workflow with a blank image tag explicitly keeps its running
+image; a Cloud Run release does not prove the listen pod has the same source.
+An overlay changes Python files, not image dependencies, environment, IAM or
+already imported modules. Do not use an old interactive Python session after
+copying files. No live image comparison or production account read is required
+to identify the signature mismatch above.
 
 The owner's agent can call `await utils.dream_agent.dry_run(uid, records,
 targets=[...], vocabulary=[...])` inside a pod with authorized, decrypted,

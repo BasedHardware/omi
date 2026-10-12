@@ -146,7 +146,7 @@ def test_owner_retrieval_dry_run_exercises_all_paths_without_admission_or_writes
         ),
     )
 
-    def temporal(uid, collection, *a):
+    def temporal(uid, collection, *a, **k):
         if collection == 'conversations':
             return fail()
         return [{'id': 'private-screen', 'ocrText': 'private-screen-content'}]
@@ -166,6 +166,12 @@ def test_owner_retrieval_dry_run_exercises_all_paths_without_admission_or_writes
         assert tuple(counts[k] for k in ('attempted', 'found', 'added', 'failed', 'duplicate')) == values
         assert counts['unavailable'] == counts['budget_skipped'] == 0
     assert result['triage_fits'] and 'private-' not in json.dumps(result)
+    assert result['retrieval_failure_counts'] == {
+        'links': {'RuntimeError': 2},
+        'lexical': {},
+        'semantic': {'RuntimeError': 1},
+        'temporal': {'RuntimeError': 1},
+    }
     forbidden.assert_not_called()
 
 
@@ -200,14 +206,19 @@ def test_reports_and_metrics_publish_only_closed_count_labels(caplog):
     report['retrieval_counts']['private-path'] = {'private-label': 99}
     report['dirty_counts']['unavailable'] = 32
     report['dirty_counts']['private-label'] = 99
+    report['retrieval_failure_counts']['temporal'] = {'TypeError': 4, 'private-class': 99}
+    report['retrieval_failure_counts']['private-path'] = {'TypeError': 99}
     before = dream_metrics.RETRIEVAL.labels('lexical', 'failed')._value.get()
     dirty_before = dream_metrics.DIRTY_READS.labels('unavailable')._value.get()
+    failures_before = dream_metrics.RETRIEVAL_FAILURES.labels('temporal', 'TypeError')._value.get()
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         dream_metrics.record_pass(report)
     assert dream_metrics.RETRIEVAL.labels('lexical', 'failed')._value.get() == before + 2
     assert dream_metrics.DIRTY_READS.labels('unavailable')._value.get() == dirty_before + 32
+    assert dream_metrics.RETRIEVAL_FAILURES.labels('temporal', 'TypeError')._value.get() == failures_before + 4
     assert 'private-' not in caplog.text
     assert 'retrieval_counts' in caplog.text and 'dirty_counts' in caplog.text
+    assert 'retrieval_failure_counts' in caplog.text
 
 
 def test_unconfigured_conversation_vector_index_is_counted_as_failed(monkeypatch):
@@ -326,3 +337,131 @@ def test_memory_lock_is_transient_but_disposition_is_permanent(monkeypatch, chan
         assert raised.value.status_code == status
     else:
         assert dream_reads.read_record('synthetic', 'memories/permanent') is None
+
+
+def test_eight_ordinary_speech_targets_search_without_rare_tokens_and_exclude_all_inputs(monkeypatch):
+    from datetime import timedelta
+    from database import dream_context_reads
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    # Every word was filtered out by the old rarity gate.
+    speech = ['We work in the garden with the boat ' + word for word in ('one', 'two', 'three', 'four')]
+    assert all(set(dream_context.tokens(words)) <= dream_context.common_words() for words in speech)
+    records = {
+        f'conversations/target-{i}': {'created_at': now, 'transcript_segments': [{'text': speech[i % 4]}]}
+        for i in range(8)
+    }
+    lexical, semantic, windows = [], [], []
+    monkeypatch.setattr(dream_context.action_items, 'get_action_items', lambda *a, **k: [])
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **k: lexical.append(k['query']) or [])
+    monkeypatch.setattr(dream_context, 'semantic_conversation_refs', lambda query, uid: semantic.append(query) or [])
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(search=lambda *a, **k: []))
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda *a, **k: {'transcript_segments': [{'text': 'Toy neighbour'}]}
+    )
+
+    # Reproduce the actual pre-#21237 shared dependency left by dream-only overlays.
+    def old_control(uid):
+        return SimpleNamespace(account_generation=0)
+
+    monkeypatch.setattr(dream_context_reads, 'get_task_workflow_control', old_control)
+
+    def temporal(uid, collection, start, anchor, end, **kwargs):
+        windows.append((collection, start, end, kwargs['excluded_ids']))
+        if collection == 'conversations':
+            return [{'id': 'outside-input'}]
+        return dream_context_reads.temporal_neighbours(
+            uid, collection, start, anchor, end, firestore_client=RecordingFirestore(), **kwargs
+        )
+
+    monkeypatch.setattr(dream_context, 'temporal_neighbours', temporal)
+    result = asyncio.run(dream_agent.dry_run_retrieval('synthetic', records, caps=Caps(tokens=100000), vocabulary=[]))
+    assert len(lexical) == len(semantic) == 4
+    assert all('garden' in query and 'boat' in query for query in lexical)
+    assert semantic == speech
+    assert result['retrieval_counts']['lexical']['attempted'] == 4
+    assert result['retrieval_counts']['semantic']['attempted'] == 8
+    assert result['retrieval_counts']['temporal']['failed'] == 4
+    assert result['retrieval_failure_counts']['temporal'] == {'TypeError': 4}
+    assert result['target_context_counts'] == {'retrieval_seeded': 4, 'contextless': 4}
+    assert result['role_counts'] == {'target': 8, 'context': 1} and result['triage_fits']
+    for collection, start, end, excluded in windows:
+        if collection == 'conversations':
+            assert {f'target-{i}' for i in range(8)} <= excluded
+            assert (start, end) == (now - timedelta(hours=24), now + timedelta(hours=24))
+        else:
+            assert (start, end) == (now - timedelta(hours=2), now + timedelta(hours=2))
+    conversation_windows = [excluded for collection, _, _, excluded in windows if collection == 'conversations']
+    assert 'outside-input' not in conversation_windows[0]
+    assert all('outside-input' in excluded for excluded in conversation_windows[1:])
+    assert 'synthetic' not in json.dumps(result) and 'garden' not in json.dumps(result)
+
+
+def test_semantic_short_and_nonlatin_text_does_not_depend_on_lexical_gate(monkeypatch):
+    queries = []
+    monkeypatch.setattr(dream_context, 'semantic_conversation_refs', lambda query, uid: queries.append(query) or [])
+    monkeypatch.setattr(dream_context, 'MemoryService', lambda: SimpleNamespace(search=lambda *a, **k: []))
+    monkeypatch.setattr(dream_context, 'keyword_search_conversation_ids', lambda **k: [])
+    report = {}
+    list(
+        dream_context.context_candidates(
+            'synthetic',
+            {'people/a': {'name': 'AI'}, 'people/b': {'name': '猫'}},
+            [],
+            read_record=None,
+            read_entity_record=None,
+            diagnostics=report,
+        )
+    )
+    assert queries == ['AI', '猫']
+    assert report['retrieval_counts']['lexical']['query_empty'] == 2
+    assert report['retrieval_counts']['semantic']['query_empty'] == 0
+    assert report['retrieval_counts']['semantic']['attempted'] == 4
+
+
+def test_exception_class_counters_cover_query_and_hydration_without_private_labels():
+    def broken():
+        raise TypeError('private-provider-body')
+
+    report = {}
+    assert list(dream_context.query_candidates(report, 'temporal', broken)) == []
+    dream_context.add_context({'people/a': {}}, [('people/b', broken, 'temporal')], Caps(), diagnostics=report)
+    custom = type('private-account-name', (Exception,), {})('private-body')
+    dream_diagnostics.path_failure(report, 'temporal', custom)
+    assert report['retrieval_counts']['temporal']['failed'] == 3
+    counts = dream_diagnostics.counts_only(report)
+    assert counts['retrieval_failure_counts']['temporal'] == {'TypeError': 2, 'Exception': 1}
+    assert 'private-' not in json.dumps(counts)
+
+
+def test_temporal_exclusion_precedes_top_four_selection_with_bounded_overfetch():
+    from datetime import timedelta
+    from database.dream_context_reads import temporal_neighbours
+    from tests.support.firestore_shape_recorder import RecordingFirestore
+
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    db = RecordingFirestore()
+    targets = [db.snapshot(f'users/synthetic/conversations/target-{i}', {'created_at': now}) for i in range(8)]
+    neighbours = [
+        db.snapshot(
+            f'users/synthetic/conversations/context-{i}',
+            {
+                'created_at': now - timedelta(minutes=i + 1),
+            },
+        )
+        for i in range(4)
+    ]
+    db.queue_results(targets + neighbours)
+    db.queue_results(targets)
+    rows = temporal_neighbours(
+        'synthetic',
+        'conversations',
+        now - timedelta(days=1),
+        now,
+        now + timedelta(days=1),
+        excluded_ids={f'target-{i}' for i in range(8)},
+        firestore_client=db,
+    )
+    assert [row['id'] for row in rows] == [f'context-{i}' for i in range(4)]
+    assert len(db.shapes) == 2 and all(shape.limit == 12 for shape in db.shapes)
