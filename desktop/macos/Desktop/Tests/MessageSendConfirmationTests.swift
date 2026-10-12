@@ -418,6 +418,84 @@ final class MessageSendConfirmationTests: XCTestCase {
     XCTAssertEqual(confirmation.status, .delivered)
   }
 
+  // MARK: - National numbers resolved through the sending account
+
+  func testANationalUSNumberSentFromAMacSetToIndiaConfirms() async throws {
+    let history = try MessagesHistoryFixture()
+    addTeardownBlock { history.remove() }
+    let usChat = try history.directChat(with: "+12673618369")
+    let confirmation = try await confirm(
+      "omi send check 1", history: .store(history.url, region: "IN"), handle: "2673618369"
+    ) {
+      try history.addOutgoing(
+        chat: usChat, text: "omi send check 1", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+  }
+
+  func testANationalNumberMatchingBothAUSAndAnIndianChatIsAmbiguous() async throws {
+    let history = try MessagesHistoryFixture()
+    addTeardownBlock { history.remove() }
+    let usChat = try history.directChat(with: "+12673618369")
+    _ = try history.directChat(with: "+912673618369")
+    let confirmation = try await confirm(
+      "omi send check 1", history: .store(history.url, region: "IN"), handle: "2673618369"
+    ) {
+      try history.addOutgoing(
+        chat: usChat, text: "omi send check 1", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .unconfirmed)
+    XCTAssertEqual(confirmation.unconfirmedReason, .ambiguousRecipient)
+  }
+
+  func testAPhoneSendingAccountDecidesBetweenTheSameDigitsInTwoCountries() async throws {
+    let history = try MessagesHistoryFixture()
+    addTeardownBlock { history.remove() }
+    let account = "P:+12673618369"
+    let usChat = try history.directChat(with: "+12673618369", accountLogin: account)
+    _ = try history.directChat(with: "+912673618369", accountLogin: account)
+    let confirmation = try await confirm(
+      "omi send check 1", history: .store(history.url, region: "IN"), handle: "2673618369"
+    ) {
+      try history.addOutgoing(
+        chat: usChat, text: "omi send check 1", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+  }
+
+  func testATextToYourselfIsDecidedByTheOutgoingRowNotTheIncomingCopy() async throws {
+    let history = try MessagesHistoryFixture()
+    addTeardownBlock { history.remove() }
+    let ownChat = try history.directChat(with: "+12673618369", accountLogin: "P:+12673618369")
+    let confirmation = try await confirm(
+      "omi send check 1", history: .store(history.url, region: "IN"), handle: "2673618369"
+    ) {
+      try history.addOutgoing(
+        chat: ownChat, text: "omi send check 1", at: Self.sendStart, sent: true, delivered: true)
+      try history.addMessage(
+        chat: ownChat, text: "omi send check 1", at: Self.sendStart, fromMe: false, sent: false, delivered: false)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered, "the incoming self-copy is ignored, not counted as a second row")
+  }
+
+  func testATextToYourselfWithoutADeliveredMarkWaitsTheWindow() async throws {
+    let history = try MessagesHistoryFixture()
+    addTeardownBlock { history.remove() }
+    let ownChat = try history.directChat(with: "+12673618369")
+    let confirmation = try await confirm(
+      "omi send check 1", history: .store(history.url, region: "US"), handle: "+12673618369"
+    ) {
+      try history.addMessage(
+        chat: ownChat, text: "omi send check 1", at: Self.sendStart, fromMe: false, sent: false, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow, "an incoming copy alone never confirms a send")
+  }
+
   // MARK: - Text matching
 
   func testLineEndingsAndWhitespaceAreNormalised() async throws {
