@@ -373,7 +373,7 @@ and an explicit empty literal renders as `''`.
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
-| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
+| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | — | unowned |
 
 ## Undeclared env flags
 
