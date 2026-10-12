@@ -1136,6 +1136,7 @@
       "safe_next_action": "Check the pod for oversized batches or concurrent streams above its admission limit; recycle the replica if OOMs repeat."
     },
     "labels": {
+      "instatus_component": "speech-processing",
       "severity": "critical",
       "alert_identity": "cft8izabmcjk0e",
       "component": "speech-processing",
@@ -1232,6 +1233,7 @@
       "safe_next_action": "Check stream admission and batch settings for the workload on that GPU before raising capacity."
     },
     "labels": {
+      "instatus_component": "speech-processing",
       "severity": "warning",
       "alert_identity": "dft8iyoy04s8wf",
       "component": "speech-processing",
