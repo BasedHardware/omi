@@ -15,9 +15,12 @@ Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
 live-listen, offline-sync, or locked-conversation policies.
 
 Admission and usage recording are not a distributed monthly reservation. The
-proxy holds its four-slot semaphore through the successful usage write, bounding
-admitted-but-unaccounted requests to four per serving process/event loop. With
-healthy, launched monthly accounting, the conservative overshoot bound is
+proxy probes the seekable upload spool and initially checks allowance before
+acquiring a provider slot, then rechecks allowance after queueing. It holds its
+four-slot semaphore through the usage write attempt, bounding dispatched but
+unaccounted requests to four per serving process/event loop. A failed usage
+write emits fallback telemetry and returns the completed transcript, avoiding
+a retry-driven duplicate provider call. With healthy, launched monthly accounting, the conservative overshoot bound is
 `N × D` seconds, where `N ≤ 4 × P` for `P` serving processes and `D` is the maximum
 accounted media duration admitted per request. The finite allowance check bounds
 `D` by the plan allowance; the configured production Parakeet one-hour file cap

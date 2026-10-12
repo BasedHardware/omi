@@ -12,13 +12,13 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 
 import asyncio
 import logging
-import io
 import math
 import os
 import re
+from typing import BinaryIO
 
 import av
-from av.error import FFmpegError
+from av.error import FFmpegError, TimeoutError as AVTimeoutError
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -27,7 +27,8 @@ from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.analytics import record_usage
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.subscription import resolve_transcription_allowance
+from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -41,23 +42,24 @@ _MAX_UPLOAD_BYTES = 200_000_000
 # 503. Waiters hold no RAM (the body stays in starlette's disk spool until a
 # slot is acquired), so this only bounds client-perceived latency.
 _UPSTREAM_WAIT_SECS = 30.0
+_PROBE_TIMEOUT_SECS = 20.0
 
 _SAFE_FILENAME_RE = re.compile(r'[^A-Za-z0-9._-]')
 _MAX_FILENAME_LEN = 64
 _MAX_EXTENSION_LEN = 8
 
 
-def _audio_seconds(audio_bytes: bytes) -> int:
+def _audio_seconds(audio_file: BinaryIO) -> int:
     """Probe the uploaded media, rather than billing transcript timestamp gaps.
 
     PyAV is the existing FFmpeg binding used by voice-duration accounting.
-    A seekable in-memory input supports containers whose metadata is at the
-    end, without requiring an external ffprobe binary or another audio copy
-    on disk. Decoder errors never enter logs or the response.
+    The existing seekable upload spool supports containers whose metadata is
+    at the end, without an external ffprobe binary or a resident body copy
+    while waiting for a provider slot. Decoder errors never enter logs or the response.
     """
     try:
         seconds = 0.0
-        with av.open(io.BytesIO(audio_bytes), mode='r') as audio:
+        with av.open(audio_file, mode='r', timeout=_PROBE_TIMEOUT_SECS) as audio:
             if not audio.streams.audio:
                 raise ValueError('missing audio stream')
             stream = audio.streams.audio[0]
@@ -70,8 +72,19 @@ def _audio_seconds(audio_bytes: bytes) -> int:
         if not math.isfinite(seconds) or seconds <= 0:
             raise ValueError('invalid duration')
         return math.ceil(seconds)
+    except AVTimeoutError:
+        raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
     except (ValueError, TypeError, FFmpegError):
         raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+
+
+async def _admit(uid: str, source: str | None, seconds: int) -> None:
+    # This route calls Omi-paid Parakeet; Deepgram BYOK cannot exempt it.
+    allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid, source=source, byok_active=False)
+    if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
+        raise HTTPException(status_code=503, detail='Transcription allowance temporarily unavailable')
+    if not allowance.managed or (allowance.remaining_seconds is not None and seconds > allowance.remaining_seconds):
+        raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
 
 
 def _safe_upstream_filename(filename) -> str:
@@ -115,6 +128,29 @@ async def stt_transcribe(
     if file.size is not None and file.size > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
+    if file.size == 0:
+        raise HTTPException(status_code=400, detail='No audio data provided')
+    if file.size is None:
+        # Defense in depth for callers without Starlette's multipart size.
+        sample = await file.read(_MAX_UPLOAD_BYTES + 1)
+        size = len(sample)
+        del sample
+        if size > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
+        if not size:
+            raise HTTPException(status_code=400, detail='No audio data provided')
+        await file.seek(0)
+
+    try:
+        seconds = await asyncio.wait_for(
+            run_blocking(storage_executor, _audio_seconds, file.file), timeout=_PROBE_TIMEOUT_SECS
+        )
+    except (asyncio.TimeoutError, AVTimeoutError):
+        raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
+    await file.seek(0)
+    source = request.headers.get('x-app-platform')
+    await _admit(uid, source, seconds)
+
     upstream_url = api_url.rstrip('/') + '/v2/transcribe'
     client = get_stt_proxy_client()
     semaphore = get_stt_proxy_semaphore()
@@ -136,19 +172,9 @@ async def stt_transcribe(
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
-        # This route always calls Omi's Parakeet. A Deepgram BYOK header
-        # cannot make that Omi-paid call exempt from the transcription meter.
-        seconds = await run_blocking(storage_executor, _audio_seconds, audio_bytes)
-        allowance = await run_blocking(
-            db_executor,
-            resolve_transcription_allowance,
-            uid,
-            source=request.headers.get('x-app-platform'),
-            byok_active=False,
-        )
-        if not allowance.managed or (allowance.remaining_seconds is not None and seconds > allowance.remaining_seconds):
-            del audio_bytes
-            raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
+        # Initial admission precedes the slot. Recheck after queueing so
+        # stale admissions cannot escape the in-flight accounting bound.
+        await _admit(uid, source, seconds)
 
         files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
         data = {'diarize': 'true' if diarize else 'false'}
@@ -185,7 +211,13 @@ async def stt_transcribe(
 
         # Keep completed-but-unaccounted calls inside the four-slot bound too.
         # This is not a distributed monthly-quota reservation.
-        await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+        try:
+            await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+        except Exception as error:
+            # No idempotency key: withholding a completed transcript encourages
+            # a retry and another paid provider call. Do not log exception text.
+            logger.error('stt_transcribe: usage write failed exception_type=%s', type(error).__name__)
+            record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
         return payload
     finally:
         semaphore.release()
