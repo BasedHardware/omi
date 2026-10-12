@@ -1,7 +1,12 @@
 """The released in-app final message owns citation cards, not raw markers."""
 
 import asyncio
+import json
+import os
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 from tests.unit import _chat_router_test_harness as harness
 
@@ -38,6 +43,58 @@ def _conversations():
         }
         for index in range(1, 9)
     ]
+
+
+def test_app_sse_bytes_preserve_the_pre_channel_citation_contract(environment, monkeypatch):
+    client, _chat, _chat_db, service = environment
+    historical_source = os.environ.get('OMI_CITATION_HISTORICAL_SOURCE')
+    if historical_source:
+        service = harness.load_real_module('utils.chat_turn_historical', Path(historical_source))
+        service.extract_memory_ids = sys.modules['utils.chat_turn'].extract_memory_ids
+        router = sys.modules['routers.chat']
+        monkeypatch.setattr(router, 'run_chat_turn', service.run_chat_turn)
+        monkeypatch.setattr(router, 'TurnOptions', service.TurnOptions)
+        monkeypatch.setattr(router, 'MobileReplySink', service.MobileReplySink)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 12, 7, 58, 37, tzinfo=timezone.utc)
+
+    identifiers = iter(['fixture-human', 'fixture-ai'])
+    monkeypatch.setattr(service, 'datetime', FixedDateTime)
+    monkeypatch.setattr(service, 'uuid', SimpleNamespace(uuid4=lambda: next(identifiers)))
+
+    async def stream(*args, **kwargs):
+        kwargs['callback_data'].update(
+            answer='I can name them.[1][2][4][6][7]',
+            memories_found=_conversations(),
+            prompt_name='fixture-prompt',
+            prompt_commit='fixture-commit',
+            langsmith_run_id='fixture-run',
+            action_receipts=[],
+            channel_items=[],
+        )
+        # Include a split marker and a thinking frame, exactly as token streaming permits.
+        yield 'think: Searching conversations'
+        yield 'data: I can name them.[1][2][4]['
+        yield 'data: 6][7]'
+        yield None
+
+    monkeypatch.setattr(service, 'execute_chat_stream', stream)
+    response = client.post('/v2/messages', json={'text': 'Who did I meet?'}, headers={'User-Agent': ''})
+    assert response.status_code == 200
+    fixture = harness.BACKEND_DIR / 'tests/fixtures/chat_app_citations_pre_21240.sse.json'
+    capture = os.environ.get('OMI_CITATION_CAPTURE_PATH')
+    if capture:
+        Path(capture).write_bytes(response.content)
+    assert response.content == json.loads(fixture.read_text()).encode('utf-8')
+    payload = _decode_done_frame(response.text)
+    assert payload['text'] == 'I can name them.'
+    assert payload['memories_id'] == [f'conversation-{index}' for index in [1, 2, 4, 6, 7]]
+    assert [card['id'] for card in payload['memories']] == payload['memories_id']
+    assert payload['content_blocks'] == []
+    assert payload['evidence'] is None
 
 
 @pytest.mark.parametrize('platform', ['ios', 'android', 'macos'])
