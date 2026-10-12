@@ -122,7 +122,7 @@ def test_webhook_returns_success():
     """Webhook must always return {"status": "success"} at the end (Stripe expects 2xx)."""
     source = _read_source()
     # Find the stripe_webhook function
-    func_start = source.index("async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):")
+    func_start = source.index("async def stripe_webhook(")
     # Get to the return at the end of the function
     func_section = source[func_start:]
     # The function should end with return {"status": "success"}

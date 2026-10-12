@@ -1561,6 +1561,51 @@ final class SpeakerTagPromptAnswerSubmitted extends RegisteredEvent {
   Map<String, Object> get properties => {"kind": kind.wireName, "answer": answer.wireName, "clip_played": clipPlayed, "first_time": firstTime, "succeeded": succeeded};
 }
 
+enum BillingSubscriptionPlanChangedPreviousPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPreviousPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedNewPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedNewPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedInterval(this.wireName);
+  final String wireName;
+}
+
+final class BillingSubscriptionPlanChanged extends RegisteredEvent {
+  const BillingSubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.interval, required this.mrrBeforeCents, required this.mrrAfterCents});
+  final BillingSubscriptionPlanChangedPreviousPlan previousPlan;
+  final BillingSubscriptionPlanChangedNewPlan newPlan;
+  final BillingSubscriptionPlanChangedInterval interval;
+  final int mrrBeforeCents;
+  final int mrrAfterCents;
+  @override
+  String get wireName => "Billing Subscription Plan Changed";
+  @override
+  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "interval": interval.wireName, "mrr_before_cents": mrrBeforeCents, "mrr_after_cents": mrrAfterCents};
+}
+
 final class SpeakerTagPromptsClosed extends RegisteredEvent {
   const SpeakerTagPromptsClosed({required this.answeredCount, required this.promptCount});
   final int answeredCount;

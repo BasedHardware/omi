@@ -235,7 +235,7 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         handler_start = source.index("'customer.subscription.updated'")
         handler_end = source.index("subscription_schedule.completed", handler_start)
         handler = source[handler_start:handler_end]
-        projection = handler.find("emit_billing_product_event(")
+        projection = handler.find("await schedule_billing_webhook_events(")
         guard = handler.find("adopted_active_paid = False")
         durable_write = handler.find("users_db.update_user_subscription")
         assert projection != -1

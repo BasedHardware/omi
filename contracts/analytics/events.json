@@ -2499,6 +2499,63 @@
       "correlation": null
     },
     {
+      "id": "billingSubscriptionPlanChanged",
+      "wire_name": "Billing Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "mrrBeforeCents": {
+          "type": "int",
+          "wire_name": "mrr_before_cents"
+        },
+        "mrrAfterCents": {
+          "type": "int",
+          "wire_name": "mrr_after_cents"
+        }
+      },
+      "consumers": [
+        "billing-plan-changes"
+      ],
+      "correlation": null
+    },
+    {
       "id": "speakerTagPromptsClosed",
       "wire_name": "Speaker Tag Prompts Closed",
       "status": "active",

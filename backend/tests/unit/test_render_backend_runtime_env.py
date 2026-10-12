@@ -888,7 +888,10 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
-        } == {(name, name, 'latest') for name in names}, service
+        } == (
+            {(name, name, 'latest') for name in names}
+            | ({('POSTHOG_BILLING_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest')} if service == 'backend' else set())
+        ), service
     desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
     assert {
         (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
