@@ -138,7 +138,7 @@ def test_retrieval_tiers_are_owner_scoped_and_cheapest_first(monkeypatch):
     monkeypatch.setattr(
         dream_context,
         'temporal_neighbours',
-        lambda uid, collection, *a: [{'id': 'adjacent' if collection == 'conversations' else 'frame'}],
+        lambda uid, collection, *a, **k: [{'id': 'adjacent' if collection == 'conversations' else 'frame'}],
     )
 
     def read(uid, ref):

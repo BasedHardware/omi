@@ -41,6 +41,7 @@ def entries():
                 'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
             },
             domains={'collection': ['conversations', 'screen_activity']},
+            neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
         ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),

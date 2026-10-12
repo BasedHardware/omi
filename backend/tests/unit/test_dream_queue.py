@@ -73,16 +73,16 @@ def test_paid_weight_and_ref_identity(queue):
     assert queue.rows[('dream_users', UID)]['score'] == 2
 
 
-def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
+def test_budget_reads_oldest_first_and_watermark_never_skips_unread(queue):
     seed(queue, 80)
     caps = Caps(tokens=12000)
     lease = dream_store.acquire(UID, caps, now=NOW)
     records, consumed = dream_reads.read_changes(UID, lease, caps)
     assert 0 < len(consumed) < 80
-    assert list(records) == [f'conversations/{i}' for i in range(79, 79 - len(consumed), -1)]
+    assert list(records) == [f'conversations/{i}' for i in range(len(consumed))]
     assert fits_triage(records, caps)
     assert not fits_triage(
-        {**records, f'conversations/{79 - len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
+        {**records, f'conversations/{len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
     )
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     assert dream_store.dirty_count(UID) == 80 - len(consumed)
@@ -93,7 +93,7 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     next_lease = dream_store.acquire(UID, caps, now=NOW)
     next_records, _ = dream_reads.read_changes(UID, next_lease, caps)
     assert set(next_records).isdisjoint(records)
-    assert list(next_records)[0] == f'conversations/{79 - len(consumed)}'
+    assert list(next_records)[0] == f'conversations/{len(consumed)}'
 
 
 @pytest.mark.parametrize(
@@ -216,13 +216,14 @@ def test_successful_report_settles_only_visible_admitted_versions(queue, monkeyp
     )
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(), 1)))
     report = asyncio.run(dream_agent.run_pass(UID))
-    assert report['status'] == 'not_admitted'
-    assert report['dirty_read'] == 0
+    assert report['status'] == 'complete'
+    assert report['dirty_read'] == 3
     assert report['dirty_counts']['attempted'] == 32
-    assert report['dirty_counts']['permanent_acknowledged'] == 32
+    assert report['dirty_counts']['permanent_acknowledged'] == 29
     assert dream_store.dirty_count(UID) == report['records_queued_after'] == 3
     report = asyncio.run(dream_agent.run_pass(UID))
-    assert report['status'] == 'complete' and report['dirty_read'] == 3
+    assert report['status'] == 'not_admitted' and report['dirty_read'] == 0
+    assert report['dirty_counts']['permanent_acknowledged'] == 3
     assert report['records_queued_after'] == 0
     assert all(count == 0 for path in report['retrieval_counts'].values() for count in path.values())
 
@@ -450,12 +451,12 @@ def test_three_failed_reasoning_passes_settle_only_consumed_versions(queue, monk
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
-    # Keep an unread older row behind the poisoned frontier.
+    # Keep another version queued behind the selected poisoned target.
     real_read = dream_reads.read_changes
 
     def read_one(*args, **kwargs):
         records, consumed = real_read(*args, **kwargs)
-        return {'conversations/1': records['conversations/1']}, consumed[:1]
+        return {'conversations/1': records['conversations/1']}, [item for item in consumed if item['id'] == '1']
 
     monkeypatch.setattr(dream_reads, 'read_changes', read_one)
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
@@ -583,19 +584,22 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
     assert dream_store.dirty_count(UID) == 0 and report['poisoned'] == 0
 
 
-@pytest.mark.parametrize('status', [402, 423])
+@pytest.mark.parametrize('status', [402, 423, 'transcript'])
 def test_transient_unavailable_expires_after_three_version_fenced_attempts(queue, monkeypatch, status):
     from fastapi import HTTPException
 
     seed(queue, 1)
 
     def unavailable(*a, **k):
+        if status == 'transcript':
+            raise dream_reads.DreamTranscriptReadError('Synthetic unverifiable speech')
         raise HTTPException(status, 'Synthetic transient')
 
     monkeypatch.setattr(dream_reads, 'read_record', unavailable)
     for attempt in range(3):
         report = asyncio.run(dream_agent.run_pass(UID))
         assert report['status'] == 'not_admitted' and report['dirty_counts']['transient'] == 1
+        assert report['dirty_counts']['failed'] == int(status == 'transcript')
         assert report['dirty_counts']['transient_expired'] == int(attempt == 2)
         if attempt < 2:
             assert dream_store.dirty_refs(UID)[0].to_dict()['failed_passes'] == attempt + 1
@@ -635,6 +639,10 @@ def test_inspection_and_settlement_reads_remain_bounded_on_500_ref_queue(queue, 
     assert report['dirty_counts']['permanent_acknowledged'] == 32
     assert report['records_queued_after'] == 468
     assert queries == [32, 33]
+    # The bounded pass inspects the oldest prefix, leaving newer arrivals queued.
+    remaining = {s.to_dict()['id'] for s in original(UID)}
+    assert not remaining & {str(i) for i in range(32)}
+    assert {str(i) for i in range(32, 500)} == remaining
     assert len(queue.reads) - before < 40  # direct settlement reads, not all 500
     assert dream_store.acquire(UID, Caps()) is not None
 
