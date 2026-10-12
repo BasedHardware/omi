@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 
 void main() {
@@ -63,6 +64,81 @@ void main() {
       // stage remains done and answers remain intact without re-prompting or double-saving.
       expect(flow.answers.any((a) => a.isGoal && a.saved), isTrue);
       expect(flow.answers.where((a) => !a.isGoal && a.saved).length, 3);
+    });
+
+    test('wrapper marks setup and complete pages as resumable steps', () {
+      // kAuthPage (0) and kAiConsentPage (1) are pre-onboarding gates and must not be resumable
+      expect(OnboardingWrapper.isResumableStepForTesting(0), isFalse);
+      expect(OnboardingWrapper.isResumableStepForTesting(1), isFalse);
+
+      // Steps from kNamePage (2) through kCompletePage (9) must be resumable
+      expect(OnboardingWrapper.isResumableStepForTesting(2), isTrue); // kNamePage
+      expect(OnboardingWrapper.isResumableStepForTesting(6), isTrue); // kSpeechProfilePage
+      expect(OnboardingWrapper.isResumableStepForTesting(7), isTrue); // kKnowledgeGraphPage
+      expect(OnboardingWrapper.isResumableStepForTesting(8), isTrue); // kSetupPage
+      expect(OnboardingWrapper.isResumableStepForTesting(9), isTrue); // kCompletePage
+    });
+
+    test('wrapper previousStep correctly navigates back from complete, setup, and graph', () {
+      // From Complete page (9):
+      // When setup page is enabled: returns Setup page (8)
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 9,
+          setupPageEnabled: true,
+          knowledgeGraphStepEnabled: false,
+        ),
+        8,
+      );
+
+      // When setup page is disabled and graph is enabled: returns Graph page (7)
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 9,
+          setupPageEnabled: false,
+          knowledgeGraphStepEnabled: true,
+        ),
+        7,
+      );
+
+      // When setup and graph are disabled: returns Speech profile page (6)
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 9,
+          setupPageEnabled: false,
+          knowledgeGraphStepEnabled: false,
+        ),
+        6,
+      );
+
+      // From Setup page (8):
+      // Returns graph (7) if graph enabled, else speech profile (6)
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 8,
+          setupPageEnabled: true,
+          knowledgeGraphStepEnabled: true,
+        ),
+        7,
+      );
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 8,
+          setupPageEnabled: true,
+          knowledgeGraphStepEnabled: false,
+        ),
+        6,
+      );
+
+      // From Knowledge Graph page (7): returns speech profile (6)
+      expect(
+        OnboardingWrapper.previousStepForTesting(
+          currentIndex: 7,
+          setupPageEnabled: false,
+          knowledgeGraphStepEnabled: true,
+        ),
+        6,
+      );
     });
   });
 }
