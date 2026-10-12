@@ -190,15 +190,12 @@ class DeviceConnectionFactory {
 }
 
 class DeviceConnectionException implements Exception {
-  String cause;
+  final String cause;
   final Object? error;
 
   DeviceConnectionException(this.cause, [this.error]);
 
-  bool get isTimeout =>
-      this is DeviceConnectionTimeoutException ||
-      error is TimeoutException ||
-      cause.toLowerCase().contains('timeout');
+  bool get isTimeout => this is DeviceConnectionTimeoutException || error is TimeoutException;
 }
 
 class DeviceConnectionTimeoutException extends DeviceConnectionException {
