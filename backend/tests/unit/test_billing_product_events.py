@@ -126,3 +126,103 @@ def test_paid_entitlement_loss_is_counted_on_update_and_not_again_on_delete(monk
     assert len(emitted) == 1
     assert emitted[0]['event'] == 'Billing Subscription Churned'
     assert emitted[0]['properties']['reason'] == 'payment_failure'
+
+
+_PLUS_MONTHLY = 'price_1TuH6z1F8wnoWYvw7Siv61SX'
+
+
+def test_scheduled_cancellation_carries_price_mrr_and_legacy_marker(monkeypatch):
+    emitted = []
+    monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
+
+    subscription_events.emit_billing_product_event(
+        uid='uid-1',
+        stripe_event_id='evt-schedule',
+        stripe_event_created=1_758_700_800,
+        stripe_event_type='customer.subscription.updated',
+        subscription_obj={
+            'status': 'active',
+            'id': 'sub-secret',
+            'cancel_at_period_end': True,
+            'items': {
+                'data': [
+                    {
+                        'price': {
+                            'id': _PLUS_MONTHLY,
+                            'unit_amount': 1999,
+                            'recurring': {'interval': 'month'},
+                        }
+                    }
+                ]
+            },
+        },
+        previous_paid_subscription_id='sub-secret',
+        resulting_paid_subscription_id='sub-secret',
+        previous_attributes={'cancel_at_period_end': False},
+    )
+
+    assert [event['event'] for event in emitted] == ['Billing Subscription Cancellation Scheduled']
+    properties = emitted[0]['properties']
+    assert properties['plan'] == 'plus'
+    assert properties['interval'] == 'month'
+    assert properties['price_id'] == _PLUS_MONTHLY
+    assert properties['mrr_cents'] == 1999
+    assert properties['price_generation'] == 'legacy'
+    assert properties['reason'] == 'none'
+    assert 'sub-secret' not in properties.values()
+
+
+def test_yearly_mrr_is_unit_amount_divided_by_twelve(monkeypatch):
+    emitted = []
+    monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
+
+    subscription_events.emit_billing_product_event(
+        uid='uid-1',
+        stripe_event_id='evt-start-year',
+        stripe_event_created=1_758_700_800,
+        stripe_event_type='customer.subscription.created',
+        subscription_obj={
+            'status': 'active',
+            'id': 'sub-secret',
+            'items': {
+                'data': [
+                    {
+                        'price': {
+                            'id': 'price_not_in_catalog',
+                            'unit_amount': 19990,
+                            'recurring': {'interval': 'year'},
+                        }
+                    }
+                ]
+            },
+        },
+        previous_paid_subscription_id=None,
+        resulting_paid_subscription_id='sub-secret',
+    )
+
+    properties = emitted[0]['properties']
+    assert properties['interval'] == 'year'
+    assert properties['mrr_cents'] == 19990 // 12
+    assert properties['price_generation'] == 'unknown'
+    assert subscription_events.price_catalog_generation(_PLUS_MONTHLY) == 'legacy'
+    assert subscription_events.price_catalog_generation('price_not_in_catalog') == 'unknown'
+
+
+def test_update_without_cancel_transition_does_not_emit_scheduled_cancellation(monkeypatch):
+    emitted = []
+    monkeypatch.setattr(subscription_events, '_resolve_plan', lambda _: 'plus')
+    monkeypatch.setattr(subscription_events, '_resolve_interval', lambda _: 'month')
+    monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
+
+    subscription_events.emit_billing_product_event(
+        uid='uid-1',
+        stripe_event_id='evt-update',
+        stripe_event_created=1_758_700_800,
+        stripe_event_type='customer.subscription.updated',
+        subscription_obj={'status': 'active', 'id': 'sub-1', 'cancel_at_period_end': True},
+        previous_paid_subscription_id='sub-1',
+        resulting_paid_subscription_id='sub-1',
+        previous_attributes={'status': 'trialing'},
+    )
+
+    assert emitted == []

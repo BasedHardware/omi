@@ -16,7 +16,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from config.plan_catalog import PlanType, resolve_stripe_price_plan
+from config.plan_catalog import PlanType, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES, resolve_stripe_price_plan
 from utils.metrics import OMI_SUBSCRIPTION_EVENTS
 
 logger = logging.getLogger(__name__)
@@ -39,11 +39,52 @@ _REASONS = frozenset({'cancellation_requested', 'payment_failure', 'payment_disp
 
 _PAYMENT_FAILED_STATUSES = frozenset({'past_due', 'unpaid'})
 
+# Ladder-v1 Stripe prices do not exist yet. Every recognized catalog price is a
+# legacy entitlement price. Add ids here when those prices ship; do not infer
+# the generation from the plan id. Spec §3 keys entitlements by price.
+_LADDER_V1_PRICE_IDS: frozenset[str] = frozenset()
+
 # `reason` describes why a subscription ended, so only this event can ever carry
 # one; every other event pins 'none'. Both the recording path and the zero
 # initialization below read this, so the reachable label space cannot drift from
 # what is actually emitted.
 _REASON_BEARING_EVENT = 'ended'
+
+
+def price_catalog_generation(price_id: str | None) -> str:
+    """Return ``legacy``, ``ladder_v1``, or ``unknown`` from the Stripe price id."""
+
+    if not isinstance(price_id, str) or not price_id:
+        return 'unknown'
+    if price_id in _LADDER_V1_PRICE_IDS:
+        return 'ladder_v1'
+    if price_id in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES:
+        return 'legacy'
+    return 'unknown'
+
+
+def _monthly_mrr_cents(price: Mapping[str, Any], interval: str) -> int | None:
+    """Monthly-normalized catalog amount in cents. Yearly prices use integer division by 12."""
+
+    amount = price.get('unit_amount')
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+        return None
+    if interval == 'month':
+        return amount
+    if interval == 'year':
+        return amount // 12
+    return None
+
+
+def _cancellation_just_scheduled(
+    subscription_obj: Mapping[str, Any],
+    previous_attributes: Mapping[str, Any] | None,
+) -> bool:
+    if not isinstance(previous_attributes, Mapping) or 'cancel_at_period_end' not in previous_attributes:
+        return False
+    previous = previous_attributes.get('cancel_at_period_end')
+    current = subscription_obj.get('cancel_at_period_end')
+    return (not previous) and bool(current)
 
 
 def emit_billing_product_event(
@@ -55,12 +96,15 @@ def emit_billing_product_event(
     subscription_obj: Mapping[str, Any] | None,
     previous_paid_subscription_id: str | None,
     resulting_paid_subscription_id: str | None,
+    previous_attributes: Mapping[str, Any] | None = None,
 ) -> None:
     """Emit an owner-bound billing lifecycle event after webhook resolution.
 
     Stripe remains authoritative. This is a bounded PostHog projection used by
-    product scorecards; scheduled cancellation is deliberately not churn, and
-    no amount, customer, card, email, or subscription identifier is emitted.
+    product scorecards. Scheduled cancellation is not churn. The event carries
+    the catalog price id, its monthly-normalized unit amount, and a
+    legacy-versus-ladder-v1 marker derived from that price id. It does not
+    carry a customer, card, email, or subscription identifier.
     """
     if not uid or not stripe_event_id or not isinstance(subscription_obj, Mapping):
         return
@@ -82,8 +126,14 @@ def emit_billing_product_event(
         reason = (
             'payment_failure' if obj.get('status') in _PAYMENT_FAILED_STATUSES else _resolve_cancellation_reason(obj)
         )
+    if event_name is None and _cancellation_just_scheduled(obj, previous_attributes):
+        event_name = 'Billing Subscription Cancellation Scheduled'
     if event_name is None:
         return
+    price = _first_item_price(obj)
+    raw_price_id = price.get('id')
+    price_id = raw_price_id[:128] if isinstance(raw_price_id, str) and raw_price_id else 'unknown'
+    mrr_cents = _monthly_mrr_cents(price, interval)
     try:
         occurred_at = None
         if isinstance(stripe_event_created, (int, float)):
@@ -105,6 +155,9 @@ def emit_billing_product_event(
                 'plan': plan,
                 'interval': interval,
                 'reason': reason,
+                'price_id': price_id,
+                'price_generation': price_catalog_generation(price_id if price_id != 'unknown' else None),
+                **({'mrr_cents': mrr_cents} if mrr_cents is not None else {}),
             },
         )
     except Exception:

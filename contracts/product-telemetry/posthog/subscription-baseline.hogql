@@ -1,0 +1,283 @@
+-- Weekly subscription baseline (spec §1 / workstream W2). Read-only aggregate.
+-- A 2026-10-12 read-only run of this file against PostHog project 302298
+-- (2026-09-14 through 2026-10-12) hit the API max execution time. The non-`$`
+-- activity scan is the expensive input. Over the prior 365 days that project
+-- had zero Billing Subscription Started, Churned, or Cancellation Scheduled
+-- rows, so dollar ARPMAU and payer net MRR retention stay insufficient
+-- evidence until those webhook events arrive with mrr_cents.
+-- One row per UTC Monday week that overlaps [{date_from}, {date_to}).
+-- Dollar columns are NULL when the evidence is missing. Do not treat NULL as zero.
+--
+-- MAU
+--   Distinct coalesce(person_id, distinct_id) with at least one event whose
+--   name does not start with '$' in the 30 days ending at the exclusive week
+--   end (Monday 00:00 UTC + 7 days). '$' events are PostHog internals, not
+--   product activity. This is the admin dashboard's trailing-30-day actor
+--   count with that exclusion.
+--
+-- Activation and 30-day paid conversion
+--   A user activates at their earliest `Product Value` event (the scorecard
+--   activation event in contracts/product-telemetry/metric-definitions.json).
+--   A week's cohort is the users whose activation instant falls in that
+--   Monday–Sunday. paid_by_day_30 counts those with a
+--   `Billing Subscription Started` in [activation, activation + 30 days).
+--   paid_conversion = paid_by_day_30 / activated_users.
+--   Both paid columns are NULL until the whole cohort is mature:
+--   week_start + 37 days <= {date_to}. Billing events are paid-plan
+--   entitlement including trials, not cash collected.
+--
+-- MRR and ARPMAU
+--   A person is an active payer at week end when their latest
+--   `Billing Subscription Started` or `Billing Subscription Churned` before
+--   that instant is Started. MRR is that event's mrr_cents (monthly-normalized
+--   catalog unit amount, cents). `Billing Subscription Cancellation Scheduled`
+--   is not churn and is not read here. mrr_cents is absent on events emitted
+--   before this property shipped; if any active payer lacks it, mrr_cents and
+--   arpmau_usd are NULL for the week (a partial sum would undercount).
+--   ARPMAU = (mrr_cents / 100) / MAU. NULL when MAU is 0 or MRR is unknown.
+--   Zero active payers is MRR 0 only when this project has billing events.
+--   If `Billing Subscription Started` is absent entirely, MRR, ARPMAU, and
+--   paid conversion are NULL: a zero would claim nobody pays.
+--
+-- Payer net MRR retention (calendar month of the week's Monday)
+--   Spec formula: (expansion - contraction - churn) / starting MRR.
+--   starting MRR is the sum of mrr_cents for payers active immediately before
+--   the month. expansion and contraction are the positive and negative deltas
+--   for payers active at both ends. churn is the starting MRR of payers active
+--   at the start and not at the end. New payers are excluded from the ratio
+--   (their MRR is not in these columns). NULL until the month has ended and
+--   every relevant payer has mrr_cents. Classic NRR is 1 + this ratio.
+--   The same month value repeats on each week of that month.
+
+WITH
+-- At most 60 Monday weeks per run. Narrow {date_from}/{date_to} to stay inside that.
+weeks AS (
+    SELECT toStartOfWeek({date_from}, 1) + toIntervalWeek(number) AS week_start
+    FROM numbers(60)
+    WHERE week_start >= toStartOfWeek({date_from}, 1)
+      AND week_start < {date_to}
+),
+activity AS (
+    SELECT
+        coalesce(person_id, distinct_id) AS actor,
+        timestamp
+    FROM events
+    WHERE timestamp >= {date_from} - INTERVAL 30 DAY
+      AND timestamp < {date_to}
+      AND NOT startsWith(event, '$')
+),
+mau AS (
+    SELECT
+        w.week_start AS week_start,
+        count(DISTINCT a.actor) AS mau
+    FROM weeks AS w
+    INNER JOIN activity AS a
+        ON a.timestamp >= w.week_start + INTERVAL 7 DAY - INTERVAL 30 DAY
+        AND a.timestamp < w.week_start + INTERVAL 7 DAY
+    GROUP BY w.week_start
+),
+first_value AS (
+    SELECT
+        coalesce(person_id, distinct_id) AS actor,
+        min(timestamp) AS activated_at
+    FROM events
+    WHERE event = 'Product Value'
+      AND timestamp < {date_to}
+    GROUP BY actor
+),
+billing_events AS (
+    SELECT
+        coalesce(person_id, distinct_id) AS actor,
+        timestamp,
+        event AS billing_event,
+        -- -1 means the property is absent. HogQL argMax rejects Nullable ints.
+        assumeNotNull(toInt(if(toString(properties.mrr_cents) = '', '-1', toString(properties.mrr_cents)))) AS mrr_cents
+    FROM events
+    WHERE event IN ('Billing Subscription Started', 'Billing Subscription Churned')
+      AND timestamp < {date_to}
+),
+billing_coverage AS (
+    SELECT
+        count() AS billing_events,
+        countIf(billing_event = 'Billing Subscription Started') AS started_events
+    FROM billing_events
+),
+activation_users AS (
+    SELECT
+        f.actor AS actor,
+        f.activated_at AS activated_at,
+        countIf(
+            b.billing_event = 'Billing Subscription Started'
+            AND b.timestamp >= f.activated_at
+            AND b.timestamp < f.activated_at + INTERVAL 30 DAY
+        ) > 0 AS paid
+    FROM first_value AS f
+    LEFT JOIN billing_events AS b ON b.actor = f.actor
+    WHERE f.activated_at >= {date_from}
+      AND f.activated_at < {date_to}
+    GROUP BY f.actor, f.activated_at
+),
+activated AS (
+    SELECT
+        toStartOfWeek(activated_at, 1) AS week_start,
+        count() AS activated_users,
+        countIf(paid) AS paid_by_day_30
+    FROM activation_users
+    GROUP BY week_start
+),
+payer_state AS (
+    SELECT
+        w.week_start AS week_start,
+        b.actor AS actor,
+        argMax(b.billing_event, b.timestamp) AS last_event,
+        argMax(b.mrr_cents, b.timestamp) AS last_mrr
+    FROM weeks AS w
+    INNER JOIN billing_events AS b ON b.timestamp < w.week_start + INTERVAL 7 DAY
+    GROUP BY w.week_start, b.actor
+),
+week_mrr AS (
+    SELECT
+        week_start,
+        countIf(last_event = 'Billing Subscription Started') AS active_payers,
+        countIf(last_event = 'Billing Subscription Started' AND last_mrr < 0) AS payers_missing_mrr,
+        sumIf(last_mrr, last_event = 'Billing Subscription Started' AND last_mrr >= 0) AS known_mrr_cents
+    FROM payer_state
+    GROUP BY week_start
+),
+month_bounds AS (
+    SELECT DISTINCT toStartOfMonth(week_start) AS month_start
+    FROM weeks
+),
+month_state AS (
+    SELECT
+        m.month_start AS month_start,
+        b.actor AS actor,
+        countIf(b.timestamp < m.month_start) AS events_before_start,
+        argMaxIf(b.billing_event, b.timestamp, b.timestamp < m.month_start) AS start_event,
+        argMaxIf(b.mrr_cents, b.timestamp, b.timestamp < m.month_start) AS start_mrr,
+        argMax(b.billing_event, b.timestamp) AS end_event,
+        argMax(b.mrr_cents, b.timestamp) AS end_mrr
+    FROM month_bounds AS m
+    INNER JOIN billing_events AS b ON b.timestamp < m.month_start + INTERVAL 1 MONTH
+    GROUP BY m.month_start, b.actor
+),
+month_retention AS (
+    SELECT
+        month_start,
+        countIf(
+            events_before_start > 0
+            AND start_event = 'Billing Subscription Started'
+            AND start_mrr < 0
+        ) + countIf(end_event = 'Billing Subscription Started' AND end_mrr < 0) AS missing_mrr,
+        sumIf(
+            start_mrr,
+            events_before_start > 0
+            AND start_event = 'Billing Subscription Started'
+            AND start_mrr >= 0
+        ) AS starting_mrr_cents,
+        sumIf(
+            end_mrr - start_mrr,
+            events_before_start > 0
+            AND start_event = 'Billing Subscription Started'
+            AND end_event = 'Billing Subscription Started'
+            AND start_mrr >= 0
+            AND end_mrr >= 0
+            AND end_mrr > start_mrr
+        ) AS expansion_cents,
+        sumIf(
+            start_mrr - end_mrr,
+            events_before_start > 0
+            AND start_event = 'Billing Subscription Started'
+            AND end_event = 'Billing Subscription Started'
+            AND start_mrr >= 0
+            AND end_mrr >= 0
+            AND end_mrr < start_mrr
+        ) AS contraction_cents,
+        sumIf(
+            start_mrr,
+            events_before_start > 0
+            AND start_event = 'Billing Subscription Started'
+            AND end_event != 'Billing Subscription Started'
+            AND start_mrr >= 0
+        ) AS churn_cents
+    FROM month_state
+    GROUP BY month_start
+)
+SELECT
+    toString(w.week_start) AS week_start,
+    mau.mau AS mau,
+    activated.activated_users AS activated_users,
+    if(
+        (SELECT started_events FROM billing_coverage) > 0 AND w.week_start + INTERVAL 37 DAY <= {date_to},
+        activated.paid_by_day_30,
+        nullIf(toInt(0), 0)
+    ) AS paid_by_day_30,
+    if(
+        (SELECT started_events FROM billing_coverage) > 0
+        AND w.week_start + INTERVAL 37 DAY <= {date_to}
+        AND activated.activated_users > 0,
+        toFloat(activated.paid_by_day_30) / activated.activated_users,
+        nullIf(toFloat(0), toFloat(0))
+    ) AS paid_conversion,
+    week_mrr.active_payers AS active_payers,
+    week_mrr.payers_missing_mrr AS payers_missing_mrr,
+    if(
+        (SELECT billing_events FROM billing_coverage) > 0 AND ifNull(week_mrr.payers_missing_mrr, 0) = 0,
+        ifNull(week_mrr.known_mrr_cents, 0),
+        nullIf(toInt(0), 0)
+    ) AS mrr_cents,
+    if(
+        (SELECT billing_events FROM billing_coverage) > 0
+        AND ifNull(week_mrr.payers_missing_mrr, 0) = 0
+        AND ifNull(mau.mau, 0) > 0,
+        toFloat(ifNull(week_mrr.known_mrr_cents, 0)) / 100.0 / mau.mau,
+        nullIf(toFloat(0), toFloat(0))
+    ) AS arpmau_usd,
+    toString(toStartOfMonth(w.week_start)) AS month_start,
+    if(toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}, 1, 0) AS month_mature,
+    if(
+        toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}
+        AND ifNull(month_retention.missing_mrr, 0) = 0
+        AND ifNull(month_retention.starting_mrr_cents, 0) > 0,
+        month_retention.starting_mrr_cents,
+        nullIf(toInt(0), 0)
+    ) AS starting_mrr_cents,
+    if(
+        toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}
+        AND ifNull(month_retention.missing_mrr, 0) = 0
+        AND ifNull(month_retention.starting_mrr_cents, 0) > 0,
+        ifNull(month_retention.expansion_cents, 0),
+        nullIf(toInt(0), 0)
+    ) AS expansion_cents,
+    if(
+        toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}
+        AND ifNull(month_retention.missing_mrr, 0) = 0
+        AND ifNull(month_retention.starting_mrr_cents, 0) > 0,
+        ifNull(month_retention.contraction_cents, 0),
+        nullIf(toInt(0), 0)
+    ) AS contraction_cents,
+    if(
+        toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}
+        AND ifNull(month_retention.missing_mrr, 0) = 0
+        AND ifNull(month_retention.starting_mrr_cents, 0) > 0,
+        ifNull(month_retention.churn_cents, 0),
+        nullIf(toInt(0), 0)
+    ) AS churn_cents,
+    if(
+        toStartOfMonth(w.week_start) + INTERVAL 1 MONTH <= {date_to}
+        AND ifNull(month_retention.missing_mrr, 0) = 0
+        AND ifNull(month_retention.starting_mrr_cents, 0) > 0,
+        (
+            toFloat(ifNull(month_retention.expansion_cents, 0))
+            - toFloat(ifNull(month_retention.contraction_cents, 0))
+            - toFloat(ifNull(month_retention.churn_cents, 0))
+        ) / month_retention.starting_mrr_cents,
+        nullIf(toFloat(0), toFloat(0))
+    ) AS payer_net_mrr_retention
+FROM weeks AS w
+LEFT JOIN mau ON mau.week_start = w.week_start
+LEFT JOIN activated ON activated.week_start = w.week_start
+LEFT JOIN week_mrr ON week_mrr.week_start = w.week_start
+LEFT JOIN month_retention ON month_retention.month_start = toStartOfMonth(w.week_start)
+ORDER BY w.week_start
+LIMIT 50001

@@ -391,6 +391,11 @@ extension SettingsContentView {
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
     }
+    .onAppear {
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_billing",
+        currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown")
+    }
   }
 
   @ViewBuilder

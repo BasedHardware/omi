@@ -950,11 +950,28 @@ extension SettingsContentView {
     refreshPlanUsageDetails()
   }
 
+  func checkoutSelection(for priceId: String) -> (plan: String, interval: String) {
+    for plan in fallbackPlanCatalog {
+      if let price = plan.prices.first(where: { $0.id == priceId }) {
+        return (plan.id, SubscriptionFunnelWire.interval(price.title))
+      }
+    }
+    if let selectedPlanIdForCheckout {
+      return (selectedPlanIdForCheckout, "unknown")
+    }
+    return ("unknown", "unknown")
+  }
+
   func startCheckout(for priceId: String) {
     guard activeCheckoutPriceId == nil else { return }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
+    let selection = checkoutSelection(for: priceId)
+    pendingCheckoutPlanId = selection.plan
+    pendingCheckoutInterval = selection.interval
+    AnalyticsManager.shared.upgradePlanSelected(
+      plan: selection.plan, billingInterval: selection.interval, source: "macos_billing")
 
     let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
     let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
@@ -974,6 +991,7 @@ extension SettingsContentView {
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
             self.upgradePromotionCode = ""
+            AnalyticsManager.shared.upgradeSucceeded(plan: selection.plan, billingInterval: selection.interval)
             loadSubscriptionInfo()
           }
         } catch let apiError as APIError {
@@ -1009,6 +1027,7 @@ extension SettingsContentView {
             subscriptionError = nil
             pendingSubscriptionPriceId = nil
             pendingCheckoutSessionId = nil
+            AnalyticsManager.shared.upgradeSucceeded(plan: selection.plan, billingInterval: selection.interval)
             loadSubscriptionInfo()
           }
         } else if let urlString = response.url, let url = URL(string: urlString) {
@@ -1090,6 +1109,7 @@ extension SettingsContentView {
         }
       }
     case .cancelled, .dismissed:
+      AnalyticsManager.shared.upgradeCancelled()
       pendingSubscriptionPriceId = nil
       pendingCheckoutSessionId = nil
       loadSubscriptionInfo()
@@ -1110,6 +1130,8 @@ extension SettingsContentView {
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {
+              AnalyticsManager.shared.upgradeSucceeded(
+                plan: pendingCheckoutPlanId, billingInterval: pendingCheckoutInterval)
               applySuccessfulSubscriptionRefresh(subscription)
             }
             return
@@ -1120,6 +1142,8 @@ extension SettingsContentView {
               userSubscription = subscription
               subscriptionError =
                 "Payment completed, but plan refresh is still catching up. Please try reloading this page in a moment."
+              AnalyticsManager.shared.upgradeSucceeded(
+                plan: pendingCheckoutPlanId, billingInterval: pendingCheckoutInterval)
               pendingSubscriptionPriceId = nil
               pendingCheckoutSessionId = nil
             }

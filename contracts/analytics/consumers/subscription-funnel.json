@@ -1,0 +1,26 @@
+{
+  "id": "subscription-funnel",
+  "kind": "question",
+  "owner": "Subscription",
+  "question": "Of the people who open a subscription paywall, how many select a tier and how many finish or abandon checkout, by surface, tier, and billing interval, per namespace and build? Paywall Opened carries source and current_plan. Upgrade Plan Selected carries plan (tier id), billing_interval, and source. Upgrade Succeeded Attributed carries plan and billing_interval. Subscription Plan Changed carries previous_plan, new_plan, billing_interval, and change_source. The cancel-flow events carry the closed reason enum. Upgrade Succeeded and Upgrade Cancelled stay property-less presence events: the registry forbids adding properties to those released ids, so a completed checkout emits Upgrade Succeeded Attributed in the same call. Upgrade Modal Clicked and Upgrade Modal Dismissed are the app-version update prompt and are not in this funnel. Stripe webhook events, not these client events, are the source of truth for MRR and churn.",
+  "query": "contracts/analytics/consumers/subscription-funnel.sql",
+  "events": [
+    "paywallOpened",
+    "upgradePlanSelected",
+    "upgradeSucceededAttributed",
+    "upgradeSucceeded",
+    "upgradeCancelled",
+    "subscriptionPlanChanged",
+    "subscriptionCancelFlowStarted",
+    "subscriptionCancelReasonSelected",
+    "subscriptionCancelConfirmed",
+    "subscriptionCancelKeptPlan",
+    "subscriptionCancelAbandoned"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero events is expected on builds that predate this registration, and on desktop or web until those clients ship the same wire names. A missing Paywall Opened row for one source means that surface did not open the plans sheet in the selected namespace and build."
+}

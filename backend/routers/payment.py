@@ -1160,6 +1160,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             stripe_event_created=event.get('created'),
                             stripe_event_type=event['type'],
                             subscription_obj=subscription_obj,
+                            previous_attributes=event.get('data', {}).get('previous_attributes'),
                             previous_paid_subscription_id=previous_paid_id,
                             resulting_paid_subscription_id=(
                                 new_subscription.stripe_subscription_id

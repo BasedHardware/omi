@@ -38,6 +38,9 @@ class PlansSheet extends StatefulWidget {
   final Animation<double> arrowAnimation;
   final VoidCallback? onCancelSubscription;
 
+  /// Closed paywall `source` for the surface that opened this sheet.
+  final String analyticsSource;
+
   const PlansSheet({
     super.key,
     required this.waveController,
@@ -45,6 +48,7 @@ class PlansSheet extends StatefulWidget {
     required this.arrowController,
     required this.arrowAnimation,
     this.onCancelSubscription,
+    this.analyticsSource = 'usage_page',
   });
 
   @override
@@ -299,7 +303,11 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     }
 
-    PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+    PlatformManager.instance.analytics.upgradePlanSelected(
+      plan: tierId ?? 'unknown',
+      billingInterval: isYearly ? 'year' : 'month',
+      source: widget.analyticsSource,
+    );
 
     await _handleUpgrade(priceId, targetPlan: tierId ?? 'unknown', billingInterval: isYearly ? 'year' : 'month');
   }

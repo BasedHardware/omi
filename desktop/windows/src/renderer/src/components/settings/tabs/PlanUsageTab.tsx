@@ -8,6 +8,13 @@ import { ChatUsageCard } from '../billing/ChatUsageCard'
 import { OverageCard } from '../billing/OverageCard'
 import { TrialCard } from '../billing/TrialCard'
 import { PlanGrid } from '../billing/PlanGrid'
+import { canonicalPlanId } from '../../../lib/billingPlans'
+import {
+  trackPaywallOpened,
+  trackUpgradeCancelled,
+  trackUpgradePlanSelected,
+  trackUpgradeSucceeded
+} from '../../../lib/analytics'
 import {
   fetchSubscription,
   fetchChatQuota,
@@ -58,6 +65,13 @@ export function PlanUsageTab(): React.JSX.Element {
   const [portalBusy, setPortalBusy] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const plansRef = useRef<HTMLDivElement | null>(null)
+  const paywallTracked = useRef(false)
+
+  useEffect(() => {
+    if (paywallTracked.current || !sub?.subscription) return
+    paywallTracked.current = true
+    trackPaywallOpened('windows_billing', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
+  }, [sub])
 
   const load = useCallback(async (): Promise<void> => {
     setError(null)
@@ -115,6 +129,12 @@ export function PlanUsageTab(): React.JSX.Element {
   const onBuy = async (priceId: string, promotionCode?: string): Promise<void> => {
     if (!subscription || activePriceId) return
     setActivePriceId(priceId)
+    const selected = catalog.find((item) =>
+      (item.prices ?? []).some((price) => price.id === priceId)
+    )
+    const priceTitle = selected?.prices?.find((price) => price.id === priceId)?.title ?? 'unknown'
+    const tier = selected?.id ?? 'unknown'
+    trackUpgradePlanSelected(tier, priceTitle, 'windows_billing')
     try {
       const result = await startCheckout(
         { priceId, promotionCode, currentSubscription: subscription },
@@ -132,6 +152,7 @@ export function PlanUsageTab(): React.JSX.Element {
           // force-closed in the gap AFTER Stripe charged but BEFORE the success
           // redirect fired, the webhook has (or will have) granted the plan
           // server-side, and this pickup keeps the tab from showing stale state.
+          trackUpgradeCancelled()
           void load()
           return
         case 'refresh_lagging':
@@ -146,6 +167,7 @@ export function PlanUsageTab(): React.JSX.Element {
         default:
           toast("You're all set", { tone: 'success' })
       }
+      trackUpgradeSucceeded(tier, priceTitle)
       setSelectedPlanId(null)
       await load()
     } catch (e) {
