@@ -159,6 +159,57 @@ def test_patch_service_drops_ingress_startup_probe_initial_delay_and_keeps_the_r
     assert source['spec']['template']['spec']['containers'][0]['startupProbe']['initialDelaySeconds'] == 60
 
 
+def test_desktop_backend_liveness_probe_survives_service_yaml_round_trip_and_keeps_startup_probe():
+    module = _load_module()
+    source = _service()
+    ingress = source['spec']['template']['spec']['containers'][0]
+    ingress['startupProbe'] = {
+        'tcpSocket': {'port': 8080},
+        'timeoutSeconds': 240,
+        'periodSeconds': 240,
+        'failureThreshold': 1,
+    }
+    ingress['livenessProbe'] = {'tcpSocket': {'port': 8080}}
+
+    patched = module.patch_service(
+        source,
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+        desktop_backend_liveness_probe=True,
+    )
+    rendered = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
+    final_ingress = rendered['spec']['template']['spec']['containers'][0]
+    assert final_ingress['startupProbe'] == ingress['startupProbe']
+    assert final_ingress['livenessProbe'] == {
+        'httpGet': {'path': '/healthz/live', 'port': 8080},
+        'periodSeconds': 10,
+        'timeoutSeconds': 5,
+        'failureThreshold': 3,
+    }
+    assert rendered['spec']['template']['spec']['containers'][-1]['livenessProbe']['httpGet']['path'] == '/liveness'
+    assert ingress['livenessProbe'] == {'tcpSocket': {'port': 8080}}
+
+
+def test_liveness_probe_is_opt_in_for_shared_sidecar_script():
+    module = _load_module()
+    patched = module.patch_service(
+        _service(),
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+    assert 'livenessProbe' not in patched['spec']['template']['spec']['containers'][0]
+
+
 def test_patch_service_leaves_an_absent_startup_probe_to_cloud_run_defaults():
     module = _load_module()
 
@@ -434,6 +485,7 @@ spec:
                 config_secret='cloud-run-gmp-config',
                 expected_env_state=expected_state,
                 tag='',
+                desktop_backend_liveness_probe=False,
             )
         )
 
@@ -640,6 +692,7 @@ spec:
             config_secret='cloud-run-gmp-config',
             expected_env_state=expected_state,
             tag='',
+            desktop_backend_liveness_probe=False,
         )
     )
 

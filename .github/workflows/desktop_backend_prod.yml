@@ -410,6 +410,7 @@ jobs:
             --ingress-container=desktop-backend-1 \
             --config="$DESKTOP_BACKEND_CONTROLS/backend/deploy/cloud_run_gmp_sidecar.yaml" \
             --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
+            --desktop-backend-liveness-probe \
             --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
@@ -438,6 +439,20 @@ jobs:
           # so that field went empty and the guard below started failing closed. Extract
           # the image by container name instead, and assert there is exactly one match so
           # the guard still fails closed if the container topology ever changes again.
+          revision_json="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          jq -e '
+            [.spec.containers[]? | select(.name == "desktop-backend-1")] as $ingress |
+            ($ingress | length) == 1 and
+            $ingress[0].startupProbe.tcpSocket.port == 8080 and
+            $ingress[0].livenessProbe.httpGet.path == "/healthz/live" and
+            $ingress[0].livenessProbe.httpGet.port == 8080 and
+            $ingress[0].livenessProbe.periodSeconds == 10 and
+            $ingress[0].livenessProbe.timeoutSeconds == 5 and
+            $ingress[0].livenessProbe.failureThreshold == 3
+          ' <<< "$revision_json" >/dev/null
           runtime_image_ref="$(
             gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
               --project="$PROJECT_ID" \

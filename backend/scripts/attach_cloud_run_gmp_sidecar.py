@@ -395,6 +395,7 @@ def patch_service(
     ingress_container_name: str,
     config_secret: str,
     config_secret_version: str,
+    desktop_backend_liveness_probe: bool = False,
 ) -> ConfigDict:
     patched = cast(ConfigDict, json.loads(json.dumps(service)))
     patched.pop('status', None)
@@ -441,6 +442,13 @@ def patch_service(
         ingress = candidates[0]
         ingress['name'] = ingress_container_name
     _drop_startup_probe_initial_delay(ingress)
+    if desktop_backend_liveness_probe:
+        ingress['livenessProbe'] = {
+            'httpGet': {'path': '/healthz/live', 'port': 8080},
+            'periodSeconds': 10,
+            'timeoutSeconds': 5,
+            'failureThreshold': 3,
+        }
     retained_containers = [
         container for container in containers if container is not ingress and container.get('name') != SIDECAR_NAME
     ]
@@ -784,6 +792,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         ingress_container_name=args.ingress_container,
         config_secret=args.config_secret,
         config_secret_version=config_secret_version,
+        desktop_backend_liveness_probe=args.desktop_backend_liveness_probe,
     )
 
     path: Path | None = None
@@ -1043,6 +1052,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--expected-env-state', type=Path)
     parser.add_argument('--tag', default='')
     parser.add_argument(
+        '--desktop-backend-liveness-probe',
+        action='store_true',
+        help='Set the desktop-backend ingress /healthz/live probe on the final service revision.',
+    )
+    parser.add_argument(
         '--repair-secret-annotations',
         action='store_true',
         help='Repair project-ID secret paths on the live service and exit. Does not attach a sidecar.',
@@ -1057,6 +1071,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.desktop_backend_liveness_probe and (
+        args.job or args.repair_secret_annotations or args.service != 'desktop-backend'
+    ):
+        raise SystemExit('--desktop-backend-liveness-probe requires a desktop-backend service attachment')
     if args.detach:
         if not args.job or args.repair_secret_annotations or args.dry_run:
             raise SystemExit('--detach is only supported with --job')
