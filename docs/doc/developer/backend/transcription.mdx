@@ -215,7 +215,7 @@ Response (mirrors parakeet `/v2/transcribe`):
 }
 ```
 
-Errors: `400` empty file, `401` missing/invalid bearer token, `413` audio exceeds the duration/size limits, `429` per-user rate limit exceeded (`stt:transcribe` policy — honor `Retry-After`), `503` model loading or service busy (retry later), `502` upstream failure. Implementation: `backend/routers/stt.py`.
+Errors: `400` empty file or unreadable/invalid media duration, `401` missing/invalid bearer token, `402` transcription allowance exhausted or insufficient for this file, `413` audio exceeds the duration/size limits, `429` per-user rate limit exceeded (`stt:transcribe` policy — honor `Retry-After`), `503` model loading, service busy, duration-probe deadline, or temporarily unavailable allowance (retry later), `502` upstream failure. Implementation: `backend/routers/stt.py`.
 
 ## Transcription outcome contract
 

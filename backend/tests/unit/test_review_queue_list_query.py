@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 from google.cloud.firestore_v1 import Query
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -24,6 +26,7 @@ class _Snapshot:
         self._data = data
         self.exists = data is not None
         self.reference = reference
+        self.update_time = reference._database.versions.get(reference.path, 1) if reference else 1
 
     def to_dict(self):
         return dict(self._data) if self._data is not None else None
@@ -46,11 +49,21 @@ class _Document:
         self._database.store[self.path] = dict(payload)
         self._database.write_log.append(('set', self.path, dict(payload)))
 
-    def update(self, payload, **_kwargs):
+    def update(self, payload, *, option=None):
+        if self._database.before_update:
+            self._database.before_update(self)
+        if option is not None and option._last_update_time != self._database.versions.get(self.path, 1):
+            raise FailedPrecondition('document changed')
         if self._database.fail_review_updates and '/memory_review_queue/' in self.path:
             raise RuntimeError('review self-heal failed')
         self._database.store[self.path].update(payload)
         self._database.write_log.append(('update', self.path, dict(payload)))
+        self._database.versions[self.path] = self._database.versions.get(self.path, 1) + 1
+
+    def create(self, payload):
+        if self.path in self._database.store:
+            raise AlreadyExists('document exists')
+        self.set(payload)
 
     def delete(self):
         if self._database.fail_cursor_writes and '/memory_state/' in self.path:
@@ -69,6 +82,7 @@ class _Query:
         order_fields=(),
         limit_count=None,
         cursor_id=None,
+        selected_fields=None,
     ):
         self._database = database
         self._path = path
@@ -76,6 +90,7 @@ class _Query:
         self._order_fields = tuple(order_fields)
         self._limit_count = limit_count
         self._cursor_id = cursor_id
+        self._selected_fields = selected_fields
 
     def _clone(self, **changes):
         return _Query(
@@ -85,7 +100,11 @@ class _Query:
             order_fields=changes.get('order_fields', self._order_fields),
             limit_count=changes.get('limit_count', self._limit_count),
             cursor_id=changes.get('cursor_id', self._cursor_id),
+            selected_fields=changes.get('selected_fields', self._selected_fields),
         )
+
+    def select(self, fields):
+        return self._clone(selected_fields=tuple(fields))
 
     def where(self, *, filter):
         return self._clone(filters=(*self._filters, (filter.field_path, filter.op_string, filter.value)))
@@ -128,7 +147,7 @@ class _Query:
             rows.append(
                 _Snapshot(
                     path[len(prefix) :],
-                    data,
+                    deepcopy(data),
                     reference=_Document(self._database, path),
                 )
             )
@@ -148,8 +167,12 @@ class _Query:
                 'limit': self._limit_count,
                 'cursor_id': self._cursor_id,
                 'returned_ids': [snapshot.id for snapshot in page],
+                **({'selected_fields': self._selected_fields} if self._selected_fields is not None else {}),
             }
         )
+        if self._selected_fields is not None:
+            for snapshot in page:
+                snapshot._data = {key: value for key, value in snapshot._data.items() if key in self._selected_fields}
         return page
 
     @staticmethod
@@ -185,6 +208,8 @@ class _Firestore:
         self.document_cursor_log = []
         self.fail_review_updates = False
         self.fail_cursor_writes = False
+        self.versions = {}
+        self.before_update = None
 
     def collection(self, name):
         assert name == 'users'
@@ -227,6 +252,127 @@ def _review(
 
 def _queue_store(uid: str, items):
     return {f'users/{uid}/memory_review_queue/{item["review_id"]}': item for item in items}
+
+
+def test_expire_is_paged_non_destructive_and_idempotent(monkeypatch):
+    uid = 'uid-expiration-test'
+    cutoff = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    rows = [
+        _review('a-legacy', impact=0.5, created_at=cutoff - timedelta(days=1)),
+        _review('b-canonical', impact=0.5, created_at=cutoff - timedelta(days=1), canonical=True),
+        _review('c-pending-review', impact=0.5, created_at=cutoff - timedelta(days=1), status='pending_review'),
+        _review('d-accepted', impact=0.5, created_at=cutoff - timedelta(days=1), status='accepted'),
+        _review('e-cutoff', impact=0.5, created_at=cutoff),
+        _review('f-new', impact=0.5, created_at=cutoff + timedelta(days=1)),
+        _review('g-expired', impact=0.5, created_at=cutoff - timedelta(days=1), status='expired'),
+        _review('h-missing-time', impact=0.5, created_at=cutoff),
+        _review('i-naive-time', impact=0.5, created_at=cutoff.replace(tzinfo=None)),
+    ]
+    rows[-2].pop('created_at')
+    store = _queue_store(uid, rows)
+    for collection in ('memory_items', 'memories', 'memory_commits', 'short_term_memories', 'memory_corrections'):
+        store[f'users/{uid}/{collection}/protected'] = {'unchanged': True}
+    database = _Firestore(store)
+    before = deepcopy(store)
+    monkeypatch.setattr(review_queue, 'REVIEW_EXPIRE_PAGE_SIZE', 2)
+    monkeypatch.setattr(review_queue, 'db', database)
+
+    def expire(**kwargs):
+        return review_queue.expire_review_conflicts(uid, created_before=cutoff, firestore_client=database, **kwargs)
+
+    assert expire() == {'pending': {'legacy': 1, 'canonical_memory': 1}, 'pending_review': {'legacy': 1}}
+    assert database.store == before
+    assert database.write_log == []
+    assert len(database.query_log) == 5
+    assert all(query['limit'] == 2 for query in database.query_log)
+    assert all(query['selected_fields'] == ('status', 'authority', 'created_at') for query in database.query_log)
+
+    assert expire(dry_run=False) == {'expired': {'legacy': 2, 'canonical_memory': 1}}
+    assert len(database.write_log) == 3
+    for _, path, update in database.write_log:
+        assert '/memory_review_queue/' in path
+        assert set(update) == {'status', 'resolved_at', 'updated_at', 'reason', 'permitted_uses'}
+        assert update['reason'] == review_queue.REVIEW_EXPIRE_REASON
+        assert update['permitted_uses'] == []
+        assert update['resolved_at'] == update['updated_at']
+        assert update['resolved_at'].tzinfo is not None
+        assert database.store[path] == {**before[path], **update}
+    changed_paths = {path for _, path, _ in database.write_log}
+    assert {path: row for path, row in database.store.items() if path not in changed_paths} == {
+        path: row for path, row in before.items() if path not in changed_paths
+    }
+    after = deepcopy(database.store)
+    assert expire(dry_run=False) == {}
+    assert expire() == {}
+    assert database.store == after
+    assert len(database.write_log) == 3
+    assert review_queue.resolve_review_conflict(uid, 'b-canonical', 'accept')['status'] == 'already_resolved'
+    assert review_queue.resolve_review_conflict(uid, 'a-legacy', 'timeout')['status'] == 'already_resolved'
+
+
+@pytest.mark.parametrize('status', ['pending', 'pending_review'])
+def test_expired_rows_hidden_from_ranked_and_sparse_pending_lists(monkeypatch, status):
+    now = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    expired = _review('expired', impact=1.0, created_at=now, status='expired', canonical=True)
+    sparse = _review('sparse-expired', impact=1.0, created_at=now, status='expired')
+    sparse.pop('impact')
+    database = _Firestore(
+        _queue_store('test', [expired, sparse, _review('pending', impact=0.5, created_at=now, status=status)])
+    )
+    monkeypatch.setattr(review_queue, 'db', database)
+    assert [row['review_id'] for row in review_queue.list_review_conflicts('test', status=status)] == ['pending']
+    assert database.write_log == []
+    assert database.batch_get_log == []
+
+
+def test_expire_does_not_overwrite_concurrent_resolution():
+    cutoff = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    database = _Firestore(_queue_store('test', [_review('r', impact=0.5, created_at=cutoff - timedelta(days=1))]))
+
+    def concurrent_resolution(reference):
+        database.store[reference.path]['status'] = 'accepted'
+        database.versions[reference.path] = 2
+
+    database.before_update = concurrent_resolution
+    with pytest.raises(FailedPrecondition):
+        review_queue.expire_review_conflicts('test', created_before=cutoff, dry_run=False, firestore_client=database)
+    assert database.store['users/test/memory_review_queue/r']['status'] == 'accepted'
+    assert database.write_log == []
+
+
+def test_expire_rejects_naive_cutoff_before_acquiring_client(monkeypatch):
+    def unexpected_client():
+        raise AssertionError('must validate before IO')
+
+    monkeypatch.setattr(review_queue, 'get_firestore_client', unexpected_client)
+    with pytest.raises(ValueError, match='timezone-aware'):
+        review_queue.expire_review_conflicts('test', created_before=datetime(2026, 7, 20))
+
+
+@pytest.mark.parametrize('status', ['expired', 'unknown', '', None])
+def test_action_policy_fails_closed(status):
+    assert review_queue.ACTION_POLICY['expired'] == set()
+    assert review_queue.permitted_uses(status) == set()
+    assert review_queue.can_use_for_action(status, 'irreversible') is False
+    assert review_queue.can_use_for_action(status, 'answer') is False
+
+
+def test_legacy_producer_replay_preserves_expired_review():
+    database = _Firestore({})
+    first = review_queue.create_review_conflict(
+        'test', fact={'id': 'memory-test'}, conflict_with=[], db_client=database
+    )
+    path = f'users/test/memory_review_queue/{first["review_id"]}'
+    database.store[path].update({'status': 'expired', 'permitted_uses': []})
+    before = deepcopy(database.store)
+    assert (
+        review_queue.create_review_conflict('test', fact={'id': 'memory-test'}, conflict_with=[], db_client=database)[
+            'status'
+        ]
+        == 'expired'
+    )
+    assert database.store == before
+    assert len(database.write_log) == 1
 
 
 def test_list_review_conflicts_applies_server_status_order_and_limit(monkeypatch):

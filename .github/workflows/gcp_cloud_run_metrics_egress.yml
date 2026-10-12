@@ -46,6 +46,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # Required repo or prod Environment variable; fail before credentials/Helm.
+      - name: Validate prod dead-man notification channels
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ALERT_CHANNELS//[[:space:]]/}" ]]; then
+            echo "MONITORING_DEADMAN_NOTIFICATION_CHANNELS must be created before running prod monitoring." >&2
+            exit 1
+          fi
+
       - name: Resolve environment-specific release contract
         env:
           ENV_SLUG: ${{ vars.ENV }}
@@ -94,6 +106,16 @@ jobs:
           # impersonable only from this workflow on main.
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-monitoring-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Ensure external prod Grafana dead-man
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/ensure_grafana_deadman.py \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --notification-channels="$ALERT_CHANNELS"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
