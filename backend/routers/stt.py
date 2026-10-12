@@ -12,13 +12,12 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 
 import asyncio
 import logging
-import json
+import io
 import math
 import os
 import re
-import subprocess
-import tempfile
 
+import av
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -50,29 +49,27 @@ _MAX_EXTENSION_LEN = 8
 def _audio_seconds(audio_bytes: bytes) -> int:
     """Probe the uploaded media, rather than billing transcript timestamp gaps.
 
-    A seekable input supports containers whose duration metadata is at the end.
-    ffprobe is already part of the serving image's FFmpeg dependency. Only the
-    duration is returned; neither filenames nor decoder stderr enter logs.
+    PyAV is the existing FFmpeg binding used by voice-duration accounting.
+    A seekable in-memory input supports containers whose metadata is at the
+    end, without requiring an external ffprobe binary or another audio copy
+    on disk. Decoder errors never enter logs or the response.
     """
     try:
-        with tempfile.NamedTemporaryFile(prefix='omi-stt-meter-') as audio:
-            audio.write(audio_bytes)
-            audio.flush()
-            result = subprocess.run(
-                ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'json', audio.name],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                timeout=20,
-                check=True,
-            )
-        seconds = float(json.loads(result.stdout)['format']['duration'])
+        with av.open(io.BytesIO(audio_bytes)) as audio:
+            if not audio.streams.audio:
+                raise ValueError('missing audio stream')
+            stream = audio.streams.audio[0]
+            if audio.duration is not None:
+                seconds = float(audio.duration) / 1_000_000
+            elif stream.duration is not None and stream.time_base is not None:
+                seconds = float(stream.duration * stream.time_base)
+            else:
+                raise ValueError('missing duration')
         if not math.isfinite(seconds) or seconds <= 0:
             raise ValueError('invalid duration')
         return math.ceil(seconds)
-    except (ValueError, KeyError, subprocess.SubprocessError):
+    except (ValueError, TypeError, av.error.FFmpegError):
         raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
-    except OSError:
-        raise HTTPException(status_code=503, detail='Audio duration service unavailable') from None
 
 
 def _safe_upstream_filename(filename) -> str:
@@ -161,31 +158,32 @@ async def stt_transcribe(
         finally:
             del files
             del audio_bytes
+        if resp.status_code >= 400:
+            # 413 (audio too long) and 503 (model loading / overloaded) carry
+            # client-actionable details — forward them as-is. Anything else is an
+            # internal upstream failure the client can't act on.
+            if resp.status_code in (413, 503):
+                detail = 'Transcription failed upstream'
+                try:
+                    payload = resp.json()
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and payload.get('detail'):
+                    detail = str(payload['detail'])
+                logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
+                raise HTTPException(status_code=resp.status_code, detail=detail)
+            logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')
+            raise HTTPException(status_code=502, detail='Transcription failed upstream')
+
+        try:
+            payload = resp.json()
+        except ValueError:
+            logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
+            raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
+
+        # Keep completed-but-unaccounted calls inside the four-slot bound too.
+        # This is not a distributed monthly-quota reservation.
+        await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+        return payload
     finally:
         semaphore.release()
-
-    if resp.status_code >= 400:
-        # 413 (audio too long) and 503 (model loading / overloaded) carry
-        # client-actionable details — forward them as-is. Anything else is an
-        # internal upstream failure the client can't act on.
-        if resp.status_code in (413, 503):
-            detail = 'Transcription failed upstream'
-            try:
-                payload = resp.json()
-            except ValueError:
-                payload = None
-            if isinstance(payload, dict) and payload.get('detail'):
-                detail = str(payload['detail'])
-            logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
-            raise HTTPException(status_code=resp.status_code, detail=detail)
-        logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')
-        raise HTTPException(status_code=502, detail='Transcription failed upstream')
-
-    try:
-        payload = resp.json()
-    except ValueError:
-        logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
-        raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
-
-    await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
-    return payload

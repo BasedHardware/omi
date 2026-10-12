@@ -90,6 +90,7 @@ def test_provider_failure_does_not_record_success_usage(monkeypatch, metering):
 def test_duration_probe_uses_media_frames_and_rounds_up(monkeypatch):
     # Restore the production probe masked by the autouse route fixture.
     monkeypatch.undo()
+    monkeypatch.setenv('PATH', '')  # CI has no ffprobe; the decoder must be self-contained.
     data = io.BytesIO()
     with wave.open(data, 'wb') as wav:
         wav.setnchannels(1)
@@ -101,9 +102,31 @@ def test_duration_probe_uses_media_frames_and_rounds_up(monkeypatch):
 
 def test_duration_probe_rejects_unreadable_media(monkeypatch):
     monkeypatch.undo()
+    monkeypatch.setenv('PATH', '')
     with pytest.raises(HTTPException) as exc:
         stt_router._audio_seconds(b'not audio')
     assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize('record_fails', [False, True])
+def test_proxy_slot_is_held_through_usage_accounting_and_released(monkeypatch, record_fails):
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(stt_router, 'get_stt_proxy_semaphore', lambda: semaphore)
+
+    def record(*args, **kwargs):
+        assert semaphore.locked(), 'another admission must not reuse this slot before accounting finishes'
+        if record_fails:
+            raise RuntimeError('synthetic accounting failure')
+
+    monkeypatch.setattr(stt_router, 'record_usage', record)
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    client = _make_client(monkeypatch, fake)
+    if record_fails:
+        with pytest.raises(RuntimeError, match='synthetic accounting failure'):
+            _upload(client)
+    else:
+        assert _upload(client).status_code == 200
+    assert not semaphore.locked()
 
 
 class _FakeResponse:
