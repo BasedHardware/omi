@@ -263,9 +263,14 @@ class IMessageAdapter(BaseAdapter):
     async def item_presentation(self, message, text, items):
         if len(items) > 1:
             text = plain(text)
+            # A shorter id is a string prefix of a longer one (`ab` / `abc`, `1` / `10`).
+            # Replace longer URL spellings first so the short form cannot eat the long one.
+            patterns = []
             for item in items:
                 for url in (item['url'], item['url'].removeprefix('https://')):
-                    text = text.replace(' (' + url + ')', '').replace(url, '')
+                    patterns.extend((' (' + url + ')', '(' + url + ')', url))
+            for pattern in sorted(set(patterns), key=len, reverse=True):
+                text = text.replace(pattern, '')
             text = text.strip()
         card = None
         if items and await self.ledger.has_outbound(message):

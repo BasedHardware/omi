@@ -309,3 +309,29 @@ def test_imessage_list_card_uses_reply_order_and_configured_base(adapter, monkey
         {'type': 'link', 'value': 'https://share.example.com/omi/items?memory=second&task=a%2Fb%20%26%3D%E9%9B%AA'}
     ]
     assert 'share.example.com' not in ''.join(adapter.render('Open https://share.example.com/omi.'))
+
+
+def test_imessage_multi_item_text_does_not_eat_longer_urls(adapter):
+    if adapter.channel != 'imessage':
+        return
+    message = incoming(adapter)
+    adapter.ledger.accepted_chats.add(message.external_chat_id)
+    sources = [
+        {'kind': 'task', 'id': 'ab', 'title': 'Short task'},
+        {'kind': 'task', 'id': 'abc', 'title': 'Longer task'},
+        {'kind': 'task', 'id': '1', 'title': 'One'},
+        {'kind': 'task', 'id': '10', 'title': 'Ten'},
+    ]
+    text = (
+        '[Longer task](https://h.omi.me/task/abc) and [Short task](https://h.omi.me/task/ab). '
+        '[Ten](https://h.omi.me/task/10) and [One](https://h.omi.me/task/1).'
+    )
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload({'text': text, 'conversations': sources})
+
+    asyncio.run(run())
+    bodies = sends(adapter)
+    assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': 'Longer task and Short task. Ten and One.'}]
+    assert 'h.omi.me' not in bodies[0]['message']['parts'][0]['value']
