@@ -791,6 +791,7 @@ final class DesktopAutomationActionRegistry {
     registerCloseAskOmiActions()
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
+    registerItemLinkActions()
     registerConversationRecordingActions()
     register(
       name: "refresh_all_data",
