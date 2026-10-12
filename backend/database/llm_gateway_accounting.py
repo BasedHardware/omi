@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -47,8 +48,15 @@ def record_llm_gateway_attempt(
     attempt_id = _required_string(event, 'attempt_id')
     client = firestore_client or get_firestore_client()
     data = dict(event)
+    data['attempt_id'] = attempt_id
+    if data.get('estimated_cost_micro_usd') is not None:
+        data['estimated_cost_micro_usd'] = _micro_usd(data['estimated_cost_micro_usd'])
     data['subscription_tier'] = _subscription_tier(client, data.get('user_uid'))
-    plan_id = resolve_usage_plan_id(data.get('user_uid', ''), firestore_client=client)
+    try:
+        plan_id = resolve_usage_plan_id(data.get('user_uid', ''), firestore_client=client)
+    except Exception:
+        logger.warning('Failed to resolve usage plan for uid=%s', data.get('user_uid'))
+        plan_id = None
     data['plan_id'] = plan_id
     data['plan_attribution_status'] = 'complete' if plan_id is not None else 'missing'
     payer = data.get('payer')
@@ -71,7 +79,10 @@ def record_llm_gateway_attempt(
 
 
 def _subscription_tier(client: Any, uid: object) -> str:
-    if not isinstance(uid, str) or not uid:
+    if not isinstance(uid, str) or not uid.strip():
+        return 'unattributed'
+    uid = uid.strip()
+    if '/' in uid or '\\' in uid:
         return 'unattributed'
     try:
         snapshot = client.collection('users').document(uid).get(['subscription'])
@@ -96,9 +107,12 @@ def _subscription_tier(client: Any, uid: object) -> str:
 
 def _required_string(event: Mapping[str, Any], key: str) -> str:
     value = event.get(key)
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str):
         raise ValueError(f'gateway accounting event requires {key}')
-    return value
+    cleaned = value.strip()
+    if not cleaned or '/' in cleaned or '\\' in cleaned:
+        raise ValueError(f'gateway accounting event requires valid non-empty {key}')
+    return cleaned
 
 
 def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
@@ -112,9 +126,13 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
     """
     uid_hash: str | None = None
     try:
-        date = data.get('date')
-        if not isinstance(date, str) or not date:
+        raw_date = data.get('date')
+        if not isinstance(raw_date, str) or not raw_date.strip():
             logger.warning('user-day rollup skipped: accounting event without a date')
+            return
+        date = raw_date.strip()
+        if '/' in date or '\\' in date or '..' in date:
+            logger.warning('user-day rollup skipped: invalid date format %r', raw_date)
             return
         uid_hash = _hashed_uid(data.get('user_uid'))
         cost = _micro_usd(data.get('estimated_cost_micro_usd'))
@@ -127,7 +145,7 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
             'subscription_tier': data.get('subscription_tier'),
             'plan_id': data.get('plan_id'),
         }
-        if cost:
+        if cost > 0:
             update['cost_micro_usd_sum'] = firestore.Increment(cost)
             update[_provider_cost_field(data.get('provider'))] = firestore.Increment(cost)
             update[f'fc_{_feature_class(data.get("feature"))}'] = firestore.Increment(cost)
@@ -142,27 +160,53 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
 
 def _hashed_uid(uid: object) -> str:
     """The finops ledger uid convention: sha256 prefix, or anonymous when absent."""
-    if isinstance(uid, str) and uid:
-        return hashlib.sha256(uid.encode()).hexdigest()[:16]
+    if isinstance(uid, str) and uid.strip():
+        return hashlib.sha256(uid.strip().encode()).hexdigest()[:16]
     return _ANONYMOUS_UID_HASH
 
 
 def _micro_usd(value: object) -> int:
-    return value if isinstance(value, int) else 0
+    """Clamp and convert cost to a non-negative integer micro-USD.
+
+    Protects finops accounting ledgers from negative ledger decrements
+    and coerces float/numeric costs safely while rejecting booleans,
+    infinities, and NaN.
+    """
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        try:
+            val_float = float(value)
+            if not math.isfinite(val_float) or val_float <= 0:
+                return 0
+            return int(round(val_float))
+        except (ValueError, OverflowError):
+            return 0
+    if isinstance(value, str):
+        try:
+            val_float = float(value.strip())
+            if not math.isfinite(val_float) or val_float <= 0:
+                return 0
+            return int(round(val_float))
+        except (ValueError, OverflowError):
+            return 0
+    return 0
 
 
 def _platform(value: object) -> str:
-    return value if isinstance(value, str) and value else _UNATTRIBUTED
+    return value.strip() if isinstance(value, str) and value.strip() else _UNATTRIBUTED
 
 
 def _provider_cost_field(provider: object) -> str:
-    return _PROVIDER_COST_FIELDS.get(provider if isinstance(provider, str) else '', _OTHER_PROVIDER_COST_FIELD)
+    cleaned = provider.strip().lower() if isinstance(provider, str) else ''
+    return _PROVIDER_COST_FIELDS.get(cleaned, _OTHER_PROVIDER_COST_FIELD)
 
 
 def _feature_class(feature: object) -> str:
     """Mirror the finops ledger puller's per-user feature bucketing."""
-    if not isinstance(feature, str) or not feature:
+    if not isinstance(feature, str) or not feature.strip():
         return 'extraction'
+    feature = feature.strip().lower()
     if feature.startswith('desktop_'):
         return 'desktop'
     if feature == 'proactive_notification':
