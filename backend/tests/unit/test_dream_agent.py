@@ -131,6 +131,9 @@ def test_aggregate_hides_rare_patterns_and_does_not_double_count_salts():
 
 @pytest.fixture
 def pass_context(monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     lease = {'run_id': 'synthetic-run', 'mode': 'shadow', 'watermark': dream_store.EPOCH, 'score': 1}
     records = {'conversations/c1': {'id': 'c1', 'structured': {'title': 'Meeting'}}}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')

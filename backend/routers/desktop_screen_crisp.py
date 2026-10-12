@@ -1,4 +1,6 @@
 import logging
+import time
+from collections.abc import Awaitable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +26,14 @@ router = APIRouter()
 # Compatibility seam for existing route tests and downstream fakes; this name
 # now points at the recoverable requested/claimed/uploaded query.
 list_pending_frame_requests = list_recoverable_frame_requests
+
+
+async def _timed_phase(phase_ms: dict[str, int], name: str, work: Awaitable[Any]) -> Any:
+    started = time.perf_counter()
+    try:
+        return await work
+    finally:
+        phase_ms[name] += round((time.perf_counter() - started) * 1000)
 
 
 class ScreenActivityRow(BaseModel):
@@ -112,6 +122,8 @@ async def sync_screen_activity(
         raise HTTPException(status_code=400, detail="Maximum 100 rows per batch")
     if not request.rows:
         return ScreenActivitySyncResponse(synced=0, last_id=0)
+    started = time.perf_counter()
+    phase_ms = {"upsert": 0, "entitlement": 0, "vector": 0, "frame_requests": 0}
     rows = [
         {
             **row.model_dump(by_alias=True),
@@ -133,7 +145,9 @@ async def sync_screen_activity(
     parity_capture.observe("client", {"type": "screen_activity_rows", "rows": _parity_screen_rows(rows)})
     try:
         try:
-            written = await run_blocking(db_executor, upsert_screen_activity, uid, rows)
+            written = await _timed_phase(
+                phase_ms, "upsert", run_blocking(db_executor, upsert_screen_activity, uid, rows)
+            )
         except Exception as exc:
             logger.exception("Screen activity Firestore write failed for uid=%s", uid)
             raise HTTPException(status_code=500, detail="Firestore write failed") from exc
@@ -143,12 +157,14 @@ async def sync_screen_activity(
         # still stored either way, so a later upgrade can backfill vectors from the stored text.
         embedded_rows = (
             [row for row in rows if row.get("embedding")]
-            if await run_blocking(db_executor, grants_cloud_screen_vectors, uid)
+            if await _timed_phase(phase_ms, "entitlement", run_blocking(db_executor, grants_cloud_screen_vectors, uid))
             else []
         )
         if embedded_rows:
             try:
-                await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
+                await _timed_phase(
+                    phase_ms, "vector", run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
+                )
             except Exception:
                 logger.exception("Screen activity vector write failed for uid=%s", uid)
         response_payload: dict[str, Any] = {"synced": written, "last_id": max(row.id for row in request.rows)}
@@ -169,20 +185,28 @@ async def sync_screen_activity(
         )
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
-                await run_blocking(
-                    db_executor,
-                    reconcile_conversation_keyframe_jobs,
-                    uid,
-                    device_id=routed_device_id,
-                    account_generation=request.account_generation,
-                    device_retention_seconds=request.device_retention_seconds,
+                await _timed_phase(
+                    phase_ms,
+                    "frame_requests",
+                    run_blocking(
+                        db_executor,
+                        reconcile_conversation_keyframe_jobs,
+                        uid,
+                        device_id=routed_device_id,
+                        account_generation=request.account_generation,
+                        device_retention_seconds=request.device_retention_seconds,
+                    ),
                 )
-                pending = await run_blocking(
-                    db_executor,
-                    list_pending_frame_requests,
-                    uid,
-                    device_id=routed_device_id,
-                    account_generation=request.account_generation,
+                pending = await _timed_phase(
+                    phase_ms,
+                    "frame_requests",
+                    run_blocking(
+                        db_executor,
+                        list_pending_frame_requests,
+                        uid,
+                        device_id=routed_device_id,
+                        account_generation=request.account_generation,
+                    ),
                 )
                 response_payload["frame_requests"] = [
                     FrameRequestDelivery(
@@ -225,4 +249,17 @@ async def sync_screen_activity(
         )
         return response
     finally:
+        # Authority resolution is control-plane work; the frame DB calls above
+        # are timed individually, including failures.
+        total_ms = round((time.perf_counter() - started) * 1000)
+        if total_ms > 2000:
+            logger.info(
+                "screen_activity_sync_slow total_ms=%d row_count=%d upsert_ms=%d entitlement_ms=%d vector_ms=%d frame_requests_ms=%d",
+                total_ms,
+                len(request.rows),
+                phase_ms["upsert"],
+                phase_ms["entitlement"],
+                phase_ms["vector"],
+                phase_ms["frame_requests"],
+            )
         parity_capture.persist()

@@ -1,5 +1,6 @@
 from contextlib import nullcontext
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -130,6 +131,43 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
             ],
         ),
     ]
+
+
+def test_slow_sync_logs_phase_durations_without_uid(monkeypatch, caplog):
+    ticks = iter(range(12))
+    monkeypatch.setattr(desktop_screen_crisp, "time", SimpleNamespace(perf_counter=lambda: next(ticks)))
+    monkeypatch.setattr(desktop_screen_crisp, "is_desktop_trial_paywalled", lambda *_: False)
+    _entitle(monkeypatch)
+    _enable_frame_requests(monkeypatch)
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity_vectors", lambda uid, rows: None)
+    monkeypatch.setattr(desktop_screen_crisp, "reconcile_conversation_keyframe_jobs", lambda *args, **kwargs: None)
+    monkeypatch.setattr(desktop_screen_crisp, "list_pending_frame_requests", lambda *args, **kwargs: [])
+
+    with caplog.at_level(logging.INFO):
+        response = make_client().post(
+            "/v1/screen-activity/sync",
+            json={
+                "account_generation": 7,
+                "rows": [
+                    {
+                        "id": 1,
+                        "timestamp": "2026-07-26T00:00:00Z",
+                        "clientDeviceId": "mac-a",
+                        "embedding": [0.1],
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    lines = [record.message for record in caplog.records if "screen_activity_sync_slow" in record.message]
+    assert len(lines) == 1
+    assert (
+        "total_ms=11000 row_count=1 upsert_ms=1000 entitlement_ms=1000 vector_ms=1000 frame_requests_ms=2000"
+        in lines[0]
+    )
+    assert "user-1" not in lines[0]
 
 
 def test_enabled_screen_sync_returns_only_device_routed_frame_metadata(monkeypatch):

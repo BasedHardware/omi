@@ -135,3 +135,7 @@ def backfill_share() -> float:
 
 def random_seed_share() -> float:
     return min(1.0, number('DREAM_AGENT_RANDOM_SEED_SHARE', 0.1))
+
+
+def concurrency() -> int:
+    return max(1, min(8, int(number('DREAM_AGENT_CONCURRENCY', 2))))

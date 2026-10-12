@@ -65,11 +65,11 @@ def test_authenticated_off_is_cheap_noop(client, monkeypatch):
             'email_verified': True,
         },
     )
-    monkeypatch.setattr(dream_store, 'candidates', lambda **k: pytest.fail('off read Firestore'))
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('off read Firestore'))
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: pytest.fail('off attempted admission'))
     response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
     assert response.status_code == 200
-    assert response.json() == {'complete': 0, 'failed': 0, 'not_admitted': 0, 'deadline': 0}
+    assert response.json() == {'complete': 0, 'failed': 0, 'not_admitted': 0, 'deadline': 0, 'waiting': 0}
 
 
 def test_route_returns_counts_only(client, monkeypatch, caplog):
@@ -95,15 +95,18 @@ def test_route_returns_counts_only(client, monkeypatch, caplog):
     )
     with caplog.at_level('INFO', logger='routers.dream_sweep'):
         response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
-    assert response.json() == {'complete': 1, 'failed': 1, 'not_admitted': 1, 'deadline': 1}
+    assert response.json() == {'complete': 1, 'failed': 1, 'not_admitted': 1, 'deadline': 1, 'waiting': 0}
     assert UID not in response.text and 'private' not in response.text
     logged = caplog.text
-    assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 failure_types=synthetic:1' in logged
+    assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 waiting=0 failure_types=synthetic:1' in logged
     assert UID not in logged and 'private' not in logged
 
 
 @pytest.fixture
 def store(monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
@@ -206,6 +209,12 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
 @pytest.mark.parametrize('stalled_stage', ['query', 'plan', 'finish'])
 def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeypatch, stalled_stage):
     monkeypatch.setattr(dream_agent, 'DRAIN_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(dream_agent, 'PASS_TIMEOUT_SECONDS', 0)
+    monkeypatch.setattr(dream_agent, 'FINISH_MARGIN_SECONDS', 0)
+    monkeypatch.setenv('DREAM_AGENT_CONCURRENCY', '1')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     entered = asyncio.Event()
     pending = asyncio.Event()
 
@@ -216,14 +225,14 @@ def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeyp
     real_blocking = dream_agent.run_blocking
 
     async def blocking(executor, fn, *a, **k):
-        if stalled_stage == 'query' and fn is dream_store.candidates:
+        if stalled_stage == 'query' and fn is dream_agent.dream_scheduler.candidates:
             return await stall()
         if stalled_stage == 'finish' and fn is dream_store.finish:
             return await stall()
         return await real_blocking(executor, fn, *a, **k)
 
     monkeypatch.setattr(dream_agent, 'run_blocking', blocking)
-    monkeypatch.setattr(dream_store, 'candidates', lambda **k: [UID, 'never-started'])
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: [UID, 'never-started'])
     monkeypatch.setattr(
         dream_agent, 'plan_pass', stall if stalled_stage == 'plan' else AsyncMock(return_value=(Plan(), 0))
     )
@@ -277,8 +286,12 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '180s'
-    assert dream_agent.DRAIN_TIMEOUT_SECONDS < 150 < int(dream['attempt_deadline'][:-1])
+    assert dream['attempt_deadline'] == '300s'
+    assert (
+        dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
+        <= dream_agent.DRAIN_TIMEOUT_SECONDS
+        < int(dream['attempt_deadline'][:-1])
+    )
     assert not any(
         job['name'] == dream['name'] and job['state'] != 'PAUSED' for job in scheduler['environments']['dev']['jobs']
     )

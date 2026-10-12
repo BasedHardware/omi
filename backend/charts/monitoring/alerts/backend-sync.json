@@ -608,9 +608,9 @@
             {
               "evaluator": {
                 "params": [
-                  20
+                  48
                 ],
-                "type": "gt"
+                "type": "gte"
               },
               "operator": {
                 "type": "and"
@@ -642,12 +642,12 @@
     "updated": "2026-06-20T02:27:43Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": "20 instances (80% of max)",
+      "threshold": ">=48 instances for 30m (max_instances - 2). Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 18.8 / p90 34 / max 49.5; .github/actions/deploy-backend-stack/action.yml sets backend-sync --max-instances=50.",
       "summary": "Omi API alert: Backend-sync instance count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi API production service path.",

@@ -40,7 +40,7 @@ class Document(StrictFirestoreDocument):
 
     def get(self, transaction=None, **kwargs):
         self._database.reads.append(self.path)
-        result = super().get(transaction=transaction, **kwargs)
+        result = super().get(transaction=transaction)
         result.reference = self
         result.id = self.id
         return result

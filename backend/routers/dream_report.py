@@ -29,6 +29,10 @@ async def run_now(body: DreamRunRequest, uid: str = Depends(auth.get_current_use
             report = await dream_agent.run_pass(uid, trigger='manual', timeout_seconds=70)
             if report.get('run_id'):
                 return await run_blocking(db_executor, dream_report.finished_run, uid, report['run_id'])
+            if report.get('status') == 'waiting':
+                raise HTTPException(
+                    503, detail=report.get('reason', 'reserved_capacity'), headers={'Retry-After': '120'}
+                )
             return DreamRun(run_id='', created_at=datetime.now(timezone.utc), trigger='manual', status='idle')
     except AdmissionDenied as exc:
         code = 409 if exc.reason == 'dream_run_in_progress' else 429 if exc.reason == 'dream_manual_limit' else 503
