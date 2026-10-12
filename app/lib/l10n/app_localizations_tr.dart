@@ -13046,4 +13046,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Henüz sipariş vermedim';
+
+  @override
+  String get onboardingConnectOmi => 'Omi\'yi bağla';
 }

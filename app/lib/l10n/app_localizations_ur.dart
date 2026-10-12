@@ -13047,4 +13047,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'ابھی آرڈر نہیں کیا';
+
+  @override
+  String get onboardingConnectOmi => 'Omi کو جوڑیں';
 }

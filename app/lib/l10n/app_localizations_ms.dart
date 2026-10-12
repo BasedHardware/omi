@@ -13064,4 +13064,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Belum memesan';
+
+  @override
+  String get onboardingConnectOmi => 'Sambungkan Omi';
 }

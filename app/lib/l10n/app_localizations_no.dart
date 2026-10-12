@@ -13034,4 +13034,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ikke bestilt ennå';
+
+  @override
+  String get onboardingConnectOmi => 'Koble til Omi';
 }

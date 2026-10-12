@@ -199,6 +199,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future<void> startQuietDeviceScan() async {
     if (_isDisposed || isConnected) return;
     if (!await readBluetoothPermission()) return;
+    // Only when the radio is already on: an off adapter would raise the shared "Enable Bluetooth"
+    // guidance over an unrelated step. "Connect your Omi" handles that case itself.
+    try {
+      if (BluetoothReadiness.parse(await BleHostApi().getBluetoothState()) != BluetoothAdapterState.on) return;
+    } catch (_) {
+      return;
+    }
     if (_isDisposed) return;
     ServiceManager.instance().device.subscribe(this, this);
     await deviceProvider?.initiateConnection('OnboardingEarlyScan');

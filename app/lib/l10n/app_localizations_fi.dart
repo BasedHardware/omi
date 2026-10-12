@@ -13038,4 +13038,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'En ole vielä tilannut';
+
+  @override
+  String get onboardingConnectOmi => 'Yhdistä Omi';
 }

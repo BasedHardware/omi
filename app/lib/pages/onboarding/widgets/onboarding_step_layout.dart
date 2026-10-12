@@ -24,7 +24,9 @@ class OnboardingStepLayout extends StatelessWidget {
       children: [
         if (progress != null)
           Padding(
-            padding: const EdgeInsets.only(top: OmiSpacing.md),
+            // Same top inset as the back button so the progress line sits level with it; the bottom
+            // inset keeps the header row its full height, so content below does not move.
+            padding: const EdgeInsets.only(top: OmiSpacing.xxs, bottom: OmiSpacing.md - OmiSpacing.xxs),
             child: progress!,
           ),
         if (onBack != null)

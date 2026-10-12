@@ -13056,4 +13056,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ainda não encomendei';
+
+  @override
+  String get onboardingConnectOmi => 'Conectar Omi';
 }

@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_plain_step.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -228,64 +228,49 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   @override
   Widget build(BuildContext context) {
     final hasSelection = selectedLanguageName != null;
-    return OnboardingStep(
-      card: OnboardingCard(
-        content: [
-          Semantics(
-            header: true,
-            child: Text(context.l10n.whatsYourPrimaryLanguage, style: OmiType.title1, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: OmiSpacing.xxl),
-          Semantics(
-            button: true,
-            label: context.l10n.selectPrimaryLanguage,
-            value: selectedLanguageName,
-            excludeSemantics: true,
-            child: Material(
-              color: OmiColors.surface1,
-              shape: RoundedRectangleBorder(
-                borderRadius: OmiRadius.lgAll,
-                side: BorderSide(color: OmiColors.border),
-              ),
-              child: InkWell(
-                customBorder: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
-                onTap: () {
-                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                  _showLanguageSelector(context, homeProvider.availableLanguages);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.lg),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          selectedLanguageName ?? context.l10n.selectYourLanguage,
-                          style: OmiType.body.copyWith(
-                            color: hasSelection ? OmiColors.textPrimary : OmiColors.textTertiary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+    return OnboardingPlainStep(
+      title: context.l10n.whatsYourPrimaryLanguage,
+      body: Semantics(
+        button: true,
+        label: context.l10n.selectPrimaryLanguage,
+        value: selectedLanguageName,
+        excludeSemantics: true,
+        child: Material(
+          color: OmiColors.surface1,
+          shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+          child: InkWell(
+            customBorder: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+            onTap: () {
+              final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+              _showLanguageSelector(context, homeProvider.availableLanguages);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.lg),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      selectedLanguageName ?? context.l10n.selectYourLanguage,
+                      style: OmiType.title3.copyWith(
+                        color: hasSelection ? OmiColors.textPrimary : OmiColors.textTertiary,
                       ),
-                      const SizedBox(width: OmiSpacing.sm),
-                      Icon(Icons.keyboard_arrow_down, color: OmiColors.textTertiary, size: 24),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Icon(Icons.keyboard_arrow_down, color: OmiColors.textTertiary, size: 24),
+                ],
               ),
             ),
           ),
-        ],
-        footer: [
-          const SizedBox(height: OmiSpacing.xxl),
-          // Async: the button shows a spinner and ignores taps while the language saves.
-          OmiButton(
-            key: const Key('onboarding_language_continue'),
-            label: context.l10n.continueButton,
-            expand: true,
-            onPressed: selectedLanguage == null ? null : _continue,
-          ),
-        ],
+        ),
+      ),
+      // Async: the button shows a spinner and ignores taps while the language saves.
+      action: OmiButton(
+        key: const Key('onboarding_language_continue'),
+        label: context.l10n.continueButton,
+        expand: true,
+        onPressed: selectedLanguage == null ? null : _continue,
       ),
     );
   }

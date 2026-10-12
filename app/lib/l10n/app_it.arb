@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Tocca per risolvere",
     "onboardingNoOmiYet": "Non hai ancora il tuo Omi?",
     "onboardingOmiOrdered": "L'ho ordinato",
-    "onboardingOmiNotOrdered": "Non ancora ordinato"
+    "onboardingOmiNotOrdered": "Non ancora ordinato",
+    "onboardingConnectOmi": "Connetti Omi"
 }

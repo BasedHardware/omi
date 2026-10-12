@@ -12852,4 +12852,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => '아직 주문하지 않았어요';
+
+  @override
+  String get onboardingConnectOmi => 'Omi 연결';
 }

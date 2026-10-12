@@ -13028,4 +13028,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'هنوز سفارش نداده‌ام';
+
+  @override
+  String get onboardingConnectOmi => 'اتصال Omi';
 }

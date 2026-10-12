@@ -13043,4 +13043,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Belum memesan';
+
+  @override
+  String get onboardingConnectOmi => 'Hubungkan Omi';
 }

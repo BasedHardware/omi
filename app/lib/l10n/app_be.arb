@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
     "onboardingNoOmiYet": "Яшчэ няма Omi?",
     "onboardingOmiOrdered": "Я ўжо замовіў",
-    "onboardingOmiNotOrdered": "Яшчэ не замовіў"
+    "onboardingOmiNotOrdered": "Яшчэ не замовіў",
+    "onboardingConnectOmi": "Падключыце Omi"
 }

@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "సరిచేయడానికి నొక్కండి",
     "onboardingNoOmiYet": "ఇంకా మీ Omi లేదా?",
     "onboardingOmiOrdered": "నేను ఆర్డర్ చేశాను",
-    "onboardingOmiNotOrdered": "ఇంకా ఆర్డర్ చేయలేదు"
+    "onboardingOmiNotOrdered": "ఇంకా ఆర్డర్ చేయలేదు",
+    "onboardingConnectOmi": "Omiని కనెక్ట్ చేయండి"
 }

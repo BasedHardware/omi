@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Korjaa napauttamalla",
     "onboardingNoOmiYet": "Eikö Omi ole vielä saapunut?",
     "onboardingOmiOrdered": "Olen tilannut sen",
-    "onboardingOmiNotOrdered": "En ole vielä tilannut"
+    "onboardingOmiNotOrdered": "En ole vielä tilannut",
+    "onboardingConnectOmi": "Yhdistä Omi"
 }

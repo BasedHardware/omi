@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "タップして修正",
     "onboardingNoOmiYet": "まだOmiをお持ちでないですか？",
     "onboardingOmiOrdered": "注文済みです",
-    "onboardingOmiNotOrdered": "まだ注文していません"
+    "onboardingOmiNotOrdered": "まだ注文していません",
+    "onboardingConnectOmi": "Omiを接続"
 }

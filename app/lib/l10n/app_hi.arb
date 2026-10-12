@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "ठीक करने के लिए टैप करें",
     "onboardingNoOmiYet": "अभी तक आपका Omi नहीं आया?",
     "onboardingOmiOrdered": "मैंने ऑर्डर कर दिया है",
-    "onboardingOmiNotOrdered": "अभी ऑर्डर नहीं किया"
+    "onboardingOmiNotOrdered": "अभी ऑर्डर नहीं किया",
+    "onboardingConnectOmi": "Omi कनेक्ट करें"
 }

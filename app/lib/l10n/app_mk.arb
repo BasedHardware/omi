@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "Допрете за да поправите",
     "onboardingNoOmiYet": "Сè уште немате Omi?",
     "onboardingOmiOrdered": "Го нарачав",
-    "onboardingOmiNotOrdered": "Сè уште не сум нарачал"
+    "onboardingOmiNotOrdered": "Сè уште не сум нарачал",
+    "onboardingConnectOmi": "Поврзете Omi"
 }

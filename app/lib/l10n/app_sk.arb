@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Ťuknutím opravíte",
     "onboardingNoOmiYet": "Ešte nemáte Omi?",
     "onboardingOmiOrdered": "Už som ho objednal/a",
-    "onboardingOmiNotOrdered": "Ešte neobjednané"
+    "onboardingOmiNotOrdered": "Ešte neobjednané",
+    "onboardingConnectOmi": "Pripojte Omi"
 }

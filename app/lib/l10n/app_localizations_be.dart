@@ -13068,4 +13068,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Яшчэ не замовіў';
+
+  @override
+  String get onboardingConnectOmi => 'Падключыце Omi';
 }

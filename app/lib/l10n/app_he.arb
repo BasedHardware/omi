@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "הקישו לתיקון",
     "onboardingNoOmiYet": "עדיין אין לכם Omi?",
     "onboardingOmiOrdered": "הזמנתי",
-    "onboardingOmiNotOrdered": "עוד לא הזמנתי"
+    "onboardingOmiNotOrdered": "עוד לא הזמנתי",
+    "onboardingConnectOmi": "חיבור Omi"
 }

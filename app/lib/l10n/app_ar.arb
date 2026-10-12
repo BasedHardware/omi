@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "اضغط للإصلاح",
     "onboardingNoOmiYet": "ليس لديك Omi بعد؟",
     "onboardingOmiOrdered": "لقد طلبته",
-    "onboardingOmiNotOrdered": "لم أطلبه بعد"
+    "onboardingOmiNotOrdered": "لم أطلبه بعد",
+    "onboardingConnectOmi": "اتصل بـ Omi"
 }

@@ -4043,5 +4043,6 @@
     "onboardingPermissionTapToFix": "Нажмите, чтобы исправить",
     "onboardingNoOmiYet": "Ещё нет Omi?",
     "onboardingOmiOrdered": "Я уже заказал",
-    "onboardingOmiNotOrdered": "Ещё не заказал"
+    "onboardingOmiNotOrdered": "Ещё не заказал",
+    "onboardingConnectOmi": "Подключите Omi"
 }

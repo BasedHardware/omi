@@ -13029,4 +13029,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ešte neobjednané';
+
+  @override
+  String get onboardingConnectOmi => 'Pripojte Omi';
 }

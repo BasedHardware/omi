@@ -13035,4 +13035,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ještě neobjednáno';
+
+  @override
+  String get onboardingConnectOmi => 'Připojte Omi';
 }

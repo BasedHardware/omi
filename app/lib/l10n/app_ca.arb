@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Toca per solucionar-ho",
     "onboardingNoOmiYet": "Encara no tens l'Omi?",
     "onboardingOmiOrdered": "Ja l'he demanat",
-    "onboardingOmiNotOrdered": "Encara no l'he demanat"
+    "onboardingOmiNotOrdered": "Encara no l'he demanat",
+    "onboardingConnectOmi": "Connecta l'Omi"
 }

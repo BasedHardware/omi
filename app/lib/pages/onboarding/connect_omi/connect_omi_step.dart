@@ -92,6 +92,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final compact = MediaQuery.sizeOf(context).height <= 700;
+    final stage = compact ? 220.0 : 260.0;
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
         final devices = provider.visibleDeviceList;
@@ -113,7 +114,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
                   child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
                 ),
                 child: DeviceAnimationWidget(
-                  sizeMultiplier: compact ? 0.8 : 1.0,
+                  sizeMultiplier: compact ? 0.65 : 0.75,
                   isConnected: provider.isConnected,
                   deviceName: provider.isConnected ? provider.deviceName : shown?.name,
                   deviceType: provider.isConnected ? provider.deviceType : shown?.type,
@@ -123,8 +124,8 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
             : Stack(
                 alignment: Alignment.center,
                 children: [
-                  if (!cantFind) ScanningRippleWidget(isScanning: true, size: compact ? 240 : 300),
-                  Assets.images.omiWithoutRopeTurnedOff.image(width: compact ? 110 : 140, height: compact ? 110 : 140),
+                  if (!cantFind) ScanningRippleWidget(isScanning: true, size: stage, color: OmiColors.textTertiary),
+                  Assets.images.omiWithoutRopeTurnedOff.image(width: stage * 0.42, height: stage * 0.42),
                 ],
               );
 
@@ -138,52 +139,65 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
             child: Column(
               children: [
-                Expanded(child: Center(child: visual)),
-                Semantics(
-                  header: true,
-                  child: Text(l10n.connectOmiDevice, style: OmiType.title1, textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(
-                  subtitle,
-                  key: const Key('connect_omi_status'),
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: OmiSpacing.md),
-                // The tappable device rows; stays mounted because it owns the connection handling.
-                FoundDevices(
-                  goNext: () => _finish(OnboardingDeviceChoice.connected),
-                  isFromOnboarding: true,
-                  onRescan: _scanAgain,
-                  showStatus: false,
-                ),
-                if (cantFind) ...[
-                  OmiButton(
-                    key: const Key('connect_omi_scan_again'),
-                    label: l10n.scanAgain,
-                    icon: Icons.refresh,
-                    expand: true,
-                    onPressed: _scanAgain,
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(height: stage, child: Center(child: visual)),
+                          const SizedBox(height: OmiSpacing.xxl),
+                          Semantics(
+                            header: true,
+                            child: Text(l10n.onboardingConnectOmi, style: OmiType.title1, textAlign: TextAlign.center),
+                          ),
+                          const SizedBox(height: OmiSpacing.xs),
+                          // A narrow measure so the instruction wraps evenly instead of leaving one word behind.
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 280),
+                            child: Text(
+                              subtitle,
+                              key: const Key('connect_omi_status'),
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: OmiSpacing.lg),
+                          // The tappable device rows; stays mounted because it owns the connection handling.
+                          FoundDevices(
+                            goNext: () => _finish(OnboardingDeviceChoice.connected),
+                            isFromOnboarding: true,
+                            onRescan: _scanAgain,
+                            showStatus: false,
+                          ),
+                          if (cantFind) ...[
+                            OmiButton(
+                              key: const Key('connect_omi_scan_again'),
+                              label: l10n.scanAgain,
+                              icon: Icons.refresh,
+                              onPressed: _scanAgain,
+                            ),
+                            OmiButton.tertiary(
+                              key: const Key('connect_omi_how_to_pair'),
+                              label: l10n.howToPair,
+                              onPressed: _showConnectionGuide,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: OmiSpacing.xs),
-                  OmiButton.secondary(
-                    key: const Key('connect_omi_how_to_pair'),
-                    label: l10n.howToPair,
-                    expand: true,
-                    onPressed: _showConnectionGuide,
-                  ),
-                ],
-                const SizedBox(height: OmiSpacing.lg),
+                ),
                 if (!provider.isConnected) ...[
                   Text(
                     l10n.onboardingNoOmiYet,
                     style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                     textAlign: TextAlign.center,
                   ),
+                  // Quiet links, not buttons: they must not compete with the device above.
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -195,6 +209,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
                           onPressed: () => _finish(OnboardingDeviceChoice.ordered),
                         ),
                       ),
+                      Container(width: 1, height: 14, color: OmiColors.border),
                       Flexible(
                         child: OmiButton.tertiary(
                           key: const Key('connect_omi_not_ordered'),
@@ -206,7 +221,6 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
                     ],
                   ),
                 ],
-                const SizedBox(height: OmiSpacing.sm),
               ],
             ),
           ),

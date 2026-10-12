@@ -4050,5 +4050,6 @@
     "onboardingPermissionTapToFix": "Tryk for at rette",
     "onboardingNoOmiYet": "Har du ikke din Omi endnu?",
     "onboardingOmiOrdered": "Jeg har bestilt den",
-    "onboardingOmiNotOrdered": "Ikke bestilt endnu"
+    "onboardingOmiNotOrdered": "Ikke bestilt endnu",
+    "onboardingConnectOmi": "Forbind Omi"
 }

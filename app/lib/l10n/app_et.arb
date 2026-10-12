@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Puuduta parandamiseks",
     "onboardingNoOmiYet": "Sul pole veel Omit?",
     "onboardingOmiOrdered": "Olen selle tellinud",
-    "onboardingOmiNotOrdered": "Pole veel tellinud"
+    "onboardingOmiNotOrdered": "Pole veel tellinud",
+    "onboardingConnectOmi": "Ühenda Omi"
 }

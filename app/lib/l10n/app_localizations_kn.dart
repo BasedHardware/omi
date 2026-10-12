@@ -13072,4 +13072,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'ಇನ್ನೂ ಆರ್ಡರ್ ಮಾಡಿಲ್ಲ';
+
+  @override
+  String get onboardingConnectOmi => 'Omi ಸಂಪರ್ಕಿಸಿ';
 }

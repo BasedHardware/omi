@@ -49,8 +49,9 @@ void main() {
         final headerBottom = tester.getRect(find.byType(OnboardingProgressLine)).bottom;
         expect(tester.getRect(title).top, greaterThanOrEqualTo(headerBottom));
         expect(tester.getRect(title).overlaps(tester.getRect(back)), isFalse);
-        // SafeArea is consumed by the host once; the page starts directly below its header.
-        expect(tester.getRect(title).top - headerBottom, moreOrLessEquals(20));
+        // SafeArea is consumed by the host once; the page starts directly below its header. The
+        // progress line sits level with the back button, so the header row extends below it.
+        expect(tester.getRect(title).top - headerBottom, moreOrLessEquals(20 + OmiSpacing.md - OmiSpacing.xxs));
         await tester.tap(back);
         expect(backs, 1);
         await tester.drag(scroll, const Offset(0, -350));

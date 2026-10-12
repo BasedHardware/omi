@@ -12967,4 +12967,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'ยังไม่ได้สั่งซื้อ';
+
+  @override
+  String get onboardingConnectOmi => 'เชื่อมต่อ Omi';
 }

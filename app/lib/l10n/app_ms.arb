@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Ketik untuk membetulkan",
     "onboardingNoOmiYet": "Belum ada Omi lagi?",
     "onboardingOmiOrdered": "Saya sudah memesannya",
-    "onboardingOmiNotOrdered": "Belum memesan"
+    "onboardingOmiNotOrdered": "Belum memesan",
+    "onboardingConnectOmi": "Sambungkan Omi"
 }

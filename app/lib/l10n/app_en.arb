@@ -15783,5 +15783,9 @@
     "onboardingOmiNotOrdered": "Not ordered yet",
     "@onboardingOmiNotOrdered": {
         "description": "Onboarding connect step: choice for people who have not ordered an Omi device"
+    },
+    "onboardingConnectOmi": "Connect Omi",
+    "@onboardingConnectOmi": {
+        "description": "Onboarding connect step title; Omi is the brand name of the wearable"
     }
 }

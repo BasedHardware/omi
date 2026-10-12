@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "दुरुस्त करण्यासाठी टॅप करा",
     "onboardingNoOmiYet": "अजून तुमचा Omi आला नाही?",
     "onboardingOmiOrdered": "मी ऑर्डर केला आहे",
-    "onboardingOmiNotOrdered": "अजून ऑर्डर केलेला नाही"
+    "onboardingOmiNotOrdered": "अजून ऑर्डर केलेला नाही",
+    "onboardingConnectOmi": "Omi कनेक्ट करा"
 }

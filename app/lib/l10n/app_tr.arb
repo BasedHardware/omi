@@ -4043,5 +4043,6 @@
     "onboardingPermissionTapToFix": "Düzeltmek için dokunun",
     "onboardingNoOmiYet": "Omi'n henüz yok mu?",
     "onboardingOmiOrdered": "Sipariş verdim",
-    "onboardingOmiNotOrdered": "Henüz sipariş vermedim"
+    "onboardingOmiNotOrdered": "Henüz sipariş vermedim",
+    "onboardingConnectOmi": "Omi'yi bağla"
 }

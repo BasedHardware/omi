@@ -12828,4 +12828,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => '还没下单';
+
+  @override
+  String get onboardingConnectOmi => '连接 Omi';
 }

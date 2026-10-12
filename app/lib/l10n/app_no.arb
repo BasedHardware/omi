@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Trykk for å fikse",
     "onboardingNoOmiYet": "Har du ikke fått Omi ennå?",
     "onboardingOmiOrdered": "Jeg har bestilt den",
-    "onboardingOmiNotOrdered": "Ikke bestilt ennå"
+    "onboardingOmiNotOrdered": "Ikke bestilt ennå",
+    "onboardingConnectOmi": "Koble til Omi"
 }

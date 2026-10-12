@@ -13079,4 +13079,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ещё не заказал';
+
+  @override
+  String get onboardingConnectOmi => 'Подключите Omi';
 }

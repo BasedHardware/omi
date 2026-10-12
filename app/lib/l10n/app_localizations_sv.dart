@@ -13038,4 +13038,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Inte beställt än';
+
+  @override
+  String get onboardingConnectOmi => 'Anslut Omi';
 }

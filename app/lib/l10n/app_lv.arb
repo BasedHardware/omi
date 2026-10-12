@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Pieskarieties, lai labotu",
     "onboardingNoOmiYet": "Vēl nav Omi?",
     "onboardingOmiOrdered": "Esmu to pasūtījis",
-    "onboardingOmiNotOrdered": "Vēl neesmu pasūtījis"
+    "onboardingOmiNotOrdered": "Vēl neesmu pasūtījis",
+    "onboardingConnectOmi": "Savienot Omi"
 }

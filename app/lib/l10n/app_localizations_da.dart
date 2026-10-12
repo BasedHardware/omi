@@ -13020,4 +13020,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Ikke bestilt endnu';
+
+  @override
+  String get onboardingConnectOmi => 'Forbind Omi';
 }

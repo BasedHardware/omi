@@ -23240,6 +23240,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not ordered yet'**
   String get onboardingOmiNotOrdered;
+
+  /// Onboarding connect step title; Omi is the brand name of the wearable
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Omi'**
+  String get onboardingConnectOmi;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

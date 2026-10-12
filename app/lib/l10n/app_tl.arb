@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "I-tap para ayusin",
     "onboardingNoOmiYet": "Wala ka pang Omi?",
     "onboardingOmiOrdered": "Na-order ko na",
-    "onboardingOmiNotOrdered": "Hindi pa naka-order"
+    "onboardingOmiNotOrdered": "Hindi pa naka-order",
+    "onboardingConnectOmi": "Ikonekta ang Omi"
 }

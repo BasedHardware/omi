@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Nhấn để khắc phục",
     "onboardingNoOmiYet": "Bạn chưa có Omi?",
     "onboardingOmiOrdered": "Tôi đã đặt hàng",
-    "onboardingOmiNotOrdered": "Chưa đặt hàng"
+    "onboardingOmiNotOrdered": "Chưa đặt hàng",
+    "onboardingConnectOmi": "Kết nối Omi"
 }

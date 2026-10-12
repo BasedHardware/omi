@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_plain_step.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -150,57 +151,41 @@ class _PermissionsWidgetState extends State<PermissionsWidget> with WidgetsBindi
   @override
   Widget build(BuildContext context) {
     final permissions = _permissions ?? const <OnboardingPermission>[];
-    // No artwork on this step: the title sits at the top, the cards under it, Continue at the bottom.
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.xs),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              header: true,
-              child: Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
+    return OnboardingPlainStep(
+      title: context.l10n.grantPermissions,
+      body: Column(
+        children: [
+          for (final permission in permissions) ...[
+            _OnboardingPermissionRow(
+              key: ValueKey('onboarding_permission_${permission.name}'),
+              permission: permission,
+              state: _stateOf(permission),
+              busy: _busy == permission,
+              onTap: () => _onTap(permission),
             ),
-            const SizedBox(height: OmiSpacing.xl),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    for (final permission in permissions) ...[
-                      _OnboardingPermissionCard(
-                        key: ValueKey('onboarding_permission_${permission.name}'),
-                        permission: permission,
-                        state: _stateOf(permission),
-                        busy: _busy == permission,
-                        onTap: () => _onTap(permission),
-                      ),
-                      const SizedBox(height: OmiSpacing.sm),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: OmiSpacing.md),
-            OmiButton(
-              key: const Key('onboarding_permissions_continue'),
-              label: context.l10n.continueButton,
-              expand: true,
-              onPressed: _allAnswered
-                  ? () {
-                      OmiHaptics.selection();
-                      widget.goNext();
-                    }
-                  : null,
-            ),
+            const SizedBox(height: OmiSpacing.sm),
           ],
-        ),
+        ],
+      ),
+      action: OmiButton(
+        key: const Key('onboarding_permissions_continue'),
+        label: context.l10n.continueButton,
+        expand: true,
+        onPressed: _allAnswered
+            ? () {
+                OmiHaptics.selection();
+                widget.goNext();
+              }
+            : null,
       ),
     );
   }
 }
 
-class _OnboardingPermissionCard extends StatelessWidget {
-  const _OnboardingPermissionCard({
+/// One permission as its own card: icon tile, title, and the switch. A line under the title
+/// appears only when there is something to do (Bluetooth off, notifications to fix).
+class _OnboardingPermissionRow extends StatelessWidget {
+  const _OnboardingPermissionRow({
     super.key,
     required this.permission,
     required this.state,
@@ -217,13 +202,6 @@ class _OnboardingPermissionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final denied = state == OnboardingPermissionCardState.denied;
-    // Notifications that are off are a problem worth fixing (red); the others are a caution (orange).
-    final deniedColor = permission == OnboardingPermission.notifications ? OmiColors.danger : OmiColors.warning;
-    final tint = switch (state) {
-      OnboardingPermissionCardState.unanswered => OmiColors.textSecondary,
-      OnboardingPermissionCardState.allowed => OmiColors.textPrimary,
-      OnboardingPermissionCardState.denied => deniedColor,
-    };
     final String? note = !denied
         ? null
         : switch (permission) {
@@ -240,54 +218,49 @@ class _OnboardingPermissionCard extends StatelessWidget {
       excludeSemantics: true,
       child: Material(
         color: OmiColors.surface1,
-        shape: RoundedRectangleBorder(
-          borderRadius: OmiRadius.lgAll,
-          side: BorderSide(color: denied ? deniedColor : OmiColors.border),
-        ),
+        borderRadius: OmiRadius.lgAll,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: busy ? null : onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        child: Center(child: FaIcon(onboardingPermissionIcon(permission), size: 18, color: tint)),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: OmiType.headline.copyWith(
-                            fontSize: OmiType.callout.fontSize,
-                            color: denied ? deniedColor : OmiColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (busy)
-                        const OmiSpinner(size: OmiSpinnerSize.small)
-                      else
-                        IgnorePointer(
-                          child: OmiSwitch(
-                            value: state == OnboardingPermissionCardState.allowed,
-                            onChanged: (_) {},
-                          ),
-                        ),
-                    ],
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(color: OmiColors.surface0, borderRadius: OmiRadius.smAll),
+                    child: Center(
+                      child: FaIcon(onboardingPermissionIcon(permission), size: 15, color: OmiColors.textPrimary),
+                    ),
                   ),
-                ),
-                if (note != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 24 + OmiSpacing.sm, bottom: OmiSpacing.xxs),
-                    child: Text(note, style: OmiType.footnote.copyWith(color: deniedColor)),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+                        if (note != null) ...[
+                          const SizedBox(height: 2),
+                          Text(note, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                        ],
+                      ],
+                    ),
                   ),
-              ],
+                  const SizedBox(width: OmiSpacing.sm),
+                  OnboardingPermissionToggle(
+                    on: state == OnboardingPermissionCardState.allowed,
+                    denied: denied,
+                    busy: busy,
+                    // Notifications that are off are worth fixing (red); the rest are a caution (orange).
+                    deniedColor:
+                        permission == OnboardingPermission.notifications ? OmiColors.danger : OmiColors.warning,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

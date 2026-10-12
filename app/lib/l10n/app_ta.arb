@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "சரிசெய்ய தட்டவும்",
     "onboardingNoOmiYet": "இன்னும் உங்கள் Omi இல்லையா?",
     "onboardingOmiOrdered": "நான் ஆர்டர் செய்துவிட்டேன்",
-    "onboardingOmiNotOrdered": "இன்னும் ஆர்டர் செய்யவில்லை"
+    "onboardingOmiNotOrdered": "இன்னும் ஆர்டர் செய்யவில்லை",
+    "onboardingConnectOmi": "Omi-ஐ இணைக்கவும்"
 }

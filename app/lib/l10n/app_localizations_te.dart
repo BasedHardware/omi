@@ -13085,4 +13085,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'ఇంకా ఆర్డర్ చేయలేదు';
+
+  @override
+  String get onboardingConnectOmi => 'Omiని కనెక్ట్ చేయండి';
 }

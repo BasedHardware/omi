@@ -13094,4 +13094,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Сè уште не сум нарачал';
+
+  @override
+  String get onboardingConnectOmi => 'Поврзете Omi';
 }

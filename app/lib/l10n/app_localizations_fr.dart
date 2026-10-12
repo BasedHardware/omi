@@ -13136,4 +13136,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Pas encore commandé';
+
+  @override
+  String get onboardingConnectOmi => 'Connecter Omi';
 }

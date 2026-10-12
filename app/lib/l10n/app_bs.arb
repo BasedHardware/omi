@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "Dodirnite da popravite",
     "onboardingNoOmiYet": "Još nemate Omi?",
     "onboardingOmiOrdered": "Naručio/la sam ga",
-    "onboardingOmiNotOrdered": "Još nisam naručio/la"
+    "onboardingOmiNotOrdered": "Još nisam naručio/la",
+    "onboardingConnectOmi": "Povežite Omi"
 }

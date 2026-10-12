@@ -13081,4 +13081,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Още не съм поръчал';
+
+  @override
+  String get onboardingConnectOmi => 'Свържете Omi';
 }

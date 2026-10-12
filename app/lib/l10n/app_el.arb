@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Πατήστε για διόρθωση",
     "onboardingNoOmiYet": "Δεν έχετε ακόμα το Omi σας;",
     "onboardingOmiOrdered": "Το έχω παραγγείλει",
-    "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα"
+    "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα",
+    "onboardingConnectOmi": "Συνδέστε το Omi"
 }

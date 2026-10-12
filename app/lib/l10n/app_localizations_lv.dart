@@ -13062,4 +13062,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Vēl neesmu pasūtījis';
+
+  @override
+  String get onboardingConnectOmi => 'Savienot Omi';
 }

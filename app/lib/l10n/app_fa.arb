@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
     "onboardingNoOmiYet": "هنوز Omi ندارید؟",
     "onboardingOmiOrdered": "سفارش داده‌ام",
-    "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام"
+    "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
+    "onboardingConnectOmi": "اتصال Omi"
 }

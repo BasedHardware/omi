@@ -13116,4 +13116,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Δεν το έχω παραγγείλει ακόμα';
+
+  @override
+  String get onboardingConnectOmi => 'Συνδέστε το Omi';
 }

@@ -4043,5 +4043,6 @@
     "onboardingPermissionTapToFix": "Touchez pour corriger",
     "onboardingNoOmiYet": "Vous n'avez pas encore votre Omi ?",
     "onboardingOmiOrdered": "Je l'ai commandé",
-    "onboardingOmiNotOrdered": "Pas encore commandé"
+    "onboardingOmiNotOrdered": "Pas encore commandé",
+    "onboardingConnectOmi": "Connecter Omi"
 }

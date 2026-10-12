@@ -86,6 +86,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
 
+  /// The step on screen and which way the reader last moved, for the step transition.
+  int _shownIndex = 0;
+  bool _forward = true;
+
   @override
   void initState() {
     super.initState();
@@ -99,7 +103,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: kPageCount, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
-      setState(() {});
+      setState(() {
+        _forward = _controller!.index >= _shownIndex;
+        _shownIndex = _controller!.index;
+      });
       _rememberStep(_controller!.index);
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
@@ -506,12 +513,55 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 progress: kProgressSteps.contains(index)
                     ? OnboardingProgressLine(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
-                child: pages[index],
+                child: _StepTransition(index: index, forward: _forward, child: pages[index]),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Moves between steps: the new step slides in from the side the reader is heading and fades up,
+/// the old one drifts the other way and fades out. Instant under Reduce Motion.
+class _StepTransition extends StatelessWidget {
+  const _StepTransition({required this.index, required this.forward, required this.child});
+
+  final int index;
+  final bool forward;
+  final Widget child;
+
+  static const double _shift = 0.08;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
+    return AnimatedSwitcher(
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 420),
+      reverseDuration: reduce ? Duration.zero : const Duration(milliseconds: 260),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
+      transitionBuilder: (child, animation) {
+        final incoming = child.key == ValueKey(index);
+        // An outgoing child runs its animation backwards, ending at its begin offset.
+        final from = (incoming == forward) ? _shift : -_shift;
+        return IgnorePointer(
+          ignoring: !incoming,
+          child: FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: Offset(from, 0), end: Offset.zero).animate(animation),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: KeyedSubtree(key: ValueKey(index), child: child),
     );
   }
 }
@@ -551,12 +601,13 @@ class OnboardingProgressLine extends StatelessWidget {
             // Clear of the back button on the left, balanced on the right.
             padding: const EdgeInsets.symmetric(horizontal: kOmiMinTapTarget + OmiSpacing.md),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: OmiRadius.pillAll,
               child: SizedBox(
-                height: 4,
+                width: double.infinity,
+                height: 3,
                 child: Stack(
                   children: [
-                    Positioned.fill(child: ColoredBox(color: OmiColors.surface3)),
+                    Positioned.fill(child: ColoredBox(color: OmiColors.surface2)),
                     TweenAnimationBuilder<double>(
                       tween: Tween(end: fraction),
                       duration: motion.standard,

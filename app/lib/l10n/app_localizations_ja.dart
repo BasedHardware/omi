@@ -12847,4 +12847,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'まだ注文していません';
+
+  @override
+  String get onboardingConnectOmi => 'Omiを接続';
 }

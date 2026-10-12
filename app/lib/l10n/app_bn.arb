@@ -11445,5 +11445,6 @@
     "onboardingPermissionTapToFix": "ঠিক করতে ট্যাপ করুন",
     "onboardingNoOmiYet": "এখনও Omi নেই?",
     "onboardingOmiOrdered": "আমি অর্ডার করেছি",
-    "onboardingOmiNotOrdered": "এখনও অর্ডার করিনি"
+    "onboardingOmiNotOrdered": "এখনও অর্ডার করিনি",
+    "onboardingConnectOmi": "Omi সংযুক্ত করুন"
 }

@@ -13027,4 +13027,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Pole veel tellinud';
+
+  @override
+  String get onboardingConnectOmi => 'Ühenda Omi';
 }

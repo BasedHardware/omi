@@ -13088,4 +13088,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Încă nu am comandat';
+
+  @override
+  String get onboardingConnectOmi => 'Conectează Omi';
 }

@@ -13085,4 +13085,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Még nem rendeltem';
+
+  @override
+  String get onboardingConnectOmi => 'Omi csatlakoztatása';
 }

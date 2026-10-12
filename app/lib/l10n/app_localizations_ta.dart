@@ -13123,4 +13123,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'இன்னும் ஆர்டர் செய்யவில்லை';
+
+  @override
+  String get onboardingConnectOmi => 'Omi-ஐ இணைக்கவும்';
 }

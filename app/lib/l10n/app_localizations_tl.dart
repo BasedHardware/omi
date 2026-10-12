@@ -13138,4 +13138,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Hindi pa naka-order';
+
+  @override
+  String get onboardingConnectOmi => 'Ikonekta ang Omi';
 }

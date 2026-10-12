@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "点按以修复",
     "onboardingNoOmiYet": "还没有 Omi？",
     "onboardingOmiOrdered": "我已下单",
-    "onboardingOmiNotOrdered": "还没下单"
+    "onboardingOmiNotOrdered": "还没下单",
+    "onboardingConnectOmi": "连接 Omi"
 }

@@ -13031,4 +13031,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Chưa đặt hàng';
+
+  @override
+  String get onboardingConnectOmi => 'Kết nối Omi';
 }

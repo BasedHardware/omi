@@ -12960,4 +12960,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'لم أطلبه بعد';
+
+  @override
+  String get onboardingConnectOmi => 'اتصل بـ Omi';
 }

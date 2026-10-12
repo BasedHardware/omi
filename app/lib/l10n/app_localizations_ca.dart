@@ -13101,4 +13101,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Encara no l\'he demanat';
+
+  @override
+  String get onboardingConnectOmi => 'Connecta l\'Omi';
 }

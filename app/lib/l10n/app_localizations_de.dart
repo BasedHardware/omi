@@ -13132,4 +13132,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Noch nicht bestellt';
+
+  @override
+  String get onboardingConnectOmi => 'Omi verbinden';
 }

@@ -13067,4 +13067,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Još nisam naručio/la';
+
+  @override
+  String get onboardingConnectOmi => 'Povežite Omi';
 }

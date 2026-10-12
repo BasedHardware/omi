@@ -12940,4 +12940,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'עוד לא הזמנתי';
+
+  @override
+  String get onboardingConnectOmi => 'חיבור Omi';
 }

@@ -13072,4 +13072,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Aún no lo he pedido';
+
+  @override
+  String get onboardingConnectOmi => 'Conecta tu Omi';
 }

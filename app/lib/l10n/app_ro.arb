@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Atinge pentru a remedia",
     "onboardingNoOmiYet": "Nu ai încă Omi?",
     "onboardingOmiOrdered": "L-am comandat",
-    "onboardingOmiNotOrdered": "Încă nu am comandat"
+    "onboardingOmiNotOrdered": "Încă nu am comandat",
+    "onboardingConnectOmi": "Conectează Omi"
 }

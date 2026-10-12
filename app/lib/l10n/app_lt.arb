@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Bakstelėkite, kad pataisytumėte",
     "onboardingNoOmiYet": "Dar neturite Omi?",
     "onboardingOmiOrdered": "Jau užsisakiau",
-    "onboardingOmiNotOrdered": "Dar neužsisakiau"
+    "onboardingOmiNotOrdered": "Dar neužsisakiau",
+    "onboardingConnectOmi": "Prijunkite Omi"
 }

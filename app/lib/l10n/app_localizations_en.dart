@@ -13018,4 +13018,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Not ordered yet';
+
+  @override
+  String get onboardingConnectOmi => 'Connect Omi';
 }

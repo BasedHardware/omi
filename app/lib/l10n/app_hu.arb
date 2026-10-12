@@ -4104,5 +4104,6 @@
     "onboardingPermissionTapToFix": "Koppints a javításhoz",
     "onboardingNoOmiYet": "Még nincs meg az Omid?",
     "onboardingOmiOrdered": "Már megrendeltem",
-    "onboardingOmiNotOrdered": "Még nem rendeltem"
+    "onboardingOmiNotOrdered": "Még nem rendeltem",
+    "onboardingConnectOmi": "Omi csatlakoztatása"
 }

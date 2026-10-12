@@ -13057,4 +13057,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Dar neužsisakiau';
+
+  @override
+  String get onboardingConnectOmi => 'Prijunkite Omi';
 }

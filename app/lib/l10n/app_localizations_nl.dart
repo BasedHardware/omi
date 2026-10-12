@@ -13069,4 +13069,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingOmiNotOrdered => 'Nog niet besteld';
+
+  @override
+  String get onboardingConnectOmi => 'Omi verbinden';
 }

@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข",
     "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
     "onboardingOmiOrdered": "สั่งซื้อแล้ว",
-    "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ"
+    "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ",
+    "onboardingConnectOmi": "เชื่อมต่อ Omi"
 }

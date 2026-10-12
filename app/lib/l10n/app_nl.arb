@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Tik om te herstellen",
     "onboardingNoOmiYet": "Heb je je Omi nog niet?",
     "onboardingOmiOrdered": "Ik heb hem besteld",
-    "onboardingOmiNotOrdered": "Nog niet besteld"
+    "onboardingOmiNotOrdered": "Nog niet besteld",
+    "onboardingConnectOmi": "Omi verbinden"
 }

@@ -4008,5 +4008,6 @@
     "onboardingPermissionTapToFix": "Торкніться, щоб виправити",
     "onboardingNoOmiYet": "Ще немає Omi?",
     "onboardingOmiOrdered": "Я вже замовив",
-    "onboardingOmiNotOrdered": "Ще не замовив"
+    "onboardingOmiNotOrdered": "Ще не замовив",
+    "onboardingConnectOmi": "Підключіть Omi"
 }
