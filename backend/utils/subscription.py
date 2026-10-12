@@ -1614,9 +1614,13 @@ TRANSCRIPTION_MODE_BLOCKED = 'blocked'
 _UNRESOLVED: Any = object()
 
 
-def _closed(reason: str) -> TranscriptionAllowance:
-    """No managed minutes: the free local path, never a billed socket."""
-    return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
+def _closed(reason: str, *, limit_seconds: Optional[int] = 0) -> TranscriptionAllowance:
+    """No managed minutes; preserve a known total without reopening enforcement.
+
+    A zero total here means unresolved, not unlimited. Snapshot serialization
+    retains its existing finite plan cap when this result has no known total.
+    """
+    return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason, limit_seconds=limit_seconds)
 
 
 # resolve_transcription_allowance() reasons meaning "this lookup could not be
@@ -1684,6 +1688,7 @@ def resolve_transcription_allowance(
     other caller — and any usage record that cannot be trusted, resolves to
     the free local path rather than a billed socket.
     """
+    known_limit_seconds: Optional[int] = 0
     try:
         # The reviewer identities the subscription snapshot already treats as
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
@@ -1707,6 +1712,7 @@ def resolve_transcription_allowance(
         if not subscription:
             return _closed('subscription_inactive')
         allowance = transcription_allowance_seconds(subscription.plan)
+        known_limit_seconds = allowance
         # The catalog's explicit unlimited marker projects to None. A finite
         # zero is a real zero allowance and must therefore fail closed.
         if allowance is None:
@@ -1716,7 +1722,7 @@ def resolve_transcription_allowance(
         used = _usage_seconds(usage)
         if used is None:
             logger.warning('transcription allowance: untrusted usage record for uid=%s', uid)
-            return _closed('usage_invalid')
+            return _closed('usage_invalid', limit_seconds=allowance)
         remaining = max(0, allowance - used)
         if remaining > 0:
             return TranscriptionAllowance(
@@ -1727,7 +1733,7 @@ def resolve_transcription_allowance(
         )
     except Exception as exc:  # fail closed: a billed socket is never the default
         logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
-        return _closed('allowance_unavailable')
+        return _closed('allowance_unavailable', limit_seconds=known_limit_seconds)
 
 
 def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:

@@ -1225,8 +1225,12 @@ def get_user_subscription_endpoint(
     )
     allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
-    response.transcription_seconds_limit = allowance.limit_seconds or 0
-    response.subscription.limits.transcription_seconds = allowance.limit_seconds
+    # A closed result with no resolved total is not an unlimited allowance.
+    # Keep the already-built finite snapshot instead of emitting the wire's
+    # 0 == unlimited sentinel. Known totals (including exhaustion) still win.
+    if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
+        response.transcription_seconds_limit = allowance.limit_seconds or 0
+        response.subscription.limits.transcription_seconds = allowance.limit_seconds
     return response
 
 

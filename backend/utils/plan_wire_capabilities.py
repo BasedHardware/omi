@@ -10,9 +10,8 @@ from typing import Callable, Optional
 MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
 # v0.12.197+12197-macos published the decoder; v0.12.196 lacks Plus/unknown.
 MIN_MACOS_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '0.12.197')
-MIN_WINDOWS_VERSION = os.getenv(
-    'PLUS_UNLIMITED_V2_MIN_WINDOWS_VERSION', os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
-)
+# macOS releases cannot establish safe decoding for Windows builds.
+MIN_WINDOWS_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_WINDOWS_VERSION', '99.0.0')
 
 
 def understands_plan_identity(

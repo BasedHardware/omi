@@ -1015,3 +1015,65 @@ def test_onboarding_patch_http_preserves_previous_completion(monkeypatch):
         'device_onboarding_completed': True,
         'future_field': 'keep',
     }
+
+
+@pytest.mark.parametrize('reason', ['subscription_inactive', 'usage_invalid', 'allowance_unavailable'])
+def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, reason):
+    import utils.subscription as subscription_module
+
+    plan = users_router.PlanType.basic if reason == 'subscription_inactive' else users_router.PlanType.plus
+    cap = 18_000 if plan is users_router.PlanType.basic else 90_000
+    subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
+    monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription)
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        users_router,
+        'get_user_valid_subscription',
+        lambda uid: None if reason == 'subscription_inactive' else subscription,
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_monthly_usage_for_subscription',
+        lambda uid: {'transcription_seconds': -1 if reason == 'usage_invalid' else 10},
+    )
+    monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
+    monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
+    monkeypatch.setattr(
+        users_router,
+        'get_phone_call_quota_snapshot',
+        lambda *args, **kwargs: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_chat_quota_snapshot',
+        lambda *args, **kwargs: {'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None},
+    )
+    monkeypatch.setattr(
+        users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
+    )
+    monkeypatch.setattr(
+        subscription_module,
+        'is_trial_paywalled',
+        (
+            MagicMock(side_effect=RuntimeError('dependency unavailable'))
+            if reason == 'allowance_unavailable'
+            else lambda *args, **kwargs: False
+        ),
+    )
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
+    response = users_router.get_user_subscription_endpoint(
+        # Shipped clients do not declare the new six-plan capability.
+        request=Request({'type': 'http', 'headers': []}),
+        uid='fixture-user',
+        x_app_platform='ios',
+        x_app_version='1.0.600',
+    )
+    assert response.transcription_allowance.model_dump() == {
+        'mode': 'on_device',
+        'remaining_seconds': 0,
+        'reason': reason,
+    }
+    assert response.transcription_seconds_limit == cap
+    assert response.subscription.limits.transcription_seconds == cap

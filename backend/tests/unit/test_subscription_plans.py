@@ -438,3 +438,31 @@ def test_absent_or_unrecognized_capability_keeps_old_clients_safe(subscription_m
 @pytest.mark.parametrize('plan', [PlanType.basic, PlanType.unlimited, PlanType.operator, PlanType.architect])
 def test_capability_never_changes_plan_membership(subscription_module, plan):
     assert subscription_module.wire_plan_for_client(plan, 'ios', None, '1') == plan
+
+
+@pytest.mark.parametrize('desktop_floor,windows_floor', [(None, None), ('0.12.197', None), ('0.12.197', '2.0.0')])
+def test_windows_import_time_floor_does_not_inherit_macos(monkeypatch, desktop_floor, windows_floor):
+    import importlib.util
+
+    for name, value in [
+        ('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', desktop_floor),
+        ('PLUS_UNLIMITED_V2_MIN_WINDOWS_VERSION', windows_floor),
+    ]:
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    spec = importlib.util.spec_from_file_location('windows_floor_fixture', _BACKEND / 'utils/plan_wire_capabilities.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    assert module.MIN_WINDOWS_VERSION == (windows_floor or '99.0.0')
+    assert not module.understands_plan_identity('windows', '1.0.35', None, compare)
+    assert module.understands_plan_identity('macos', '0.12.197', None, compare)
+    if windows_floor:
+        assert module.understands_plan_identity('windows', '2.0.0', None, compare)
