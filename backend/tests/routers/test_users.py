@@ -1077,3 +1077,79 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     }
     assert response.transcription_seconds_limit == cap
     assert response.subscription.limits.transcription_seconds == cap
+
+
+@pytest.mark.parametrize('plan', [users_router.PlanType.plus, users_router.PlanType.unlimited_v2])
+@pytest.mark.parametrize(
+    'platform,version,identity,capable',
+    [
+        ('ios', '1.0.600', None, False),
+        ('android', '1.0.600', '0', False),
+        ('ios', '1.0.600', 'garbage', False),
+        ('ios', '1.0.600', '1', True),
+        ('android', '1.0.600', '1', True),
+        ('macos', '0.12.196', None, False),
+        ('macos', '0.12.197', None, True),
+        ('windows', '1.0.35', None, False),
+        ('windows', '1.0.35', '1', True),
+        ('web', '0.1.0', None, True),
+        (None, None, '1', False),
+        ('unknown', '99.0.0', '1', False),
+    ],
+)
+def test_subscription_http_negotiates_catalog_ids_before_response_validation(
+    monkeypatch, plan, platform, version, identity, capable
+):
+    """Real HTTP/response model, wire gate and allowance; only storage is fake."""
+    from utils import subscription as subscription_module
+
+    subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
+    monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription.model_copy())
+    monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: subscription.model_copy())
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
+    monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
+    monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
+    monkeypatch.setattr(
+        users_router,
+        'get_phone_call_quota_snapshot',
+        lambda *args, **kwargs: MagicMock(to_client_dict=lambda: {'has_access': True, 'is_paid': True}),
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_chat_quota_snapshot',
+        lambda *args, **kwargs: {'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None},
+    )
+    monkeypatch.setattr(
+        users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
+    )
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
+    app = FastAPI()
+    app.add_api_route(
+        '/v1/users/me/subscription',
+        users_router.get_user_subscription_endpoint,
+        response_model=users_router.UserSubscriptionResponse,
+    )
+    app.dependency_overrides[users_router.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
+    headers = {
+        k: v
+        for k, v in {
+            'X-App-Platform': platform,
+            'X-App-Version': version,
+            'X-Omi-Plan-Identity': identity,
+        }.items()
+        if v is not None
+    }
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/subscription', headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['subscription']['plan'] == (plan.value if capable else 'unlimited')
+    # Remapping cannot change the real plan's budget or its enforcement answer.
+    assert body['transcription_seconds_limit'] == (90_000 if plan is users_router.PlanType.plus else 0)
+    assert body['transcription_allowance']['remaining_seconds'] == (
+        89_990 if plan is users_router.PlanType.plus else None
+    )

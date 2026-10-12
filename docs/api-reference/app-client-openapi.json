@@ -23576,6 +23576,219 @@
         "title": "PhoneNumbersResponse",
         "type": "object"
       },
+      "PlanIdentitySubscription": {
+        "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "current_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price Id"
+          },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits",
+            "default": {}
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanType",
+            "default": "basic"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus",
+            "default": "active"
+          },
+          "stripe_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Subscription Id"
+          }
+        },
+        "title": "PlanIdentitySubscription",
+        "type": "object"
+      },
+      "PlanIdentityUserSubscriptionResponse": {
+        "properties": {
+          "available_plans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPlan"
+            },
+            "title": "Available Plans",
+            "type": "array"
+          },
+          "chat_quota_allowed": {
+            "default": true,
+            "title": "Chat Quota Allowed",
+            "type": "boolean"
+          },
+          "chat_quota_percent": {
+            "default": 0.0,
+            "title": "Chat Quota Percent",
+            "type": "number"
+          },
+          "chat_quota_reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Quota Reset At"
+          },
+          "chat_quota_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatQuotaUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chat_quota_used": {
+            "default": 0.0,
+            "title": "Chat Quota Used",
+            "type": "number"
+          },
+          "desktop_grandfather_until": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desktop Grandfather Until"
+          },
+          "insights_gained_limit": {
+            "title": "Insights Gained Limit",
+            "type": "integer"
+          },
+          "insights_gained_used": {
+            "title": "Insights Gained Used",
+            "type": "integer"
+          },
+          "phone_call_quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/PlanIdentitySubscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcription_seconds_limit": {
+            "title": "Transcription Seconds Limit",
+            "type": "integer"
+          },
+          "transcription_seconds_used": {
+            "title": "Transcription Seconds Used",
+            "type": "integer"
+          },
+          "words_transcribed_limit": {
+            "title": "Words Transcribed Limit",
+            "type": "integer"
+          },
+          "words_transcribed_used": {
+            "title": "Words Transcribed Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subscription",
+          "transcription_seconds_used",
+          "transcription_seconds_limit",
+          "words_transcribed_used",
+          "words_transcribed_limit",
+          "insights_gained_used",
+          "insights_gained_limit"
+        ],
+        "title": "PlanIdentityUserSubscriptionResponse",
+        "type": "object"
+      },
       "PlanLimits": {
         "properties": {
           "chat_cost_usd_per_month": {
@@ -70760,6 +70973,15 @@
               "title": "X-Device-Id-Hash",
               "type": "string"
             }
+          },
+          {
+            "description": "Value 1 declares catalog plan IDs and lossless unknown-plan decoding on a recognized client platform. Otherwise the platform release floor determines capability; older or unidentified clients retain legacy labels.",
+            "in": "header",
+            "name": "X-Omi-Plan-Identity",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -70795,7 +71017,13 @@
         "summary": "Get User Subscription Endpoint",
         "tags": [
           "v1"
-        ]
+        ],
+        "x-omi-plan-identity-response": {
+          "description": "application/json response when the server plan-identity capability predicate accepts the header or platform/version floor. The default 200 schema is the legacy projection.",
+          "schema": {
+            "$ref": "#/components/schemas/PlanIdentityUserSubscriptionResponse"
+          }
+        }
       }
     },
     "/v1/users/me/trial": {
