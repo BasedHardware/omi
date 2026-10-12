@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 
 // Fakes GET /v3/memories pagination: hard page cap 500, no first-page expansion.
-function fakeBackend(total: number, header?: string) {
+function fakeBackend(total: number, deviceScopeHeader?: string, lifecycleHeader?: string) {
   return async (
     _path: string,
     config: { params: { limit: number; offset: number } }
@@ -57,7 +57,14 @@ function fakeBackend(total: number, header?: string) {
     ) as Partial<Memory>[]
     return {
       data,
-      ...(header ? { headers: { 'x-omi-memory-canonical-lifecycle-exposed': header } } : {})
+      headers: {
+        ...(deviceScopeHeader
+          ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader }
+          : {}),
+        ...(lifecycleHeader
+          ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader }
+          : {})
+      }
     }
   }
 }
@@ -250,21 +257,43 @@ describe('useMemories — pagination, capability header, delete', () => {
     })
   })
 
-  it('sets canonicalLifecycleExposed from the response header', async () => {
-    omiApiGet.mockImplementation(fakeBackend(2, 'true'))
+  it('establishes canonical lifecycle from an empty list with device-scope support', async () => {
+    omiApiGet.mockImplementation(fakeBackend(0, 'true'))
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
+    expect(result.current.memories).toEqual([])
+  })
+
+  it('ignores the retired lifecycle header on a successful list', async () => {
+    omiApiGet.mockImplementation(fakeBackend(2, 'true', 'false'))
     const { result } = renderHook(() => useMemories())
     await act(async () => {
       await result.current.refresh()
     })
     expect(result.current.canonicalLifecycleExposed).toBe(true)
 
-    // A subsequent fetch that reports the flag off must flip it back — the tier
-    // filters must not linger visible against a backend that stopped exposing them.
-    omiApiGet.mockImplementation(fakeBackend(2, 'false'))
+    omiApiGet.mockImplementation(fakeBackend(2, 'false', 'true'))
     await act(async () => {
       await result.current.refresh()
     })
     expect(result.current.canonicalLifecycleExposed).toBe(false)
+
+    // As with the retired signal, an absent capability on a later response
+    // leaves the established in-session value alone.
+    omiApiGet.mockImplementation(fakeBackend(2, 'true'))
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
+
+    omiApiGet.mockImplementation(fakeBackend(2))
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
   })
 
   it('deleteMemory drops the row optimistically and reverts on failure', async () => {

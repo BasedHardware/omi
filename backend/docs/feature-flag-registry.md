@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-09 -->
+<!-- feature-flag-registry as-of: 2026-10-12 -->
 
 # Feature-flag authority registry
 
@@ -112,7 +112,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-09.
+None as of 2026-10-12.
 
 ## Flags
 
@@ -251,7 +251,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
-| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Per-account capability header that turns on memory tier and device filters in current macOS and Windows clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
+| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
@@ -374,7 +374,7 @@ and an explicit empty literal renders as `''`.
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
-| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
+| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | — | unowned |
 
 ## Undeclared env flags
 
