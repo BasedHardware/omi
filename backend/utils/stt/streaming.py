@@ -70,6 +70,7 @@ from utils.stt.stream_close import (
     PROVIDER_AUTH_REJECTED,
     PROVIDER_BUDGET_EXHAUSTED,
     PROVIDER_RATE_LIMITED,
+    initialize_stt_stream_close_children,
     record_stt_stream_close,
 )
 from utils.stt.connect_metrics import (
@@ -182,9 +183,10 @@ _soniox_circuit = soniox_circuit_from_env()
 _family_circuits_identity: dict[str, str] = {}
 _family_circuits_lock = threading.Lock()
 
-# Pre-create the always-emitted connect series so absence of a provider's
-# failures is queryable (and a dead emitter visible) from process start.
+# Pre-create the always-emitted connect and stream-close series so absence of a
+# provider's failures is queryable (and a dead emitter visible) from process start.
 initialize_stt_provider_connect_children()
+initialize_stt_stream_close_children()
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
