@@ -446,6 +446,71 @@ jobs:
           gcloud monitoring policies describe "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
             --format='value(notificationChannels)' | grep -q .
 
+      # Core-feature recap outcome counters. Log-based, so they do not depend on
+      # the job's Managed Prometheus sidecar or on a scrape landing before exit.
+      # Grafana reads them through the Cloud Monitoring datasource (PromQL name
+      # logging_googleapis_com:user_<metric>): Core Features "Daily recap" stats
+      # and alert omi-daily-recap-generation-failing.
+      - name: Provision daily recap outcome log metrics
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          config_dir="$RUNNER_TEMP/daily-recap-log-metrics"
+          mkdir -p "$config_dir"
+          python3 - "$config_dir" <<'PY_LOG_METRICS'
+          import json, sys
+          job = 'resource.type="cloud_run_job" resource.labels.job_name="notifications-job" '
+          def label(key, description):
+              return {'key': key, 'valueType': 'STRING', 'description': description}
+          metrics = {
+              'daily_summary_recap_generated': {
+                  'description': 'Daily recap: current-day recap persisted for a recipient (backfill excluded).',
+                  'filter': job + 'textPayload:"daily_summary_generated "',
+                  'labels': [label('retry', 'True when generated on a retry pass.')],
+                  'labelExtractors': {'retry': 'REGEXP_EXTRACT(textPayload, "retry=(True|False)")'},
+              },
+              'daily_summary_user_failed': {
+                  'description': 'Daily recap: recipient failed (generation error, delivery error, or per-user budget).',
+                  'filter': job + 'textPayload:"daily_summary_user_failed "',
+                  'labels': [
+                      label('reason', 'generation_error or user_budget_exceeded.'),
+                      label('error_type', 'Exception class name; empty for budget timeouts.'),
+                  ],
+                  'labelExtractors': {
+                      'reason': 'REGEXP_EXTRACT(textPayload, "reason=([a-z_]+)")',
+                      'error_type': 'REGEXP_EXTRACT(textPayload, "error_type=([A-Za-z0-9_]+)")',
+                  },
+              },
+          }
+          for name, spec in metrics.items():
+              body = {
+                  'name': name,
+                  'description': spec['description'],
+                  'filter': spec['filter'],
+                  'metricDescriptor': {
+                      'metricKind': 'DELTA',
+                      'valueType': 'INT64',
+                      'unit': '1',
+                      'labels': spec['labels'],
+                  },
+                  'labelExtractors': spec['labelExtractors'],
+              }
+              with open(f'{sys.argv[1]}/{name}.json', 'w') as output:
+                  json.dump(body, output)
+          PY_LOG_METRICS
+          for metric in daily_summary_recap_generated daily_summary_user_failed; do
+            config="$config_dir/$metric.json"
+            if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+              gcloud logging metrics update "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+                --config-from-file="$config"
+            else
+              gcloud logging metrics create "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+                --config-from-file="$config"
+            fi
+            gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(labelExtractors)' | grep -q 'REGEXP_EXTRACT'
+          done
+
       - name: Reconcile notifications Scheduler trigger
         env:
           SCHEDULER_ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}

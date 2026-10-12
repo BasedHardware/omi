@@ -17,6 +17,67 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 - Live Instatus delivery verification and notification-policy rework remain
   maintainer-approved Phase 2 work (not claimed by the inventory).
 
+## Grafana storage
+
+Grafana 12.1.0 uses SQLite on the existing 20Gi `standard-rwo` PVC. Prod and
+dev enable `[database] wal=true`, `query_retries=10`, and
+`transaction_retries=10` without changing the database type, path or persistence.
+These options are defined in [v12.1.0 defaults.ini](https://github.com/grafana/grafana/blob/v12.1.0/conf/defaults.ini)
+and parsed in [database_config.go](https://github.com/grafana/grafana/blob/v12.1.0/pkg/services/sqlstore/database_config.go);
+their defaults are false, 0 and 5. There is no dedicated SQLite busy-timeout INI
+option in that version. Retry counts are not a wall-clock timeout guarantee.
+
+On 2026-10-12, prod logged 11 locked-database lines at 03:02Z and 67 at 09:02Z:
+alert evaluation ticks dropped, Alertmanager configuration failed, a provisioning
+GET returned 500 after 32.7 seconds, and health probes failed. WAL allows readers
+alongside a writer; retries help transient contention but do not remove SQLite's
+single-writer limit. Migrating Grafana to PostgreSQL is the proper follow-up.
+
+The values change rolls the single Grafana pod, briefly interrupting dashboards,
+alert evaluation and Grafana notifications until it is ready; the PVC is retained.
+Probe settings are unchanged. Review rendered chart probe timeout/period/failure
+threshold and measured restart evidence before tuning them.
+
+12.1.0 also defines `[unified_alerting] state_periodic_save_interval` (default 5m),
+but it only applies with `alertingSaveStatePeriodic`. Evaluate its crash/restart
+state recovery trade-off separately. `[unified_alerting.state_history] backend=loki`
+exists, but needs an authenticated writer, retention/query validation and a plan
+for existing SQL annotation history before migration. Neither is enabled here;
+alert history is retained.
+
+## Dead-man
+
+Cloud Monitoring owns **Prod Grafana external health** and **Prod Grafana dead-man:
+health failing for 5 minutes**, declared in
+[`grafana-deadman.json`](../../deploy/monitoring/grafana-deadman.json). It GETs
+`https://monitor.omi.me/api/health` over validated HTTPS every 60 seconds from
+USA, Europe and Asia Pacific, with a 10-second request timeout and exactly HTTP
+200 accepted. The policy scopes `uptime_check/check_passed` to the assigned check
+ID; more than one failing checker location for 300 seconds pages (60-second
+next-older alignment, count-false reduction grouped by check ID, count > 1).
+Detection also includes Monitoring ingestion/evaluation latency. This tests endpoint health, not end-to-end notification delivery or all
+rule evaluations, and no samples are not treated as a failed HTTP check.
+
+Before merge/deployment, create the repo or `prod` Environment variable
+`MONITORING_DEADMAN_NOTIFICATION_CHANNELS` containing comma-separated full
+`projects/based-hardware/notificationChannels/<id>` names of approved external
+channels. Unset, blank, malformed or duplicate entries fail closed. The
+monitoring workflow's prod WIF identity needs Monitoring uptime-check and
+alert-policy list/get/create/update permissions (for example Monitoring Editor);
+verify that grant through the normal IAM ownership process. No IAM is changed here.
+
+After merge, `workflow_dispatch` **Deploy Cloud Run Metrics Egress**
+(`gcp_cloud_run_metrics_egress.yml`) on `main` with `environment=prod`; it requires
+`prod` Environment approval. The ensure step runs before Helm, independently of
+Grafana, reconciles unique display names, preserves assigned check/policy and
+condition IDs, verifies writes, and fails on duplicates/API errors. Unchanged
+runs do not write. Updates patch only supported drifted uptime-check fields;
+immutable drift (resource, period, checker type or disabled state) fails with a
+manual delete-and-recreate instruction. Rerun afterward to bind the policy to
+the new check ID. After rollout, operators should confirm Grafana readiness,
+healthy multi-region samples and approved channel delivery; this change has only
+local validation, not a live acceptance receipt.
+
 ## Architecture
 
 ```
@@ -815,6 +876,23 @@ spec:
 Place alert YAML in the `alerts/` directory and configure Grafana sidecar to load from it.
 
 ### Metrics Contract
+
+`omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
+the four bounded providers plus the `unknown` fallback, crossed with the eleven
+bounded close reasons in `utils/stt/stream_close.py`. Initialization runs on that
+module's import (including direct Soniox users) and beside the connect initializer
+in `utils/stt/streaming.py`. It is idempotent and never resets a count. A zero
+must be scraped before a close for `increase()` to observe the first event;
+events before the first scrape still cannot be recovered by this initialization.
+
+`tests/unit/test_monitoring_stt_metric_zero_init.py` checks every Prometheus
+expression in `alerts/*.json` against the metrics defined in `utils/metrics.py`
+and `llm_gateway/gateway/metrics.py`. Gauges and unlabelled metrics qualify;
+labelled counters and histograms must expose startup children or have an explicit
+one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
+must shrink as initialization is added. Exporter/GPU/other service registries and
+full selector coverage are outside this family-level contract; stream-close
+selector coverage has its own unit test.
 
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
