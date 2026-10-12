@@ -13007,4 +13007,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mục',
+      one: '1 mục',
+      zero: 'Không có mục nào',
+    );
+    return '$_temp0';
+  }
 }

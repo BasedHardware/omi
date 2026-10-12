@@ -660,7 +660,7 @@
             {
               "evaluator": {
                 "params": [
-                  2500
+                  4000
                 ],
                 "type": "gt"
               },
@@ -694,12 +694,12 @@
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "50",
-      "threshold": "2500ms (2.5s)",
+      "threshold": ">4000 ms for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >2500 ms threshold breached 6% of hours; p50 1280 / p90 2320 / max 3730 ms. Threshold above the measured maximum.",
       "summary": "Omi speech processing alert: VAD request latency is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi speech processing production service path.",

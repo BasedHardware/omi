@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Tillämpa den här föreslagna rättelsen?",
     "reviewProposalApply": "Tillämpa",
     "reviewProposalSuggested": "Föreslaget",
-    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades."
+    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades.",
+    "itemLinkListTitle": "{count, plural, =0{Inga objekt} =1{1 objekt} other{{count} objekt}}"
 }

@@ -12,7 +12,7 @@ These tests pin the disposition contract:
 
 * the sweep is disposition and visibility only -- it never replays a BYOK
   finalization and never substitutes Omi platform credentials,
-* ``blocked_byok``, fresh, live-leased, and unknown-age rows are never
+* fresh, live-leased, and unknown-age rows are never
   terminalized,
 * an unownable row reaches exactly one honest terminal through a
   generation/ownership fence, with its own ``byok_session_abandoned`` code,
@@ -248,9 +248,9 @@ def test_candidates_exclude_every_row_that_still_has_an_owner():
     now_ish = datetime.now(timezone.utc)
     client = _JobsClient(
         [
-            # Still legitimately waiting for a live session to present keys, and
-            # already visible on the blocked_byok gauge.
+            # Waiting past the bound must terminate; fresh waiting is preserved.
             _snapshot('blocked', status='blocked_byok'),
+            _snapshot('fresh-blocked', status='blocked_byok', updated_at=now_ish),
             _snapshot('completed', status='completed'),
             _snapshot('dead-letter', status='dead_letter'),
             # A live worker still owns this lease.
@@ -266,7 +266,7 @@ def test_candidates_exclude_every_row_that_still_has_an_owner():
 
     sweep = jobs.get_abandoned_byok_job_candidates(abandoned_after=_ABANDONED_AFTER, firestore_client=client)
 
-    assert [candidate['job_id'] for candidate in sweep['candidates']] == ['stranded', 'expired-lease']
+    assert [candidate['job_id'] for candidate in sweep['candidates']] == ['blocked', 'stranded', 'expired-lease']
     assert sweep['exhausted'] is True
     assert sweep['resume_after_path'] is None
 
@@ -497,12 +497,12 @@ def test_a_live_session_that_came_back_fences_the_abandonment():
     assert status_moved.updates == []
 
 
-def test_blocked_fresh_platform_and_missing_rows_are_never_terminalized():
+def test_fresh_platform_and_missing_rows_are_never_terminalized():
     conversation_ref = _bound_conversation()
 
     for job in (
-        # Still waiting for a live session to present keys.
-        _stranded_job(status='blocked_byok'),
+        # Waiting inside the bound still has time to reconnect.
+        _stranded_job(status='blocked_byok', updated_at=_NOW),
         # Platform-key job: owned by the Cloud Tasks worker and the reconciler.
         _stranded_job(requires_byok=False),
         # Inside the reconnect window.
@@ -698,3 +698,42 @@ def test_outcomes_increment_the_privacy_safe_disposition_counter(monkeypatch):
     labels.reset_mock()
     service.reconcile_abandoned_byok_finalization_jobs()
     assert labels.call_args_list[0].kwargs == {'outcome': 'abandoned_bookkeeping'}
+
+
+def test_aged_blocked_job_closes_conversation_and_moves_blocked_projection():
+    transaction = _OrderedTransaction()
+    ref = _Ref(
+        'job-1',
+        _stranded_job(
+            status='blocked_byok',
+            updated_at=_NOW,
+            byok_last_activity_at=_STRANDED_AT,
+            lease_epoch=2,
+        ),
+    )
+    result = _abandon(transaction, ref, _bound_conversation(), projection=_Collection(), status='blocked_byok', epoch=2)
+    assert result == {'status': 'abandoned', 'conversation_outcome': 'closed'}
+    assert not transaction.read_after_write
+    assert transaction.updates[0][1]['last_failure_code'] == jobs.BYOK_ABANDONED_FAILURE_CODE
+    fields = transaction.sets[0][1]
+    assert {name: value.value for name, value in fields.items() if hasattr(value, 'value')} == {
+        'blocked_byok': -1,
+        'dead_letter': 1,
+        'failure': 1,
+    }
+
+
+def test_candidates_include_just_reclaimed_job_without_resetting_abandonment_age():
+    client = _JobsClient(
+        [
+            _snapshot(
+                'reclaimed',
+                status='blocked_byok',
+                updated_at=datetime.now(timezone.utc),
+                byok_last_activity_at=_STRANDED_AT,
+            )
+        ]
+    )
+    sweep = jobs.get_abandoned_byok_job_candidates(abandoned_after=_ABANDONED_AFTER, firestore_client=client)
+    assert [row['job_id'] for row in sweep['candidates']] == ['reclaimed']
+    assert sweep['candidates'][0]['last_activity_at'] == _STRANDED_AT

@@ -58,10 +58,20 @@ class DeliveryLedger:
             self.store.db.transaction, apply, operation_name='channel_delivery'
         )
 
-    def accepted(self, message, operation, provider_id):
-        self._chat(message).collection('receipts').document(key(operation)).update(
-            {'state': 'accepted', 'provider_id': str(provider_id), 'at': datetime.now(timezone.utc)}
+    def accepted(self, message, operation, provider_id, *, message_sent=False):
+        chat = self._chat(message)
+        batch = self.store.db.batch()
+        batch.update(
+            chat.collection('receipts').document(key(operation)),
+            {'state': 'accepted', 'provider_id': str(provider_id), 'at': datetime.now(timezone.utc)},
         )
+        if message_sent:
+            batch.set(chat, {'outbound_accepted': True}, merge=True)
+        batch.commit()
+
+    async def has_outbound(self, message):
+        snapshot = await run_blocking(db_executor, self._chat(message).get)
+        return bool((snapshot.to_dict() or {}).get('outbound_accepted'))
 
     async def receive(self, message):
         await run_blocking(db_executor, self.inbound, message)
@@ -69,5 +79,5 @@ class DeliveryLedger:
     async def begin(self, message, operation, **kwargs):
         return await run_blocking(db_executor, self.reserve, message, operation, **kwargs)
 
-    async def commit(self, message, operation, provider_id):
-        await run_blocking(db_executor, self.accepted, message, operation, provider_id)
+    async def commit(self, message, operation, provider_id, *, message_sent=False):
+        await run_blocking(db_executor, self.accepted, message, operation, provider_id, message_sent=message_sent)

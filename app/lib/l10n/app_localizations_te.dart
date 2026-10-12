@@ -13061,4 +13061,16 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count అంశాలు',
+      one: '1 అంశం',
+      zero: 'అంశాలు లేవు',
+    );
+    return '$_temp0';
+  }
 }

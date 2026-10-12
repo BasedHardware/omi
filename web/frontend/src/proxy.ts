@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { shareLinkHeader, shareRepresentation } from './lib/shared-export.mjs';
+import { ITEM_LIST_QUERY_HEADER } from './lib/item-link.mjs';
 
 export function proxy(request: NextRequest) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return NextResponse.next();
+  if (request.nextUrl.pathname === '/items') return itemListRequest(request);
   const match = /^\/conversations\/([^/]+)$/.exec(request.nextUrl.pathname);
   if (!match) return NextResponse.next();
   const suffix = /\.(md|json)$/.exec(match[1]);
@@ -44,4 +46,15 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: '/conversations/:path*' };
+/**
+ * /items keeps its display order in the raw query (repeated, interleaved keys),
+ * which a parsed searchParams object loses. Hand the page the raw string,
+ * always overwriting any client-sent copy of the header.
+ */
+function itemListRequest(request: NextRequest) {
+  const forwarded = new Headers(request.headers);
+  forwarded.set(ITEM_LIST_QUERY_HEADER, request.nextUrl.search.replace(/^\?/, ''));
+  return NextResponse.next({ request: { headers: forwarded } });
+}
+
+export const config = { matcher: ['/conversations/:path*', '/items'] };

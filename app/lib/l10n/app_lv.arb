@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Lietot šo ieteikto labojumu?",
     "reviewProposalApply": "Lietot",
     "reviewProposalSuggested": "Ieteikts",
-    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots."
+    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.",
+    "itemLinkListTitle": "{count, plural, =0{Nav vienību} =1{1 vienība} other{{count} vienības}}"
 }

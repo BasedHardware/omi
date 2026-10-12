@@ -566,14 +566,23 @@ def test_main_fleet_gated_fails_when_a_gated_uid_is_missing(
     assert "COMMITTED_BUT_ABSENT" in output
 
 
-def test_redis_import_rules_match_emitted_cache_write_labels(verifier: SimpleNamespace) -> None:
+@pytest.fixture(scope="module")
+def redis_import_inputs(verifier: SimpleNamespace) -> tuple[dict[str, dict], str]:
+    # Importing the fallback module graph and parsing every committed export is
+    # setup, not the behavior under test; keep it out of the CPU-guarded call.
     from utils.observability.fallback import bucket_component
 
-    rules = verifier.load_live_stt_import_rules()
+    return verifier.load_live_stt_import_rules(), bucket_component("redis_cache")
+
+
+def test_redis_import_rules_match_emitted_cache_write_labels(
+    verifier: SimpleNamespace, redis_import_inputs: tuple[dict[str, dict], str]
+) -> None:
+    rules, redis_bucket = redis_import_inputs
     for uid in verifier.REDIS_CACHE_IMPORT_UIDS:
         expressions = [item.get("model", {}).get("expr", "") for item in rules[uid]["data"]]
         expression = next(expr for expr in expressions if "omi_fallback_total" in expr)
-        assert f'component="{bucket_component("redis_cache")}"' in expression
+        assert f'component="{redis_bucket}"' in expression
         assert 'from_mode="cache_write"' in expression
         assert 'outcome="degraded"' in expression
         assert 'auth_error|connection_error|timeout' in expression

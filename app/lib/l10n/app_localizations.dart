@@ -23210,6 +23210,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This changed since Dream suggested it, so nothing was applied.'**
   String get reviewProposalConflict;
+
+  /// Title of the sheet that lists the items an Omi link points at (conversations, tasks, memories)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
+  String itemLinkListTitle(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

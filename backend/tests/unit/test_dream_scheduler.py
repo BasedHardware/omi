@@ -45,7 +45,7 @@ def test_rotation_reaches_owners_beyond_top_100_and_wraps(monkeypatch):
     assert len(db.transactions) == 3
 
 
-def test_saturation_signal_and_shared_slots_fail_closed(monkeypatch):
+def test_saturation_blocks_but_missing_evidence_admits(monkeypatch):
     async def exercise():
         state = ReservationState()
         client = SimpleNamespace(get=AsyncMock(return_value=None), set=AsyncMock(return_value=True), eval=AsyncMock())
@@ -67,9 +67,11 @@ def test_saturation_signal_and_shared_slots_fail_closed(monkeypatch):
         client.set.return_value = False
         assert await dream_capacity.claim(2) is None
         states[PT_MODEL_CURRENT] = State.UNKNOWN
-        assert await dream_capacity.available_model() is None
+        assert await dream_capacity.available_model() == PT_MODEL_CURRENT
         monkeypatch.setattr(state, 'client', lambda: None)
-        assert await dream_capacity.claim(2) is None
+        slot = await dream_capacity.claim(2)
+        assert slot and slot[0].startswith('dream-local:')
+        await dream_capacity.release(slot)
 
     asyncio.run(exercise())
 

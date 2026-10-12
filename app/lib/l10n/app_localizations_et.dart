@@ -13003,4 +13003,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count üksust',
+      one: '1 üksus',
+      zero: 'Üksusi pole',
+    );
+    return '$_temp0';
+  }
 }

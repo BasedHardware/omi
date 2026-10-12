@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Bruke denne foreslåtte rettelsen?",
     "reviewProposalApply": "Bruk",
     "reviewProposalSuggested": "Foreslått",
-    "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt."
+    "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt.",
+    "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}"
 }

@@ -705,6 +705,27 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
+
+
+def _byok_reclaim_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/reclaim-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/byok_reclaim_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.conversation_finalization_jobs.recover_stranded_byok_jobs',
+        neutrals={'limit': _LIMIT},
+        setup=_byok_reclaim_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
@@ -2637,7 +2658,6 @@ for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
-    ('claim', {'path': 'channel_identities/link/inbox/job'}, _messaging_claim),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):
@@ -2649,6 +2669,16 @@ for method, base, setup in (
             patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore._claim',
+        base={'self': _messaging_store, 'path': 'channel_identities/link/inbox/job'},
+        neutrals={'now': _NOW},
+        domains={'take_head': [False, True]},
+        setup=_messaging_claim,
+        patchers=(_messaging_cleanup, _messaging_decryption),
+    )
+)
 _add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
 
 _add(

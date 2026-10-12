@@ -13064,4 +13064,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elemente',
+      one: '1 element',
+      zero: 'Niciun element',
+    );
+    return '$_temp0';
+  }
 }

@@ -13004,4 +13004,16 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+      zero: 'هیچ موردی نیست',
+    );
+    return '$_temp0';
+  }
 }

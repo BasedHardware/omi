@@ -13057,4 +13057,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Това се промени, след като Dream го предложи, затова нищо не беше приложено.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count елемента',
+      one: '1 елемент',
+      zero: 'Няма елементи',
+    );
+    return '$_temp0';
+  }
 }

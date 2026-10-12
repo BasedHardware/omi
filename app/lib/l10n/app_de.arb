@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Diese vorgeschlagene Korrektur übernehmen?",
     "reviewProposalApply": "Übernehmen",
     "reviewProposalSuggested": "Vorschlag",
-    "reviewProposalConflict": "Das hat sich geändert, seit Dream es vorgeschlagen hat. Es wurde nichts übernommen."
+    "reviewProposalConflict": "Das hat sich geändert, seit Dream es vorgeschlagen hat. Es wurde nichts übernommen.",
+    "itemLinkListTitle": "{count, plural, =0{Keine Elemente} =1{1 Element} other{{count} Elemente}}"
 }

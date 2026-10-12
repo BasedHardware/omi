@@ -12943,4 +12943,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count รายการ',
+      one: '1 รายการ',
+      zero: 'ไม่มีรายการ',
+    );
+    return '$_temp0';
+  }
 }

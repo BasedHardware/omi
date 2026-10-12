@@ -13006,4 +13006,16 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি আইটেম',
+      one: '১টি আইটেম',
+      zero: 'কোনো আইটেম নেই',
+    );
+    return '$_temp0';
+  }
 }

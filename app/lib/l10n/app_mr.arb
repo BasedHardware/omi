@@ -11440,5 +11440,6 @@
     "reviewProposalGeneric": "ही सुचवलेली दुरुस्ती लागू करायची?",
     "reviewProposalApply": "लागू करा",
     "reviewProposalSuggested": "सुचवलेले",
-    "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही."
+    "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.",
+    "itemLinkListTitle": "{count, plural, =0{कोणतेही आयटम नाहीत} =1{1 आयटम} other{{count} आयटम}}"
 }

@@ -22,7 +22,14 @@ def setup_turn():
     )
     store = MemoryStore()
     message = ChannelMessage(
-        'telegram', 'telegram', 'fixture-user', 'fixture-chat', 'first', 'Synthetic request', datetime.now(timezone.utc)
+        'telegram',
+        'telegram',
+        'fixture-user',
+        'fixture-chat',
+        'first',
+        'Synthetic request',
+        datetime.now(timezone.utc),
+        reply_to='1',
     )
     store.identities[('telegram', 'telegram', 'fixture-user')] = dict(uid='test', active=True, generation='gen')
     return adapter, store, message
@@ -490,9 +497,14 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
     monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
 
+    completed = asyncio.Event()
+
     async def dispatch(paths):
-        for path in paths:
-            await gateway.process(path)
+        try:
+            for path in paths:
+                await gateway.process(path)
+        finally:
+            completed.set()
 
     gateway.wake = dispatch
     monkeypatch.setattr(messaging, '_gateways', {'telegram': gateway})
@@ -512,12 +524,11 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
                         'update_id': i + 1,
                         'callback_query': {'id': 'fixture-callback', 'from': sender, 'message': item, 'data': 'undo'},
                     }
+                completed.clear()
                 response = await client.post('/v1/messaging/webhooks/telegram', headers=headers, json=body)
                 assert response.status_code == 202
-                for _ in range(100):
-                    if all(job['status'] == 'done' for job in store.jobs.values()) and not store.leases:
-                        break
-                    await asyncio.sleep(0.005)
+                await asyncio.wait_for(completed.wait(), 5)
+                assert all(job['status'] == 'done' for job in store.jobs.values())
                 assert not store.leases
             bad = await client.post('/v1/messaging/webhooks/telegram', json=body)
             assert bad.status_code == 401
@@ -619,12 +630,11 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
         for path in reversed(paths):
             assert not await gateway.process(path)
         assert not seen
-        # No TTL advances ownership. An explicit release is needed even much later.
+        # A fresh lease stays exclusive until its holder releases it.
         assert store.leases
         store.release('test', session['surface'], held)
-        assert not await gateway.process(paths[2])
-        for path in paths:
-            assert await gateway.process(path)
+        assert await gateway.process(paths[2])
+        assert all(store.jobs[path]['status'] == 'done' for path in paths)
 
     asyncio.run(run())
     assert seen == list(zip(['0', '1', '2'], times))
@@ -867,8 +877,10 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
         assert not await gateway.process(first)
         assert store.jobs[first]['status'] == 'running'
         assert store.jobs[first]['fifo_settled_at']
+        assert store.jobs[second]['fifo_settled_at']
         denied[0] = False
-        assert await gateway.process(second)
+        third = store.enqueue(replace(message, provider_message_id='third'))
+        assert await gateway.process(third)
 
     asyncio.run(run())
     assert not store.leases
@@ -877,8 +889,7 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
 def test_telegram_request_clock_uses_message_date_not_late_webhook_time(monkeypatch):
     adapter, _, _ = setup_turn()
     at = datetime(2026, 10, 11, 9, 19, 3, tzinfo=timezone.utc)
-    # This fixture exercises an in-window message date; wall time must not
-    # eventually push it past the unchanged production 24-hour bound.
+    # Exercise an in-window message date independently of today's wall clock.
     monkeypatch.setattr(
         telegram_module,
         'bound_provider_clock',
@@ -940,7 +951,7 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
     following = store.enqueue(replace(message, provider_message_id='next'))
 
     async def run():
-        assert not await gateway.process(failed)
+        assert await gateway.process(failed)  # settled failure drains callback and next message
         assert store.jobs[failed]['status'] == 'running'
         assert store.jobs[failed]['fifo_settled_at']
         assert 'payload' in store.jobs[failed]
@@ -950,8 +961,9 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
             e['id'] == 'reply:' + gateway_module.key('telegram', 'first') for e in store.events('test', session['id'])
         )
         assert not await gateway.process(failed)  # retained evidence is never replayed
-        assert await gateway.process(callback)
-        assert await gateway.process(following)
+        assert not await gateway.process(callback)
+        assert not await gateway.process(following)
+        assert store.jobs[callback]['status'] == store.jobs[following]['status'] == 'done'
         assert not store.leases
 
     asyncio.run(run())

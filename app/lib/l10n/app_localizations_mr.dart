@@ -13015,4 +13015,16 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count आयटम',
+      one: '1 आयटम',
+      zero: 'कोणतेही आयटम नाहीत',
+    );
+    return '$_temp0';
+  }
 }

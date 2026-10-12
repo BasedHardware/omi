@@ -12804,4 +12804,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个项目',
+      one: '1 个项目',
+      zero: '无项目',
+    );
+    return '$_temp0';
+  }
 }
