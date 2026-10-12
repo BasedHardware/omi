@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-cancel-path-unbounded-terminal-send",
+  "violated_contract": "When a caller cancels an async session, teardown that issues a terminal protocol send must not block indefinitely on transport backpressure. The cancel path must bound that send and still complete cancellation of peer tasks so shutdown cannot hang.",
+  "canonical_prevention": "Wrap terminal teardown sends (for example a WebSocket finalize frame) in asyncio.wait_for using the session drain timeout or a small default, treat timeout and send errors as fail-open, and cover the production cancel path with a hermetic regression that blocks the send and proves CancelledError returns within the bound while peer tasks are cancelled.",
+  "canonical_prevention_artifact": [
+    "sdks/python/tests/test_parakeet_finalize_timeout.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python/"
+  ],
+  "status": "open"
+}
