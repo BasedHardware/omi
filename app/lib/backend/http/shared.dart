@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/http/streaming_error.dart';
@@ -889,6 +890,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     HttpPoolManager.stampRequestTime(request);
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+    ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -908,6 +910,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           );
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+          ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
           return http.Response.fromStream(streamedResponse);
         },
       );
