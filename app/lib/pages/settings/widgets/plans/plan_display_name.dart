@@ -6,9 +6,19 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The backend's display title for a plan tier ([tierId] is the wire `plan_id`, e.g. `operator`),
-/// or null when the subscription response does not list that tier.
+/// Canonical product name for known IDs; backend title for a future tier.
 String? planTitleForTier(String tierId, List<SubscriptionPlan> availablePlans) {
+  const names = {
+    'basic': 'Free',
+    'plus': 'Plus',
+    'operator': 'Pro',
+    'architect': 'Architect',
+    'pro': 'Architect',
+    'unlimited': 'Neo',
+    'unlimited_v2': 'Unlimited'
+  };
+  final knownName = names[tierId];
+  if (knownName != null) return knownName;
   final title = availablePlans.firstWhereOrNull((plan) => plan.id == tierId)?.title.trim();
   return (title == null || title.isEmpty) ? null : title;
 }
@@ -17,11 +27,6 @@ String? planTitleForTier(String tierId, List<SubscriptionPlan> availablePlans) {
 /// Future plans may use their server title. Product names are not translated.
 String planDisplayName(PlanType plan, List<SubscriptionPlan> availablePlans, AppLocalizations l10n) {
   if (plan == PlanType.basic) return l10n.free;
-  if (plan == PlanType.plus) return 'Plus';
-  if (plan == PlanType.operator) return 'Pro';
-  if (plan == PlanType.architect) return 'Architect';
-  if (plan == PlanType.unlimited) return 'Neo';
-  if (plan == PlanType.unlimitedV2) return 'Unlimited';
   final fromBackend = planTitleForTier(plan.wireName, availablePlans);
   if (fromBackend != null) return fromBackend;
   // A plan this client does not know yet: show its id readably rather than calling it Free.

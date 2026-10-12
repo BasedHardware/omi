@@ -39,7 +39,7 @@ void main() {
     });
 
     test('a blank backend title is ignored', () {
-      expect(planTitleForTier('plus', [SubscriptionPlan(id: 'plus', title: '  ')]), isNull);
+      expect(planTitleForTier('plus', [SubscriptionPlan(id: 'plus', title: '  ')]), 'Plus');
       expect(planDisplayName(PlanType.plus, [SubscriptionPlan(id: 'plus', title: '')], l10n), 'Plus');
     });
   });
