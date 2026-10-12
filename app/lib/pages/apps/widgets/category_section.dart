@@ -40,11 +40,24 @@ class CategorySection extends StatelessWidget {
     final displayedApps = apps.take(9).toList();
 
     // --- Configuration Constants ---
-    const double targetItemHeight = 85.0;
+    // Heights follow the reader's text size: fixed 85 / 60 pt rows cut the app's name, category
+    // and rating (and the section title) at a larger text size (layout lint, 1.3x).
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    double lineOf(TextStyle style) {
+      final painter =
+          TextPainter(text: TextSpan(text: 'Ag', style: style), textScaler: scaler, textDirection: direction)..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final rowText = lineOf(OmiType.body) + 2 + lineOf(OmiType.footnote) + 2 + lineOf(OmiType.caption);
+    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText) + 1);
     const double crossAxisSpacing = 0.0;
     const double mainAxisSpacing = 14.0;
     const int maxRows = 3;
-    const double titleSectionHeight = 60.0;
+    final double titleSectionHeight = max(60.0, 24 + 16 + lineOf(OmiType.title2));
 
     // --- Dynamic Calculation ---
     final int numRows = min(maxRows, displayedApps.length);
@@ -53,7 +66,8 @@ class CategorySection extends StatelessWidget {
     final double gridContentHeight = numRows * targetItemHeight + max(0, numRows - 1) * crossAxisSpacing;
     final double totalSectionHeight = titleSectionHeight + gridContentHeight;
 
-    const double childAspectRatio = 0.28;
+    // Cards keep their width (85 / 0.28 pt) as rows grow taller with the text.
+    final double childAspectRatio = targetItemHeight / (85.0 / 0.28);
 
     return Container(
       height: totalSectionHeight,
