@@ -80,6 +80,11 @@ class LiveRecoveryController:
         self._candidate: Any = None
         self._candidate_text = False
         self._adopted_at: float | None = None
+        # The configured identity this session currently SERVES: the last
+        # reservation an owner adopted. A proven recovery rebases the dial
+        # ledger onto it, so identities an earlier episode paid for stop
+        # counting against the session's recovery budget.
+        self._serving_identity: str | None = None
         self.episode_count = 0
 
     # -- client departure latch (monotonic; a flap cannot resurrect) --------
@@ -156,6 +161,7 @@ class LiveRecoveryController:
         if self.client_has_left():
             return
         if self._adopted and self._candidate_text:
+            self._release_ledger_on_proof()
             self._deadline = None
             self.state = RecoveryState.recovered
 
@@ -181,6 +187,35 @@ class LiveRecoveryController:
         self._candidate_text = True
         self._release()
 
+    def note_serving_identity(self, identity: str) -> None:
+        """Record which configured identity the session currently serves.
+
+        Called by the owner at adoption. Proof-time ledger release credits the
+        identity the session actually holds; an unattributed adoption (no
+        reservation seam fired) must not erase the ledger, so it stays None.
+        """
+        self._serving_identity = identity if identity else None
+
+    def _release_ledger_on_proof(self) -> None:
+        """A proven recovery rebases per-session recovery accounting.
+
+        The dial ledger and its guards exist to bound one recovery episode —
+        how many candidates one death may burn. A successor that answered the
+        proof (real text, or the healthy connected dwell) ended that episode:
+        keeping its identity in the ledger turns the next ordinary provider
+        death into instant exhaustion while every provider is healthy. Drop
+        every paid-for identity except the one now serving; episode count
+        stays, so a pathological churn loop still meets the session cap.
+        """
+        serving = self._serving_identity
+        if not serving:
+            return
+        keep = {serving}
+        keep.update(self._reentry_grants)
+        if self._cheap_reentry_granted:
+            keep.add('parakeet-window')
+        self.attempted_targets = {identity for identity in self.attempted_targets if identity in keep}
+
     def note_healthy_connection(self, candidate: Any = None) -> None:
         """The owner observed the current candidate's socket alive.
 
@@ -203,6 +238,7 @@ class LiveRecoveryController:
             return
         if self._clock() - self._adopted_at < RECOVERY_HEALTHY_CONNECTED_SECONDS:
             return
+        self._release_ledger_on_proof()
         self._deadline = None
         self.state = RecoveryState.recovered
 

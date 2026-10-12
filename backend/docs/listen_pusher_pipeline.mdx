@@ -1295,7 +1295,18 @@ leg settlement still requires real text or the terminal path. A successor
 dying before either proof keeps the original episode's remaining budget;
 one dying after the release opens a fresh 60s episode, and a session is
 bounded to twenty such episodes. The unique-target ledger, dial count, and
-that single Soniox re-entry grant span all of a session's episodes.
+that single Soniox re-entry grant span all of a session's episodes. A proven
+recovery — the successor's first nonempty transcript, or the five-second
+connected dwell — rebases the ledger onto the identity the session actually
+adopted: identities that earlier episodes paid for stop counting against the
+session, so the next ordinary provider death still has untried legs instead
+of exhausting a healthy chain. An adoption with no bound identity (legacy
+reconnects and sockets that bypass the reservation seam) proves the episode
+without a rebase. The receiver-side session failure sets follow the same
+evidence: adopting a hop clears only the adopted identity (and its family's
+recorded failure, with the paired rebuild counter); families that never
+re-dialled stay condemned for the session, and provider-level circuit
+breakers remain the cross-session authority.
 Concurrent last-resort handshakes retain the configured circuit probe limit.
 A session waits at most 12 seconds for an occupied non-account probe slot;
 account benches and window shedding are never forced. At the 300ms default

@@ -1466,9 +1466,36 @@ class ListenReceiver(ReplayFilterMixin):
         record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = None if hop.settled else hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        # Bind the identity this adoption now serves BEFORE any proof can
+        # release the episode: the dial-ledger rebase and the receiver-side
+        # session-failure sets both need to know who is holding the session.
+        self.recovery.note_serving_identity(self._attempted_identity(raw, self.host.stt_service))
+        self._release_stt_session_failures(self._serving_provider())
         self.recovery.adopted(self._candidate_token)
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
         return True
+
+    def _release_stt_session_failures(self, serving_provider: str) -> None:
+        """Drop the current provider from this session's recovery exclusions.
+
+        A hop the receiver actually adopted is new evidence that the provider
+        serves: its family dialled, connected, and passed the serving gate
+        after this session condemned it. Keeping it failed would pair the
+        controller ledger with a receiver-side veto and exhaust the walk on
+        the next ordinary death. Providers that never re-dialled here keep
+        their session exclusion — this releases only the family now serving,
+        and the provider-level circuit breaker still owns cross-session
+        health.
+        """
+        family = provider_for_service(serving_provider) or serving_provider
+        released = family in self._stt_failed_providers
+        self._stt_failed_providers.discard(family)
+        identity = self.recovery._serving_identity if self.recovery is not None else None
+        if isinstance(identity, str):
+            self._stt_failed_targets.discard(identity)
+        if released:
+            self._stt_rebuild_attempts = 0
+            self._stt_failed_reasons.pop(family, None)
 
     async def _reject_candidate(self, raw: Any, epoch: Any, hop: Any, previous: Any) -> None:
         """Release an unadopted replacement and keep walking the episode."""
