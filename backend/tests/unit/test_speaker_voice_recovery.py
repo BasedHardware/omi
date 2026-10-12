@@ -9,10 +9,12 @@ import pytest
 
 from routers.listen import speakers
 from routers.listen.speaker_audio import select_query_audio
-from tests.unit.test_speaker_match import _live_matcher, _segment
+from tests.unit.test_speaker_match import _segment
+from tests.unit.test_owner_recognition_diagnostics import live, snapshot
 from tests.unit.test_owner_recognition_embedding_budget import _clock
+from tests.unit.test_speaker_targeted_fairness import serve
 from utils.audio import AudioRingBuffer
-from utils.observability.speaker_embedding_budget import RECOVERY_GRANTS, RECOVERY_ACCEPTANCES
+from utils.observability.speaker_embedding_budget import RECOVERY_GRANTS, RECOVERY_ACCEPTANCES, RECOVERY_DENIALS
 from utils.stt.speaker_recovery import VoiceRecovery, RECOVERY_COOLDOWN_SECONDS
 
 
@@ -29,9 +31,13 @@ def _metric(counter, **labels):
     return counter.labels(**labels)._value.get()
 
 
+NEAR_OWNER = np.array([[0.32, -np.sqrt(1 - 0.32**2)]], dtype=np.float32)
+FAR = np.array([[-1.0, 0.0]], dtype=np.float32)
+
+
 def _setup(monkeypatch, *, failed=False):
     clock = _clock(monkeypatch)
-    matcher, host, emitted = _live_matcher(monkeypatch, [])
+    matcher, host, emitted = live(monkeypatch, [])
     host.state.audio_ring_buffer = AudioRingBuffer(120, 16000)
     calls = []
 
@@ -39,7 +45,7 @@ def _setup(monkeypatch, *, failed=False):
         calls.append(1)
         if failed:
             raise RuntimeError('injected failure')
-        return np.array([[-1.0, 0.0]], dtype=np.float32)
+        return NEAR_OWNER.copy()
 
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
     return matcher, host, clock, calls, emitted
@@ -55,7 +61,7 @@ async def _exhaust(matcher, host, clock):
 
 
 @pytest.mark.anyio
-async def test_twelve_noisy_attempts_then_new_clean_owner_speech_recovers(monkeypatch):
+async def test_twelve_near_owner_attempts_then_new_clean_owner_speech_recovers(monkeypatch):
     matcher, host, clock, calls, emitted = _setup(monkeypatch)
     first = _metric(RECOVERY_GRANTS, tranche='first')
     accepted = _metric(RECOVERY_ACCEPTANCES, target='owner')
@@ -66,18 +72,15 @@ async def test_twelve_noisy_attempts_then_new_clean_owner_speech_recovers(monkey
     host.state.audio_ring_buffer.write_positioned(_pcm(10, 20), 24)
     await matcher.match(1, _segment('clean-long', 24, 10))
     assert matcher._embedding_attempts[1] == 13
-    assert not matcher.speaker_to_person  # old noisy centroid still participates
-    host.state.audio_ring_buffer.write_positioned(_pcm(2, 20), 34)
-    await matcher.match(1, _segment('clean-next', 34, 2))
-    assert len(calls) == 14
+    assert len(calls) == 13
     assert matcher.speaker_to_person[1][0] == 'user'
-    assert emitted[-1] == (1, 'user', 'User', 'clean-next')
+    assert emitted[-1] == (1, 'user', 'User', 'clean-long')
     assert _metric(RECOVERY_GRANTS, tranche='first') == first + 1
     assert _metric(RECOVERY_ACCEPTANCES, target='owner') == accepted + 1
     matcher._publish_decisions(matcher._voice_decisions)
     await matcher.match(1, _segment('mapped-repeat', 34, 2))
     assert _metric(RECOVERY_ACCEPTANCES, target='owner') == accepted + 1
-    assert len(calls) == 14
+    assert len(calls) == 13
 
 
 @pytest.mark.anyio
@@ -93,7 +96,7 @@ async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(mo
 
     async def extract(pcm):
         observed.append(np.frombuffer(pcm, dtype=np.int16))
-        return np.array([[-1.0, 0.0]], dtype=np.float32)
+        return NEAR_OWNER.copy()
 
     monkeypatch.setattr(matcher, '_extract_query', extract)
     # Accrue proof across updates, preserving gaps and the selection checkpoint.
@@ -109,7 +112,7 @@ async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(mo
     assert all(np.count_nonzero(observed[0] == value) == 2 * 16000 for value in range(20, 25))
     assert recovery.checkpoint_audio_watermark == 84
     assert recovery.query_audio_watermark == 60
-    assert matcher._pending_audio[1] == [(0, 60)]
+    assert 1 not in matcher._pending_audio  # main clears metadata after success; no self-requeue
     clock.now += 30
     await matcher.match(1, _segment('old-fallback', 0, 60))
     await matcher.match(1, _segment('old-fallback', 0, 60))
@@ -425,7 +428,7 @@ async def test_actual_scope_change_and_carried_rollover_do_not_renew_tranches(mo
     await _exhaust(matcher, host, clock)
     clock.now += 30
     host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
-    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: np.array([[-1.0, 0.0]], dtype=np.float32))
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: NEAR_OWNER.copy())
     await matcher.match(1, dict(_segment('scope-next', 24, 10), speaker_id_scope='next'))
     recovery = matcher._voice_recovery[1]
     assert recovery.tranches == 1
@@ -480,8 +483,111 @@ def test_recovery_metrics_have_closed_labels_only():
     for counter, label, values in (
         (RECOVERY_GRANTS, 'tranche', {'first', 'second'}),
         (RECOVERY_ACCEPTANCES, 'target', {'owner', 'person'}),
+        (RECOVERY_DENIALS, 'reason', {'proven_rejector', 'clearly_far', 'completed_not_near_owner'}),
     ):
         samples = [s for family in counter.collect() for s in family.samples if s.name.endswith('_total')]
-        assert len(samples) == 2
+        assert len(samples) == len(values)
         assert all(set(s.labels) == {label} for s in samples)
         assert {s.labels[label] for s in samples} == values
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('reason', ['proven_rejector', 'clearly_far', 'completed_not_near_owner'])
+async def test_real_runner_denies_fresh_tranches_to_decided_non_near_voices(monkeypatch, reason):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+
+    def extract(*args):
+        calls.append(1)
+        if reason == 'clearly_far' and len(calls) <= 11:
+            raise RuntimeError('initial failure before one completed comparison')
+        return np.array([[1.0, 1.0]], dtype=np.float32) if reason == 'completed_not_near_owner' else FAR
+
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
+    await _exhaust(matcher, host, clock)
+    assert matcher._rejectors.proven(1) is (reason == 'proven_rejector')
+    if reason == 'clearly_far':
+        assert matcher._rejectors.comparisons[1] == 1
+    recovery = matcher._voice_recovery[1]
+    clock.now = recovery.next_grant_at
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    checkpoint = (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
+    grants = _metric(RECOVERY_GRANTS, tranche='first')
+    denied = _metric(RECOVERY_DENIALS, reason=reason)
+    tokens = matcher._socket_embedding_tokens
+    matcher.queue.put_nowait(dict(_segment('fresh-but-ineligible', 24, 10), speaker_id=1))
+    assert await serve(matcher, host, monkeypatch, 1) == [(1, 'fresh-but-ineligible')]
+    assert len(calls) == matcher._embedding_attempts[1] == 12
+    assert recovery.tranches == 0
+    assert recovery.fresh_bytes == 10 * host.state.audio_ring_buffer.bytes_per_second
+    assert checkpoint == (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
+    assert _metric(RECOVERY_GRANTS, tranche='first') == grants
+    assert _metric(RECOVERY_DENIALS, reason=reason) == denied + 1
+    summary = snapshot(matcher)
+    assert summary['attempted'] == 12 and summary['owner_comparisons'] > 0
+    assert summary['budget_voice'] == summary['reasons']['embedding_budget'] == 1
+    matcher.diagnostics.stop('drain', matcher.queue, matcher.tasks)
+    frozen = snapshot(matcher)
+    assert frozen['stop'] == 'drain' and frozen['pending_queue'] == 0 and frozen['pending_tasks'] == 0
+    # Only the unchanged monotonic refill occurred; the denied request spent nothing.
+    assert matcher._socket_embedding_tokens == pytest.approx(min(16, tokens + 30 * 240 / 3600))
+
+
+@pytest.mark.anyio
+async def test_new_completed_far_result_cannot_spend_remaining_recovery_attempts(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
+    await _exhaust(matcher, host, clock)
+    clock.now = matcher._voice_recovery[1].next_grant_at
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: calls.append(1) or FAR)
+    matcher.queue.put_nowait(dict(_segment('undecided-grant', 24, 10), speaker_id=1))
+    await serve(matcher, host, monkeypatch, 1)
+    recovery = matcher._voice_recovery[1]
+    assert recovery.tranches == 1 and matcher._embedding_attempts[1] == 13
+    assert matcher._rejectors.comparisons[1] == 1
+    denied = _metric(RECOVERY_DENIALS, reason='clearly_far')
+    tokens = matcher._socket_embedding_tokens
+    host.state.audio_ring_buffer.write_positioned(_pcm(2), 34)
+    matcher.queue.put_nowait(dict(_segment('now-clearly-far', 34, 2), speaker_id=1))
+    await serve(matcher, host, monkeypatch, 1)
+    assert len(calls) == matcher._embedding_attempts[1] == 13
+    assert recovery.tranches == 1 and not recovery.accepted
+    assert matcher._socket_embedding_tokens == tokens
+    assert _metric(RECOVERY_DENIALS, reason='clearly_far') == denied + 1
+
+
+@pytest.mark.anyio
+async def test_profile_recheck_can_make_a_former_rejector_eligible_without_renewing_proof(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: calls.append(1) or FAR)
+    await _exhaust(matcher, host, clock)
+    recovery = matcher._voice_recovery[1]
+    clock.now = recovery.next_grant_at
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    await matcher.match(1, _segment('far-first', 24, 10))
+    assert matcher._embedding_attempts[1] == 12 and recovery.tranches == 0
+    matcher.person_embeddings['user']['embedding'] = np.array([[-0.32, np.sqrt(1 - 0.32**2)]], dtype=np.float32)
+    await matcher._reevaluate_loaded_owner()
+    assert not matcher._rejectors.proven(1)
+    assert matcher._voice_distances[1]['user'] == pytest.approx(0.68)
+    await matcher.match(1, _segment('same-fresh-proof-now-near', 24, 10))
+    assert matcher._voice_recovery[1] is recovery
+    assert matcher._embedding_attempts[1] == len(calls) == 13
+    assert recovery.tranches == 1
+
+
+@pytest.mark.anyio
+async def test_retained_decided_row_is_not_undecided_when_round_history_is_absent(monkeypatch):
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: calls.append(1) or FAR)
+    await _exhaust(matcher, host, clock)
+    # Carried/manual rows may already have a decision without a current round ledger.
+    matcher._rejectors.comparisons.clear()
+    assert matcher._voice_decisions[1] is not None and not matcher._rejectors.proven(1)
+    recovery = matcher._voice_recovery[1]
+    clock.now = recovery.next_grant_at
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    before = _metric(RECOVERY_DENIALS, reason='clearly_far')
+    await matcher.match(1, _segment('decided-row-without-rounds', 24, 10))
+    assert len(calls) == matcher._embedding_attempts[1] == 12
+    assert recovery.tranches == 0
+    assert _metric(RECOVERY_DENIALS, reason='clearly_far') == before + 1

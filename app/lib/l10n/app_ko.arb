@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "이 작업은 백그라운드에서 계속됩니다 — 이 화면을 벗어나도 됩니다.",
     "syncCardRateLimited": "공정 사용 한도에 도달했습니다 — 동기화가 자동으로 다시 시작됩니다",
+    "syncCardThrottlePaused": "동기화가 잠시 일시 중지되었습니다 — 자동으로 다시 시작됩니다",
     "syncCardBackendBusy": "Omi 서버가 혼잡합니다 — 용량이 확보되는 대로 녹음이 동기화됩니다",
     "unableToDetermineFirmwareVersion": "현재 펌웨어 버전을 확인할 수 없습니다",
     "promoCode": "프로모 코드",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "목표",
     "chatBlockConversation": "대화",
     "chatBlockMemory": "메모리",
+    "chatBlockPerson": "사람",
+    "chatBlockUndone": "실행 취소됨",
+    "chatBlockUndoFailed": "변경 사항을 실행 취소하지 못했습니다",
     "chatBlockQuestion": "질문",
     "chatBlockOpenInGoals": "목표에서 열기",
     "chatBlockOpenConversation": "대화 열기",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "이 수정 제안을 적용할까요?",
     "reviewProposalApply": "적용",
     "reviewProposalSuggested": "제안",
-    "reviewProposalConflict": "Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다."
+    "reviewProposalConflict": "Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.",
+    "itemLinkListTitle": "{count, plural, =0{항목 없음} =1{항목 1개} other{항목 {count}개}}"
 }

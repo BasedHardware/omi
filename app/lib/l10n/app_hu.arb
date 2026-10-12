@@ -3037,6 +3037,7 @@
     },
     "syncProcessingBackgroundHint": "Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.",
     "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik",
+    "syncCardThrottlePaused": "A szinkronizálás rövid időre szünetel — automatikusan folytatódik",
     "syncCardBackendBusy": "Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás",
     "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg",
     "promoCode": "Promóciós kód",
@@ -3239,6 +3240,9 @@
     "chatBlockGoal": "Cél",
     "chatBlockConversation": "Beszélgetés",
     "chatBlockMemory": "Emlék",
+    "chatBlockPerson": "Személy",
+    "chatBlockUndone": "Visszavonva",
+    "chatBlockUndoFailed": "Nem sikerült visszavonni a módosítást",
     "chatBlockQuestion": "Kérdés",
     "chatBlockOpenInGoals": "Megnyitás a Célokban",
     "chatBlockOpenConversation": "Beszélgetés megnyitása",
@@ -4095,5 +4099,6 @@
     "reviewProposalGeneric": "Alkalmazod ezt a javasolt javítást?",
     "reviewProposalApply": "Alkalmaz",
     "reviewProposalSuggested": "Javasolt",
-    "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva."
+    "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.",
+    "itemLinkListTitle": "{count, plural, =0{Nincsenek elemek} =1{1 elem} other{{count} elem}}"
 }

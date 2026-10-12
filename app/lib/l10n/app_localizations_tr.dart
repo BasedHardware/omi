@@ -9124,6 +9124,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
 
   @override
+  String get syncCardThrottlePaused => 'Senkronizasyon kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
   String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
 
   @override
@@ -9788,6 +9791,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Anı';
+
+  @override
+  String get chatBlockPerson => 'Kişi';
+
+  @override
+  String get chatBlockUndone => 'Geri alındı';
+
+  @override
+  String get chatBlockUndoFailed => 'Bu değişiklik geri alınamadı';
 
   @override
   String get chatBlockQuestion => 'Soru';
@@ -13010,4 +13022,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Öğe',
+      one: '1 Öğe',
+      zero: 'Öğe Yok',
+    );
+    return '$_temp0';
+  }
 }

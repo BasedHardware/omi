@@ -877,7 +877,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'LINQ_API_KEY',
             'LINQ_WEBHOOK_SECRET',
         },
-        'backend-sync': common | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT'},
+        'backend-sync': common
+        | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }

@@ -2976,6 +2976,7 @@
     },
     "syncProcessingBackgroundHint": "Это продолжается в фоновом режиме — вы можете покинуть этот экран.",
     "syncCardRateLimited": "Достигнут лимит использования — синхронизация возобновится автоматически",
+    "syncCardThrottlePaused": "Синхронизация ненадолго приостановлена — она возобновится автоматически",
     "syncCardBackendBusy": "Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности",
     "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки",
     "promoCode": "Промокод",
@@ -3178,6 +3179,9 @@
     "chatBlockGoal": "Цель",
     "chatBlockConversation": "Разговор",
     "chatBlockMemory": "Воспоминание",
+    "chatBlockPerson": "Человек",
+    "chatBlockUndone": "Отменено",
+    "chatBlockUndoFailed": "Не удалось отменить это изменение",
     "chatBlockQuestion": "Вопрос",
     "chatBlockOpenInGoals": "Открыть в «Целях»",
     "chatBlockOpenConversation": "Открыть разговор",
@@ -4034,5 +4038,6 @@
     "reviewProposalGeneric": "Применить это предложенное исправление?",
     "reviewProposalApply": "Применить",
     "reviewProposalSuggested": "Предложено",
-    "reviewProposalConflict": "Это изменилось после предложения Dream, поэтому ничего не применено."
+    "reviewProposalConflict": "Это изменилось после предложения Dream, поэтому ничего не применено.",
+    "itemLinkListTitle": "{count, plural, =0{Нет элементов} =1{1 элемент} other{{count} элементов}}"
 }

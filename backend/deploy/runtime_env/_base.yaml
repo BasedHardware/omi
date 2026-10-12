@@ -505,6 +505,9 @@ environment_shared:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:
             value: backend
+          OMI_VERTEX_RESERVATION_PROJECT:
+            value: '{compute_project}'
+            category: runtime_identity
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -652,6 +655,12 @@ environment_shared:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         secrets:
+          TYPESENSE_HOST:
+            secret: TYPESENSE_HOST
+            version: latest
+          TYPESENSE_API_KEY:
+            secret: TYPESENSE_API_KEY
+            version: latest
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
             version: latest
@@ -668,6 +677,12 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          OMI_VERTEX_RESERVATION_PROJECT:
+            value: '{compute_project}'
+            category: runtime_identity
+          TYPESENSE_HOST_PORT:
+            value: '443'
+            category: service_discovery
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery

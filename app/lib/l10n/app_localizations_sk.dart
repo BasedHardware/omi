@@ -9106,6 +9106,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncCardRateLimited => 'Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronizácia je na chvíľu pozastavená — automaticky sa obnoví';
+
+  @override
   String get syncCardBackendBusy =>
       'Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita';
 
@@ -9770,6 +9773,15 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Spomienka';
+
+  @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Vrátené späť';
+
+  @override
+  String get chatBlockUndoFailed => 'Túto zmenu sa nepodarilo vrátiť späť';
 
   @override
   String get chatBlockQuestion => 'Otázka';
@@ -12993,4 +13005,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count položiek',
+      one: '1 položka',
+      zero: 'Žiadne položky',
+    );
+    return '$_temp0';
+  }
 }

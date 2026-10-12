@@ -1,15 +1,36 @@
-"""Bounded metadata-only speaker work, coalesced before fair admission."""
+"""Bounded FIFO speaker work, with a tail only for proven rejectors."""
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from collections import deque
+from itertools import count
+from math import isfinite
+from typing import Any, Callable
 
-MAX_QUEUED_VOICES = 100
-MAX_QUEUED_INTERVALS = 128
-SPEAKER_QUEUE_MAX_WAIT_SECONDS = 5.0
-VoiceKey = tuple[int, Optional[str], str, int]
+from utils.observability.speaker_embedding_budget import REJECTOR_DEMOTIONS
+
+MAX_QUEUED_SEGMENTS = 100
+
+
+def pending_audio_ranges(
+    segment: dict[str, Any], pending: list[tuple[float, float]], buffer_start: float, buffer_end: float
+) -> list[tuple[float, float]]:
+    """Clamp and union queued timing metadata without pooling ordinary updates."""
+    incoming = segment.get(
+        '_speaker_audio_ranges',
+        [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
+    )
+    fresh: list[tuple[float, float]] = []
+    for start, end in sorted(pending + incoming):
+        start, end = max(start, buffer_start), min(end, buffer_end)
+        if end <= start:
+            continue
+        if fresh and start <= fresh[-1][1]:
+            fresh[-1] = (fresh[-1][0], max(fresh[-1][1], end))
+        else:
+            fresh.append((start, end))
+    return fresh
 
 
 def subtract_audio_ranges(
@@ -30,134 +51,119 @@ def subtract_audio_ranges(
     return ranges
 
 
-@dataclass
-class _QueuedVoice:
-    segment: dict[str, Any]
-    arrived_at: float
+class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
+    """Keep ordinary provider updates separate and in arrival order.
 
-
-class SpeakerMatchQueue:
-    """One pending slot per generation/conversation/scoped voice, at most 100.
-
-    Work aged five monotonic seconds wins oldest-first; otherwise untried
-    voices win, then acoustic near-owner candidates and longer pooled clips.
-    Active voices stay queued until completion instead of occupying task slots
-    waiting on the same speaker lock. Nothing here reserves model budget.
+    Generation is captured at enqueue so old work cannot match after a rollover.
+    Only a proven rejector collapses into one pending entry behind ordinary work.
+    Per-voice serialization and the task ceiling remain the matcher's concern.
     """
 
-    def __init__(
-        self,
-        *,
-        generation: Callable[[], int],
-        attempts: Callable[[int], int],
-        near_owner: Callable[[int], bool],
-        clock: Callable[[], float],
-    ) -> None:
+    # asyncio.Queue's Python 3.11 storage/waiter fields are absent from typeshed.
+    # Coalescing adjusts unfinished work and wakes a blocked producer when a
+    # pending slot is released; the inherited get/put cancellation rules remain.
+    _queue: deque[dict[str, Any]]
+    _unfinished_tasks: int
+    _putters: deque[asyncio.Future[None]]
+
+    def __init__(self, *, generation: Callable[[], int], rejector: Callable[[int], bool] = lambda _: False) -> None:
+        super().__init__(maxsize=MAX_QUEUED_SEGMENTS)
         self._generation = generation
-        self._attempts = attempts
-        self._near_owner = near_owner
-        self._clock = clock
-        self._items: dict[VoiceKey, _QueuedVoice] = {}
-        # The matcher lock is numeric even across scope/generation changes.
-        self._active: set[int] = set()
-        self._changed = asyncio.Event()
-        self.maxsize = MAX_QUEUED_VOICES
+        self._rejector = rejector
+        self._arrival = count()
+
+    def _is_rejector(self, work: dict[str, Any]) -> bool:
+        return work['_matcher_generation'] == self._generation() and self._rejector(work['speaker_id'])
 
     @staticmethod
-    def _key(segment: dict[str, Any]) -> VoiceKey:
-        return (
-            segment['_matcher_generation'],
-            segment.get('conversation_id'),
-            segment.get('speaker_id_scope') or '',
-            segment['speaker_id'],
+    def _key(work: dict[str, Any]) -> tuple[Any, ...]:
+        return tuple(
+            work.get(field) for field in ('_matcher_generation', 'conversation_id', 'speaker_id_scope', 'speaker_id')
         )
 
-    def qsize(self) -> int:
-        return len(self._items)
-
-    def empty(self) -> bool:
-        return not self._items
-
-    def full(self) -> bool:
-        return self.qsize() >= self.maxsize
-
-    def put_nowait(self, segment: dict[str, Any]) -> None:
-        self._put_ranges(
-            segment,
-            [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
+    @staticmethod
+    def _ranges(work: dict[str, Any]) -> list[tuple[float, float]]:
+        return work.get(
+            '_speaker_audio_ranges',
+            [(work['abs_start'], min(work['abs_end'], work['abs_start'] + max(0.0, work['duration'])))],
         )
 
-    def _put_ranges(self, segment: dict[str, Any], ranges: list[tuple[float, float]]) -> None:
-        # Only timing and identity metadata enter this queue, never PCM or text.
+    def _merge(self, pending: dict[str, Any], latest: dict[str, Any]) -> None:
+        ranges: list[tuple[float, float]] = []
+        for start, end in sorted(self._ranges(pending) + self._ranges(latest)):
+            if not isfinite(start) or not isfinite(end) or end <= start:
+                continue
+            if ranges and start <= ranges[-1][1]:
+                ranges[-1] = (ranges[-1][0], max(ranges[-1][1], end))
+            else:
+                ranges.append((start, end))
+        first_arrival = min(pending['_queue_order'], latest['_queue_order'])
+        latest_interval = latest.get(
+            '_speaker_latest_interval', (latest['abs_start'], latest['abs_end'], latest['duration'])
+        )
+        pending.update(latest)
+        pending['_speaker_latest_interval'] = latest_interval
+        pending['_queue_order'] = first_arrival
+        pending['_speaker_audio_ranges'] = ranges[-128:]
+        if ranges:
+            pending['abs_start'] = ranges[-128:][0][0]
+            pending['abs_end'] = ranges[-1][1]
+            pending['duration'] = sum(end - start for start, end in ranges[-128:])
+        pending['_rejector_pending'] = True
+        REJECTOR_DEMOTIONS.labels(action='coalesced').inc()
+
+    def _normalize(self) -> None:
+        # Recheck at dequeue too: queued FIFO work may become proven while
+        # earlier tasks finish. Never merge across conversation/scope fences.
+        ordinary: list[dict[str, Any]] = []
+        rejectors: dict[tuple[Any, ...], dict[str, Any]] = {}
+        removed = 0
+        for work in self._queue:
+            if not self._is_rejector(work):
+                work.pop('_rejector_pending', None)
+                latest_interval = work.pop('_speaker_latest_interval', None)
+                if latest_interval is not None:
+                    work.pop('_speaker_audio_ranges', None)
+                    work['abs_start'], work['abs_end'], work['duration'] = latest_interval
+                ordinary.append(work)
+                continue
+            key = self._key(work)
+            if key in rejectors:
+                self._merge(rejectors[key], work)
+                removed += 1
+            else:
+                if not work.get('_rejector_pending'):
+                    work['_rejector_pending'] = True
+                    REJECTOR_DEMOTIONS.labels(action='deferred').inc()
+                rejectors[key] = work
+        self._queue.clear()
+        self._queue.extend([*sorted(ordinary, key=lambda work: work['_queue_order']), *rejectors.values()])
+        self._unfinished_tasks -= removed
+        for _ in range(removed):
+            while self._putters:
+                waiter = self._putters.popleft()
+                if not waiter.done():
+                    waiter.set_result(None)
+                    break
+
+    def _get(self) -> dict[str, Any]:
+        self._normalize()
+        return super()._get()
+
+    def put_nowait(self, item: dict[str, Any]) -> None:
+        # Timing/identity metadata only; queued work never carries PCM or text.
         work = {
-            field: segment[field]
+            field: item[field]
             for field in ('id', 'conversation_id', 'speaker_id', 'speaker_id_scope', 'abs_start', 'abs_end', 'duration')
-            if field in segment
+            if field in item
         }
         work['_matcher_generation'] = self._generation()
-        key = self._key(work)
-        previous = self._items.get(key)
-        if previous is None and self.full():
-            raise asyncio.QueueFull
-        intervals = list(previous.segment['_speaker_audio_ranges']) if previous is not None else []
-        intervals.extend(ranges)
-        merged: list[tuple[float, float]] = []
-        for start, end in sorted(intervals):
-            if end <= start:
-                continue
-            if merged and start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-            else:
-                merged.append((start, end))
-        work['_speaker_audio_ranges'] = merged[-MAX_QUEUED_INTERVALS:]
-        self._items[key] = _QueuedVoice(work, previous.arrived_at if previous is not None else self._clock())
-        self._changed.set()
-
-    def retain_unselected(self, segment: dict[str, Any], ranges: list[tuple[float, float]]) -> None:
-        """Leave successfully unconsumed queued work ready after this voice completes.
-
-        A served quantum starts a new queue age; an already-pending provider
-        update keeps its age and latest identity. Full queues retain the audio
-        metadata in the matcher for ordinary future updates instead.
-        """
-        if not ranges or segment.get('_matcher_generation') != self._generation():
-            return
-        pending = self._items.get(self._key(segment))
-        try:
-            self._put_ranges(pending.segment if pending is not None else segment, ranges)
-        except asyncio.QueueFull:
-            pass
-
-    def get_nowait(self) -> dict[str, Any]:
-        ready = [(key, item) for key, item in self._items.items() if key[3] not in self._active]
-        if not ready:
-            raise asyncio.QueueEmpty
-        now = self._clock()
-        aged = [(key, item) for key, item in ready if now - item.arrived_at >= SPEAKER_QUEUE_MAX_WAIT_SECONDS]
-        if aged:
-            key, item = min(aged, key=lambda entry: entry[1].arrived_at)
-        else:
-            key, item = min(
-                ready,
-                key=lambda entry: (
-                    self._attempts(entry[0][3]) > 0,
-                    not self._near_owner(entry[0][3]),
-                    -min(10.0, sum(end - start for start, end in entry[1].segment['_speaker_audio_ranges'])),
-                    entry[1].arrived_at,
-                ),
-            )
-        del self._items[key]
-        self._active.add(key[3])
-        return item.segment
-
-    async def get(self) -> dict[str, Any]:
-        while True:
-            self._changed.clear()
-            try:
-                return self.get_nowait()
-            except asyncio.QueueEmpty:
-                await self._changed.wait()
-
-    def complete(self, segment: dict[str, Any]) -> None:
-        self._active.discard(segment['speaker_id'])
-        self._changed.set()
+        work['_queue_order'] = next(self._arrival)
+        self._normalize()
+        if self._is_rejector(work):
+            for pending in self._queue:
+                if self._is_rejector(pending) and self._key(pending) == self._key(work):
+                    self._merge(pending, work)
+                    return
+        super().put_nowait(work)
+        self._normalize()

@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Αυτό συνεχίζεται στο παρασκήνιο — μπορείτε να φύγετε από αυτήν την οθόνη.",
     "syncCardRateLimited": "Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα",
+    "syncCardThrottlePaused": "Ο συγχρονισμός διακόπηκε προσωρινά — θα συνεχιστεί αυτόματα",
     "syncCardBackendBusy": "Οι διακομιστές της Omi είναι φορτωμένοι — οι ηχογραφήσεις σας θα συγχρονιστούν μόλις απελευθερωθεί χωρητικότητα",
     "unableToDetermineFirmwareVersion": "Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware",
     "promoCode": "Κωδικός προσφοράς",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Στόχος",
     "chatBlockConversation": "Συνομιλία",
     "chatBlockMemory": "Ανάμνηση",
+    "chatBlockPerson": "Άτομο",
+    "chatBlockUndone": "Αναιρέθηκε",
+    "chatBlockUndoFailed": "Δεν ήταν δυνατή η αναίρεση αυτής της αλλαγής",
     "chatBlockQuestion": "Ερώτηση",
     "chatBlockOpenInGoals": "Άνοιγμα στους Στόχους",
     "chatBlockOpenConversation": "Άνοιγμα συνομιλίας",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Να εφαρμοστεί αυτή η προτεινόμενη διόρθωση;",
     "reviewProposalApply": "Εφαρμογή",
     "reviewProposalSuggested": "Προτεινόμενο",
-    "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα."
+    "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.",
+    "itemLinkListTitle": "{count, plural, =0{Κανένα στοιχείο} =1{1 στοιχείο} other{{count} στοιχεία}}"
 }

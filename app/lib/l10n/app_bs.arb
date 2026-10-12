@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "Ovo se nastavlja u pozadini — možete napustiti ovaj ekran.",
     "syncCardRateLimited": "Dostignut je limit poštene upotrebe — sinkronizacija će se automatski nastaviti",
+    "syncCardThrottlePaused": "Sinhronizacija je nakratko pauzirana — nastavit će se automatski",
     "syncCardBackendBusy": "Omi serveri su zauzeti — vaši snimci će se sinhronizovati kada se oslobodi kapacitet",
     "unableToDetermineFirmwareVersion": "Nije moguće odrediti trenutnu verziju firmvera",
     "promoCode": "Promo kod",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "Cilj",
     "chatBlockConversation": "Razgovor",
     "chatBlockMemory": "Sjećanje",
+    "chatBlockPerson": "Osoba",
+    "chatBlockUndone": "Poništeno",
+    "chatBlockUndoFailed": "Ova promjena se nije mogla poništiti",
     "chatBlockQuestion": "Pitanje",
     "chatBlockOpenInGoals": "Otvori u Ciljevima",
     "chatBlockOpenConversation": "Otvori razgovor",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "Primijeniti ovu predloženu ispravku?",
     "reviewProposalApply": "Primijeni",
     "reviewProposalSuggested": "Predloženo",
-    "reviewProposalConflict": "Ovo se promijenilo nakon što je Dream to predložio, pa ništa nije primijenjeno."
+    "reviewProposalConflict": "Ovo se promijenilo nakon što je Dream to predložio, pa ništa nije primijenjeno.",
+    "itemLinkListTitle": "{count, plural, =0{Nema stavki} =1{1 stavka} other{{count} stavki}}"
 }

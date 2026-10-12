@@ -2932,6 +2932,7 @@
     },
     "syncProcessingBackgroundHint": "Això continua en segon pla — pots sortir d'aquesta pantalla.",
     "syncCardRateLimited": "S'ha assolit el límit d'ús just — la sincronització es reprendrà automàticament",
+    "syncCardThrottlePaused": "La sincronització s'ha pausat breument — es reprendrà automàticament",
     "syncCardBackendBusy": "Els servidors d'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible",
     "unableToDetermineFirmwareVersion": "No s'ha pogut determinar la versió actual del firmware",
     "promoCode": "Codi promocional",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Objectiu",
     "chatBlockConversation": "Conversa",
     "chatBlockMemory": "Record",
+    "chatBlockPerson": "Persona",
+    "chatBlockUndone": "Desfet",
+    "chatBlockUndoFailed": "No s'ha pogut desfer aquest canvi",
     "chatBlockQuestion": "Pregunta",
     "chatBlockOpenInGoals": "Obre a Objectius",
     "chatBlockOpenConversation": "Obre la conversa",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Vols aplicar aquesta correcció suggerida?",
     "reviewProposalApply": "Aplica",
     "reviewProposalSuggested": "Suggerit",
-    "reviewProposalConflict": "Això ha canviat des que Dream ho va suggerir, així que no s'ha aplicat res."
+    "reviewProposalConflict": "Això ha canviat des que Dream ho va suggerir, així que no s'ha aplicat res.",
+    "itemLinkListTitle": "{count, plural, =0{Cap element} =1{1 element} other{{count} elements}}"
 }

@@ -23,6 +23,12 @@ def admission(monkeypatch):
     database = DreamFirestore()
     database.rows[('users', UID)] = {}
     database.rows[('dream_users', UID)] = {'sequence': 2, 'watermark': 0, 'score': 2}
+    database.rows[('dream_users', UID, 'dirty', dream_store.dirty_id('conversations', 'read'))] = {
+        'collection': 'conversations',
+        'id': 'read',
+        'version': 'read-version',
+        'last_changed_at': NOW,
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     # Strict fixture validates read-before-write; the production transactional
@@ -125,13 +131,16 @@ def test_aggregate_hides_rare_patterns_and_does_not_double_count_salts():
 
 @pytest.fixture
 def pass_context(monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     lease = {'run_id': 'synthetic-run', 'mode': 'shadow', 'watermark': dream_store.EPOCH, 'score': 1}
     records = {'conversations/c1': {'id': 'c1', 'structured': {'title': 'Meeting'}}}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [{'spelling': 'Meeting', 'authorship': 'user_authored'}])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -196,7 +205,7 @@ def test_undo_markers_and_edit_caps_stop_effects(monkeypatch, pass_context):
         dream_agent.review_changes, 'agent_change_allowed', lambda uid, key: key != dream_tools.edit_key(edits[0])
     )
     applied = []
-    monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: applied.append(a[1].before) or 'applied')
+    monkeypatch.setattr(dream_tools, 'apply_grounded_edit', lambda *a: applied.append(a[1].before) or 'applied')
     result = asyncio.run(dream_agent.run_pass(UID, caps=Caps(edits=1)))
     assert applied == ['one']
     assert [o['status'] for o in result['outcomes']] == ['suppressed', 'applied', 'edit_cap']
@@ -292,10 +301,13 @@ def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
     state.update(score=4)
     from datetime import timedelta
 
-    consumed = [{'version': 'read-version', 'last_changed_at': NOW}]
+    consumed = [{'collection': 'conversations', 'id': 'read', 'version': 'read-version', 'last_changed_at': NOW}]
     state_path = ('dream_users', UID, 'dirty')
-    admission.rows[(*state_path, 'read')] = {'version': 'read-version', 'last_changed_at': NOW}
-    admission.rows[(*state_path, 'arrival')] = {
+    admission.rows[(*state_path, dream_store.dirty_id('conversations', 'read'))] = {
+        'version': 'read-version',
+        'last_changed_at': NOW,
+    }
+    admission.rows[(*state_path, dream_store.dirty_id('conversations', 'arrival'))] = {
         'version': 'arrival-version',
         'last_changed_at': NOW + timedelta(seconds=1),
     }
@@ -309,8 +321,8 @@ def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
     )
     state = admission.rows[('dream_users', UID)]
     assert state['watermark'] == NOW and state['score'] == 4
-    assert (*state_path, 'read') not in admission.rows
-    assert (*state_path, 'arrival') in admission.rows
+    assert (*state_path, dream_store.dirty_id('conversations', 'read')) not in admission.rows
+    assert (*state_path, dream_store.dirty_id('conversations', 'arrival')) in admission.rows
     assert state['lease'] is None
     report = admission.rows[('users', UID, 'dream_runs', lease['run_id'])]
     assert 'review_encrypted_v1' in report['source']
@@ -435,8 +447,16 @@ def test_tier_policy_defaults_and_override(monkeypatch, caplog):
     from utils.dream_metrics import POLICY_WARNINGS
 
     monkeypatch.delenv('DREAM_AGENT_AUTO_APPLY_KINDS', raising=False)
-    assert auto_apply_kinds() == {'title', 'overview', 'spelling', 'vocabulary'}
-    assert SUGGEST == {'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
+    assert auto_apply_kinds() == {'title', 'overview', 'spelling'}
+    assert SUGGEST == {
+        'vocabulary',
+        'close_task',
+        'retire_task',
+        'merge_people',
+        'merge_memories',
+        'memory',
+        'entity_summary',
+    }
     assert all(apply_policy(kind, AUTO) == 'auto' for kind in AUTO)
     assert all(apply_policy(kind, AUTO) == 'suggest' for kind in SUGGEST)
     before = POLICY_WARNINGS._value.get()
@@ -475,7 +495,7 @@ def test_tier_routes_and_shadow_labels(monkeypatch, pass_context, mode):
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=edits), 100)))
     calls = []
     monkeypatch.setattr(
-        dream_tools, 'apply_edit', lambda uid, edit, records: calls.append(('auto', edit.kind)) or 'applied'
+        dream_tools, 'apply_grounded_edit', lambda uid, edit, records: calls.append(('auto', edit.kind)) or 'applied'
     )
     monkeypatch.setattr(
         dream_tools, 'suggest_edit', lambda uid, edit, records: calls.append(('suggest', edit.kind)) or 'suggested'

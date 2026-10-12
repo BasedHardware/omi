@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.",
     "syncCardRateLimited": "محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود",
+    "syncCardThrottlePaused": "همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود",
     "syncCardBackendBusy": "سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند",
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
     "promoCode": "کد تخفیف",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "هدف",
     "chatBlockConversation": "گفتگو",
     "chatBlockMemory": "خاطره",
+    "chatBlockPerson": "شخص",
+    "chatBlockUndone": "لغو شد",
+    "chatBlockUndoFailed": "لغو این تغییر ممکن نشد",
     "chatBlockQuestion": "پرسش",
     "chatBlockOpenInGoals": "باز کردن در اهداف",
     "chatBlockOpenConversation": "باز کردن گفتگو",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "این اصلاح پیشنهادی اعمال شود؟",
     "reviewProposalApply": "اعمال",
     "reviewProposalSuggested": "پیشنهادی",
-    "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد."
+    "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.",
+    "itemLinkListTitle": "{count, plural, =0{هیچ موردی نیست} =1{۱ مورد} other{{count} مورد}}"
 }

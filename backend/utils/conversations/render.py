@@ -139,6 +139,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Voice calibration evidence stays inside backend persistence and processing."""
     conv.pop('speaker_match_scores', None)
+    conv.pop('owner_recognition_diagnostics', None)
     for segment in conv.get('transcript_segments') or []:
         if isinstance(segment, dict):
             segment.pop('speaker_match_scores', None)

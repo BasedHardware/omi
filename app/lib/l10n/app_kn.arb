@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು.",
     "syncCardRateLimited": "ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ",
+    "syncCardThrottlePaused": "ಸಿಂಕ್ ಸ್ವಲ್ಪ ಸಮಯ ನಿಲ್ಲಿಸಲಾಗಿದೆ — ಅದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪುನರಾರಂಭಗೊಳ್ಳುತ್ತದೆ",
     "syncCardBackendBusy": "Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ",
     "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "ಗುರಿ",
     "chatBlockConversation": "ಸಂಭಾಷಣೆ",
     "chatBlockMemory": "ನೆನಪು",
+    "chatBlockPerson": "ವ್ಯಕ್ತಿ",
+    "chatBlockUndone": "ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ",
+    "chatBlockUndoFailed": "ಈ ಬದಲಾವಣೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "chatBlockQuestion": "ಪ್ರಶ್ನೆ",
     "chatBlockOpenInGoals": "ಗುರಿಗಳಲ್ಲಿ ತೆರೆಯಿರಿ",
     "chatBlockOpenConversation": "ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "ಈ ಸೂಚಿಸಿದ ತಿದ್ದುಪಡಿಯನ್ನು ಅನ್ವಯಿಸುವುದೇ?",
     "reviewProposalApply": "ಅನ್ವಯಿಸಿ",
     "reviewProposalSuggested": "ಸೂಚಿಸಲಾಗಿದೆ",
-    "reviewProposalConflict": "Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ."
+    "reviewProposalConflict": "Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.",
+    "itemLinkListTitle": "{count, plural, =0{ಯಾವುದೇ ಐಟಂ ಇಲ್ಲ} =1{1 ಐಟಂ} other{{count} ಐಟಂಗಳು}}"
 }

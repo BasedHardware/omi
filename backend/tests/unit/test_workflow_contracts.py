@@ -326,7 +326,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as four parallel shard jobs whose interleaved slices partition
+    selection as six parallel shard jobs whose interleaved slices partition
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -337,8 +337,9 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4]" in workflow
-    assert "--shard 4/${{ matrix.shard }}" in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
+    assert "--shard 6/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
     assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
@@ -2008,3 +2009,23 @@ def test_notifications_job_deploy_restores_singleton_before_action_and_reattache
     assert '--job' in attach['run'] and '--detach' not in attach['run']
     assert 'if' not in detach and 'if' not in attach
     assert workflow['concurrency']['cancel-in-progress'] is False
+
+
+def test_notifications_job_renders_the_verified_gateway_endpoint():
+    """The manifest default for OMI_LLM_GATEWAY_URL is the inert http://127.0.0.1:9.
+
+    The 2026-10-10 deploy rendered without the gated endpoint and every daily
+    recap generation failed with APIConnectionError until the next redeploy.
+    """
+    workflow = yaml.safe_load(
+        (BACKEND_DIR.parent / ".github" / "workflows" / "gcp_notifications_job.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["deploy"]["steps"]
+    ids = [step.get("id") for step in steps]
+    gate = ids.index("gateway-serving")
+    render = ids.index("runtime-env")
+    assert gate < render
+    assert "verify-llm-gateway-serving.py" in steps[gate]["run"]
+    assert "--github-output" in steps[gate]["run"]
+    assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
+    assert "http://127.0.0.1:9" in steps[render]["run"]

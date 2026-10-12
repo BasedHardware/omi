@@ -9177,6 +9177,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncCardRateLimited => 'Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα';
 
   @override
+  String get syncCardThrottlePaused => 'Ο συγχρονισμός διακόπηκε προσωρινά — θα συνεχιστεί αυτόματα';
+
+  @override
   String get syncCardBackendBusy =>
       'Οι διακομιστές της Omi είναι φορτωμένοι — οι ηχογραφήσεις σας θα συγχρονιστούν μόλις απελευθερωθεί χωρητικότητα';
 
@@ -9846,6 +9849,15 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Ανάμνηση';
+
+  @override
+  String get chatBlockPerson => 'Άτομο';
+
+  @override
+  String get chatBlockUndone => 'Αναιρέθηκε';
+
+  @override
+  String get chatBlockUndoFailed => 'Δεν ήταν δυνατή η αναίρεση αυτής της αλλαγής';
 
   @override
   String get chatBlockQuestion => 'Ερώτηση';
@@ -13080,4 +13092,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count στοιχεία',
+      one: '1 στοιχείο',
+      zero: 'Κανένα στοιχείο',
+    );
+    return '$_temp0';
+  }
 }

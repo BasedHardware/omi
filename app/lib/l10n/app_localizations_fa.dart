@@ -9113,6 +9113,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
 
   @override
+  String get syncCardThrottlePaused => 'همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
   String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
 
   @override
@@ -9773,6 +9776,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'خاطره';
+
+  @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'لغو شد';
+
+  @override
+  String get chatBlockUndoFailed => 'لغو این تغییر ممکن نشد';
 
   @override
   String get chatBlockQuestion => 'پرسش';
@@ -12992,4 +13004,16 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+      zero: 'هیچ موردی نیست',
+    );
+    return '$_temp0';
+  }
 }

@@ -9148,6 +9148,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncCardRateLimited => 'Достигнут лимит использования — синхронизация возобновится автоматически';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронизация ненадолго приостановлена — она возобновится автоматически';
+
+  @override
   String get syncCardBackendBusy =>
       'Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности';
 
@@ -9816,6 +9819,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Воспоминание';
+
+  @override
+  String get chatBlockPerson => 'Человек';
+
+  @override
+  String get chatBlockUndone => 'Отменено';
+
+  @override
+  String get chatBlockUndoFailed => 'Не удалось отменить это изменение';
 
   @override
   String get chatBlockQuestion => 'Вопрос';
@@ -13043,4 +13055,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Это изменилось после предложения Dream, поэтому ничего не применено.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count элементов',
+      one: '1 элемент',
+      zero: 'Нет элементов',
+    );
+    return '$_temp0';
+  }
 }

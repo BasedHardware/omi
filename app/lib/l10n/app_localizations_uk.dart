@@ -9133,6 +9133,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncCardRateLimited => 'Досягнуто ліміт використання — синхронізація відновиться автоматично';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронізацію ненадовго призупинено — вона відновиться автоматично';
+
+  @override
   String get syncCardBackendBusy =>
       'Сервери Omi перевантажені — ваші записи синхронізуються, щойно з\'явиться доступна потужність';
 
@@ -9800,6 +9803,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Спогад';
+
+  @override
+  String get chatBlockPerson => 'Людина';
+
+  @override
+  String get chatBlockUndone => 'Скасовано';
+
+  @override
+  String get chatBlockUndoFailed => 'Не вдалося скасувати цю зміну';
 
   @override
   String get chatBlockQuestion => 'Питання';
@@ -13027,4 +13039,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Це змінилося після пропозиції Dream, тому нічого не застосовано.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count елементів',
+      one: '1 елемент',
+      zero: 'Немає елементів',
+    );
+    return '$_temp0';
+  }
 }

@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता.",
     "syncCardRateLimited": "वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल",
+    "syncCardThrottlePaused": "सिंक थोडा वेळ थांबवले आहे — ते आपोआप पुन्हा सुरू होईल",
     "syncCardBackendBusy": "Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील",
     "unableToDetermineFirmwareVersion": "सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही",
     "promoCode": "प्रोमो कोड",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "ध्येय",
     "chatBlockConversation": "संभाषण",
     "chatBlockMemory": "स्मृती",
+    "chatBlockPerson": "व्यक्ती",
+    "chatBlockUndone": "पूर्ववत केले",
+    "chatBlockUndoFailed": "हा बदल पूर्ववत करता आला नाही",
     "chatBlockQuestion": "प्रश्न",
     "chatBlockOpenInGoals": "ध्येयांमध्ये उघडा",
     "chatBlockOpenConversation": "संभाषण उघडा",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "ही सुचवलेली दुरुस्ती लागू करायची?",
     "reviewProposalApply": "लागू करा",
     "reviewProposalSuggested": "सुचवलेले",
-    "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही."
+    "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.",
+    "itemLinkListTitle": "{count, plural, =0{कोणतेही आयटम नाहीत} =1{1 आयटम} other{{count} आयटम}}"
 }

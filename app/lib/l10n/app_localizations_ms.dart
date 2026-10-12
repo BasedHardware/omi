@@ -9132,6 +9132,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik';
 
   @override
+  String get syncCardThrottlePaused => 'Penyegerakan dijeda sebentar — ia akan disambung semula secara automatik';
+
+  @override
   String get syncCardBackendBusy =>
       'Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula';
 
@@ -9798,6 +9801,15 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Memori';
+
+  @override
+  String get chatBlockPerson => 'Orang';
+
+  @override
+  String get chatBlockUndone => 'Dibatalkan';
+
+  @override
+  String get chatBlockUndoFailed => 'Tidak dapat membatalkan perubahan itu';
 
   @override
   String get chatBlockQuestion => 'Soalan';
@@ -13028,4 +13040,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Ini telah berubah sejak Dream mencadangkannya, jadi tiada apa yang digunakan.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Item',
+      one: '1 Item',
+      zero: 'Tiada Item',
+    );
+    return '$_temp0';
+  }
 }

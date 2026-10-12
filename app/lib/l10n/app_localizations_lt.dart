@@ -9126,6 +9126,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncCardRateLimited => 'Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai';
 
   @override
+  String get syncCardThrottlePaused => 'Sinchronizavimas trumpam pristabdytas — jis bus tęsiamas automatiškai';
+
+  @override
   String get syncCardBackendBusy => 'Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai';
 
   @override
@@ -9796,6 +9799,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Prisiminimas';
+
+  @override
+  String get chatBlockPerson => 'Asmuo';
+
+  @override
+  String get chatBlockUndone => 'Atšaukta';
+
+  @override
+  String get chatBlockUndoFailed => 'Nepavyko atšaukti šio pakeitimo';
 
   @override
   String get chatBlockQuestion => 'Klausimas';
@@ -13021,4 +13033,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementai',
+      one: '1 elementas',
+      zero: 'Nėra elementų',
+    );
+    return '$_temp0';
+  }
 }

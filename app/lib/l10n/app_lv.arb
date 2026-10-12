@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu.",
     "syncCardRateLimited": "Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski",
+    "syncCardThrottlePaused": "Sinhronizācija īslaicīgi apturēta — tā atsāksies automātiski",
     "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda",
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
     "promoCode": "Reklāmas kods",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Mērķis",
     "chatBlockConversation": "Saruna",
     "chatBlockMemory": "Atmiņa",
+    "chatBlockPerson": "Persona",
+    "chatBlockUndone": "Atsaukts",
+    "chatBlockUndoFailed": "Šīs izmaiņas neizdevās atsaukt",
     "chatBlockQuestion": "Jautājums",
     "chatBlockOpenInGoals": "Atvērt sadaļā “Mērķi”",
     "chatBlockOpenConversation": "Atvērt sarunu",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Lietot šo ieteikto labojumu?",
     "reviewProposalApply": "Lietot",
     "reviewProposalSuggested": "Ieteikts",
-    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots."
+    "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.",
+    "itemLinkListTitle": "{count, plural, =0{Nav vienību} =1{1 vienība} other{{count} vienības}}"
 }

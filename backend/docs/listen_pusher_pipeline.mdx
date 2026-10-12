@@ -6,6 +6,27 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
+managed-transcription allowance before calling the provider. It probes the
+uploaded media duration and rejects a file that exceeds the remaining allowance;
+successful provider responses increment root `hourly_usage.transcription_seconds`
+by that duration, rounded up to a second. Deepgram BYOK cannot exempt this
+Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
+live-listen, offline-sync, or locked-conversation policies.
+
+Admission and usage recording are not a distributed monthly reservation. The
+proxy probes the seekable upload spool and initially checks allowance before
+acquiring a provider slot, then rechecks allowance after queueing. It holds its
+four-slot semaphore through the usage write attempt, bounding dispatched but
+unaccounted requests to four per serving process/event loop. A failed usage
+write emits fallback telemetry and returns the completed transcript, avoiding
+a retry-driven duplicate provider call. With healthy, launched monthly accounting, the conservative overshoot bound is
+`N × D` seconds, where `N ≤ 4 × P` for `P` serving processes and `D` is the maximum
+accounted media duration admitted per request. The finite allowance check bounds
+`D` by the plan allowance; the configured production Parakeet one-hour file cap
+normally narrows it further. The semaphore is not shared across replicas, and an
+accounting-write outage does not have this finite cumulative bound.
+
 > Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation
@@ -479,11 +500,49 @@ conversation's `speaker_resolution` tells clients whether ids are people:
 open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
 it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
 `..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
-Every early exit records an anonymous reason (`no_audio`, `unaligned_audio`, or
+Every early exit retains its aggregate reason (`no_audio`, `unaligned_audio`, or
 `no_embeddings`) so a successful sync reprocess cannot conceal an unavailable
 resolution. The Flutter transcript presents anonymous IDs as provisional when
 the status is `unavailable`; those chunk-local IDs must not be displayed as
 dozens of confirmed participants.
+
+Owner-recognition diagnostics are observation only: matching thresholds, budgets,
+queue ordering, and identity labels stay unchanged. Live refusals emit at most
+one `event=owner_recognition_diagnostics kind=live_refusal` summary per reason
+per generation. Successful enqueue, profile load, score generation, and publication
+use `kind=live_progress`, with the same bound. An early finalization sample uses
+`kind=live_checkpoint`; drain/rollover closures use `kind=live_stop`. Logs carry UID,
+conversation, recording, socket, and speaker scope; UID never enters a
+Prometheus label. Budget refusals reuse the existing `cap=voice|socket|both`
+counters and first-block log, while the generation summary retains those counts.
+Resolver exits carry the same attribution and pass name, including separate
+`private_cloud_disabled` and `endpoint_unconfigured` reasons.
+
+The conversation's internal `owner_recognition_diagnostics` field contains
+only whitelisted counts, enums, durations, and IDs: no transcript, audio,
+embeddings, distances, or secrets. It is omitted from client JSON and schema.
+At most four live generations, eight scopes per summary, and 8 KiB of encoded
+metadata survive. The first-resolver summary is immutable across later repair
+and reprocessing; transactional merges retain newer live sequences. Live
+metadata piggybacks on identity flushes, with a metadata-only transactional
+read/update only after a generation closes at drain or rollover. Early
+finalization checkpoints are log-only and neither mutate the summary nor claim
+persistence; comparisons completed before closure enter the frozen summary.
+Each closed socket/conversation/generation claims at most one standalone attempt
+before awaiting persistence; concurrent and repeated boundaries cannot retry it, even
+on failure. Closed summaries are flushed after speaker refresh even when no labels were
+produced. Existing identity/processing writes can also carry the summary. Unchanged snapshots do not write. Thus
+N generations add at most N successful standalone writes (and N transaction
+invocations; Firestore may retry reads within a transaction). Each can advance
+the document revision once and invalidate an overlapping late-repair CAS.
+There is no extra diagnostic write on the segment loop. The unqueried map has
+a declared single-field indexing exemption, inherited by its descendants;
+applying exemptions follows the separate approved field-exemptions operation. Optional metadata
+is omitted if the resulting document exceeds the conservative 900 KiB size
+guard; failures preserve existing metadata and allow content writes to continue.
+A stopped generation freezes its summary so an in-flight old task cannot claim
+success in the successor. Queue/task counts describe the sampled boundary,
+not a completed queue barrier or proof that an owner was present.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
@@ -2231,7 +2290,9 @@ sequenceDiagram
 
 ### Offline upload status ownership
 
-`GET /v2/sync-local-files/{job_id}` reads the job without mutating it, checks
+`GET /v2/sync-local-files/{job_id}` first applies the per-UID hot-loop ceiling
+(40 polls per 20 seconds, HTTP 429 with `Retry-After: 20`), then reads the job
+without mutating it, checks
 the authenticated owner, and only then attempts stale Cloud Tasks recovery
 under the worker's run lease. An old progress timestamp alone cannot fail
 an active worker, override standby, or replace a concurrent completed result.
@@ -3133,11 +3194,13 @@ Live query admission additionally records the following closed-label counters:
 | `omi_speaker_id_embedding_attempts_total{outcome="reserved\|succeeded\|failed"}` | `reserved` counts synchronously spent voice attempts/socket tokens. `succeeded` means query extraction returned, even if matching subsequently rejects, loses authority, or becomes stale. `failed` means encoding/extraction raised or the caller was cancelled; a cancelled executor request may still finish remotely. Neither completion refunds budget. Completions can lag reservations. |
 | `omi_speaker_id_budget_voices_total{cap="voice\|socket\|both"}` | First denial per admitted numeric voice per matcher generation, classified by its first cap. Provider scope changes of the same numeric voice do not reset the admission cap or incidence marker. Rollovers reset this marker, including for carried voices whose attempts remain spent. |
 | `omi_speaker_id_budget_sockets_total{cap="voice\|socket\|both"}` | First denial per socket lifetime, classified by the first cap, including a voice-only denial. It counts sockets experiencing any budget denial, not exclusively sockets exhausting tokens; rollovers do not reset it. |
+| `omi_speaker_id_rejector_demotions_total{action="deferred\|coalesced"}` | `deferred` counts newly created or converted proven-rejector pending entries placed behind ordinary work; `coalesced` counts provider updates absorbed into an existing pending rejector entry. Repeated queue inspection does not recount either. These measure scheduling opportunities, not comparisons or saved GPU calls. |
+| `omi_speaker_id_rejector_tail_denials_total{reason="reserved_tail"}` | One otherwise-admissible reservation denied because a proven rejector would spend the last two socket tokens. No token or voice attempt is spent. Actual voice/socket exhaustion still uses the existing exclusive cap counters instead. |
 
 Compare exit rates by cap to locate pressure. Compare summed exits with summed
 voice/socket incidence over a long window to distinguish repeated blocked updates
 from affected voices/sockets; these are incidence cohorts, not active gauges or
-distinct-user counts. Each counter has exactly three preinitialized label values:
+distinct-user counts. Each of the four original budget/extraction counters has exactly three preinitialized label values:
 12 counter series per target, plus 12 Prometheus `_created` series. No UID, socket,
 recording, conversation, generation, speaker, or provider scope is a metric label.
 
@@ -3150,31 +3213,66 @@ UIDs occur only in this log; there is no transcript, PCM, or embedding payload.
 The old per-update `speaker_id_exit reason=embedding_budget` log is suppressed;
 its legacy metric continues to increment alongside the exclusive counter.
 
-The existing metadata queue holds at most 100 pending scoped voices, coalescing
-updates by matcher generation, conversation, provider scope, and numeric speaker.
-It retains at most 128 distinct timing intervals per slot, never fills silence
-gaps, and keeps the latest segment ID. A voice already running waits in its one
-pending slot until completion, rather than occupying task slots behind its lock.
-Active suppression follows the numeric matcher lock across provider scopes and
-generations, while pending keys remain distinct. After successful extraction,
-unselected intervals beyond a query's ten seconds remain in the same queue for
-normal scheduling after completion, with a new age for the served work quantum.
-Already-pending updates retain their age and latest ID. If the queue is full,
-those intervals remain in matcher metadata for the next ordinary update.
-Failures and denials introduce no retry, and every subsequent query reserves
-through the shared socket bucket and current voice allowance.
-Before five seconds of queue age, untried voices precede previously attempted
-voices, followed by existing acoustic near-owner preference and longer pooled
-clips. Once aged, ready work wins oldest-first, so at most 99 older pending slots
-can precede it and continued updates cannot renew its age. This is a selection
-bound, not a five-second execution deadline: task capacity and active voice locks
-can still delay work. All queries retain the 10-second audio bound, shared
-16-token burst/refill of 240 per hour, and 16-task ceiling. The initial voice
-allowance is 12, with the bounded fresh-PCM recovery described below.
-Scheduling introduces no retry timer or reserved/exempt quota. Better utilization
-can change actual call counts within the same ceiling, but cannot enlarge that
-ceiling. Acceptance thresholds, margins, manual veto, contention, and generation
-publication fences are unchanged.
+The live matcher queue holds at most 100 pending entries. Ordinary provider
+updates remain separate and in exact FIFO arrival order; there is no untried,
+near-owner, duration, or age-based priority. Queued work carries timing/identity metadata
+and the enqueue-time matcher generation, never PCM or transcript text. The
+existing per-voice lock serializes tasks, and at most 16 matcher tasks run.
+
+Only a proven rejector is deferred behind all ordinary work, and its pending
+updates coalesce with merged audio intervals and the latest segment ID. Three
+completed comparison rounds in the current matcher generation must all clearly
+reject every enrolled owner/person candidate. Each round requires the existing
+five-second evidence floor; attempts, extraction failures, duplicate audio,
+pending evidence and roster re-evaluations do not count as completed rounds.
+Any non-clear completed result permanently prevents proof in that generation:
+accepts, margin ambiguity, contention, invalid/empty comparisons and the whole
+calibrated owner near band remain protected. Known manual authority also
+prevents demotion. Current distances are rechecked, so profile re-evaluation
+cannot leave a newly close voice in the rejector tail. Proof resets on rollover.
+Coalescing never crosses generation, conversation or provider-scope fences;
+each entry retains at most 128 disjoint intervals. Other voices use identical
+per-update clip selection and initial-evidence cadence.
+Deferred entries retain their earliest enqueue position. If current proof is
+revoked by manual authority or profile re-evaluation, the pending entry returns
+to that position among ordinary work; later arrivals cannot keep overtaking it.
+The entry drops its pooled audio ranges and restores the latest provider update's
+original start, end and duration, so ordinary clip selection uses only that latest
+interval rather than the former rejector pool.
+
+After the existing monotonic socket refill and actual cap checks, a proven
+rejector cannot reserve with two or fewer tokens remaining. Those tokens remain
+available to any ordinary voice, including a tried voice still building initial
+evidence. This records `rejector_tail_reserved` in the bounded exit/diagnostic
+reason vocabulary, separately from actual `embedding_budget` exhaustion. It
+does not add tokens, refund failures, or create retries.
+The approved cutoff applies to the fractional balance literally: a balance of
+2.1 can spend one token and leave 1.1. It does not reserve two whole request
+opportunities at every fractional balance; that would require a different cutoff.
+
+Each dequeued update contributes its own audio interval to the existing pending
+minimum-evidence accumulation. Successful queries subtract already-embedded
+ranges, select at most ten seconds using the existing centered/chronological
+policy, and clear pending metadata. Unselected leftovers do not create another
+queue entry: only an ordinary provider update can drive another query. Duplicate
+or overlapping updates cannot double-count successful evidence. Failures and
+budget denials retain pending metadata, but introduce no autonomous retry.
+
+This retains the restored scheduling/query cadence for all ordinary voices,
+while preserving #21181 budget telemetry and all authority/stale-generation guards. The telemetry
+names, labels, first-block semantics, and exclusive-cap/legacy-count equality
+above remain compatible with owner-recognition diagnostics. The initial 12-attempt
+voice allowance (with targeted recovery below), shared 16-token burst/refill of 240 per hour, acceptance thresholds,
+margins, manual veto, and contention remain unchanged. Actual calls and latency
+can differ for proven rejectors inside the same request ceiling. The new
+counters add exactly three `_total` series (plus three `_created` series) using
+closed labels and no UID, socket, conversation, scope or speaker labels.
+
+Owner diagnostics keep their query/comparison, budget, progress/refusal and
+stop hooks with this FIFO scheduler. Stop/checkpoint `pending_queue` samples
+`queue.qsize()`: it counts pending entries, including separate ordinary updates
+for the same voice and a collapsed entry per proven rejector/fence. Closed generation summaries stay frozen when stale queued
+work is examined after a rollover.
 
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
 `window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
@@ -3836,9 +3934,13 @@ Each conversation admits at most 128 voice ids, with at most 128 pending interva
 per voice, 16 in-flight tasks and an initial 12 embedding attempts per voice.
 Rollover resets uncarried voices' attempts and recovery state; validated automatic
 owner carry and copied manual mappings retain both. Same-conversation profile
-refresh and provider scope changes do not reset them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
-opportunities within both budgets, regardless of their initial distance: noisy
-early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+refresh and provider scope changes do not reset them. Accepted voices stop spending.
+Within the initial allowance, rejected voices can retry with later provider audio.
+Beyond it, recovery is restricted to a current calibrated owner near-miss or a
+voice with no completed owner/person comparison in this generation. Completed
+clear-far voices are excluded after even one round, before they can qualify as
+proven rejectors. Other completed results outside the calibrated owner near-miss
+predicate (including margin abstention and contention) receive no extra quota. A recovered owner re-arbitrates
 all evidenced voices and withdraws competing automatic owner mappings.
 Near-threshold misses, print-margin ambiguity, owner contention and missing prints
 stay retryable. No new exit reason is added.
@@ -3851,6 +3953,14 @@ made when the twelfth reservation spends quota. A grant requires at least ten
 seconds of distinct, proven PCM after that checkpoint (or the prior grant), and
 30 monotonic seconds after exhaustion/prior grant. Each tranche is granted only
 when the current allowance is exhausted and a socket token can be reserved;
+eligibility is rechecked before every extra reservation, including unused attempts
+in an already granted tranche. The existing near-miss predicate requires the owner
+to be nearest with distance in [0.65, 0.70), the existing 0.10 runner-up gap and no
+contention. The completed-comparison ledger and any already-decided carried/manual row,
+not attempts, failures or pending evidence, distinguish undecided voices.
+Roster re-evaluation alone never counts as a completed round. Current profile
+distances are rechecked, so a later close/far result can change eligibility without
+resetting attempts, tranches, freshness checkpoints or cooldowns;
 there is no timer, automatic failed-request retry, refund, or socket exemption.
 Freshness uses the ring's absolute append byte positions AND a capture-axis
 high-watermark, with sample-aligned, non-overlapping span proof. Segment duration,
@@ -3881,8 +3991,20 @@ automatic acceptance per voice-generation after a successful recovery extraction
 it excludes manual labels, failed/stale extraction and contended/rejected results.
 Later re-arbitration may accept that evidenced voice; repeated/reinstated acceptance
 does not count twice. Carried state is not counted as a new recovery cohort.
-These add four counter series per target plus four `_created` series; no IDs are
-labels or new log payloads. Compare summed grants, first/second usage and owner
+`omi_speaker_id_recovery_denials_total{reason="proven_rejector|clearly_far|completed_not_near_owner"}`
+counts each otherwise attempted extra reservation refused by eligibility, including
+a grant request or an unused attempt in an existing tranche. `proven_rejector`
+requires the unchanged three-round proof; `clearly_far` covers completed clear
+rejection before that proof; `completed_not_near_owner` covers other completed
+results outside the current calibrated near-miss predicate. These refusals spend
+no attempt/token and never advance the tranche checkpoint. Freshness, cooldown,
+tranche/attempt ceilings and socket refusals are not counted in this eligibility
+family; they retain the existing cap/legacy telemetry. Rates measure refusals,
+not unique voices or causal GPU savings. These three recovery families add seven
+counter series per target plus seven `_created` series; all label values are
+preinitialized and closed, and no IDs are labels or new log payloads. Existing
+#21181/#21235 budget/diagnostic and #21298 rejector counters keep their meanings.
+Compare summed grants, first/second usage, eligibility denials and owner
 recovery acceptance rates with voice-cap incidence and finalized outcomes on the
 same instrumented pods. Acceptance/grants is descriptive, not a causal success
 rate: a voice can use two grants, and acceptance can lag a grant. Lower exit counts

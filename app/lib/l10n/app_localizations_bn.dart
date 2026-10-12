@@ -9120,6 +9120,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncCardRateLimited => 'ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
 
   @override
+  String get syncCardThrottlePaused => 'সিঙ্ক সাময়িকভাবে থামানো হয়েছে — এটি স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
+
+  @override
   String get syncCardBackendBusy => 'Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে';
 
   @override
@@ -9779,6 +9782,15 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'স্মৃতি';
+
+  @override
+  String get chatBlockPerson => 'ব্যক্তি';
+
+  @override
+  String get chatBlockUndone => 'পূর্বাবস্থায় ফেরানো হয়েছে';
+
+  @override
+  String get chatBlockUndoFailed => 'এই পরিবর্তনটি পূর্বাবস্থায় ফেরানো যায়নি';
 
   @override
   String get chatBlockQuestion => 'প্রশ্ন';
@@ -12994,4 +13006,16 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি আইটেম',
+      one: '১টি আইটেম',
+      zero: 'কোনো আইটেম নেই',
+    );
+    return '$_temp0';
+  }
 }

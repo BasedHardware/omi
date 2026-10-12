@@ -9108,6 +9108,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
 
   @override
+  String get syncCardThrottlePaused => 'Sünkroonimine on korraks peatatud — see jätkub automaatselt';
+
+  @override
   String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
 
   @override
@@ -9768,6 +9771,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Mälestus';
+
+  @override
+  String get chatBlockPerson => 'Isik';
+
+  @override
+  String get chatBlockUndone => 'Tühistatud';
+
+  @override
+  String get chatBlockUndoFailed => 'Seda muudatust ei õnnestunud tühistada';
 
   @override
   String get chatBlockQuestion => 'Küsimus';
@@ -12991,4 +13003,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count üksust',
+      one: '1 üksus',
+      zero: 'Üksusi pole',
+    );
+    return '$_temp0';
+  }
 }

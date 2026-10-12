@@ -174,6 +174,7 @@ SCHEMA_GROUPS = {
             'SyncLocalFilesResultResponse',
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',
+            'SyncContentInProgressResponse',
             'SyncJobStatusResponse',
             'RejectSpeakerRequest',
             'SyncCaptureManifestFile',
@@ -188,6 +189,8 @@ SCHEMA_GROUPS = {
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
         'schemas': (
+            'EditReceiptBlock',
+            'UndoChatReceiptResponse',
             'MessageConversationStructured',
             'MessageConversation',
             'FileChat',

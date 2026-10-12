@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.",
     "syncCardRateLimited": "הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי",
+    "syncCardThrottlePaused": "הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית",
     "syncCardBackendBusy": "השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה",
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
     "promoCode": "קוד קידום",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "יעד",
     "chatBlockConversation": "שיחה",
     "chatBlockMemory": "זיכרון",
+    "chatBlockPerson": "אדם",
+    "chatBlockUndone": "בוטל",
+    "chatBlockUndoFailed": "לא ניתן היה לבטל את השינוי",
     "chatBlockQuestion": "שאלה",
     "chatBlockOpenInGoals": "פתיחה ביעדים",
     "chatBlockOpenConversation": "פתיחת השיחה",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "להחיל את התיקון המוצע הזה?",
     "reviewProposalApply": "החל",
     "reviewProposalSuggested": "מוצע",
-    "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל."
+    "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.",
+    "itemLinkListTitle": "{count, plural, =0{אין פריטים} =1{פריט אחד} other{{count} פריטים}}"
 }

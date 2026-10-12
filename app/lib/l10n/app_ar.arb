@@ -2932,6 +2932,7 @@
     },
     "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.",
     "syncCardRateLimited": "تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا",
+    "syncCardThrottlePaused": "توقفت المزامنة مؤقتًا — ستُستأنف تلقائيًا",
     "syncCardBackendBusy": "خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة",
     "unableToDetermineFirmwareVersion": "تعذر تحديد إصدار البرنامج الثابت الحالي",
     "promoCode": "رمز ترويجي",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "هدف",
     "chatBlockConversation": "محادثة",
     "chatBlockMemory": "ذكرى",
+    "chatBlockPerson": "شخص",
+    "chatBlockUndone": "تم التراجع",
+    "chatBlockUndoFailed": "تعذّر التراجع عن هذا التغيير",
     "chatBlockQuestion": "سؤال",
     "chatBlockOpenInGoals": "فتح في الأهداف",
     "chatBlockOpenConversation": "فتح المحادثة",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "هل تريد تطبيق هذا الإصلاح المقترح؟",
     "reviewProposalApply": "تطبيق",
     "reviewProposalSuggested": "مقترح",
-    "reviewProposalConflict": "تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء."
+    "reviewProposalConflict": "تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.",
+    "itemLinkListTitle": "{count, plural, =0{لا توجد عناصر} =1{عنصر واحد} other{{count} عناصر}}"
 }

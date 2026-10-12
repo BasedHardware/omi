@@ -9158,6 +9158,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncCardRateLimited => 'Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронизацијата е накратко паузирана — ќе продолжи автоматски';
+
+  @override
   String get syncCardBackendBusy =>
       'Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет';
 
@@ -9826,6 +9829,15 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Спомен';
+
+  @override
+  String get chatBlockPerson => 'Лице';
+
+  @override
+  String get chatBlockUndone => 'Поништено';
+
+  @override
+  String get chatBlockUndoFailed => 'Оваа промена не можеше да се поништи';
 
   @override
   String get chatBlockQuestion => 'Прашање';
@@ -13058,4 +13070,16 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Ова се промени откако Dream го предложи, па ништо не е применето.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ставки',
+      one: '1 ставка',
+      zero: 'Нема ставки',
+    );
+    return '$_temp0';
+  }
 }

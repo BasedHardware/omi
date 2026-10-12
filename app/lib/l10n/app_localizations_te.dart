@@ -9162,6 +9162,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncCardRateLimited => 'న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది';
 
   @override
+  String get syncCardThrottlePaused => 'సింక్ కొద్దిసేపు నిలిపివేయబడింది — ఇది స్వయంచాలకంగా తిరిగి ప్రారంభమవుతుంది';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi సర్వర్‌లు బిజీగా ఉన్నాయి — సామర్థ్యం అందుబాటులోకి వచ్చిన వెంటనే మీ రికార్డింగ్‌లు సింక్ అవుతాయి';
 
@@ -9826,6 +9829,15 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'జ్ఞాపకం';
+
+  @override
+  String get chatBlockPerson => 'వ్యక్తి';
+
+  @override
+  String get chatBlockUndone => 'రద్దు చేయబడింది';
+
+  @override
+  String get chatBlockUndoFailed => 'ఈ మార్పును రద్దు చేయలేకపోయాము';
 
   @override
   String get chatBlockQuestion => 'ప్రశ్న';
@@ -13049,4 +13061,16 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count అంశాలు',
+      one: '1 అంశం',
+      zero: 'అంశాలు లేవు',
+    );
+    return '$_temp0';
+  }
 }

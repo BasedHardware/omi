@@ -1441,7 +1441,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0",
+          "expression": "C",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
@@ -1680,7 +1680,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 5 && $B > 0.10",
+          "expression": "$A >= 5 && $B > 0.35",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -1733,7 +1733,7 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
@@ -1742,9 +1742,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 5 && $B > 0.10",
-      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
-      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+      "threshold": "$A >= 5 && $B > 0.35 for 30m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: B p50 12.0% / p90 20.5% / max 31.8%; A sessions/10m p50 63. Threshold above the measured maximum.",
+      "evaluated_bad": "At least 5 window sessions/10m with no_text ratio above 35%, sustained for 30m, fires.",
+      "evaluated_good": "Fewer than 5 window sessions/10m or no_text ratio at most 35% does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-window-no-text",
@@ -1820,7 +1820,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 5 && $B >= 30",
+          "expression": "$A >= 5 && $B >= 55",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -1873,18 +1873,18 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "Parakeet canary first-text p95 exceeds the 30 s budget; roll allocation back to 0.",
+      "summary": "Parakeet canary first-text p95 reaches the 55 s alert threshold; roll allocation back to 0 if sustained for 30m.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 5 && $B >= 30",
-      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
-      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+      "threshold": "$A >= 5 && $B >= 55 for 30m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: first-text p95 B p50 13.8s / p90 41s / max 60s (histogram top). Threshold above the measured p90, below the histogram top.",
+      "evaluated_bad": "At least 5 first-text observations/10m with first-text p95 at least 55s, sustained for 30m, fires.",
+      "evaluated_good": "Fewer than 5 first-text observations/10m or first-text p95 below 55s does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-window-first-text",
@@ -2291,7 +2291,7 @@
       }
     ],
     "updated": "2026-09-21T00:00:00Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "2m",
     "keep_firing_for": "0s",
@@ -2302,7 +2302,7 @@
       "verification": "Compare queue depth, p95 and prerecorded errors in the Parakeet dashboard before ramping.",
       "safe_next_action": "Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 10 && $B >= 0.02",
+      "threshold": "$A >= 10 && $B >= 0.02; sparse traffic no-data is OK because the $A >= 10 volume guard already excludes low volume.",
       "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
       "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
     },
@@ -2380,7 +2380,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.01",
+          "expression": "$A >= 20 && $B > 0.25",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2433,7 +2433,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "1m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - terminal failure after delivered text",
@@ -2442,9 +2442,9 @@
       "verification": "Hermetic exported-query counter fixtures evaluated; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A >= 20 && $B > 0.01",
-      "evaluated_bad": "All listen traffic: 100 transcribed sessions with 2 terminal-after-text failures fires at 2%; stable and former-canary sessions both contribute to the volume floor and ratio.",
-      "evaluated_good": "Fewer than 20 transcribed sessions across all listen traffic or at most 1% terminal-after-text failures stays healthy."
+      "threshold": "$A >= 20 && $B > 0.25 for 10m. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 6.9% / p90 17.8% / max 33%; sustained elevated ratio above the measured p90.",
+      "evaluated_bad": "Contract fixture: 100 eligible sessions or admissions and 30 failures/refusals gives a 30% ratio above 25%; fires after 10m.",
+      "evaluated_good": "Fewer than 20 eligible sessions or admissions, or ratio at most 25%, stays healthy."
     },
     "labels": {
       "alert_identity": "omi-stt-terminal-after-text",
@@ -2520,7 +2520,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.01",
+          "expression": "$A >= 20 && $B > 0.08",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2573,7 +2573,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "1m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - mid-session terminal failures",
@@ -2582,9 +2582,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A >= 20 && $B > 0.01",
-      "evaluated_bad": "Synthetic fixture satisfies the volume floor and failure threshold.",
-      "evaluated_good": "Synthetic fixture has no failure or remains below the volume floor."
+      "threshold": "$A >= 20 && $B > 0.08 for 10m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: B p50 1.0% / p90 5.8% / max 12%. Threshold above the measured p90.",
+      "evaluated_bad": "At least 20 listen admissions/10m with connection/send terminal failure ratio above 8%, sustained for 10m, fires.",
+      "evaluated_good": "Fewer than 20 listen admissions/10m or terminal failure ratio at most 8% does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-mid-session-terminal",
@@ -2660,7 +2660,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0",
+          "expression": "$A >= 20 && $B > 0.15",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2713,7 +2713,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "1m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - paid adapter capacity deaths",
@@ -2722,9 +2722,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A >= 20 && $B > 0",
-      "evaluated_bad": "Synthetic fixture satisfies the volume floor and failure threshold.",
-      "evaluated_good": "Synthetic fixture has no failure or remains below the volume floor."
+      "threshold": "$A >= 20 && $B > 0.15 for 10m. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 2.1% / p90 9% / max 26%; sustained elevated ratio above the measured p90.",
+      "evaluated_bad": "Contract fixture: 100 eligible sessions or admissions and 30 failures/refusals gives a 30% ratio above 15%; fires after 10m.",
+      "evaluated_good": "Fewer than 20 eligible sessions or admissions, or ratio at most 15%, stays healthy."
     },
     "labels": {
       "alert_identity": "omi-stt-paid-capacity",
@@ -2800,7 +2800,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.01",
+          "expression": "$A >= 20 && $B > 0.10",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2862,9 +2862,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A >= 20 && $B > 0.01",
-      "evaluated_bad": "Synthetic fixture satisfies the volume floor and failure threshold.",
-      "evaluated_good": "Synthetic fixture has no failure or remains below the volume floor."
+      "threshold": "$A >= 20 && $B > 0.10 for 10m. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 0 / p90 3.4% / max 15%; sustained elevated ratio above the measured p90.",
+      "evaluated_bad": "Contract fixture: 100 eligible sessions or admissions and 30 failures/refusals gives a 30% ratio above 10%; fires after 10m.",
+      "evaluated_good": "Fewer than 20 eligible sessions or admissions, or ratio at most 10%, stays healthy."
     },
     "labels": {
       "alert_identity": "omi-stt-combined-pressure",
@@ -3080,7 +3080,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0",
+          "expression": "$A > 0 && $B > 10",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -3133,7 +3133,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "1m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - replay continuity loss",
@@ -3142,9 +3142,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "At least one recovery replay attempt in 10m with skipped replay seconds or a successor death during replay.",
-      "evaluated_good": "No replay attempt, or replays with no skipped seconds and no successor deaths."
+      "threshold": "$A > 0 && $B > 10 for 30m. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: B (skipped replay seconds + successor closes, over replayed audio seconds) p50 2.1 / p90 5.1 / max 36.5. Chronic replay skipping remains a separate product finding; this threshold does not establish acceptable continuity.",
+      "evaluated_bad": "At least one recovery replay attempt in 10m with B above 10 (skipped replay seconds + successor closes, over replayed audio seconds) sustained for 30m.",
+      "evaluated_good": "No replay attempt or B at most 10 does not fire this alert; chronic skipping below this threshold still requires product investigation."
     },
     "labels": {
       "alert_identity": "omi-stt-replay-continuity",
@@ -3360,7 +3360,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0",
+          "expression": "$A > 0 && $B > 0.25",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -3413,7 +3413,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "2m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - managed leg lifecycle gap",
@@ -3422,9 +3422,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "Managed legs opened with any unexplained opened-minus-settled-minus-open gap.",
-      "evaluated_good": "Every opened managed leg is either settled or still open."
+      "threshold": "$A > 0 && $B > 0.25 for 30m, per instance and target. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: per-pod maximum B p50 1.1% / p90 16.7% / max 100% at pod start. A nonzero steady-state gap (p50 1.1%) is an accounting defect to investigate, not healthy; the sustained threshold filters pod-start transients.",
+      "evaluated_bad": "Managed legs opened on an instance/target with unexplained opened-minus-settled-minus-open ratio above 25%, sustained for 30m, fires.",
+      "evaluated_good": "No opened legs or per-instance/target gap at most 25% does not fire this alert. A nonzero steady-state gap remains an accounting defect to investigate, not healthy."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-lifecycle-gap",
@@ -3480,7 +3480,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum((up{job=\"backend-listen-metrics\"} == 1) unless on(instance) (omi_stt_cost_routing_snapshot_timestamp_seconds{job=\"backend-listen-metrics\"} >= time() - 15))",
+          "expr": "sum((up{job=\"backend-listen-metrics\"} == 1) unless on(instance) (omi_stt_cost_routing_snapshot_timestamp_seconds{job=\"backend-listen-metrics\"} >= time() - 60))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3562,8 +3562,8 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "Routing decisions ongoing while any scraped pod exposes a stale (over 15s old) or missing fleet snapshot.",
+      "threshold": "$A > 0 && $B > 0; snapshots older than 60s are unready. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: normal snapshot ages 4-18s; the 15s window never had zero unready pods in 14 days.",
+      "evaluated_bad": "Routing decisions ongoing while any scraped pod exposes a stale (over 60s old) or missing fleet snapshot.",
       "evaluated_good": "All scraped pods serving routing decisions expose a fresh fleet snapshot."
     },
     "labels": {

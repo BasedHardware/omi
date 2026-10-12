@@ -9063,6 +9063,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncCardRateLimited => 'ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ';
 
   @override
+  String get syncCardThrottlePaused => 'หยุดการซิงค์ชั่วครู่ — จะดำเนินการต่อโดยอัตโนมัติ';
+
+  @override
   String get syncCardBackendBusy => 'เซิร์ฟเวอร์ของ Omi กำลังคับคั่ง — การบันทึกของคุณจะซิงค์เมื่อมีพื้นที่ว่างกลับมา';
 
   @override
@@ -9718,6 +9721,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'ความทรงจำ';
+
+  @override
+  String get chatBlockPerson => 'บุคคล';
+
+  @override
+  String get chatBlockUndone => 'เลิกทำแล้ว';
+
+  @override
+  String get chatBlockUndoFailed => 'ไม่สามารถเลิกทำการเปลี่ยนแปลงนี้ได้';
 
   @override
   String get chatBlockQuestion => 'คำถาม';
@@ -12931,4 +12943,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count รายการ',
+      one: '1 รายการ',
+      zero: 'ไม่มีรายการ',
+    );
+    return '$_temp0';
+  }
 }

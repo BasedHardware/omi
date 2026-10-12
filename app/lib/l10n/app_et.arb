@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "See jätkub taustal — võite sellelt ekraanilt lahkuda.",
     "syncCardRateLimited": "Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt",
+    "syncCardThrottlePaused": "Sünkroonimine on korraks peatatud — see jätkub automaatselt",
     "syncCardBackendBusy": "Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb",
     "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
     "promoCode": "Sooduskood",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Eesmärk",
     "chatBlockConversation": "Vestlus",
     "chatBlockMemory": "Mälestus",
+    "chatBlockPerson": "Isik",
+    "chatBlockUndone": "Tühistatud",
+    "chatBlockUndoFailed": "Seda muudatust ei õnnestunud tühistada",
     "chatBlockQuestion": "Küsimus",
     "chatBlockOpenInGoals": "Ava eesmärkides",
     "chatBlockOpenConversation": "Ava vestlus",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Kas rakendada see soovitatud parandus?",
     "reviewProposalApply": "Rakenda",
     "reviewProposalSuggested": "Soovitatud",
-    "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud."
+    "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.",
+    "itemLinkListTitle": "{count, plural, =0{Üksusi pole} =1{1 üksus} other{{count} üksust}}"
 }

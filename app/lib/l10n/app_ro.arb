@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Acest lucru continuă în fundal — poți părăsi acest ecran.",
     "syncCardRateLimited": "Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat",
+    "syncCardThrottlePaused": "Sincronizarea este întreruptă pentru scurt timp — va fi reluată automat",
     "syncCardBackendBusy": "Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate",
     "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului",
     "promoCode": "Cod promoțional",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Obiectiv",
     "chatBlockConversation": "Conversație",
     "chatBlockMemory": "Amintire",
+    "chatBlockPerson": "Persoană",
+    "chatBlockUndone": "Anulat",
+    "chatBlockUndoFailed": "Modificarea nu a putut fi anulată",
     "chatBlockQuestion": "Întrebare",
     "chatBlockOpenInGoals": "Deschide în Obiective",
     "chatBlockOpenConversation": "Deschide conversația",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Aplici această corectare sugerată?",
     "reviewProposalApply": "Aplică",
     "reviewProposalSuggested": "Sugerat",
-    "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic."
+    "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.",
+    "itemLinkListTitle": "{count, plural, =0{Niciun element} =1{1 element} other{{count} elemente}}"
 }

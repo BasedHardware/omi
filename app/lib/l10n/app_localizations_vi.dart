@@ -9115,6 +9115,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardRateLimited => 'Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục';
 
   @override
+  String get syncCardThrottlePaused => 'Đồng bộ hóa tạm dừng trong giây lát — sẽ tự động tiếp tục';
+
+  @override
   String get syncCardBackendBusy =>
       'Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục';
 
@@ -9776,6 +9779,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Ký ức';
+
+  @override
+  String get chatBlockPerson => 'Người';
+
+  @override
+  String get chatBlockUndone => 'Đã hoàn tác';
+
+  @override
+  String get chatBlockUndoFailed => 'Không thể hoàn tác thay đổi này';
 
   @override
   String get chatBlockQuestion => 'Câu hỏi';
@@ -12995,4 +13007,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mục',
+      one: '1 mục',
+      zero: 'Không có mục nào',
+    );
+    return '$_temp0';
+  }
 }

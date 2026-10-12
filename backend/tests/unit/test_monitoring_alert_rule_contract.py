@@ -110,7 +110,6 @@ COUNTER_FN_ON_GAUGE_DEBT = {
     "dfpgfzd3t1m9sf",  # critical, pages
     "efpossz9hmsqod",  # critical, pages
     "efpgg049laqyof",
-    "efpgg1kfjglj4d",
     "bevzeigrns5xca",
     "cevzen5b94z5sb",  # critical, pages
     "tz_backend_listen_lb_zero",  # critical, pages
@@ -853,6 +852,11 @@ def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
         assert exprs == [expected_expr], export_name
         math_nodes = [node["model"]["expression"] for node in rule["data"] if node["model"].get("type") == "math"]
         assert math_nodes == ["$A > 0"], export_name
+        nodes = {node["refId"]: node["model"] for node in rule["data"]}
+        assert rule["condition"] == "D", export_name
+        assert nodes["D"]["type"] == "reduce", export_name
+        assert nodes["D"]["expression"] == "C", export_name
+        assert nodes["C"]["expression"] == "$A > 0", export_name
 
 
 def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
@@ -1249,7 +1253,13 @@ def test_window_canary_batch_protection_pages_telegram_before_sync_degrades():
             rule = rules[uid]
             assert metric in ' '.join(d['model'].get('expr', '') for d in rule['data'])
             assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
-            assert rule['noDataState'] == 'Alerting'
+            # Sparse prerecorded traffic is healthy without data; its volume
+            # guard still requires ten requests before evaluating errors.
+            if uid == 'omi-stt-sync-prerecorded-errors':
+                assert rule['noDataState'] == 'OK'
+                assert rule['data'][2]['model']['expression'] == '$A >= 10 && $B >= 0.02'
+            else:
+                assert rule['noDataState'] == 'Alerting'
             assert rule['isPaused'] is False
             assert 'Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0' in rule['annotations']['summary']
             assert rule['for'] == '2m'

@@ -9117,6 +9117,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncCardRateLimited => 'Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt';
 
   @override
+  String get syncCardThrottlePaused => 'Synkroniseringen har pausats kort — den återupptas automatiskt';
+
+  @override
   String get syncCardBackendBusy =>
       'Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs';
 
@@ -9779,6 +9782,15 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Minne';
+
+  @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Ångrat';
+
+  @override
+  String get chatBlockUndoFailed => 'Det gick inte att ångra ändringen';
 
   @override
   String get chatBlockQuestion => 'Fråga';
@@ -13002,4 +13014,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Det här har ändrats sedan Dream föreslog det, så inget tillämpades.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count objekt',
+      one: '1 objekt',
+      zero: 'Inga objekt',
+    );
+    return '$_temp0';
+  }
 }

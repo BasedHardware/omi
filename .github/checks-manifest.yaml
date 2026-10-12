@@ -332,11 +332,21 @@ checks:
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
+  - id: grafana-deadman-contract
+    command: ["python3", ".github/scripts/test_ensure_grafana_deadman.py"]
+    triggers: [".github/scripts/ensure_grafana_deadman.py", ".github/scripts/test_ensure_grafana_deadman.py", "backend/deploy/monitoring/grafana-deadman.json", ".github/workflows/gcp_cloud_run_metrics_egress.yml"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-12 Grafana SQLite lock bursts dropped evaluations and failed health probes; the external health check must retain scoped five-minute paging, idempotent reconciliation and required channels"
   - id: backend-route-5xx-alert-contract
     command: ["python3", ".github/scripts/test_ensure_backend_route_5xx_alert.py"]
     triggers: [".github/scripts/ensure_backend_route_5xx_alert.py", ".github/scripts/test_ensure_backend_route_5xx_alert.py", ".github/monitoring/backend_route_5xx_metric.json", ".github/monitoring/backend_route_5xx_policy.json", ".github/workflows/gcp_backend.yml", ".github/scripts/ensure_monitoring_metric_alert_policy.py", ".github/scripts/ensure_firestore_missing_index_alert.py", "backend/docs/runbooks/backend-route-5xx.md"]
     lanes: ["local", "ci"]
     reason: "the 2026-10-02 /v1/users/people 5xx regression returned platform 504s for four hours unpaged; the per-route metric and alert contract, and the non-blocking deploy provisioning step, must stay covered"
+  - id: request-storm-alert-contract
+    command: ["python3", ".github/scripts/test_ensure_request_storm_alerts.py"]
+    triggers: [".github/scripts/ensure_request_storm_alerts.py", ".github/scripts/test_ensure_request_storm_alerts.py", ".github/scripts/replay_request_storm_alerts.py", ".github/scripts/ensure_monitoring_metric_alert_policy.py", ".github/monitoring/api_edge_429_policy.json", ".github/monitoring/sync_upload_409_policy.json", ".github/workflows/gcp_backend.yml", "backend/scripts/measure-request-storm-alerts.sh", "backend/docs/runbooks/request-storm-alerts.md"]
+    lanes: ["local", "ci"]
+    reason: "the 2026-10-07 sync poll storm (PR #21206) produced sustained edge 429s and duplicate uploads without paging; preserve ratio alignment, dwell and idempotent deploy reconciliation"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
@@ -561,6 +571,18 @@ checks:
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "bridge actions moved into DesktopAutomationBridge+Notifications.swift while the action-source list still named only the base file, so desktop-flow-lint called their flows unknown and failed the push gate on every branch"
+  - id: desktop-proactive-notification-gate
+    command: ["python3", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "two proactive lanes reached the bar primitive directly and skipped the master toggle, frequency throttle, snooze and presence gates; a third must fail the build, not ship silent"
+  - id: desktop-proactive-notification-gate-tests
+    command: ["python3", "desktop/macos/tests/test_check_proactive_notification_gate.py"]
+    triggers: ["desktop/macos/scripts/check-proactive-notification-gate.py", "desktop/macos/tests/test_check_proactive_notification_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "a checker that has never failed is not a guard; these fixtures are the two lanes that actually bypassed the gates"
   - id: desktop-grdb-insert-idiom-tests
     command: ["python3", "desktop/macos/tests/test_check_grdb_insert_idiom.py"]
     triggers: ["desktop/macos/scripts/check-grdb-insert-idiom.py", "desktop/macos/tests/test_check_grdb_insert_idiom.py", ".github/checks-manifest.yaml"]

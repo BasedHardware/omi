@@ -9137,6 +9137,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski';
 
   @override
+  String get syncCardThrottlePaused => 'Sinhronizācija īslaicīgi apturēta — tā atsāksies automātiski';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda';
 
@@ -9803,6 +9806,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Atmiņa';
+
+  @override
+  String get chatBlockPerson => 'Persona';
+
+  @override
+  String get chatBlockUndone => 'Atsaukts';
+
+  @override
+  String get chatBlockUndoFailed => 'Šīs izmaiņas neizdevās atsaukt';
 
   @override
   String get chatBlockQuestion => 'Jautājums';
@@ -13026,4 +13038,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vienības',
+      one: '1 vienība',
+      zero: 'Nav vienību',
+    );
+    return '$_temp0';
+  }
 }

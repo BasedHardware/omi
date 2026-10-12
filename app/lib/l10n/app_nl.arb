@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Dit gaat op de achtergrond door — je kunt dit scherm verlaten.",
     "syncCardRateLimited": "Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat",
+    "syncCardThrottlePaused": "Synchronisatie kort gepauzeerd — deze wordt automatisch hervat",
     "syncCardBackendBusy": "De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is",
     "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen",
     "promoCode": "Promotiecode",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Doel",
     "chatBlockConversation": "Gesprek",
     "chatBlockMemory": "Herinnering",
+    "chatBlockPerson": "Persoon",
+    "chatBlockUndone": "Ongedaan gemaakt",
+    "chatBlockUndoFailed": "Deze wijziging kon niet ongedaan worden gemaakt",
     "chatBlockQuestion": "Vraag",
     "chatBlockOpenInGoals": "Openen in Doelen",
     "chatBlockOpenConversation": "Gesprek openen",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Deze voorgestelde correctie toepassen?",
     "reviewProposalApply": "Toepassen",
     "reviewProposalSuggested": "Voorgesteld",
-    "reviewProposalConflict": "Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast."
+    "reviewProposalConflict": "Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.",
+    "itemLinkListTitle": "{count, plural, =0{Geen items} =1{1 item} other{{count} items}}"
 }

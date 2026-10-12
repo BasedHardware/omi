@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.",
     "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync",
+    "syncCardThrottlePaused": "Pansamantalang naka-pause ang pag-sync — awtomatiko itong magpapatuloy",
     "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
     "promoCode": "Promo code",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "Layunin",
     "chatBlockConversation": "Pag-uusap",
     "chatBlockMemory": "Alaala",
+    "chatBlockPerson": "Tao",
+    "chatBlockUndone": "Na-undo",
+    "chatBlockUndoFailed": "Hindi ma-undo ang pagbabagong iyon",
     "chatBlockQuestion": "Tanong",
     "chatBlockOpenInGoals": "Buksan sa Mga Layunin",
     "chatBlockOpenConversation": "Buksan ang pag-uusap",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "Ilapat ang iminungkahing ayos na ito?",
     "reviewProposalApply": "Ilapat",
     "reviewProposalSuggested": "Iminungkahi",
-    "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat."
+    "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.",
+    "itemLinkListTitle": "{count, plural, =0{Walang Item} =1{1 Item} other{{count} Item}}"
 }

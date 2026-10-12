@@ -9158,6 +9158,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat';
 
   @override
+  String get syncCardThrottlePaused => 'Sincronizarea este întreruptă pentru scurt timp — va fi reluată automat';
+
+  @override
   String get syncCardBackendBusy =>
       'Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate';
 
@@ -9825,6 +9828,15 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Amintire';
+
+  @override
+  String get chatBlockPerson => 'Persoană';
+
+  @override
+  String get chatBlockUndone => 'Anulat';
+
+  @override
+  String get chatBlockUndoFailed => 'Modificarea nu a putut fi anulată';
 
   @override
   String get chatBlockQuestion => 'Întrebare';
@@ -13052,4 +13064,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elemente',
+      one: '1 element',
+      zero: 'Niciun element',
+    );
+    return '$_temp0';
+  }
 }

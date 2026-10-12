@@ -9153,6 +9153,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
 
   @override
+  String get syncCardThrottlePaused => 'A szinkronizálás rövid időre szünetel — automatikusan folytatódik';
+
+  @override
   String get syncCardBackendBusy =>
       'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
 
@@ -9819,6 +9822,15 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Emlék';
+
+  @override
+  String get chatBlockPerson => 'Személy';
+
+  @override
+  String get chatBlockUndone => 'Visszavonva';
+
+  @override
+  String get chatBlockUndoFailed => 'Nem sikerült visszavonni a módosítást';
 
   @override
   String get chatBlockQuestion => 'Kérdés';
@@ -13049,4 +13061,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elem',
+      one: '1 elem',
+      zero: 'Nincsenek elemek',
+    );
+    return '$_temp0';
+  }
 }

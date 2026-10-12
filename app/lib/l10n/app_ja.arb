@@ -2966,6 +2966,7 @@
     },
     "syncProcessingBackgroundHint": "この処理はバックグラウンドで続きます — この画面から移動してかまいません。",
     "syncCardRateLimited": "利用上限に達しました — 同期は自動的に再開されます",
+    "syncCardThrottlePaused": "同期を一時停止しています — 自動的に再開します",
     "syncCardBackendBusy": "Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます",
     "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
     "promoCode": "プロモコード",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "目標",
     "chatBlockConversation": "会話",
     "chatBlockMemory": "メモリー",
+    "chatBlockPerson": "人物",
+    "chatBlockUndone": "元に戻しました",
+    "chatBlockUndoFailed": "この変更を元に戻せませんでした",
     "chatBlockQuestion": "質問",
     "chatBlockOpenInGoals": "目標で開く",
     "chatBlockOpenConversation": "会話を開く",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "この修正案を適用しますか？",
     "reviewProposalApply": "適用",
     "reviewProposalSuggested": "提案",
-    "reviewProposalConflict": "Dreamが提案した後に内容が変わったため、何も適用されませんでした。"
+    "reviewProposalConflict": "Dreamが提案した後に内容が変わったため、何も適用されませんでした。",
+    "itemLinkListTitle": "{count, plural, =0{アイテムなし} =1{1件のアイテム} other{{count}件のアイテム}}"
 }

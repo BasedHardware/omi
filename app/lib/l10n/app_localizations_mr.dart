@@ -9125,6 +9125,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncCardRateLimited => 'वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल';
 
   @override
+  String get syncCardThrottlePaused => 'सिंक थोडा वेळ थांबवले आहे — ते आपोआप पुन्हा सुरू होईल';
+
+  @override
   String get syncCardBackendBusy => 'Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील';
 
   @override
@@ -9786,6 +9789,15 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'स्मृती';
+
+  @override
+  String get chatBlockPerson => 'व्यक्ती';
+
+  @override
+  String get chatBlockUndone => 'पूर्ववत केले';
+
+  @override
+  String get chatBlockUndoFailed => 'हा बदल पूर्ववत करता आला नाही';
 
   @override
   String get chatBlockQuestion => 'प्रश्न';
@@ -13003,4 +13015,16 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count आयटम',
+      one: '1 आयटम',
+      zero: 'कोणतेही आयटम नाहीत',
+    );
+    return '$_temp0';
+  }
 }

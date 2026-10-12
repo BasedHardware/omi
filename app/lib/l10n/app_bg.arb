@@ -2932,6 +2932,7 @@
     },
     "syncProcessingBackgroundHint": "Това продължава на заден план — можете да напуснете този екран.",
     "syncCardRateLimited": "Достигнат е лимитът за честно ползване — синхронизирането ще се възобнови автоматично",
+    "syncCardThrottlePaused": "Синхронизирането е спряно за кратко — ще се възобнови автоматично",
     "syncCardBackendBusy": "Сървърите на Omi са натоварени — записите ви ще се синхронизират, когато се освободи капацитет",
     "unableToDetermineFirmwareVersion": "Не може да се определи текущата версия на фърмуера",
     "promoCode": "Промо код",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Цел",
     "chatBlockConversation": "Разговор",
     "chatBlockMemory": "Спомен",
+    "chatBlockPerson": "Човек",
+    "chatBlockUndone": "Отменено",
+    "chatBlockUndoFailed": "Тази промяна не можа да бъде отменена",
     "chatBlockQuestion": "Въпрос",
     "chatBlockOpenInGoals": "Отваряне в „Цели“",
     "chatBlockOpenConversation": "Отваряне на разговора",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Да се приложи ли тази предложена корекция?",
     "reviewProposalApply": "Приложи",
     "reviewProposalSuggested": "Предложено",
-    "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено."
+    "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено.",
+    "itemLinkListTitle": "{count, plural, =0{Няма елементи} =1{1 елемент} other{{count} елемента}}"
 }

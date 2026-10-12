@@ -2932,6 +2932,7 @@
     },
     "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit.",
     "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat",
+    "syncCardThrottlePaused": "Synchronizace je krátce pozastavena — automaticky se obnoví",
     "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita",
     "unableToDetermineFirmwareVersion": "Nelze určit aktuální verzi firmwaru",
     "promoCode": "Promo kód",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Cíl",
     "chatBlockConversation": "Konverzace",
     "chatBlockMemory": "Vzpomínka",
+    "chatBlockPerson": "Osoba",
+    "chatBlockUndone": "Vráceno zpět",
+    "chatBlockUndoFailed": "Tuto změnu se nepodařilo vrátit",
     "chatBlockQuestion": "Otázka",
     "chatBlockOpenInGoals": "Otevřít v Cílech",
     "chatBlockOpenConversation": "Otevřít konverzaci",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Použít tuto navrženou opravu?",
     "reviewProposalApply": "Použít",
     "reviewProposalSuggested": "Navrženo",
-    "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo."
+    "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo.",
+    "itemLinkListTitle": "{count, plural, =0{Žádné položky} =1{1 položka} other{{count} položek}}"
 }

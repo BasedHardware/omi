@@ -762,8 +762,14 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'Global age of the oldest queued or leased listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+)
+
+LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_blocked_byok_age_seconds',
+    'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
+    'replicated per process, aggregate with max() not sum(); informational only',
 )
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
@@ -1373,6 +1379,16 @@ PUSHER_DRAIN_IN_PROGRESS = Gauge(
 )
 PUSHER_READY.set(1)
 PUSHER_DRAIN_IN_PROGRESS.set(0)
+
+
+OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_requests_total',
+    'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
+    'omi_sync_job_poll_throttled_total',
+    'GET /v2/sync-local-files/{job_id} requests rejected by the per-UID poll ceiling',
+)
 
 
 # GET /v1/action-items read-cost controls (see database/action_items_cache.py).

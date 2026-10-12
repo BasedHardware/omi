@@ -9104,6 +9104,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncCardRateLimited => 'Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk';
 
   @override
+  String get syncCardThrottlePaused => 'Synkronisering er kortvarigt sat på pause — den genoptages automatisk';
+
+  @override
   String get syncCardBackendBusy => 'Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet';
 
   @override
@@ -9765,6 +9768,15 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Minde';
+
+  @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Fortrudt';
+
+  @override
+  String get chatBlockUndoFailed => 'Ændringen kunne ikke fortrydes';
 
   @override
   String get chatBlockQuestion => 'Spørgsmål';
@@ -12984,4 +12996,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dette er ændret, siden Dream foreslog det, så intet blev anvendt.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementer',
+      one: '1 element',
+      zero: 'Ingen elementer',
+    );
+    return '$_temp0';
+  }
 }

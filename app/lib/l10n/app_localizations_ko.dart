@@ -8984,6 +8984,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncCardRateLimited => '공정 사용 한도에 도달했습니다 — 동기화가 자동으로 다시 시작됩니다';
 
   @override
+  String get syncCardThrottlePaused => '동기화가 잠시 일시 중지되었습니다 — 자동으로 다시 시작됩니다';
+
+  @override
   String get syncCardBackendBusy => 'Omi 서버가 혼잡합니다 — 용량이 확보되는 대로 녹음이 동기화됩니다';
 
   @override
@@ -9627,6 +9630,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatBlockMemory => '메모리';
+
+  @override
+  String get chatBlockPerson => '사람';
+
+  @override
+  String get chatBlockUndone => '실행 취소됨';
+
+  @override
+  String get chatBlockUndoFailed => '변경 사항을 실행 취소하지 못했습니다';
 
   @override
   String get chatBlockQuestion => '질문';
@@ -12816,4 +12828,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '항목 $count개',
+      one: '항목 1개',
+      zero: '항목 없음',
+    );
+    return '$_temp0';
+  }
 }

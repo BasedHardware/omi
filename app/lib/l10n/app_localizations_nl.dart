@@ -9135,6 +9135,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisatie kort gepauzeerd — deze wordt automatisch hervat';
+
+  @override
   String get syncCardBackendBusy =>
       'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 
@@ -9800,6 +9803,15 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Herinnering';
+
+  @override
+  String get chatBlockPerson => 'Persoon';
+
+  @override
+  String get chatBlockUndone => 'Ongedaan gemaakt';
+
+  @override
+  String get chatBlockUndoFailed => 'Deze wijziging kon niet ongedaan worden gemaakt';
 
   @override
   String get chatBlockQuestion => 'Vraag';
@@ -13033,4 +13045,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+      zero: 'Geen items',
+    );
+    return '$_temp0';
+  }
 }

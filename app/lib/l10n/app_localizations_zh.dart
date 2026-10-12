@@ -8972,6 +8972,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
 
   @override
+  String get syncCardThrottlePaused => '同步暂时暂停 — 将自动恢复';
+
+  @override
   String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
 
   @override
@@ -9609,6 +9612,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatBlockMemory => '记忆';
+
+  @override
+  String get chatBlockPerson => '人物';
+
+  @override
+  String get chatBlockUndone => '已撤销';
+
+  @override
+  String get chatBlockUndoFailed => '无法撤销此更改';
 
   @override
   String get chatBlockQuestion => '问题';
@@ -12792,4 +12804,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个项目',
+      one: '1 个项目',
+      zero: '无项目',
+    );
+    return '$_temp0';
+  }
 }

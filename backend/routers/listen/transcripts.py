@@ -71,6 +71,23 @@ logger = logging.getLogger(__name__)
 MAX_V2_PERSIST_ATTEMPTS = 5
 
 
+def _observe_refusal(speaker, reason, scope=None):
+    observation = getattr(speaker, 'diagnostics', None)
+    if observation:
+        observation.observe(reason, scope or '')
+
+
+def _observe_embedding_admission(speaker, raw, enabled):
+    if not enabled:
+        _observe_refusal(speaker, 'disabled', raw.get('speaker_id_scope'))
+    elif not speaker.person_embeddings:
+        _observe_refusal(speaker, 'no_prints', raw.get('speaker_id_scope'))
+    elif raw.get('person_id') or raw.get('is_user'):
+        _observe_refusal(speaker, 'already_labeled', raw.get('speaker_id_scope'))
+    elif raw.get('speaker_id') in speaker.speaker_to_person:
+        _observe_refusal(speaker, 'already_mapped', raw.get('speaker_id_scope'))
+
+
 class ConversationCache:
     """Cache one live conversation without hiding its freshness contract."""
 
@@ -530,12 +547,27 @@ class TranscriptProcessor:
 
     async def flush_speaker_assignments(self, conversation_id: Optional[str], *, _retry: int = 0) -> None:
         speaker = self.host.speakers
+        observation = getattr(speaker, 'diagnostics', None)
+        diagnostic_snapshot = observation.snapshot(conversation_id) if observation and conversation_id else None
         if not conversation_id or not (
             speaker.speaker_to_person
             or speaker.segment_assignments
             or speaker.segment_identity_status
             or getattr(speaker, 'voice_identity_status', None)
         ):
+            boundary_snapshot = (
+                observation.boundary_snapshot(conversation_id) if observation and conversation_id else None
+            )
+            if boundary_snapshot and observation:
+                try:
+                    await self.host.persistence.call(
+                        conversations_db.update_owner_recognition_diagnostics,
+                        self.host.request.uid,
+                        conversation_id,
+                        boundary_snapshot,
+                    )
+                except Exception:
+                    observation.flush_failed(boundary_snapshot)
             return
         data = await self.cache.get(conversation_id, force_refresh=True)
         if not data:
@@ -562,6 +594,7 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
+            **({'owner_recognition_diagnostics': diagnostic_snapshot} if diagnostic_snapshot else {}),
             segment_update_fields=('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source'),
             return_segments=True,
         )
@@ -1037,6 +1070,9 @@ class TranscriptProcessor:
             except asyncio.TimeoutError:
                 logger.warning('Timed out waiting for listen speaker identification to finish')
         await self.host.speakers.drain(timeout=10, label='listen_speaker_final')
+        observation = getattr(self.host.speakers, 'diagnostics', None)
+        if observation:
+            observation.stop('drain', self.host.speakers.queue, self.host.speakers.tasks)
         try:
             await self.flush_speaker_assignments(self.host.state.current_conversation_id)
         except Exception as error:
@@ -1350,6 +1386,17 @@ class TranscriptProcessor:
                     observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
         for segment in segments:
             segment_id = cast(str, segment.id)
+            if queue_from_raw is None:
+                _observe_embedding_admission(
+                    speaker,
+                    dict(
+                        person_id=segment.person_id,
+                        is_user=segment.is_user,
+                        speaker_id=segment.speaker_id,
+                        speaker_id_scope=segment.speaker_id_scope,
+                    ),
+                    self.host.state.speaker_id_enabled,
+                )
             if should_skip_speaker_detection(
                 person_id=segment.person_id,
                 is_user=segment.is_user,
@@ -1380,6 +1427,7 @@ class TranscriptProcessor:
                 speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
             ):
                 if segment.audio_alignment == 'unplaced':
+                    _observe_refusal(speaker, 'unplaced', segment.speaker_id_scope)
                     continue
                 window = (capture_windows or {}).get(segment_id)
                 if window is not None:
@@ -1399,8 +1447,9 @@ class TranscriptProcessor:
                             'duration': segment.end - segment.start,
                         }
                     )
+                    _observe_refusal(speaker, 'enqueued', segment.speaker_id_scope)
                 except asyncio.QueueFull:
-                    pass
+                    _observe_refusal(speaker, 'queue_full', segment.speaker_id_scope)
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
                 continue
@@ -1455,7 +1504,9 @@ class TranscriptProcessor:
     ) -> None:
         speaker = self.host.speakers
         for raw in raw_segments:
+            _observe_embedding_admission(speaker, raw, self.host.state.speaker_id_enabled)
             if raw.get('audio_alignment') == 'unplaced' or raw.get('_capture_window_unavailable'):
+                _observe_refusal(speaker, 'unplaced', raw.get('speaker_id_scope'))
                 continue
             if should_skip_speaker_detection(
                 person_id=raw.get('person_id'),
@@ -1491,8 +1542,9 @@ class TranscriptProcessor:
                             'duration': float(raw['end']) - float(raw['start']),
                         }
                     )
+                    _observe_refusal(speaker, 'enqueued', raw.get('speaker_id_scope'))
                 except asyncio.QueueFull:
-                    pass
+                    _observe_refusal(speaker, 'queue_full', raw.get('speaker_id_scope'))
 
     async def flush_translations(self) -> None:
         if self.translation_coordinator:

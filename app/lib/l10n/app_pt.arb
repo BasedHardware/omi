@@ -2976,6 +2976,7 @@
     },
     "syncProcessingBackgroundHint": "Isto continua em segundo plano — pode sair deste ecrã.",
     "syncCardRateLimited": "Limite de uso atingido — a sincronização será retomada automaticamente",
+    "syncCardThrottlePaused": "Sincronização pausada brevemente — será retomada automaticamente",
     "syncCardBackendBusy": "Os servidores da Omi estão sobrecarregados — as suas gravações serão sincronizadas assim que houver capacidade disponível",
     "unableToDetermineFirmwareVersion": "Não foi possível determinar a versão atual do firmware",
     "promoCode": "Código promocional",
@@ -3178,6 +3179,9 @@
     "chatBlockGoal": "Meta",
     "chatBlockConversation": "Conversa",
     "chatBlockMemory": "Memória",
+    "chatBlockPerson": "Pessoa",
+    "chatBlockUndone": "Desfeito",
+    "chatBlockUndoFailed": "Não foi possível desfazer esta alteração",
     "chatBlockQuestion": "Pergunta",
     "chatBlockOpenInGoals": "Abrir em Metas",
     "chatBlockOpenConversation": "Abrir conversa",
@@ -4034,5 +4038,6 @@
     "reviewProposalGeneric": "Aplicar esta correção sugerida?",
     "reviewProposalApply": "Aplicar",
     "reviewProposalSuggested": "Sugerido",
-    "reviewProposalConflict": "Isto mudou desde que o Dream sugeriu, então nada foi aplicado."
+    "reviewProposalConflict": "Isto mudou desde que o Dream sugeriu, então nada foi aplicado.",
+    "itemLinkListTitle": "{count, plural, =0{Sem itens} =1{1 item} other{{count} itens}}"
 }

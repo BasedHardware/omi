@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "Ово се наставља у позадини — можете напустити овај екран.",
     "syncCardRateLimited": "Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити",
+    "syncCardThrottlePaused": "Синхронизација је накратко паузирана — наставиће се аутоматски",
     "syncCardBackendBusy": "Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет",
     "unableToDetermineFirmwareVersion": "Није могуће одредити тренутну верзију фирмвера",
     "promoCode": "Промо код",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "Циљ",
     "chatBlockConversation": "Разговор",
     "chatBlockMemory": "Сећање",
+    "chatBlockPerson": "Особа",
+    "chatBlockUndone": "Поништено",
+    "chatBlockUndoFailed": "Ова промена није могла да се поништи",
     "chatBlockQuestion": "Питање",
     "chatBlockOpenInGoals": "Отвори у Циљевима",
     "chatBlockOpenConversation": "Отвори разговор",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "Primeniti ovu predloženu ispravku?",
     "reviewProposalApply": "Primeni",
     "reviewProposalSuggested": "Predloženo",
-    "reviewProposalConflict": "Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno."
+    "reviewProposalConflict": "Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.",
+    "itemLinkListTitle": "{count, plural, =0{Нема ставки} =1{1 ставка} other{{count} ставки}}"
 }

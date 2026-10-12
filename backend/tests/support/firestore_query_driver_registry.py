@@ -705,6 +705,27 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
+
+
+def _byok_reclaim_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/reclaim-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/byok_reclaim_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.conversation_finalization_jobs.recover_stranded_byok_jobs',
+        neutrals={'limit': _LIMIT},
+        setup=_byok_reclaim_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
@@ -1846,6 +1867,13 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.review_queue.expire_review_conflicts',
+        base={'uid': UID, 'created_before': T0},
+        profiles=(CallerProfile('operator-review-expiration', {'dry_run': [True, False]}, serving=False),),
+    )
+)
+_add(
+    DriverEntry(
         'database.review_queue.purge_stale_review_conflicts_for_memories',
         base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']},
         neutrals={'reason': ('source_memory_deleted', 'purge payload value; not a query filter')},
@@ -2637,7 +2665,6 @@ for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
-    ('claim', {'path': 'channel_identities/link/inbox/job'}, _messaging_claim),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):
@@ -2649,6 +2676,16 @@ for method, base, setup in (
             patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore._claim',
+        base={'self': _messaging_store, 'path': 'channel_identities/link/inbox/job'},
+        neutrals={'now': _NOW},
+        domains={'take_head': [False, True]},
+        setup=_messaging_claim,
+        patchers=(_messaging_cleanup, _messaging_decryption),
+    )
+)
 _add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
 
 _add(
@@ -2667,5 +2704,13 @@ _add(
         'utils.messaging.undo.UndoStore.prune_expired',
         base={'self': UndoStore(_messaging_store), 'uid': UID, 'session': 'session'},
         domains={'now': [None, T0]},
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'database.chat_receipts.message_receipt_snapshot',
+        base={'user_ref': ref_document(f'users/{UID}'), 'message_id': 'msg-1', 'transaction': ref_transaction()},
     )
 )

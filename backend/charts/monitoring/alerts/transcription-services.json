@@ -83,7 +83,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  8
                 ],
                 "type": "gt"
               },
@@ -117,12 +117,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1",
+      "threshold": ">8 rps for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >1 rps threshold breached 71% of hours; p50 1.68 / p90 3.07 / p99 4.36 / max 4.79 rps. Threshold above the measured maximum.",
       "summary": "Omi live transcription alert: Backend-listen - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi live transcription production service path.",
@@ -518,9 +518,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  58
                 ],
-                "type": "gt"
+                "type": "gte"
               },
               "operator": {
                 "type": "and"
@@ -552,12 +552,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "threshold": "50",
+      "threshold": ">=58 replicas for 30m (maxReplicas - 2). Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >50 threshold breached 13% of hours; p50 34 / p90 52 / max 60. backend/charts/backend-listen/prod_omi_backend_listen_values.yaml sets HPA maxReplicas=60.",
       "summary": "Omi live transcription alert: Backend-listen replica count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi live transcription production service path.",
@@ -573,154 +573,6 @@
       "severity": "ticket",
       "instatus_component": "live-transcription",
       "alert_identity": "aevzf0r8z6ayoe",
-      "component": "live-transcription",
-      "impact": "infrastructure"
-    }
-  },
-  {
-    "id": 11,
-    "uid": "bevzfbkx3fuo0c",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Transcription Services",
-    "title": "Backend-listen request per pod is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 21600,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "adhocFilters": [],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "kube_horizontalpodautoscaler_status_target_metric{horizontalpodautoscaler=\"prod-omi-backend-listen\",metric_name=\"backend_listen_requests_per_pod\"}",
-          "instant": false,
-          "interval": "",
-          "intervalMs": 30000,
-          "legendFormat": "{{metric_name}} - Current",
-          "maxDataPoints": 43200,
-          "range": true,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  8
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "F"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:38Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "__panelId__": "15",
-      "threshold": "8",
-      "summary": "Omi live transcription alert: Backend-listen request per pod is high.",
-      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
-      "scope": "The Omi live transcription production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
-      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null,
-    "labels": {
-      "severity": "warning",
-      "instatus_component": "live-transcription",
-      "alert_identity": "bevzfbkx3fuo0c",
       "component": "live-transcription",
       "impact": "infrastructure"
     }

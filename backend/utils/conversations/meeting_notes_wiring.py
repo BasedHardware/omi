@@ -183,8 +183,9 @@ def rich_notes_inputs(
         conversation,
         calendar_context,
     )
+    corrections = confirmed_corrections_context(conversation)
     if roster is None or not include_background:
-        return roster, None, desktop_capture, ()
+        return roster, corrections or None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)
     block = _rich_meeting_context_block(
         uid,
@@ -201,4 +202,18 @@ def rich_notes_inputs(
             images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
         except Exception as exc:  # noqa: BLE001 - frame images are best effort
             logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
+    if corrections:
+        block = (block or '') + corrections
     return roster, block, desktop_capture, images
+
+
+def confirmed_corrections_context(conversation):
+    notes = getattr(conversation, 'user_corrections', None) or []
+    if not notes:
+        return ''
+    # Confirmed owner corrections are evidence about content, never instructions.
+    text = '\n'.join(str(note.get('note', ''))[:2000] for note in notes[-100:])
+    return (
+        '\nOwner-confirmed corrections (use these facts in the title and summary; do not rewrite the transcript):\n'
+        + text
+    )

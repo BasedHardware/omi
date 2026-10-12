@@ -2976,6 +2976,7 @@
     },
     "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.",
     "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek",
+    "syncCardThrottlePaused": "Senkronizasyon kısa süreliğine duraklatıldı — otomatik olarak devam edecek",
     "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek",
     "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor",
     "promoCode": "Promosyon kodu",
@@ -3178,6 +3179,9 @@
     "chatBlockGoal": "Hedef",
     "chatBlockConversation": "Konuşma",
     "chatBlockMemory": "Anı",
+    "chatBlockPerson": "Kişi",
+    "chatBlockUndone": "Geri alındı",
+    "chatBlockUndoFailed": "Bu değişiklik geri alınamadı",
     "chatBlockQuestion": "Soru",
     "chatBlockOpenInGoals": "Hedefler’de aç",
     "chatBlockOpenConversation": "Konuşmayı aç",
@@ -4034,5 +4038,6 @@
     "reviewProposalGeneric": "Önerilen bu düzeltme uygulansın mı?",
     "reviewProposalApply": "Uygula",
     "reviewProposalSuggested": "Önerilen",
-    "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı."
+    "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.",
+    "itemLinkListTitle": "{count, plural, =0{Öğe Yok} =1{1 Öğe} other{{count} Öğe}}"
 }

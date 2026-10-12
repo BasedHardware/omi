@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-09 -->
+<!-- feature-flag-registry as-of: 2026-10-12 -->
 
 # Feature-flag authority registry
 
@@ -112,7 +112,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-09.
+None as of 2026-10-12.
 
 ## Flags
 
@@ -251,7 +251,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
-| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Per-account capability header that turns on memory tier and device filters in current macOS and Windows clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
+| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
@@ -279,6 +279,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
+| `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
@@ -322,8 +323,11 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
@@ -371,7 +375,7 @@ and an explicit empty literal renders as `''`.
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
-| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
+| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | — | unowned |
 
 ## Undeclared env flags
 
@@ -393,6 +397,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
+- `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
+- `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
+- `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
+- `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort (fail: closed)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)

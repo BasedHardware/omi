@@ -58,6 +58,7 @@ def enqueue_review_proposal(
     evidence_version: str,
     source: dict | None = None,
     edit_key: str | None = None,
+    dream_run_id: str | None = None,
     now: datetime | None = None,
 ) -> str:
     """Dream writer: same stable item_id + same evidence version is an idempotent enqueue.
@@ -69,6 +70,8 @@ def enqueue_review_proposal(
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')
+    if dream_run_id and item.kind != 'spelling':
+        raise ValueError('Dream atomic question admission requires spelling')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
     ref = user(uid).collection('review_proposals').document(safe_id(item.item_id))
@@ -81,12 +84,21 @@ def enqueue_review_proposal(
 
     @firestore.transactional
     def enqueue(tx):
-        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent else {}
+        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent or dream_run_id else {}
         current = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
         if marker is not None and marker.get(transaction=tx).exists:
             return 'suppressed'
         if current.get('status') == 'resolved' or current.get('evidence_version') == evidence_version:
             return 'already_suggested'
+        if dream_run_id:
+            state = client().collection('dream_users').document(uid)
+            data = state.get(transaction=tx).to_dict() or {}
+            if (data.get('lease') or {}).get('run_id') != dream_run_id:
+                raise ReviewConflict('dream_lease_lost')
+            questions = data.get('questions', 0) if data.get('question_day') == day else 0
+            if questions + budget.get('dream_suggestions', 0) >= DAILY_BUDGET or budget.get('used', 0) >= DAILY_BUDGET:
+                return 'suggestion_cap'
+            tx.update(state, {'question_day': day, 'questions': questions + 1})
         if is_agent:
             from config.dream_agent import SUGGESTIONS_PER_DAY
 
@@ -117,7 +129,7 @@ def enqueue_review_proposal(
     result = run_with_transaction_contention_retry(
         client().transaction, enqueue, operation_name='review_proposal_enqueue'
     )
-    return result if is_agent else item.item_id
+    return result if is_agent or dream_run_id else item.item_id
 
 
 def validate_records(uid: str, tx, expected_records: dict | None) -> None:

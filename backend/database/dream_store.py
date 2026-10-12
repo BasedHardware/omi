@@ -6,6 +6,7 @@ spend is reserved before inference; ambiguous failures retain their reservation.
 """
 
 import os
+import random
 from hashlib import sha256
 
 from datetime import datetime, timedelta, timezone
@@ -13,8 +14,9 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from config.dream_agent import Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
+from config.dream_agent import backfill_share, Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
 from config.plan_catalog import PAID_PLAN_IDS
+from database.dream_history import review_id
 from database._client import get_firestore_client
 
 
@@ -37,6 +39,8 @@ def state_ref(database, uid):
 # Bound retries of a consumed product version after billable reasoning failures.
 # Refreshed versions reset their streak; ambiguous worker timeouts retain leases.
 POISON_FAILURE_LIMIT = 3
+DIRTY_INSPECTION_LIMIT = 32  # Bound dirty metadata and authoritative product reads per pass.
+UNAVAILABLE_FAILURE_LIMIT = 3
 DIRTY_LIMIT = 500
 WRITE_CHUNK = 400  # Leave room for state/report writes in Firestore's 500-write limit.
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -121,25 +125,13 @@ def trim_dirty(uid, *, firestore_client=None):
         trim(database.transaction())
 
 
-def candidates(*, limit=100, firestore_client=None):
-    # Single-field query: no composite index or collection-group scan.
-    return [
-        s.id
-        for s in client(firestore_client)
-        .collection('dream_users')
-        .order_by('score', direction='DESCENDING')
-        .limit(limit)
-        .stream()
-    ]
-
-
 class AdmissionDenied(Exception):
     def __init__(self, reason):
         self.reason = reason
         super().__init__(reason)
 
 
-def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, firestore_client=None):
+def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=None, firestore_client=None):
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     day = now.date().isoformat()
@@ -147,6 +139,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
     spend = database.collection('dream_spend').document(day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
+    draw = (rng or random.SystemRandom()).random()
 
     @firestore.transactional
     def claim(tx):
@@ -162,12 +155,22 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
                 return None
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
+        # Old drained states predate last_pass_at; their watermark seeds cleanup.
+        last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or data.get('watermark') or EPOCH
+        cleanup_due = (
+            not canary
+            and trigger == 'schedule'
+            and backfill_share() > 0
+            and bool(data)
+            and isinstance(last_pass, datetime)
+            and now - last_pass >= timedelta(hours=1)
+        )
         if (
             mode() == 'off'
             or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
-            or data.get('score', 0) <= 0
+            or (data.get('score', 0) <= 0 and not cleanup_due)
             or (trigger != 'manual' and passes >= caps.passes)
             or caps.tokens < 1024
             or caps.edits < 1
@@ -177,6 +180,16 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
             return None
+        has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
+        cleanup_selected = not canary and trigger == 'schedule' and draw < backfill_share()
+        if not has_dirty:
+            if not cleanup_due:
+                return None
+            # One attempt per hour even when the backfill coin declines. No lease,
+            # spend reservation or run-history document for this idle no-op.
+            tx.update(state, {'last_attempt_at': now})
+            if not cleanup_selected:
+                return None
         lease = {
             'run_id': run_id,
             'day': day,
@@ -184,7 +197,10 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             'dirty_dropped': int(data.get('dirty_dropped', 0)),
             'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
             'reservation_usd': caps.reservation_usd,
-            'score': data['score'],
+            'score': data.get('score', 0),
+            'cleanup_cursor': data.get('cleanup_cursor', {}),
+            'cleanup_selected': cleanup_selected,
+            'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'trigger': trigger,
             'started_at': now,
@@ -194,6 +210,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             {
                 **data,
                 'lease': lease,
+                'last_attempt_at': now,
                 'day': day,
                 'passes': passes + int(trigger != 'manual'),
                 'manual_runs': manual_runs + int(trigger == 'manual'),
@@ -212,7 +229,22 @@ def assert_lease(uid, run_id, *, firestore_client=None):
 
 
 def finish(
-    uid, lease, report, *, success, consumed=(), release=True, refund=False, count_failure=False, firestore_client=None
+    uid,
+    lease,
+    report,
+    *,
+    success,
+    consumed=(),
+    deferred=(),
+    unavailable=(),
+    release=True,
+    refund=False,
+    count_failure=False,
+    reviewed=(),
+    seeded=(),
+    cleanup_cursor=None,
+    now=None,
+    firestore_client=None,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -220,6 +252,11 @@ def finish(
     spend = database.collection('dream_spend').document(lease['day'])
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    deferred_until = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    deferred = set(deferred)
+    # Seed-only refs have review metadata, never an inspected dirty version.
+    deferred_ids = {dirty_id(*ref.split('/', 1)) for ref in deferred - set(seeded)}
 
     @firestore.transactional
     def complete(tx):
@@ -230,65 +267,114 @@ def finish(
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
-        queued = (
-            dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
-            if success or failure_eligible
-            else []
-        )
+        # Re-read only inspected refs, fencing every observed version. Never
+        # scan all 500 queued documents again just to settle a bounded pass.
+        items = {dirty_id(item['collection'], item['id']): item for item in [*consumed, *unavailable]}
+        keys = set(items) | deferred_ids
+        if len(keys) > DIRTY_INSPECTION_LIMIT:
+            raise ValueError('dream_settlement_limit')
+        observed = []
+        waiting = []
+        for key in keys:
+            snapshot = state.collection('dirty').document(key).get(transaction=tx)
+            row = snapshot.to_dict() or {}
+            if row and key in deferred_ids and release:
+                waiting.append(snapshot)
+            item = items.get(key)
+            if item and row.get('version') == item['version']:
+                observed.append((snapshot, item))
         versions = {item['version'] for item in consumed}
-        touched = [s for s in queued if s.to_dict()['version'] in versions]
-        poisoned = [
-            s
-            for s in touched
-            if failure_eligible and int(s.to_dict().get('failed_passes', 0)) + 1 >= POISON_FAILURE_LIMIT
+        touched = [
+            snapshot
+            for snapshot, item in observed
+            if item['version'] in versions and dirty_id(item['collection'], item['id']) not in deferred_ids
         ]
-        acknowledged = touched if success else poisoned
-        acknowledged_paths = {s.reference.path for s in acknowledged}
-        remaining = [s for s in queued if s.reference.path not in acknowledged_paths]
+        poisoned = [
+            snapshot
+            for snapshot in touched
+            if failure_eligible and int(snapshot.to_dict().get('failed_passes', 0)) + 1 >= POISON_FAILURE_LIMIT
+        ]
+        unavailable_versions = {item['version'] for item in unavailable}
+        misses = [
+            (snapshot, item) for snapshot, item in observed if release and item['version'] in unavailable_versions
+        ]
+        permanent = [snapshot for snapshot, item in misses if not item['transient']]
+        transient = [snapshot for snapshot, item in misses if item['transient']]
+        expired = [
+            snapshot
+            for snapshot in transient
+            if int(snapshot.to_dict().get('failed_passes', 0)) + 1 >= UNAVAILABLE_FAILURE_LIMIT
+        ]
+        acknowledged = list(
+            {
+                snapshot.reference.path: snapshot
+                for snapshot in [*(touched if success else poisoned), *permanent, *expired]
+            }.values()
+        )
+        acknowledged_paths = {snapshot.reference.path for snapshot in acknowledged}
         queued_after = queued_count - len(acknowledged)
-        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned)}
-        encoded = _review_store().encode_doc(uid, {'source': settled})
+        counts = {
+            **report.get('dirty_counts', {}),
+            'permanent_acknowledged': len(permanent),
+            'transient_expired': len(expired),
+        }
+        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned), 'dirty_counts': counts}
         watermark = lease['watermark']
         if acknowledged:
-            frontier = max(s.to_dict()['last_changed_at'] for s in acknowledged)
-            if remaining:
-                frontier = min(
-                    frontier, min(s.to_dict()['last_changed_at'] for s in remaining) - timedelta(microseconds=1)
+            frontier = max(snapshot.to_dict()['last_changed_at'] for snapshot in acknowledged)
+            if queued_after:
+                # At most k acknowledged rows can precede the oldest remaining
+                # row, so k+1 is enough to preserve the diagnostic frontier.
+                oldest = dirty_refs(
+                    uid, limit=len(acknowledged) + 1, newest=False, transaction=tx, firestore_client=database
                 )
+                remaining_times = [
+                    snapshot.to_dict()['last_changed_at']
+                    for snapshot in oldest
+                    if snapshot.reference.path not in acknowledged_paths
+                ]
+                if remaining_times:
+                    frontier = min(frontier, min(remaining_times) - timedelta(microseconds=1))
             watermark = max(watermark, frontier)
+        encoded = _review_store().encode_doc(uid, {'source': settled})
         for snapshot in acknowledged:
             tx.delete(snapshot.reference)
-        if failure_eligible:
-            for snapshot in remaining:
-                if snapshot.to_dict()['version'] in versions:
-                    tx.update(
-                        snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1}
-                    )
-        tx.set(
-            run,
-            {
-                **encoded,
-                'created_at': lease['started_at'],
-                'expires_at': lease['started_at'] + timedelta(days=30),
-                'mode': lease['mode'],
-                'success': success,
-                'trigger': lease.get('trigger', 'schedule'),
-                'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
-                'records_queued_after': queued_after,
-                'tokens': int(report.get('tokens', 0)),
-                'cost_usd': float(report.get('cost_usd', 0)),
-                'poisoned': len(poisoned),
-            },
-        )
+        for snapshot in waiting:
+            if snapshot.reference.path not in acknowledged_paths:
+                # Attention belongs to the UTC day, so a refreshed version also
+                # waits. Only this bounded set of affected refs is read/updated.
+                tx.update(snapshot.reference, {'deferred_until': deferred_until})
+        retrying = {
+            snapshot.reference.path: snapshot
+            for snapshot in [*(touched if failure_eligible else []), *transient]
+            if snapshot.reference.path not in acknowledged_paths
+        }
+        for snapshot in retrying.values():
+            tx.update(snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1})
+        if report.get('reason') != 'idle':
+            tx.set(
+                run,
+                {
+                    **encoded,
+                    'created_at': lease['started_at'],
+                    'expires_at': lease['started_at'] + timedelta(days=30),
+                    'mode': lease['mode'],
+                    'success': success,
+                    'trigger': lease.get('trigger', 'schedule'),
+                    'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
+                    'records_queued_after': queued_after,
+                    'tokens': int(report.get('tokens', 0)),
+                    'cost_usd': float(report.get('cost_usd', 0)),
+                    'poisoned': len(poisoned),
+                },
+            )
         patch = {
             'lease': None if release else lease,
             # The dirty set is authoritative; never filter reads by this diagnostic
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': (
-                max(0, data['score'] - lease['score']) if (success or poisoned) and queued_after == 0 else data['score']
-            ),
+            'score': (max(0, data['score'] - lease['score']) if acknowledged and queued_after == 0 else data['score']),
         }
         if refund:
             # A midnight completion must not decrement the new day's allowance.
@@ -298,6 +384,21 @@ def finish(
             tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
+        for ref in sorted(deferred if release else ())[:8]:
+            # Seeded targets have no dirty entry. Share their daily deferral with
+            # both sampling paths without adding a second metadata read.
+            tx.set(state.collection('reviews').document(review_id(ref)), {'deferred_until': deferred_until}, merge=True)
+        if success:
+            if cleanup_cursor is not None:
+                patch['cleanup_cursor'] = cleanup_cursor
+            if not refund:
+                patch['last_pass_at'] = lease['started_at']
+                for ref in sorted(set(reviewed) - deferred)[:8]:
+                    tx.set(
+                        state.collection('reviews').document(review_id(ref)),
+                        {'last_reviewed_at': lease['started_at']},
+                        merge=True,
+                    )
         tx.update(state, patch)
         return settled
 

@@ -9059,6 +9059,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncCardRateLimited => 'تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا';
 
   @override
+  String get syncCardThrottlePaused => 'توقفت المزامنة مؤقتًا — ستُستأنف تلقائيًا';
+
+  @override
   String get syncCardBackendBusy => 'خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة';
 
   @override
@@ -9717,6 +9720,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'ذكرى';
+
+  @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'تم التراجع';
+
+  @override
+  String get chatBlockUndoFailed => 'تعذّر التراجع عن هذا التغيير';
 
   @override
   String get chatBlockQuestion => 'سؤال';
@@ -12924,4 +12936,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count عناصر',
+      one: 'عنصر واحد',
+      zero: 'لا توجد عناصر',
+    );
+    return '$_temp0';
+  }
 }

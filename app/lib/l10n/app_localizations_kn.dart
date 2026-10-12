@@ -9145,6 +9145,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncCardRateLimited => 'ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ';
 
   @override
+  String get syncCardThrottlePaused => 'ಸಿಂಕ್ ಸ್ವಲ್ಪ ಸಮಯ ನಿಲ್ಲಿಸಲಾಗಿದೆ — ಅದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪುನರಾರಂಭಗೊಳ್ಳುತ್ತದೆ';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ';
 
@@ -9810,6 +9813,15 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'ನೆನಪು';
+
+  @override
+  String get chatBlockPerson => 'ವ್ಯಕ್ತಿ';
+
+  @override
+  String get chatBlockUndone => 'ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get chatBlockUndoFailed => 'ಈ ಬದಲಾವಣೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 
   @override
   String get chatBlockQuestion => 'ಪ್ರಶ್ನೆ';
@@ -13036,4 +13048,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಐಟಂಗಳು',
+      one: '1 ಐಟಂ',
+      zero: 'ಯಾವುದೇ ಐಟಂ ಇಲ್ಲ',
+    );
+    return '$_temp0';
+  }
 }

@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "การทำงานนี้ดำเนินต่อในเบื้องหลัง — คุณออกจากหน้าจอนี้ได้.",
     "syncCardRateLimited": "ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ",
+    "syncCardThrottlePaused": "หยุดการซิงค์ชั่วครู่ — จะดำเนินการต่อโดยอัตโนมัติ",
     "syncCardBackendBusy": "เซิร์ฟเวอร์ของ Omi กำลังคับคั่ง — การบันทึกของคุณจะซิงค์เมื่อมีพื้นที่ว่างกลับมา",
     "unableToDetermineFirmwareVersion": "ไม่สามารถระบุเวอร์ชันเฟิร์มแวร์ปัจจุบันได้",
     "promoCode": "รหัสโปรโมชัน",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "เป้าหมาย",
     "chatBlockConversation": "บทสนทนา",
     "chatBlockMemory": "ความทรงจำ",
+    "chatBlockPerson": "บุคคล",
+    "chatBlockUndone": "เลิกทำแล้ว",
+    "chatBlockUndoFailed": "ไม่สามารถเลิกทำการเปลี่ยนแปลงนี้ได้",
     "chatBlockQuestion": "คำถาม",
     "chatBlockOpenInGoals": "เปิดในเป้าหมาย",
     "chatBlockOpenConversation": "เปิดบทสนทนา",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "ใช้การแก้ไขที่แนะนำนี้ไหม",
     "reviewProposalApply": "ใช้",
     "reviewProposalSuggested": "ที่แนะนำ",
-    "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ"
+    "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ",
+    "itemLinkListTitle": "{count, plural, =0{ไม่มีรายการ} =1{1 รายการ} other{{count} รายการ}}"
 }

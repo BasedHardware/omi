@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Dette fortsetter i bakgrunnen — du kan forlate denne skjermen.",
     "syncCardRateLimited": "Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk",
+    "syncCardThrottlePaused": "Synkronisering er satt kort på pause — den fortsetter automatisk",
     "syncCardBackendBusy": "Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake",
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
     "promoCode": "Kampanjekode",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Mål",
     "chatBlockConversation": "Samtale",
     "chatBlockMemory": "Minne",
+    "chatBlockPerson": "Person",
+    "chatBlockUndone": "Angret",
+    "chatBlockUndoFailed": "Kunne ikke angre endringen",
     "chatBlockQuestion": "Spørsmål",
     "chatBlockOpenInGoals": "Åpne i Mål",
     "chatBlockOpenConversation": "Åpne samtale",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Bruke denne foreslåtte rettelsen?",
     "reviewProposalApply": "Bruk",
     "reviewProposalSuggested": "Foreslått",
-    "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt."
+    "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt.",
+    "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}"
 }

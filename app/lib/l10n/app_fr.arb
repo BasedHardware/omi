@@ -2976,6 +2976,7 @@
     },
     "syncProcessingBackgroundHint": "Cela continue en arrière-plan — vous pouvez quitter cet écran.",
     "syncCardRateLimited": "Limite d'utilisation atteinte — la synchronisation reprendra automatiquement",
+    "syncCardThrottlePaused": "Synchronisation brièvement suspendue — elle reprendra automatiquement",
     "syncCardBackendBusy": "Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie",
     "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware",
     "promoCode": "Code promo",
@@ -3178,6 +3179,9 @@
     "chatBlockGoal": "Objectif",
     "chatBlockConversation": "Conversation",
     "chatBlockMemory": "Souvenir",
+    "chatBlockPerson": "Personne",
+    "chatBlockUndone": "Annulé",
+    "chatBlockUndoFailed": "Impossible d'annuler cette modification",
     "chatBlockQuestion": "Question",
     "chatBlockOpenInGoals": "Ouvrir dans Objectifs",
     "chatBlockOpenConversation": "Ouvrir la conversation",
@@ -4034,5 +4038,6 @@
     "reviewProposalGeneric": "Appliquer cette correction suggérée ?",
     "reviewProposalApply": "Appliquer",
     "reviewProposalSuggested": "Suggéré",
-    "reviewProposalConflict": "Ceci a changé depuis la suggestion de Dream, donc rien n'a été appliqué."
+    "reviewProposalConflict": "Ceci a changé depuis la suggestion de Dream, donc rien n'a été appliqué.",
+    "itemLinkListTitle": "{count, plural, =0{Aucun élément} =1{1 élément} other{{count} éléments}}"
 }

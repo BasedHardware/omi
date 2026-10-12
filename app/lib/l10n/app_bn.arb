@@ -10369,6 +10369,7 @@
     },
     "syncProcessingBackgroundHint": "এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।",
     "syncCardRateLimited": "ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে",
+    "syncCardThrottlePaused": "সিঙ্ক সাময়িকভাবে থামানো হয়েছে — এটি স্বয়ংক্রিয়ভাবে আবার শুরু হবে",
     "syncCardBackendBusy": "Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে",
     "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি",
     "promoCode": "প্রোমো কোড",
@@ -10580,6 +10581,9 @@
     "chatBlockGoal": "লক্ষ্য",
     "chatBlockConversation": "কথোপকথন",
     "chatBlockMemory": "স্মৃতি",
+    "chatBlockPerson": "ব্যক্তি",
+    "chatBlockUndone": "পূর্বাবস্থায় ফেরানো হয়েছে",
+    "chatBlockUndoFailed": "এই পরিবর্তনটি পূর্বাবস্থায় ফেরানো যায়নি",
     "chatBlockQuestion": "প্রশ্ন",
     "chatBlockOpenInGoals": "লক্ষ্যে খুলুন",
     "chatBlockOpenConversation": "কথোপকথন খুলুন",
@@ -11436,5 +11440,6 @@
     "reviewProposalGeneric": "এই প্রস্তাবিত সংশোধনটি প্রয়োগ করবেন?",
     "reviewProposalApply": "প্রয়োগ করুন",
     "reviewProposalSuggested": "প্রস্তাবিত",
-    "reviewProposalConflict": "Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।"
+    "reviewProposalConflict": "Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।",
+    "itemLinkListTitle": "{count, plural, =0{কোনো আইটেম নেই} =1{১টি আইটেম} other{{count}টি আইটেম}}"
 }

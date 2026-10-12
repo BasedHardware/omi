@@ -1,10 +1,10 @@
 {
   "caps": {
-    "internal_time_to_signal_minutes": 46,
-    "pr_linux_minutes_per_day": 12100,
+    "internal_time_to_signal_minutes": 49,
+    "pr_linux_minutes_per_day": 13550,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "Reviewed Android prevention after #20437: prior inventory totals 11674.0 Linux and 1437.0 macOS minutes/day; candidate totals 12000.2 Linux and 1438.9 macOS. New emulator acceptance adds 240 Linux minutes/day, broader startup/WAL compile/JVM selection adds 80, and manual-run allowances account for the remainder. Raise Linux cap from 11900 to 12100 (1.7%); macOS and 46-minute signal caps stay unchanged. Re-seed from actual executions in the next weekly audit.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day; inventory totals become 13506.2 Linux minutes/day. Set the forecast cap to 13550. The inventory's conservative matrix-multiplied dependency-path forecast becomes 49 minutes, so its cap follows that value; actual six shards execute in parallel. macOS cap is unchanged. Re-seed from terminal executions in the next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -216,8 +216,8 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-unit-tests.yml/backend-unit-shard": {
-      "budget_p50_minutes": 9,
-      "display_name": "Backend unit shard ${{ matrix.shard }}/4",
+      "budget_p50_minutes": 8,
+      "display_name": "Backend unit shard ${{ matrix.shard }}/6",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 119,
       "if": null,
@@ -226,17 +226,19 @@
           "1",
           "2",
           "3",
-          "4"
+          "4",
+          "5",
+          "6"
         ]
       },
-      "matrix_size": 4,
+      "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 118 until the next weekly audit",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 4
+        "linux": 6
       },
       "runs_on": "ubuntu-latest"
     },

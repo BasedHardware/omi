@@ -16983,6 +16983,12 @@ abstract class AppLocalizations {
   /// **'Fair-use limit reached — syncing will resume automatically'**
   String get syncCardRateLimited;
 
+  /// Offline Sync cooldown after a temporary request throttle; syncing resumes automatically, recording is unaffected.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing paused briefly — it will resume automatically'**
+  String get syncCardThrottlePaused;
+
   /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
   ///
   /// In en, this message translates to:
@@ -18200,6 +18206,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Memory'**
   String get chatBlockMemory;
+
+  /// Caption on a chat card for a change to one of the user's people
+  ///
+  /// In en, this message translates to:
+  /// **'Person'**
+  String get chatBlockPerson;
+
+  /// Shown on a chat change receipt after the change was undone
+  ///
+  /// In en, this message translates to:
+  /// **'Undone'**
+  String get chatBlockUndone;
+
+  /// Error when undoing a change from chat fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t undo that change'**
+  String get chatBlockUndoFailed;
 
   /// Eyebrow label on a chat question card block
   ///
@@ -23186,6 +23210,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This changed since Dream suggested it, so nothing was applied.'**
   String get reviewProposalConflict;
+
+  /// Title of the sheet that lists the items an Omi link points at (conversations, tasks, memories)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
+  String itemLinkListTitle(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

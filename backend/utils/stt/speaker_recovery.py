@@ -1,10 +1,11 @@
 """Bounded fresh-PCM recovery of an exhausted live voice allowance."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 from weakref import ref, ReferenceType
 
 from utils.audio import AudioRingBuffer
+from utils.observability.speaker_embedding_budget import RECOVERY_DENIALS, RECOVERY_GRANTS
 
 RECOVERY_ATTEMPTS_PER_TRANCHE = 3
 RECOVERY_MAX_TRANCHES = 2
@@ -97,3 +98,29 @@ class VoiceRecovery:
 
     def attempt_limit(self, base: int) -> int:
         return min(MAX_RECOVERED_VOICE_ATTEMPTS, base + self.tranches * RECOVERY_ATTEMPTS_PER_TRANCHE)
+
+
+def recovery_voice_blocked(
+    matcher: Any, voice: int, now: float, socket_blocked: bool, recovery_audio: bool, *, base: int = 12
+) -> bool:
+    """Keep the original allowance; recheck eligibility before every extra query."""
+    attempts = matcher._embedding_attempts[voice]
+    recovery = matcher._voice_recovery.get(voice)
+    limit = recovery.attempt_limit(base) if recovery else base
+    blocked = attempts >= limit or attempts >= MAX_RECOVERED_VOICE_ATTEMPTS
+    if attempts < base:
+        return blocked
+    reason = matcher._rejectors.recovery_denial(voice)
+    if reason is not None:
+        RECOVERY_DENIALS.labels(reason=reason).inc()
+        return True
+    if (
+        blocked
+        and not socket_blocked
+        and recovery_audio
+        and recovery
+        and recovery.grant(now, attempts=attempts, base=base)
+    ):
+        RECOVERY_GRANTS.labels(tranche='first' if recovery.tranches == 1 else 'second').inc()
+        blocked = attempts + 1 > recovery.attempt_limit(base)
+    return blocked

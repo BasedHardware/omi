@@ -9142,6 +9142,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncCardRateLimited => 'Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна';
 
   @override
+  String get syncCardThrottlePaused => 'Сінхранізацыя ненадоўга прыпынена — яна адновіцца аўтаматычна';
+
+  @override
   String get syncCardBackendBusy => 'Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з\'явіцца магчымасць';
 
   @override
@@ -9808,6 +9811,15 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Успамін';
+
+  @override
+  String get chatBlockPerson => 'Чалавек';
+
+  @override
+  String get chatBlockUndone => 'Адменена';
+
+  @override
+  String get chatBlockUndoFailed => 'Не ўдалося адмяніць гэтую змену';
 
   @override
   String get chatBlockQuestion => 'Пытанне';
@@ -13032,4 +13044,16 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count элементаў',
+      one: '1 элемент',
+      zero: 'Няма элементаў',
+    );
+    return '$_temp0';
+  }
 }

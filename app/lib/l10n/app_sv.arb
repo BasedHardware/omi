@@ -2941,6 +2941,7 @@
     },
     "syncProcessingBackgroundHint": "Detta fortsätter i bakgrunden — du kan lämna den här skärmen.",
     "syncCardRateLimited": "Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt",
+    "syncCardThrottlePaused": "Synkroniseringen har pausats kort — den återupptas automatiskt",
     "syncCardBackendBusy": "Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs",
     "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
     "promoCode": "Kampanjkod",
@@ -3143,6 +3144,9 @@
     "chatBlockGoal": "Mål",
     "chatBlockConversation": "Konversation",
     "chatBlockMemory": "Minne",
+    "chatBlockPerson": "Person",
+    "chatBlockUndone": "Ångrat",
+    "chatBlockUndoFailed": "Det gick inte att ångra ändringen",
     "chatBlockQuestion": "Fråga",
     "chatBlockOpenInGoals": "Öppna i Mål",
     "chatBlockOpenConversation": "Öppna konversation",
@@ -3999,5 +4003,6 @@
     "reviewProposalGeneric": "Tillämpa den här föreslagna rättelsen?",
     "reviewProposalApply": "Tillämpa",
     "reviewProposalSuggested": "Föreslaget",
-    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades."
+    "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades.",
+    "itemLinkListTitle": "{count, plural, =0{Inga objekt} =1{1 objekt} other{{count} objekt}}"
 }
