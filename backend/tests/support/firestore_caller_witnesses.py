@@ -463,6 +463,11 @@ def _run_speaker_prompts(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture
     trial(capture, speaker_tag_service.get_prompts, 'u1', now=FROZEN_NOW)
 
 
+def _run_speaker_prompts_shown(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, speaker_tag_service.voice_profiles_db, 'record_tag_prompts_shown', lambda *a: False)
+    trial(capture, speaker_tag_service.mark_shown, 'u1', ['synthetic-card'], now=FROZEN_NOW)
+
+
 def _run_speaker_voice_matches(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     trial(capture, speaker_voice_matches._recent_conversations, 'u1', FROZEN_LATER)
     call = capture.calls[-1]
@@ -694,6 +699,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('speaker-prompts',),
             1,
             _run_speaker_prompts,
+        ),
+        CallerWitness(
+            'utils/speaker_tag_prompts/service.py:mark_shown:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('speaker-prompts',),
+            1,
+            _run_speaker_prompts_shown,
         ),
         CallerWitness(
             'utils/speaker_voice_matches.py:_recent_conversations:database.conversations.get_conversations',

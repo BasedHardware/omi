@@ -326,7 +326,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as four parallel shard jobs whose interleaved slices partition
+    selection as six parallel shard jobs whose interleaved slices partition
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -337,8 +337,9 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4]" in workflow
-    assert "--shard 4/${{ matrix.shard }}" in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
+    assert "--shard 6/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
     assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
@@ -1823,7 +1824,13 @@ def _composite_control_root(tmp_path: Path) -> Path:
     backend = BACKEND_DIR
     for name in ('reconcile_firestore_indexes.py', 'firestore_field_indexes.py'):
         (scripts_dir / name).write_text((backend / 'scripts' / name).read_text(encoding='utf-8'), encoding='utf-8')
-    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py', 'review_queries.py'):
+    for name in (
+        '__init__.py',
+        'firestore_index_registry.py',
+        'firestore_query_types.py',
+        'review_queries.py',
+        'messaging_queries.py',
+    ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
     return control
@@ -1982,3 +1989,23 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1
     assert 'Firestore source mismatch' in check.stdout
+
+
+def test_notifications_job_deploy_restores_singleton_before_action_and_reattaches():
+    workflow = yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_notifications_job.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    deploy_index = next(i for i, step in enumerate(steps) if step.get('id') == 'deploy')
+    deploy = steps[deploy_index]
+    assert deploy['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+    assert deploy['with']['job'] == '${{ env.SERVICE }}'
+    assert deploy['with']['env_vars'] == '${{ steps.runtime-env.outputs.notifications_job_env_vars }}'
+    assert deploy['with']['secrets'] == '${{ steps.runtime-env.outputs.notifications_job_secrets }}'
+    assert '--container' not in deploy['with']['flags']
+    detach = steps[deploy_index - 1]
+    attach = steps[deploy_index + 1]
+    assert 'attach_cloud_run_gmp_sidecar.py' in detach['run']
+    assert '--job --detach' in detach['run']
+    assert 'attach_cloud_run_gmp_sidecar.py' in attach['run']
+    assert '--job' in attach['run'] and '--detach' not in attach['run']
+    assert 'if' not in detach and 'if' not in attach
+    assert workflow['concurrency']['cancel-in-progress'] is False

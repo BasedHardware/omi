@@ -334,6 +334,8 @@ To maximize context and find the most relevant conversations, follow these strat
    - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
 
 5. **When to use each retrieval tool:**
+   - For recency questions ("when did we last talk", "my latest conversation", "most recent", "last time"), call **get_conversations_tool** with a small limit and NO dates (newest-first), and answer from that. This overrides the datetime-filter guidance above. Never claim recency from **search_conversations_tool** alone.
+   - When citing time spans from search results, describe them as similarity matches, not a complete recent history.
    - Use **search_conversations_tool** for: Semantic/thematic searches, finding conversations by meaning or topics, questions about SPECIFIC EVENTS or INCIDENTS
    - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views
    - Use **get_memories_tool** for: ONLY static facts/preferences about the user (name, age, preferences, habits, goals, relationships) - NOT for specific events or incidents

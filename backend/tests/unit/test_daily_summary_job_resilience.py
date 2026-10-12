@@ -829,3 +829,84 @@ def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure
         assert {attempt[1] for attempt in retries} == {original.date() - timedelta(days=1)}
         assert retries[1][2:] == (failure_kind in ('delivery', 'timeout'), True)
         assert {'uid-08', 'uid-11'} <= {attempt[0] for attempt in attempts}, 'healthy later batches still run'
+
+
+def test_recipient_metrics_and_appended_summary_fields(caplog) -> None:
+    with _loaded_job() as (notifications, db, _redis, _fallbacks):
+        metrics = notifications.daily_summary_metrics
+        before_failed = metrics.RECIPIENTS.labels(outcome='failed')._value.get()
+        before_selected = metrics.RECIPIENTS.labels(outcome='selected')._value.get()
+        before_incomplete = metrics.COHORT_COMPLETE.labels(outcome='incomplete')._value.get()
+        notifications._get_timezones_grouped_by_hour = lambda _at: {22: ['UTC']}
+        db.get_users_for_daily_summary_indexed = lambda *_args: _users(3)
+
+        def worker(user):
+            if user[0] == 'uid-01':
+                raise RuntimeError('persistently failing recipient')
+
+        notifications._send_summary_notification = worker
+        cohort = datetime(2026, 10, 3, 22, tzinfo=timezone.utc)
+        with caplog.at_level('INFO'):
+            result = asyncio.run(
+                notifications._send_daily_summary_cohort(
+                    cohort, notifications.summary_budget.make_cursor(22, 'uid-01', cohort), cursor_age_seconds=900.0
+                )
+            )
+        assert not result.complete
+        assert metrics.RECIPIENTS.labels(outcome='selected')._value.get() - before_selected == 3
+        assert metrics.RECIPIENTS.labels(outcome='failed')._value.get() - before_failed == 1
+        assert metrics.COHORT_COMPLETE.labels(outcome='incomplete')._value.get() - before_incomplete == 1
+        line = next(
+            record.message for record in caplog.records if record.message.startswith('daily_summary_job_summary')
+        )
+        fields = dict(field.split('=', 1) for field in line.split()[1:])
+        assert fields['complete'] == 'False'
+        assert fields['failed'] == '1'
+        assert fields['attempted'] == '3'
+        assert fields['cohort_utc'] == cohort.isoformat()
+        assert line.endswith('cursor_age_seconds=900.0 resumed=True')
+
+
+@pytest.mark.parametrize(
+    'created,retry,expected',
+    [(True, False, 'generated'), (True, True, 'generated_retry'), (False, False, 'suppressed_existing')],
+)
+def test_current_day_generation_metric_excludes_backfill(created, retry, expected) -> None:
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+        metrics = notifications.daily_summary_metrics
+        before = {
+            outcome: metrics.RECIPIENTS.labels(outcome=outcome)._value.get() for outcome in metrics.RECIPIENT_OUTCOMES
+        }
+        notifications._generate_and_store_daily_summary = lambda *_a, **_k: (
+            {'id': 'recap', 'notification_delivery_completed': True},
+            created,
+            None,
+        )
+        notifications._backfill_recent_daily_summaries = lambda *_a: None
+        notifications._send_summary_notification(('uid', [], 'UTC', None, False, retry))
+        assert {
+            outcome: metrics.RECIPIENTS.labels(outcome=outcome)._value.get() - before[outcome] for outcome in before
+        } == {outcome: int(outcome == expected) for outcome in before}
+
+
+def test_cursor_age_metric_retains_abandonment_signature_then_resets_on_fresh_tick() -> None:
+    with _loaded_job() as (notifications, db, _redis, _fallbacks):
+        now = datetime(2026, 10, 9, 22, tzinfo=timezone.utc)
+        original = now - timedelta(days=6)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications._get_timezones_grouped_by_hour = lambda _at: {22: ['UTC']}
+        db.get_users_for_daily_summary_indexed = lambda *_args: []
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(22, 'failing-recipient', original),
+        )
+        assert asyncio.run(notifications.send_daily_summary_notification()).complete
+        assert notifications.daily_summary_metrics.RESUMED_COHORT_AGE._value.get() == 518400
+        assert asyncio.run(notifications.send_daily_summary_notification()).complete
+        assert notifications.daily_summary_metrics.RESUMED_COHORT_AGE._value.get() == 0

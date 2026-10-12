@@ -1,0 +1,24 @@
+{
+  "docs": [
+    {
+      "id": "capture-modes",
+      "file": "product-kb-capture-modes.md",
+      "title": "Capture modes"
+    },
+    {
+      "id": "permissions",
+      "file": "product-kb-permissions.md",
+      "title": "Permissions"
+    },
+    {
+      "id": "surfaces",
+      "file": "product-kb-surfaces.md",
+      "title": "App surfaces"
+    },
+    {
+      "id": "data-and-account",
+      "file": "product-kb-data-and-account.md",
+      "title": "Data and account"
+    }
+  ]
+}

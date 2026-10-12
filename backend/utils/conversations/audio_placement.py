@@ -318,6 +318,16 @@ def saved_sync_window(segment: Mapping[str, Any], origin: float) -> bool:
     )
 
 
+def text_window_refusal(start: float, end: float) -> Optional[str]:
+    """A bounded reason for malformed raw text endpoints, independent of audio clocks."""
+    start_f, end_f = _numeric(start), _numeric(end)
+    if start_f is None or end_f is None or start_f < 0 or end_f < start_f:
+        return 'invalid_text_window'
+    if end_f == start_f:
+        return 'zero_text_window'
+    return None
+
+
 def locate(
     conversation: Mapping[str, Any],
     start: float,
@@ -348,7 +358,7 @@ def locate(
     """
     start_f = _numeric(start)
     end_f = _numeric(end)
-    if start_f is None or end_f is None or start_f < 0 or end_f <= start_f:
+    if start_f is None or end_f is None or text_window_refusal(start, end) is not None:
         return AudioPlacement(None, 'invalid_window')
 
     contributors = list(segments) if segments is not None else _overlapping_segments(conversation, start_f, end_f)

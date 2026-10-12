@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from config.dream_agent import Caps
-from database import dream_feedback, dream_store, dream_dirty
+from database import dream_history, dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
@@ -107,6 +107,10 @@ def store(monkeypatch):
     db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
+    db.rows[('dream_users', UID, 'dirty', 'fixture')] = {
+        'version': 'fixture',
+        'last_changed_at': datetime.now(timezone.utc),
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
@@ -160,7 +164,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         frames=[FrameQuestion(screen_ref='screen/1', question='What image?')],
         feedback=[feedback],
     )
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -170,9 +174,16 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     def forbidden(*a, **k):
         pytest.fail('shadow wrote user data or developer feedback')
 
-    for name in ('apply_edit', 'ask', 'propose_task', 'request_frame'):
+    for name in (
+        'apply_edit',
+        'apply_vocabulary',
+        'suggest_edit',
+        'suggest_vocabulary',
+        'ask',
+        'propose_task',
+        'request_frame',
+    ):
         monkeypatch.setattr(dream_tools, name, forbidden)
-    monkeypatch.setattr(dream_store, 'save_vocabulary', forbidden)
     monkeypatch.setattr(dream_feedback, 'store', forbidden)
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['status'] == 'complete'
@@ -185,6 +196,8 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     assert set(store.rows) == {
         ('users', UID),
         ('dream_users', UID),
+        ('dream_users', UID, 'dirty', 'fixture'),
+        ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
         ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
@@ -215,7 +228,7 @@ def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeyp
         dream_agent, 'plan_pass', stall if stalled_stage == 'plan' else AsyncMock(return_value=(Plan(), 0))
     )
     monkeypatch.setattr(
-        dream_agent.dream_reads, 'read_changes', lambda *a: ({'conversations/c1': {'content': 'synthetic'}}, [])
+        dream_agent.dream_reads, 'read_changes', lambda *a, **k: ({'conversations/c1': {'content': 'synthetic'}}, [])
     )
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
@@ -273,27 +286,66 @@ def test_prod_scheduler_and_writer_env_contract():
     allowlist = '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
     prod = manifest['environments']['prod']
     writers = [prod['gke']['backend-listen'], prod['gke']['pusher'], *prod['cloud_run']['services'].values()]
+    # 2026-10-11: owner dogfood promoted from shadow to on; the allowlist still limits it to the owner.
     for service in writers:
-        assert service['env']['DREAM_AGENT_MODE']['value'] == 'shadow'
+        assert service['env']['DREAM_AGENT_MODE']['value'] == 'on'
         assert service['env']['DREAM_AGENT_UID_ALLOWLIST']['value'] == allowlist
         assert 'DREAM_AGENT_TESTFLIGHT_ENABLED' not in service['env']
         assert not any(
             key.startswith('DREAM_AGENT_')
-            and key not in {'DREAM_AGENT_MODE', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_AGENT_PASSES_PER_DAY'}
+            and key
+            not in {
+                'DREAM_AGENT_MODE',
+                'DREAM_AGENT_UID_ALLOWLIST',
+                'DREAM_AGENT_PASSES_PER_DAY',
+                'DREAM_AGENT_MANUAL_RUNS_PER_DAY',
+                'DREAM_AGENT_DAILY_USD',
+                'DREAM_AGENT_CANARY_UID',
+                'DREAM_AGENT_AUTO_APPLY_KINDS',
+            }
             for key in service['env']
         )
-    # Only the sweep host admits passes; the dogfood cohort gets four per day there and defaults elsewhere.
-    sync_env = prod['cloud_run']['services']['backend-sync']['env']
-    assert sync_env['DREAM_AGENT_PASSES_PER_DAY']['value'] == '4'
-    assert all(
-        'DREAM_AGENT_PASSES_PER_DAY' not in service['env']
-        for name, service in prod['cloud_run']['services'].items()
-        if name != 'backend-sync'
-    )
+    # Spelling stays in Review until auto-apply requires supporting context, on both pass hosts.
+    for name in ('backend', 'backend-sync'):
+        kinds = prod['cloud_run']['services'][name]['env']['DREAM_AGENT_AUTO_APPLY_KINDS']['value']
+        assert set(kinds.split(',')) == {'title', 'overview', 'vocabulary'}
+    services = prod['cloud_run']['services']
+    # The sweep host and the report host present the same daily allowance; no other host declares one.
+    dogfood_caps = {
+        'DREAM_AGENT_PASSES_PER_DAY': '24',
+        'DREAM_AGENT_MANUAL_RUNS_PER_DAY': '20',
+        'DREAM_AGENT_DAILY_USD': '60',
+    }
+    for name in ('backend-sync', 'backend'):
+        for key, value in dogfood_caps.items():
+            assert services[name]['env'][key]['value'] == value
+        assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
+            'secret': 'DREAM_AGENT_FEEDBACK_SALT',
+            'version': 'latest',
+        }
+    for service in writers:
+        if service not in (services['backend'], services['backend-sync']):
+            assert dogfood_caps.keys().isdisjoint(service['env'])
+            assert 'DREAM_AGENT_FEEDBACK_SALT' not in service.get('secrets', {})
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service['env']
+    # Owner reports/Run Now are served by backend only; the synthetic canary runs on the sweep host only,
+    # in the reserved namespace, and never through the user allowlist.
+    assert [n for n, s in services.items() if 'DREAM_SELF_REPORT_MODE' in s['env']] == ['backend']
+    assert services['backend']['env']['DREAM_SELF_REPORT_MODE']['value'] == 'on'
+    canary_hosts = [n for n, s in services.items() if 'DREAM_AGENT_CANARY_UID' in s['env']]
+    assert canary_hosts == ['backend-sync']
+    canary = services['backend-sync']['env']['DREAM_AGENT_CANARY_UID']['value']
+    assert canary.startswith('dream-canary-') and canary not in allowlist.split(',')
     chart = load_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     env = {entry['name']: entry.get('value') for entry in chart['env']}
-    assert env['DREAM_AGENT_MODE'] == 'shadow'
+    assert env['DREAM_AGENT_MODE'] == 'on'
     assert env['DREAM_AGENT_UID_ALLOWLIST'] == allowlist
+    # mode=on admission and Review proposals require the Review surface wherever passes run.
+    for name in ('backend', 'backend-sync'):
+        assert services[name]['env']['REVIEW_SURFACE_MODE']['value'] == 'on'
     dev = manifest['environments']['dev']
     for service in [dev['gke']['backend-listen'], *dev['cloud_run']['services'].values()]:
         assert service['env'].get('DREAM_AGENT_MODE', {}).get('value', 'off') == 'off'
+        assert dogfood_caps.keys().isdisjoint(service['env'])
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service.get('secrets', {})
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service['env']

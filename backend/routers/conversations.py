@@ -13,9 +13,14 @@ import database.redis_db as redis_db
 import database.users as users_db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import (
+    delete_action_item_vector,
+    delete_action_item_vectors_batch,
+    delete_vector,
+    delete_transcript_chunk_vectors,
+)
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1294,6 +1299,8 @@ def delete_conversation(
 
     # Commit intent before retraction or cleanup; failures must never undo this guard.
     conversation_tombstones.record_deletion(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
 
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
@@ -1331,6 +1338,14 @@ def delete_conversation(
                 sync_action_item_reminder(
                     user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
                 )
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        if armed:
+            try:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
+            except Exception as e:
+                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1439,13 +1454,19 @@ def set_action_item_status(
             new_completed_status = data.values[i]
 
             for ai in description_to_items.get(action_item.description, []):
-                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                if not action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status)):
+                    continue
+                updated_item = action_items_db.get_action_item(uid, ai['id'])
+                if not updated_item:
+                    continue
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=ai['id'],
-                    description=ai.get('description', ''),
-                    completed=bool(new_completed_status),
-                    due_at=ai.get('due_at'),
+                    description=updated_item.get('description', ''),
+                    completed=bool(updated_item.get('completed')),
+                    due_at=updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
     except Exception as e:
         # Don't break conversation route if mirrored update fails

@@ -8,7 +8,7 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_'
       - 'custom.googleapis.com/omi_sync_phase_'
     filters:
-      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill")'
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill","notifications-job")'
       - 'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")'
     interval: '10m'
     offset: '1m'

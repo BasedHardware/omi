@@ -15,15 +15,22 @@ Map<String, dynamic> _object(String body) {
 }
 
 Future<ApiResult<wire.GeneratedSpeakerTagPromptsResponse>> getSpeakerTagPrompts() => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts', method: 'GET'),
+      request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts?owner_excerpt=true', method: 'GET'),
       decode: (body) => wire.GeneratedSpeakerTagPromptsResponse.fromJson(_object(body)),
     );
 
-Future<ApiResult<bool>> markSpeakerTagPromptsShown(List<String> promptIds) => executeApi(
+String _shownRequestBody(List<String> promptIds, bool setShown) {
+  final body = wire.GeneratedSpeakerTagPromptsShownRequest(promptIds: promptIds, setShown: setShown).toJson();
+  // The default request remains compatible with servers predating per-card telemetry.
+  if (setShown) body.remove('set_shown');
+  return jsonEncode(body);
+}
+
+Future<ApiResult<bool>> markSpeakerTagPromptsShown(List<String> promptIds, {bool setShown = true}) => executeApi(
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/shown',
         method: 'POST',
-        body: jsonEncode(wire.GeneratedSpeakerTagPromptsShownRequest(promptIds: promptIds).toJson()),
+        body: _shownRequestBody(promptIds, setShown),
       ),
       decode: (body) => wire.GeneratedSpeakerTagPromptsShownResponse.fromJson(_object(body)).firstTime,
     );
@@ -50,12 +57,16 @@ Future<ApiResult<Uint8List>> getSpeakerTagPromptClip({
   required String conversationId,
   required double start,
   required double end,
+  String? promptId,
+  String? evidenceId,
 }) {
   final query = Uri(
     queryParameters: {
       'conversation_id': conversationId,
-      'start': start.toStringAsFixed(3),
-      'end': end.toStringAsFixed(3),
+      'start': start.toString(),
+      'end': end.toString(),
+      if (promptId != null) 'prompt_id': promptId,
+      if (evidenceId != null) 'evidence_id': evidenceId,
     },
   ).query;
   return executeApi(

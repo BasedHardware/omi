@@ -8,12 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/entities/entity_page.dart';
+import 'package:omi/pages/review/dream_report_page.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_item_sheet.dart';
 import 'package:omi/pages/review/review_page.dart';
@@ -117,6 +119,39 @@ const _spellingItem = ReviewItem(
   kind: ReviewItemKind.spelling,
   quote: 'We’re piloting Pairform’s hiring tool for six weeks.',
   spelling: SpellingItem(termId: 'term-1', options: ['Paraform', 'Pairform']),
+);
+
+const _closeTaskSuggestion = ReviewItem(
+  itemId: 'agent_proposal:close',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'close_task',
+    targetLabel: 'Send Béla the signed SOW',
+    reason: 'In Thursday’s Paraform check-in you said the signed SOW went out that morning.',
+  ),
+);
+
+const _mergeSuggestion = ReviewItem(
+  itemId: 'agent_proposal:merge',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'merge_people',
+    targetLabel: 'Bela K',
+    otherLabel: 'Béla',
+    reason: 'Same company and phone number, and both appear in the Paraform pilot conversations.',
+  ),
+);
+
+const _memorySuggestion = ReviewItem(
+  itemId: 'agent_proposal:memory',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'memory',
+    targetLabel: 'Runs the Paraform pilot',
+    before: 'Runs the Paraform pilot for six weeks',
+    after: 'Runs the Paraform pilot, extended to eight weeks',
+    reason: 'In Monday’s sync Béla agreed to extend the pilot by two weeks.',
+  ),
 );
 
 /// A short silent WAV; the scenarios never play audio.
@@ -383,6 +418,93 @@ ActionItemWithMetadata _task(String id, String description, {String? workstreamI
       dueAt: dueAt,
     );
 
+Map<String, dynamic> _dreamRun(String id, String at, {String trigger = 'schedule', String status = 'complete'}) => {
+      'run_id': id,
+      'created_at': at,
+      'trigger': trigger,
+      'status': status,
+      'error_type': status == 'failed' ? 'HTTPStatusError' : null,
+      'records_read': 42,
+      'records_queued_after': 66,
+      'tokens': 7800,
+      'cost_usd': 0.0156,
+      'edits': status == 'failed'
+          ? []
+          : [
+              {
+                'kind': 'spelling',
+                'target_label': 'Paraform weekly sync',
+                'before': 'Bella',
+                'after': 'Béla',
+                'reason': 'Spelled Béla in the calendar invite and in three other conversations',
+                'evidence_count': 4,
+                'outcome': 'shadow',
+              },
+              {
+                'kind': 'merge_memories',
+                'target_label': 'Prefers morning meetings',
+                'after': 'Prefers meetings before 11am',
+                'reason': 'Two memories say the same thing',
+                'evidence_count': 2,
+                'outcome': 'shadow',
+              },
+              {
+                'kind': 'close_task',
+                'target_label': 'Send the SOW to Paraform',
+                'reason': 'You said it was sent in Thursday\'s call',
+                'evidence_count': 1,
+                'outcome': 'shadow',
+              },
+            ],
+      'questions': status == 'failed'
+          ? []
+          : [
+              {'kind': 'same_person', 'text': 'Is Bela K the same person as Béla?'},
+            ],
+      'slow_tasks': status == 'failed'
+          ? []
+          : [
+              {'description': 'Book the venue for the team offsite'},
+            ],
+      'vocabulary': status == 'failed'
+          ? []
+          : [
+              {
+                'kind': 'person',
+                'spelling': 'Béla',
+                'aliases': ['Bella']
+              },
+              {'kind': 'organization', 'spelling': 'Paraform', 'aliases': []},
+              {
+                'kind': 'jargon',
+                'spelling': 'Soniox',
+                'aliases': ['Sonix']
+              },
+            ],
+      'feedback': status == 'failed'
+          ? []
+          : [
+              {'component': 'transcription', 'failure_class': 'spelling', 'severity': 'warning', 'count': 4},
+            ],
+      'privacy_rejected': status == 'failed' ? 0 : 1,
+    };
+
+DreamReport _dreamReport({bool empty = false}) => DreamReport.fromJson({
+      'mode': 'shadow',
+      'passes_today': 2,
+      'passes_limit': 4,
+      'manual_runs_today': 1,
+      'manual_runs_limit': 3,
+      'queued_changes': empty ? 0 : 66,
+      'runs': empty
+          ? []
+          : [
+              _dreamRun('r3', '2026-10-09T12:00:41Z', trigger: 'manual'),
+              _dreamRun('r2', '2026-10-09T11:00:47Z'),
+              _dreamRun('r1', '2026-10-09T06:00:05Z', status: 'failed'),
+            ],
+    });
+
 final reviewScenarios = <AuditScenario>[
   AuditScenario(
     id: 'review-entry-home',
@@ -487,6 +609,29 @@ final reviewScenarios = <AuditScenario>[
       await _openSheet(a, _spellingItem);
       await a.tap(find.text('Paraform'));
       await a.shot('Choose a spelling');
+    },
+  ),
+  AuditScenario(
+    id: 'review-suggestions',
+    title: 'Review: Dream suggestions next to questions',
+    page: _reviewPage,
+    state: 'Dream suggests closing a task and merging two people; one regular question',
+    run: (a) async {
+      final review = await _loadedReview(a, items: const [_closeTaskSuggestion, _mergeSuggestion, _spellingItem]);
+      await a.pump(const ReviewPage(), scaffold: false, providers: [
+        ChangeNotifierProvider<ReviewProvider>.value(value: review),
+      ]);
+      await a.shot('Open Review after Dream ran');
+    },
+  ),
+  AuditScenario(
+    id: 'review-sheet-suggestion',
+    title: 'Detail sheet: a Dream suggestion',
+    page: _sheet,
+    state: 'Dream suggests rewriting a memory; current and suggested text with the reason',
+    run: (a) async {
+      await _openSheet(a, _memorySuggestion);
+      await a.shot('Tap the suggestion card');
     },
   ),
   AuditScenario(
@@ -603,6 +748,36 @@ final reviewScenarios = <AuditScenario>[
       await a.shot('Open the ⋯ menu on Tasks', step: 'menu');
       await a.tap(find.text('Group by Project'));
       await a.shot('Choose Group by Project', step: 'grouped');
+    },
+  ),
+  AuditScenario(
+    id: 'review-dream-report',
+    title: 'Dream Report in preview mode',
+    page: 'lib/pages/review/dream_report_page.dart (DreamReportPage)',
+    state:
+        'Shadow mode; a manual pass with fixes, a question, a task and learned words; a scheduled pass; a failed pass',
+    run: (a) async {
+      await a.pump(
+        DreamReportPage(
+          loadReport: () async => ApiSuccess(_dreamReport()),
+          runNow: () async => ApiSuccess(DreamRun.fromJson(_dreamRun('r4', '2026-10-09T12:30:00Z'))!),
+        ),
+        scaffold: false,
+      );
+      await a.scrollSeries('Open Dream Report from Review');
+    },
+  ),
+  AuditScenario(
+    id: 'review-dream-report-empty',
+    title: 'Dream Report before the first pass',
+    page: 'lib/pages/review/dream_report_page.dart (DreamReportPage)',
+    state: 'Shadow mode, no passes yet',
+    run: (a) async {
+      await a.pump(
+        DreamReportPage(loadReport: () async => ApiSuccess(_dreamReport(empty: true))),
+        scaffold: false,
+      );
+      await a.shot('Open Dream Report before any pass', step: 'empty');
     },
   ),
 ];

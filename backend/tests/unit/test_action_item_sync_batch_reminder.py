@@ -1,9 +1,6 @@
-import os
 import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 import pytest
 
@@ -41,13 +38,14 @@ def _batch_result(updated_ids):
 
 def test_completing_a_task_through_the_sync_batch_cancels_its_reminder(reminders):
     due_at = datetime.now(timezone.utc) + timedelta(days=1)
-    with patch('routers.action_items.action_items_db') as mock_db:
-        mock_db.get_action_item.return_value = {
+    with patch.object(action_items_router, 'action_items_db') as mock_db:
+        before = {
             'id': 't1',
             'description': 'Pay the bill',
             'due_at': due_at,
             'completed': False,
         }
+        mock_db.get_action_item.side_effect = [before, {**before, 'completed': True, 'status': 'completed'}]
         mock_db.batch_sync_update_action_items = MagicMock(return_value=_batch_result(['t1']))
 
         sync_batch_update(SyncBatchRequest(items=[SyncBatchItem(id='t1', completed=True)]), uid='u1')
@@ -59,14 +57,17 @@ def test_completing_a_task_through_the_sync_batch_cancels_its_reminder(reminders
             'description': 'Pay the bill',
             'completed': True,
             'due_at': due_at,
+            'status': 'completed',
+            'deleted': False,
         }
     ]
 
 
 def test_moving_a_due_date_through_the_sync_batch_reschedules_the_reminder(reminders):
     new_due_at = datetime.now(timezone.utc) + timedelta(days=2)
-    with patch('routers.action_items.action_items_db') as mock_db:
-        mock_db.get_action_item.return_value = {'id': 't1', 'description': 'Call back', 'completed': False}
+    with patch.object(action_items_router, 'action_items_db') as mock_db:
+        before = {'id': 't1', 'description': 'Call back', 'completed': False}
+        mock_db.get_action_item.side_effect = [before, {**before, 'due_at': new_due_at, 'status': 'active'}]
         mock_db.batch_sync_update_action_items = MagicMock(return_value=_batch_result(['t1']))
 
         sync_batch_update(SyncBatchRequest(items=[SyncBatchItem(id='t1', due_at=new_due_at)]), uid='u1')
@@ -75,7 +76,7 @@ def test_moving_a_due_date_through_the_sync_batch_reschedules_the_reminder(remin
 
 
 def test_an_export_only_sync_leaves_the_reminder_alone(reminders):
-    with patch('routers.action_items.action_items_db') as mock_db:
+    with patch.object(action_items_router, 'action_items_db') as mock_db:
         mock_db.get_action_item.return_value = {'id': 't1', 'description': 'Call back', 'completed': False}
         mock_db.batch_sync_update_action_items = MagicMock(return_value=_batch_result(['t1']))
 
@@ -85,3 +86,36 @@ def test_an_export_only_sync_leaves_the_reminder_alone(reminders):
         )
 
     assert reminders == []
+
+
+def test_failed_post_commit_read_keeps_batch_receipt_and_reconciles_other_rows(monkeypatch, reminders):
+    due_at = datetime(2027, 1, 15, 9, tzinfo=timezone.utc)
+    before = {'description': 'Synthetic saved task', 'completed': False, 'due_at': due_at, 'status': 'active'}
+    fallback = MagicMock()
+    monkeypatch.setattr(action_items_router, 'record_fallback', fallback)
+    with patch.object(action_items_router, 'action_items_db') as mock_db:
+        mock_db.get_action_item.side_effect = [
+            {**before, 'id': 't1'},
+            {**before, 'id': 't2'},
+            RuntimeError('synthetic post-commit read unavailable'),
+            {**before, 'id': 't2', 'completed': True, 'status': 'completed'},
+        ]
+        mock_db.batch_sync_update_action_items.return_value = _batch_result(['t1', 't2'])
+
+        receipt = sync_batch_update(
+            SyncBatchRequest(items=[SyncBatchItem(id='t1', completed=True), SyncBatchItem(id='t2', completed=True)]),
+            uid='u1',
+        )
+
+    assert receipt == {'status': 'ok', 'updated_count': 2}
+    assert len(reminders) == 1
+    assert reminders[0]['action_item_id'] == 't2'
+    assert reminders[0]['completed'] is True
+    assert reminders[0]['status'] == 'completed'
+    fallback.assert_called_once_with(
+        component='other',
+        from_mode='task_reminder_state_read',
+        to_mode='task_write_only',
+        reason='other',
+        outcome='degraded',
+    )

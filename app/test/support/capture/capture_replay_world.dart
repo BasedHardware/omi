@@ -27,6 +27,7 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_service.dart';
@@ -297,6 +298,7 @@ class CaptureReplayWorld {
   /// Server-side sync-job outcomes by job id, consulted by the reconciler
   /// through the injected job-status fetcher.
   final Map<String, SyncJobFetch> jobStatuses = {};
+  final List<({String jobId, DateTime at})> jobPolls = [];
 
   final List<Map<String, Object?>> coverageEvents = [];
 
@@ -342,6 +344,11 @@ class CaptureReplayWorld {
       SharedPreferences.setMockInitialValues(initialPrefs);
     }
     await SharedPreferencesUtil.init();
+    if (firstBoot) {
+      SyncRateLimiter.instance.clear();
+      SyncRateLimiter.instance.clockForTesting = clock.now;
+      SyncJobPoller.instance.resetForTesting(clock: clock.now);
+    }
 
     if (firstBoot) {
       SttModeResolver.instance = SttModeResolver(flagReader: () => false);
@@ -371,7 +378,10 @@ class CaptureReplayWorld {
       phoneUploadGate: uploads.buildGate(),
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,
-      phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
+      phoneJobStatusFetcher: (jobId) async {
+        jobPolls.add((jobId: jobId, at: clock.now()));
+        return jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound);
+      },
       phoneCoverageTelemetry: coverageEvents.add,
       // The replay world has no real disk-space plugin; report ample space so
       // the storage-admission gate proves capacity instead of failing closed.
@@ -558,6 +568,8 @@ class CaptureReplayWorld {
     await wal.stop();
     SttModeResolver.debugResetInstance();
     SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,

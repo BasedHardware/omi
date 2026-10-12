@@ -875,12 +875,15 @@ def create_action_item(
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
     # Send FCM data message if action item has a due date
-    if request.due_at:
+    if action_item.get('due_at'):
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
-            description=request.description.strip(),
-            due_at=request.due_at.isoformat(),
+            description=action_item.get('description', ''),
+            due_at=action_item['due_at'].isoformat(),
+            completed=bool(action_item.get('completed')),
+            status=action_item.get('status'),
+            deleted=bool(action_item.get('deleted')),
         )
 
     return ActionItemResponse(**action_item)
@@ -928,13 +931,16 @@ def create_action_items_batch(
     created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
     # Send FCM messages for items with due dates
-    for idx, item in enumerate(created_items_list):
-        if idx < len(request.action_items) and request.action_items[idx].due_at:
+    for item in created_items_list:
+        if item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
-                description=request.action_items[idx].description.strip(),
-                due_at=request.action_items[idx].due_at.isoformat(),
+                description=item.get('description', ''),
+                due_at=item['due_at'].isoformat(),
+                completed=bool(item.get('completed')),
+                status=item.get('status'),
+                deleted=bool(item.get('deleted')),
             )
 
     # Convert to response objects
@@ -1014,21 +1020,25 @@ def update_action_item(
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
+    updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if not updated_item:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
     # (#5085).
     if 'completed' in update_data or 'due_at' in update_data:
-        description = request.description.strip() if request.description else action_item.get('description', '')
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
-            description=description,
-            completed=bool(update_data.get('completed', action_item.get('completed'))),
-            due_at=update_data.get('due_at', action_item.get('due_at')),
+            description=updated_item.get('description', ''),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
+            status=updated_item.get('status'),
+            deleted=bool(updated_item.get('deleted')),
         )
 
-    return action_items_db.get_action_item(uid, action_item_id)
+    return updated_item
 
 
 # ******************************************************

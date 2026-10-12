@@ -20,6 +20,7 @@ from typing import Any, Dict, Mapping, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
+from utils.messaging.undo import record_write, record_created_memory
 from database._client import get_data_plane_firestore_client
 from models.knowledge_ledger_policy import PLAYBOOK_HANDLE_CHARACTER_LIMIT
 from models.memory_contracts import deterministic_contract_id
@@ -201,7 +202,7 @@ def save_playbook(description: str, body: str, config: RunnableConfig = None) ->
             db_client=firestore_client,
         )
         logger.info("Saved playbook: %s", sanitize_pii(normalized_description))
-        return f"Playbook saved ({memory_id}): {normalized_description}"
+        return f"Playbook saved ({memory_id}): {normalized_description}" + record_created_memory(uid, memory_id)
     except ValueError as exc:
         logger.info("Rejected playbook write error_type=%s", type(exc).__name__)
         return f"Error: {exc}"
@@ -275,7 +276,9 @@ def create_standing_trigger(
             db_client=firestore_client,
         )
         logger.info("Created standing trigger: %s", sanitize_pii(normalized_description))
-        return f"Standing trigger created ({memory_id}): {normalized_description}"
+        return f"Standing trigger created ({memory_id}): {normalized_description}" + record_created_memory(
+            uid, memory_id
+        )
     except ValueError as exc:
         logger.info("Rejected trigger write error_type=%s", type(exc).__name__)
         return f"Error: {exc}"
@@ -340,7 +343,9 @@ def close_fact_tool(memory_id: str, reason: str, config: RunnableConfig = None) 
             return "Fact unavailable."
         close_ledger_fact(uid, normalized_memory_id, db_client=firestore_client)
         logger.info("Closed fact reason=%s", sanitize_pii(normalized_reason))
-        return f"Fact closed ({normalized_memory_id})."
+        return f"Fact closed ({normalized_memory_id})." + record_write(
+            uid, 'memory_closed', normalized_memory_id, item.content, None
+        )
     except ValueError as exc:
         # A race against a concurrent close/mutation surfaces here even though
         # the read above found an active row a moment earlier.

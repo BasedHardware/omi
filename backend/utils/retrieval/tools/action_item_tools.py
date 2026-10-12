@@ -9,6 +9,9 @@ import contextvars
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
+from utils.messaging.undo import record_write
+from utils.messaging.projection import surface_runtime
+from utils.messaging.turn_context import phone_reminder_confirmation
 import database.action_items as action_items_db
 import database.notifications as notification_db
 from utils.notifications import (
@@ -284,6 +287,14 @@ def get_action_items_tool(
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
+    channel_items = configurable.get('channel_items')
+    if isinstance(channel_items, list):
+        channel_items.extend(
+            {'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')}
+            for item in action_items or ()
+            if item.get('id')
+        )
+
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
@@ -363,6 +374,8 @@ def create_action_item_tool(
     due_at: Optional[str] = None,
     conversation_id: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+    *,
+    due_in_minutes: Optional[int] = None,
 ) -> str:
     """
     Create a new action item (task/to-do) for the user.
@@ -387,15 +400,13 @@ def create_action_item_tool(
     Args:
         description: Short task description (5-10 words, just the action)
         due_at: Optional due date (ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
+        due_in_minutes: Relative reminder interval; anchored to original message time on channels. Do not also pass due_at.
         conversation_id: Optional conversation ID this task came from
 
     Returns:
         Brief confirmation message.
     """
-    logger.info(
-        f"🔧 create_action_item_tool called - description: {description}, "
-        f"due_at: {due_at}, conversation_id: {conversation_id}"
-    )
+    logger.info('create_action_item_tool called')
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -434,6 +445,21 @@ def create_action_item_tool(
         'conversation_id': conversation_id,
     }
 
+    runtime = surface_runtime.get()
+    channel = runtime is not None and runtime.surface != 'app'
+    display_tz = configurable.get('user_timezone') or 'UTC'
+    anchored_relative = False
+    if due_in_minutes is not None:
+        # The model can pass a bool or a non-int despite the annotation.
+        minutes: Any = due_in_minutes
+        if due_at is not None or type(minutes) is not int or minutes <= 0 or minutes > 366 * 24 * 60:
+            return 'Error: Use a positive due_in_minutes or an absolute due_at, not both.'
+        anchor = runtime.request_at if channel and runtime is not None else datetime.now(timezone.utc)
+        if anchor is None:
+            return 'Error: Original message time unavailable. Ask for an explicit reminder time.'
+        anchored_relative = channel
+        due_at = (anchor + timedelta(minutes=minutes)).isoformat()
+
     # Parse or set due date
     if due_at is not None:
         # Parse provided due date (must be ISO format with timezone)
@@ -441,12 +467,12 @@ def create_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
-            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences).
+            # A channel relative reminder keeps the original due instant. Asking for a
+            # future date is what shifted a delayed reminder onto processing time.
             now_utc = datetime.now(timezone.utc)
-            if due_dt < now_utc - timedelta(days=1):
-                logger.warning(
-                    f"⚠️ create_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
-                )
+            if due_dt < now_utc - timedelta(days=1) and not anchored_relative:
+                logger.warning('create_action_item_tool rejected past due_at')
                 return (
                     f"Error: due_at '{due_at}' is in the past. "
                     f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
@@ -478,6 +504,7 @@ def create_action_item_tool(
         # Build concise confirmation message
         task_desc = created_item.get('description', 'Task')
         result = f"✅ Added: {task_desc}"
+        reminder_state = None
 
         if created_item.get('due_at'):
             due = created_item['due_at']
@@ -485,14 +512,29 @@ def create_action_item_tool(
 
             # Send FCM notification for scheduled reminder
             try:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=action_item_id,
-                    description=task_desc,
-                    due_at=due.isoformat(),
-                )
+                if channel and due <= datetime.now(timezone.utc):
+                    reminder_state = 'late'
+                else:
+                    send_action_item_data_message(
+                        user_id=uid,
+                        action_item_id=action_item_id,
+                        description=task_desc,
+                        due_at=due.isoformat(),
+                        completed=bool(created_item.get('completed')),
+                        status=created_item.get('status'),
+                        deleted=bool(created_item.get('deleted')),
+                    )
+                    reminder_state = 'requested'
             except Exception as notif_error:
+                reminder_state = 'failed'
                 logger.error(f"⚠️ Failed to send notification: {notif_error}")
+
+        receipt_data = dict(created_item)
+        if channel and reminder_state:
+            confirmation = phone_reminder_confirmation(created_item['due_at'], display_tz, reminder_state)
+            result += '. ' + confirmation
+            receipt_data['_channel_reminder_confirmation'] = confirmation
+        result += record_write(uid, 'task', action_item_id, None, receipt_data)
 
         # Send immediate notification that task was created
         try:
@@ -513,10 +555,13 @@ def update_action_item_tool(
     completed: Optional[bool] = None,
     description: Optional[str] = None,
     due_at: Optional[str] = None,
+    delete: bool = False,
+    clear_due_date: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
-    Update an action item's status, description, or due date.
+    Update or soft-delete a task only when the user asks or confirms a proposed correction.
+    Deletion is reversible. clear_due_date removes a due date.
 
     Use this tool when:
     - User asks to mark a task as complete/done
@@ -587,6 +632,13 @@ def update_action_item_tool(
     update_data: Dict[str, Any] = {}
     changes: List[str] = []
 
+    if delete:
+        update_data.update(deleted=True, deleted_at=datetime.now(timezone.utc))
+        changes.append('deleted')
+    if clear_due_date:
+        update_data['due_at'] = None
+        changes.append('due date removed')
+
     if completed is not None:
         update_data['completed'] = completed
         if completed:
@@ -626,9 +678,15 @@ def update_action_item_tool(
     if not update_data:
         return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
 
+    # Import mutation storage only for writes; retrieval and tool schemas need no client.
+    from database import chat_edits
+    from database.chat_edits import envelope
+
     # Update the action item
     try:
-        success = action_items_db.update_action_item(uid, action_item_id, update_data)
+        before_snapshot = chat_edits.snapshot(uid, 'task', action_item_id)
+        write_state = {'before': before_snapshot}
+        success = action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
         if not success:
             return f"Error: Failed to update action item with ID '{action_item_id}'."
 
@@ -640,6 +698,13 @@ def update_action_item_tool(
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
+        result += record_write(
+            uid,
+            'task',
+            action_item_id,
+            envelope(before_snapshot, existing_item.get('description', 'Task')),
+            envelope(write_state['after'], updated_item.get('description', 'Task')),
+        )
 
         # Send notification if item was marked as completed
         if completed is True:
@@ -651,7 +716,7 @@ def update_action_item_tool(
 
         # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
         # only for an open task with a due date (#5085).
-        if 'completed' in update_data or 'due_at' in update_data:
+        if 'completed' in update_data or 'due_at' in update_data or 'deleted' in update_data:
             try:
                 sync_action_item_reminder(
                     uid,
@@ -659,6 +724,8 @@ def update_action_item_tool(
                     updated_item.get('description', ''),
                     bool(updated_item.get('completed')),
                     updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to sync action item reminder: {notif_error}")

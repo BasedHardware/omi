@@ -561,6 +561,18 @@ checks:
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "bridge actions moved into DesktopAutomationBridge+Notifications.swift while the action-source list still named only the base file, so desktop-flow-lint called their flows unknown and failed the push gate on every branch"
+  - id: desktop-proactive-notification-gate
+    command: ["python3", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "two proactive lanes reached the bar primitive directly and skipped the master toggle, frequency throttle, snooze and presence gates; a third must fail the build, not ship silent"
+  - id: desktop-proactive-notification-gate-tests
+    command: ["python3", "desktop/macos/tests/test_check_proactive_notification_gate.py"]
+    triggers: ["desktop/macos/scripts/check-proactive-notification-gate.py", "desktop/macos/tests/test_check_proactive_notification_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "a checker that has never failed is not a guard; these fixtures are the two lanes that actually bypassed the gates"
   - id: desktop-grdb-insert-idiom-tests
     command: ["python3", "desktop/macos/tests/test_check_grdb_insert_idiom.py"]
     triggers: ["desktop/macos/scripts/check-grdb-insert-idiom.py", "desktop/macos/tests/test_check_grdb_insert_idiom.py", ".github/checks-manifest.yaml"]
@@ -651,6 +663,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "PR 12935: speech availability must return on deadline without awaiting shared downloads, and recognition cleanup must precede retry"
+  - id: ios-watch-audio-chunk-relay
+    command: ["ruby", "app/ios/test/watch_audio_chunk_relay_test.rb"]
+    triggers: ["app/ios/Runner/WatchAudioChunkRelay.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/watch_audio_chunk_relay_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Issue 20479: the iPhone must forward each Apple Watch audio chunk as it arrives and keep none of the recording in memory"
   - id: ios-flutter-launch-engine-guard
     command: ["ruby", "app/ios/test/flutter_launch_engine_guard_test.rb"]
     triggers: ["app/ios/Runner/FlutterLaunchEngineGuard.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/test/flutter_launch_engine_guard_test.rb", ".github/checks-manifest.yaml"]
@@ -1103,6 +1121,12 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: desktop-swift-generated-dtos
+    command: ["python3", "backend/scripts/generate_swift_openapi_types.py", "--check"]
+    triggers: ["desktop/macos/Desktop/Sources/Generated/**/*.generated.swift", "docs/api-reference/app-client-openapi.json", "backend/scripts/generate_swift_openapi_types.py"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#21176 generated Swift must stay in sync with the backend schema even when a generated-only PR does not trigger OpenAPI Contract or execute desktop suites"
   - id: desktop-app-icon-bundle
     command: ["bash", "desktop/macos/tests/test-app-icon-bundle.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/omi_icon.icns", "desktop/macos/tests/test-app-icon-bundle.sh", ".github/checks-manifest.yaml"]

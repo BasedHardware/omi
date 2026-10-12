@@ -256,10 +256,14 @@ bool _isRequiredAuthCheck(String url) {
 
 /// Omi credentials are scoped to Omi-owned product API authorities. Hostname
 /// parsing avoids substring matches such as `api.omi.me.attacker.example`.
+/// A debug hermetic journey may additionally trust its registered loopback
+/// fixture; that registry stays empty for user-configured overrides.
 @visibleForTesting
 bool shouldAttachOmiCredentials(String url) {
   final uri = Uri.tryParse(url);
-  if (uri == null || !{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
+  if (uri == null || uri.host.isEmpty) return false;
+  if (Env.debugTrustedFixtureAuthority(uri)) return true;
+  if (!{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
   return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
 }
 
@@ -658,6 +662,7 @@ Future<http.Response?> makeApiCall({
   Duration? timeout,
   int? retries,
   bool signOutOn401 = true,
+  bool Function()? canSend,
 }) async {
   try {
     return await sendUncaughtApiCall(
@@ -668,6 +673,7 @@ Future<http.Response?> makeApiCall({
       timeout: timeout,
       retries: retries,
       signOutOn401: signOutOn401,
+      canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);

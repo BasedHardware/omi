@@ -61,7 +61,7 @@ class Query:
         return Document(self.database, (*self.path, key))
 
     def order_by(self, field, direction='ASCENDING'):
-        assert field == 'last_changed_at'
+        assert field in {'last_changed_at', 'created_at'}
         return Query(self.database, self.path, order=field, descending=direction == 'DESCENDING', bound=self.bound)
 
     def limit(self, count):
@@ -136,3 +136,11 @@ class DreamFirestore(StrictFirestore):
 
     def batch(self):
         return Batch(self)
+
+    def get_all(self, references, *, transaction=None, timeout=None, field_paths=None):
+        assert len(references) <= 100
+        if field_paths is not None:
+            return super().get_all(references, transaction=transaction, field_paths=field_paths)
+        if timeout is not None:
+            assert 0 < timeout <= 3
+        return [reference.get(transaction=transaction) for reference in references]

@@ -995,9 +995,11 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     return all_people
 
 
-def update_person(uid: str, person_id: str, name: str) -> bool:
+def update_person(uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None) -> bool:
     """Rename a stable person and retain old names as owner-scoped aliases."""
 
+    if expected_chat_state is not None:
+        return rename_person_retaining_aliases(db, uid, person_id, name, expected_chat_state=expected_chat_state)
     return rename_person_retaining_aliases(db, uid, person_id, name)
 
 
@@ -1785,10 +1787,13 @@ def is_backend_onboarding_admitted(uid: str, *, firestore_client: Any = None) ->
     return get_backend_onboarding_admission(uid, firestore_client=firestore_client) is not None
 
 
-def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
-    """Update the user's onboarding state in Firestore (merge with existing)."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'onboarding': onboarding_data}, merge=True)
+def set_user_onboarding_state(uid: str, onboarding_data: dict, *, firestore_client: Any = None) -> None:
+    """Merge only submitted fields; concurrent updates must not replay stale state."""
+    if not onboarding_data:
+        return
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    user_ref.set({'onboarding': onboarding_data}, merge=[f'onboarding.{field}' for field in onboarding_data])
 
 
 def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:

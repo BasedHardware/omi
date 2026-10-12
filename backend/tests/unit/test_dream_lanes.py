@@ -4,6 +4,14 @@ from copy import deepcopy
 
 from llm_gateway.gateway.config_loader import load_gateway_config, _generated_desktop_vertex_items
 from llm_gateway.gateway.dream_lanes import dream_lane_items
+from utils.dream_transport import TRIAGE_LANE, MAIN_LANE
+
+
+def test_backend_transport_lanes_exist_in_same_commit_gateway_config():
+    config = load_gateway_config(prod_mode=False)
+    for name in (TRIAGE_LANE, MAIN_LANE):
+        lane = config.lanes[name]
+        assert lane.active_route in config.route_artifacts
 
 
 def test_default_dream_lanes_use_luna_or_reserved_gemini():

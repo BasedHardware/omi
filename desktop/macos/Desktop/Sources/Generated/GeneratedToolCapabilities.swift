@@ -708,6 +708,19 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "get_product_kb",
+      title: "Get Product Knowledge",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Read the product guide shipped with this build of Omi for Mac.",
+      bullets: [
+      "Use when the user asks how to use, enable, or configure Omi on this Mac: Only Meetings versus Always On, permissions, settings paths, and what a screen does.",
+      "Do not use it for the user's personal conversations, memories, tasks, or screen history. Those belong to the data tools.",
+      "Pass query to search, or topic to read one document id. Omit both to list topics.",
+      "This is local. If the result says \"knowledge base unavailable\", say so and do not invent a settings path."
+    ]
+    ),
+    Capability(
       toolName: "scan_files",
       title: "Scan Files",
       latency: .asyncBackground,

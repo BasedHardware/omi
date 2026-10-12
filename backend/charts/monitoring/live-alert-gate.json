@@ -33,6 +33,8 @@
     "omi-stt-leg-lifecycle-gap",
     "omi-stt-snapshot-unready",
     "omi-stt-stage-disagreement",
-    "omi-stt-enabled-state-unknown"
+    "omi-stt-enabled-state-unknown",
+    "omi-redis-cache-conn-warn",
+    "omi-redis-cache-conn-page"
   ]
 }

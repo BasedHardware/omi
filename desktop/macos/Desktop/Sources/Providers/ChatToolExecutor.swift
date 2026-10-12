@@ -591,6 +591,9 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
+    case .getProductKb:
+      return ProductKnowledgeTool.execute(arguments: toolCall.arguments)
+
     case .unhandled:
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)

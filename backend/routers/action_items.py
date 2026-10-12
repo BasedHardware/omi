@@ -60,6 +60,7 @@ from models.action_item import (
 )
 from utils.task_intelligence import task_links
 from utils.product_telemetry import emit_product_event
+from utils.observability.fallback import record_fallback
 
 router = APIRouter()
 
@@ -146,9 +147,24 @@ def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> L
     return responses
 
 
-def _schedule_action_item_reminder(uid: str, action_item_id: str, description: str, due_at: datetime) -> None:
+def _schedule_action_item_reminder(
+    uid: str,
+    action_item_id: str,
+    description: str,
+    due_at: datetime,
+    *,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+) -> None:
     send_action_item_data_message(
-        user_id=uid, action_item_id=action_item_id, description=description, due_at=due_at.isoformat()
+        user_id=uid,
+        action_item_id=action_item_id,
+        description=description,
+        due_at=due_at.isoformat(),
+        completed=completed,
+        status=status,
+        deleted=deleted,
     )
 
 
@@ -237,11 +253,8 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 
     # Pre-fetch items to skip locked ones
     locked_ids = set()
-    existing_items = {}
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
-        if existing:
-            existing_items[item.id] = existing
         if existing and existing.get('is_locked', False):
             locked_ids.add(item.id)
 
@@ -288,13 +301,30 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
         data = update['data']
         if 'completed' not in data and 'due_at' not in data:
             continue
-        stored = existing_items.get(update['id'], {})
+        try:
+            stored = action_items_db.get_action_item(uid, update['id'])
+        except Exception:
+            # Preserve the committed batch receipt and reconcile independent rows.
+            # An unreadable row must not fall back to pre-write reminder state.
+            logger.warning('action_item_reminder_state_read_unavailable action_item_id=%s', update['id'])
+            record_fallback(
+                component='other',
+                from_mode='task_reminder_state_read',
+                to_mode='task_write_only',
+                reason='other',
+                outcome='degraded',
+            )
+            continue
+        if not stored:
+            continue
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=update['id'],
-            description=data.get('description', stored.get('description', '')),
-            completed=bool(data['completed']) if 'completed' in data else bool(stored.get('completed')),
-            due_at=data['due_at'] if 'due_at' in data else stored.get('due_at'),
+            description=stored.get('description', ''),
+            completed=bool(stored.get('completed')),
+            due_at=stored.get('due_at'),
+            status=stored.get('status'),
+            deleted=bool(stored.get('deleted')),
         )
 
     return _batch_mutation_response(result, locked_ids=locked_ids)
@@ -354,7 +384,15 @@ def create_action_item(
     # A keyed retry can return a task edited or completed since the original POST.
     # Project its saved state, never re-arm reminders or export the stale request.
     if response.due_at and not response.completed:
-        _schedule_action_item_reminder(uid, action_item_id, response.description, response.due_at)
+        _schedule_action_item_reminder(
+            uid,
+            action_item_id,
+            response.description,
+            response.due_at,
+            completed=response.completed,
+            status=response.status,
+            deleted=bool(action_item.get('deleted')),
+        )
 
     upsert_action_item_vector(uid, action_item_id, response.description)
 
@@ -734,13 +772,15 @@ def update_action_item(
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
     # (#5085). Previously this re-armed the reminder whenever due_at was present, even on completion.
-    if 'completed' in update_data or 'due_at' in update_data:
+    if 'completed' in update_data or 'status' in update_data or 'due_at' in update_data:
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=updated_item.get('description', ''),
             completed=bool(updated_item.get('completed')),
             due_at=updated_item.get('due_at'),
+            status=updated_item.get('status'),
+            deleted=bool(updated_item.get('deleted')),
         )
 
     record_product_event('action_item_mutated', request=http_request, op='update')
@@ -776,8 +816,10 @@ def toggle_action_item_completion(
         user_id=uid,
         action_item_id=action_item_id,
         description=updated_item.get('description', ''),
-        completed=completed,
+        completed=bool(updated_item.get('completed')),
         due_at=updated_item.get('due_at'),
+        status=updated_item.get('status'),
+        deleted=bool(updated_item.get('deleted')),
     )
 
     # Notify sender if this was a shared task that just got completed
@@ -951,15 +993,23 @@ def create_action_items_batch(
 
     # Fetch created items and send FCM messages
     created_items = []
-    for idx, item_id in enumerate(created_ids):
+    for item_id in created_ids:
         item = action_items_db.get_action_item(uid, item_id)
         if item:
-            created_items.append(ActionItemResponse(**item))
+            response = ActionItemResponse(**item)
+            created_items.append(response)
 
             # Send FCM data message if action item has a due date
-            due_at = action_items[idx].due_at if idx < len(action_items) else None
-            if due_at is not None:
-                _schedule_action_item_reminder(uid, item_id, action_items[idx].description, due_at)
+            if response.due_at is not None:
+                _schedule_action_item_reminder(
+                    uid,
+                    item_id,
+                    response.description,
+                    response.due_at,
+                    completed=response.completed,
+                    status=response.status,
+                    deleted=bool(item.get('deleted')),
+                )
 
     upsert_action_item_vectors_batch(
         uid,

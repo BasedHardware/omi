@@ -132,7 +132,21 @@ _BYOK_GEMINI_ROUTES: Dict[str, Tuple[str, str]] = {
     'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
 }
 
-_BYOK_MODEL_PROFILE = {**_TWO_TIER_MODEL_PROFILE, **_BYOK_GEMINI_ROUTES}
+# chat_agent and its sibling interactive-chat features resolve to the internal
+# Luna gateway alias, which a BYOK OpenAI key's own account cannot serve (OpenAI
+# 404s an unrecognized model id — the same failure class as BYOK_GEMINI_MODEL
+# above). Route BYOK OpenAI traffic on these features to a real public model.
+BYOK_OPENAI_MODEL = 'gpt-4o-mini'
+_BYOK_OPENAI_ROUTES: Dict[str, Tuple[str, str]] = {
+    'chat_agent': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_responses': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_extraction': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_graph': (BYOK_OPENAI_MODEL, 'openai'),
+    'file_chat_vision': (BYOK_OPENAI_MODEL, 'openai'),
+    'file_chat_documents': (BYOK_OPENAI_MODEL, 'openai'),
+}
+
+_BYOK_MODEL_PROFILE = {**_TWO_TIER_MODEL_PROFILE, **_BYOK_OPENAI_ROUTES, **_BYOK_GEMINI_ROUTES}
 MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
     'premium': dict(_TWO_TIER_MODEL_PROFILE),
     'max': dict(_TWO_TIER_MODEL_PROFILE),

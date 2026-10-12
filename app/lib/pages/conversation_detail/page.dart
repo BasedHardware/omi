@@ -122,7 +122,8 @@ class ConversationDetailPage extends StatefulWidget {
   State<ConversationDetailPage> createState() => ConversationDetailPageState();
 }
 
-class ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
+class ConversationDetailPageState extends State<ConversationDetailPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -136,6 +137,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   // Page-owned playback state: the bar's player reports into it, the transcript
   // highlights and follows from it.
   late final ConversationPlaybackController _playbackController;
+
+  /// Held for dispose, when the page can no longer look the provider up.
+  late final ConversationDetailProvider _detailProvider;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -250,6 +254,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void initState() {
     super.initState();
+    _detailProvider = context.read<ConversationDetailProvider>();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
     );
@@ -396,8 +402,20 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     _controller?.animateTo(_transcriptTabIndex);
   }
 
+  /// Backgrounding the app ends a speaker-labeling pass like Done: one summary update, landing on
+  /// this page if the reader comes back.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Leaving mid-pass auto-confirms it: one summary update for the labels already saved.
+    _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
     _separation.dispose();

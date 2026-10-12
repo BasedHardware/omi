@@ -1,3 +1,4 @@
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
@@ -70,6 +71,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -307,6 +309,7 @@ Future _init() async {
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
   );
+  OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -334,6 +337,7 @@ Future _init() async {
     () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
   );
   if (isAuth) {
+    OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
       authMethod:
@@ -527,7 +531,21 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
-  final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry();
+  late final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry(
+    captureContext: () {
+      final context = globalNavigatorKey.currentContext;
+      if (context == null) return (source: 'unknown', mode: 'unknown');
+      final capture = context.read<CaptureProvider>();
+      if (capture.isPhoneMicBatchRecording) return (source: 'phone_mic', mode: 'batch');
+      if (capture.isPendantBatchRecording) return (source: 'pendant', mode: 'batch');
+      final source = capture.liveCaptureSource;
+      if (source == null) return (source: 'none', mode: 'none');
+      if (source == 'phone') return (source: 'phone_mic', mode: 'live');
+      if (source == 'apple_watch') return (source: 'watch', mode: 'live');
+      if (source == 'omi' || source == 'friend') return (source: 'pendant', mode: 'live');
+      return (source: 'other', mode: 'live');
+    },
+  );
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
     identityEpoch: () => AnalyticsManager.identityEpoch,
@@ -565,6 +583,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _deinit() {
+    unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
@@ -590,6 +609,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      OnboardingSyncRuntime.setActive(true);
       unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
@@ -598,6 +618,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      OnboardingSyncRuntime.setActive(false);
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.setForeground(false);
@@ -685,6 +706,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => MessagingChannelsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => FolderProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => McpProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),
