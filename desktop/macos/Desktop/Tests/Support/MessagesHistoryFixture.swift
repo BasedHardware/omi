@@ -113,6 +113,12 @@ final class MessagesHistoryFixture: @unchecked Sendable {
     }
   }
 
+  func edit(text: String, to newText: String) throws {
+    try queue.write { db in
+      try db.execute(sql: "UPDATE message SET text = ? WHERE text = ?", arguments: [newText, text])
+    }
+  }
+
   func redate(text: String, to date: Date) throws {
     try queue.write { db in
       try db.execute(

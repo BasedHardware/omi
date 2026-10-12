@@ -56,6 +56,41 @@ final class MessageSendConfirmationTests: XCTestCase {
     XCTAssertEqual(confirmation.waitedMilliseconds, 2500)
   }
 
+  func testTheSettledSecondRestartsWhenTheDeliveredRowChanges() async throws {
+    let (history, chat) = try makeHistory()
+    clock.onSleep = { sleeps in
+      if sleeps == 1 {
+        // The first row is edited away and a second one takes its place.
+        try history.edit(text: "ok", to: "edited")
+        try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+      }
+    }
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+    XCTAssertEqual(confirmation.waitedMilliseconds, 1500, "the new row must hold for its own second")
+  }
+
+  func testAFailedReadRestartsTheSettledSecond() async throws {
+    let (history, chat) = try makeHistory()
+    let reads = LockedCounter()
+    let store = MessageSendHistory.store(history.url, region: "US")
+    let flaky = MessageSendHistory(
+      latestRowID: store.latestRowID,
+      outgoingStates: { handle, text, since, after, tracked in
+        if reads.increment() == 2 { throw MessagesReaderError.storeReadFailed(path: "chat.db", reason: "locked") }
+        return try await store.outgoingStates(handle, text, since, after, tracked)
+      })
+    let confirmation = try await confirm("ok", history: flaky) {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+    XCTAssertEqual(confirmation.waitedMilliseconds, 2000, "reads at 1.0, 1.5 and 2.0 s must agree after the failure")
+  }
+
   func testASecondIdenticalRowBeforeTheDeliverySettlesIsAmbiguous() async throws {
     let (history, chat) = try makeHistory()
     clock.onSleep = { sleeps in
