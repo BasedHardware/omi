@@ -8,6 +8,8 @@ from typing import Literal
 from urllib.parse import quote
 
 from utils.messaging.adapters.base import BaseAdapter
+from utils.observability.fallback import record_fallback
+from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.delivery_context import send_markup
 from utils.messaging.adapters.media import MEDIA_TYPES
 from utils.messaging.adapters.rendering import telegram, html_plain, item_buttons
@@ -129,8 +131,19 @@ class TelegramAdapter(BaseAdapter):
     def render(self, text):
         return telegram(text, self.capabilities.max_text_len)
 
-    async def api(self, method, body, *, files=None, idempotent=False):
+    async def api(self, method, body, *, files=None, idempotent=False, threading=True):
         kwargs = {'data': body, 'files': files} if files else {'json': body}
+
+        async def prepare_thread():
+            resolver = send_reply_target.get()
+            if not threading or method != 'sendMessage' or resolver is None or not send_first_chunk.get():
+                return
+            current = await resolver()
+            if current:
+                body['reply_parameters'] = {'message_id': int(current), 'allow_sending_without_reply': True}
+            else:
+                body.pop('reply_parameters', None)
+
         try:
             return await request_json(
                 self.transport,
@@ -138,29 +151,32 @@ class TelegramAdapter(BaseAdapter):
                 'https://api.telegram.org/bot' + self._token + '/' + method,
                 idempotent=idempotent,
                 sleep=self.sleep,
+                before_request=prepare_thread,
                 **kwargs
             )
         except ProviderError as exc:
+            if body.get('reply_parameters') and exc.status_code in (400, 404, 422) and not exc.rendering_rejected:
+                record_fallback(
+                    component='other',
+                    from_mode='threaded_reply',
+                    to_mode='plain_reply',
+                    reason='other',
+                    outcome='degraded',
+                )
+                fallback = dict(body)
+                fallback.pop('reply_parameters')
+                return await self.api(method, fallback, files=files, idempotent=idempotent, threading=False)
             # Only a definite 400 rejection permits a second send. Timeouts/5xx
             # remain ambiguous and must never duplicate a delivered message.
             if not exc.rendering_rejected or body.get('parse_mode') != 'HTML' or not body.get('text'):
                 raise
-            from utils.observability.fallback import record_fallback
-
             record_fallback(
                 component='other', from_mode='telegram_html', to_mode='plain_text', reason='other', outcome='degraded'
             )
             fallback = dict(body)
             fallback.pop('parse_mode')
             fallback['text'] = html_plain(body['text'])
-            return await request_json(
-                self.transport,
-                'POST',
-                'https://api.telegram.org/bot' + self._token + '/' + method,
-                idempotent=idempotent,
-                sleep=self.sleep,
-                json=fallback,
-            )
+            return await self.api(method, fallback, idempotent=idempotent, threading=threading)
 
     async def typing(self, message, active=True):
         if active:
@@ -180,8 +196,9 @@ class TelegramAdapter(BaseAdapter):
         await self.pace(message.external_chat_id)
         await self.pace('__global__', 1 / 30)
         body = {'chat_id': message.external_chat_id}
-        if message.callback_id and message.reply_to:
-            body['reply_parameters'] = {'message_id': int(message.reply_to)}
+        reply_to = await self.reply_target(message)
+        if reply_to and not draft:
+            body['reply_parameters'] = {'message_id': int(reply_to), 'allow_sending_without_reply': True}
         if draft:
             if self.capabilities.streaming == 'none':
                 return

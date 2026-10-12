@@ -6,6 +6,11 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 
 @pytest.fixture
 def mock_dependencies(monkeypatch):
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'recover_stranded_byok_jobs',
+        mock.Mock(return_value={'blocked': 0, 'errors': 0}),
+    )
     mocks = {
         "is_enabled": mock.Mock(return_value=True),
         "publish_metrics": mock.Mock(),

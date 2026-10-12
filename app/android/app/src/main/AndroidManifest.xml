@@ -183,7 +183,7 @@
                     android:scheme="https"
                     android:pathPattern="/tasks/.*" />
             </intent-filter>
-            <!-- Private item links (chat edit receipts, messaging channels). Singular paths only:
+            <!-- Private item links (chat edit receipts, messaging channels). Singular paths and /items only:
                  /conversations/ and /tasks/ are public share pages. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -192,6 +192,8 @@
                 <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/conversation/.*" />
                 <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/task/.*" />
                 <data android:scheme="https" android:host="h.omi.me" android:pathPattern="/memory/.*" />
+                <!-- A list of items: /items?conversation=…&task=…&memory=… -->
+                <data android:scheme="https" android:host="h.omi.me" android:path="/items" />
             </intent-filter>
         </activity>
 

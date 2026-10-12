@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "Да се приложи ли тази предложена корекция?",
     "reviewProposalApply": "Приложи",
     "reviewProposalSuggested": "Предложено",
-    "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено."
+    "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено.",
+    "itemLinkListTitle": "{count, plural, =0{Няма елементи} =1{1 елемент} other{{count} елемента}}"
 }

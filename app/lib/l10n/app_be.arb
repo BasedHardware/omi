@@ -11440,5 +11440,6 @@
     "reviewProposalGeneric": "Ужыць гэта прапанаванае выпраўленне?",
     "reviewProposalApply": "Ужыць",
     "reviewProposalSuggested": "Прапанавана",
-    "reviewProposalConflict": "Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта."
+    "reviewProposalConflict": "Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта.",
+    "itemLinkListTitle": "{count, plural, =0{Няма элементаў} =1{1 элемент} other{{count} элементаў}}"
 }

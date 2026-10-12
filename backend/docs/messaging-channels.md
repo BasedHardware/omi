@@ -75,19 +75,40 @@ turn is the same settled failure. Only a worker task that is still cancelling re
 its lease, because executor work may still be running. A settled deferred reentry
 writes a content-free failure fence, sends at most one notice, and releases the lease.
 A later reentry that sees the fence, the started reentry, or the delivered reply does
-not run the turn again. Process-loss leases still need operator reconciliation.
+not run the turn again. Process-loss rows are settled without replay after five minutes;
+ambiguous effects remain available for operator reconciliation.
 Assistant events are recorded only after delivery succeeds. Error frames are drained
 through the shared producer's terminal fallback; an error without a reply fails visibly.
 Action inverses own separate once-only receipt claims; slow domain cleanup does not
 occupy the chat lease. Settled failures retain their running inbox row for reconciliation
 but carry a FIFO settlement marker so new messages can proceed.
 
-Surface leases use atomic create and a random ownership token. They cannot be stolen,
-even after a timeout: operator recovery must first establish the previous worker is
-stopped, reconcile effects, then reset the affected job/lease. This follows the existing
-dream worker's safety model. A contender returns the job to pending without running it.
-The key is `(uid, surface)`; independent surfaces/users can progress independently.
-No in-process lock is relied on for multi-worker correctness.
+Inbox claims transactionally retire running heads older than five minutes (measured
+from `started_at`, or `created_at` for pre-migration rows). They retain encrypted
+reconciliation evidence and gain `fifo_settled_at`; they never replay a possibly sent
+reply. Pending rows older than thirty minutes are retired with content-free tombstones.
+A new wake claims the identity's oldest eligible pending row, and each worker drains
+the following rows in order after success or settled failure. Fresh running heads
+remain exclusive. The periodic recovery loop handles lost wakes.
+
+Inbound workers have a 180-second deadline, with 120 seconds of cleanup margin before
+stale recovery. Surface leases use transactional acquisition and random ownership
+tokens with the same five-minute bound. Runtime tool guards and provider send guards
+reject expired/replaced leases and settled inbox rows; an old token cannot release its
+replacement. Detached Undo uses its own once-only receipt claim and link guard.
+A contender returns the job to pending without running it. The key is `(uid, surface)`;
+independent surfaces/users can progress independently. No in-process lock is relied on
+for multi-worker correctness. Structured queue warnings include content-free path and
+head age; `omi_messaging_queue_events_total{reason}` counts `non_head`, `head_redirect`, `lease_busy`,
+`stale_running`, `stale_pending`, and `stale_lease` decisions (transaction retries may
+count a decision more than once).
+
+No data migration or queue reset is required. Old rows/leases use `created_at`; existing
+settlement markers remain respected. Recovery requires a pending wake or periodic drain.
+Review stale-running evidence before any manual replay; accepted external delivery is
+not inferred from inbox status. Already admitted external requests or synchronous tool
+writes cannot be undone by a deadline or lease fence.
+
 Typing starts after linked-account admission and before session/context preparation,
 then refreshes while the turn runs. Initial awareness loads twenty recent messages;
 older history remains searchable instead of importing lifetime history on the first turn.
@@ -229,3 +250,59 @@ Enabled app turns acquire their surface lease before quota or persistence. A con
 app request gets 409 before any write; channel contenders remain pending in the inbox.
 An app stream cancelled after admission retains its lease for ambiguous-work recovery,
 like channel workers. No such lease or new IO is added to flag-off mobile requests.
+
+### Phone rendering and item navigation
+
+Telegram GFM tables use plain, padded `<pre>` columns up to forty characters wide;
+wider tables and all iMessage tables become per-row lists. Markdown headings, quotes,
+lists, fences and rules pass through the shared token renderer. Item buttons/links
+are selected only when the final reply references the candidate's ID, URL or complete
+normalized title, in reply order. Telegram shows up to five buttons; iMessage lists up to ten items. Rephrased or ambiguous titles may therefore
+omit a button. Labels use complete words and an ellipsis within thirty characters.
+Generic `Open in Omi` navigation is removed; iMessage attaches item-specific navigation as described below.
+
+### Stacked messages and iMessage item previews
+
+Each distinct fresh user message is a separate FIFO turn, including trivial pings;
+this implementation does not coalesce questions or fold pings. Duplicate provider
+messages are deduplicated, and pendings over thirty minutes old are retired without
+answering. Admission atomically writes the encrypted inbox row and a content-free
+per-chat newest-inbound pointer. Late older webhooks and duplicates cannot move the
+pointer backward; Telegram message IDs break ties in its one-second provider clock
+(other equal-clock arrivals use admission order). Callback clicks do not become
+user-message heads. The inbound
+provider message ID/reply target already lives in the encrypted normalized payload.
+Older inbox rows without a chat pointer receive normal replies until new admission
+establishes one; no backfill is required.
+
+At actual outbound pacing completion, the adapter resolves the newest pointer. An
+answer to an older user message is threaded; an answer to the newest is sent normally.
+Only the first chunk is threaded when text splits. A known rate-limit rejection
+rechecks the pointer before retrying; an ambiguous outcome freezes the original
+request rather than changing a possibly accepted message. Telegram uses `reply_parameters`
+with `allow_sending_without_reply`; Linq uses `message.reply_to` beside `parts` on
+`POST /api/partner/v3/chats/{chatId}/messages`. This chat-scoped endpoint retains the
+top-level `preferred_service: "iMessage"` envelope proven by PR #21172 on October 11;
+`parts` and `idempotency_key` stay inside `message`. `message.reply_to` follows the
+sending-messages guide but is unverified live. Definite 400/404/422 rejections can retry
+without the thread target, with observable fallback telemetry. Ambiguous transport
+outcomes keep the original request/idempotency identity and never switch to a plain
+send. Existing scoped receipt callbacks keep their receipt target.
+
+For iMessage, zero matched items add nothing. One matched item gets its ordinary
+text answer then a separate single `link` part message using its singular item URL.
+Two or more matched items get unchanged answer text then one single `link` part message
+with `/items?conversation=<id>&task=<id>&memory=<id>`: repeated keys retain reply order,
+at most ten items, IDs percent-encoded, and no titles or other content in the URL.
+Both URL forms use `OMI_SHARE_BASE_URL` (default `https://h.omi.me`); no per-item URLs
+are appended to multi-item answer text. Cards are sent only if this chat had an accepted outbound
+message before the answer began. New or legacy chats with unknown accepted history
+skip that first card conservatively. Accepted receipts and the outbound-history marker
+commit atomically; reserved/ambiguous sends and reaction/contact actions do not
+enable previews. Optional card
+failure preserves the accepted text and records a degraded fallback. Bare web-root
+URLs are removed from iMessage text. Preview URLs contain only item kind/ID; public
+Open Graph metadata and `web/` are unchanged.
+
+Provider contracts: [Linq sending messages](https://docs.linqapp.com/channel/imessage/guides/messaging/sending-messages/)
+and [rich link previews](https://docs.linqapp.com/channel/imessage/guides/messaging/rich-link-previews/).

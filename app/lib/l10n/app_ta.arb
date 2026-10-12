@@ -11440,5 +11440,6 @@
     "reviewProposalGeneric": "இந்த பரிந்துரைத்த திருத்தத்தைப் பயன்படுத்தவா?",
     "reviewProposalApply": "பயன்படுத்து",
     "reviewProposalSuggested": "பரிந்துரைக்கப்பட்டது",
-    "reviewProposalConflict": "Dream பரிந்துரைத்த பிறகு இது மாறியுள்ளது, அதனால் எதுவும் பயன்படுத்தப்படவில்லை."
+    "reviewProposalConflict": "Dream பரிந்துரைத்த பிறகு இது மாறியுள்ளது, அதனால் எதுவும் பயன்படுத்தப்படவில்லை.",
+    "itemLinkListTitle": "{count, plural, =0{உருப்படிகள் இல்லை} =1{1 உருப்படி} other{{count} உருப்படிகள்}}"
 }

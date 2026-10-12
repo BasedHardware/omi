@@ -15,8 +15,16 @@ from utils import dream_agent, dream_capacity, dream_transport
 from utils.dream_metrics import PASSES
 from utils.llm.shaped_agent import Budget, Mount
 from utils.llm.vertex_reservation_state import ReservationState
+from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT
 
 OLD, NEW = 'gemini-2.5-flash', 'gemini-3.8-flash'
+
+
+@pytest.fixture(autouse=True)
+def isolated_local_capacity():
+    dream_capacity._local_state.cache_clear()
+    yield
+    dream_capacity._local_state.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -47,8 +55,11 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
         try:
-            # The first sweep waits, while the leased discovery runs in background.
-            assert await dream_capacity.available_model() is None
+            # Cold discovery is advisory: the first sweep still admits.
+            assert await dream_capacity.available_model() == PT_MODEL_CURRENT
+            slot = await dream_capacity.claim(2)
+            assert slot is not None
+            await dream_capacity.release(slot)
             await asyncio.gather(*state._probe_tasks)
             assert await dream_capacity.available_model() == OLD
             await asyncio.gather(*state._probe_tasks)
@@ -79,7 +90,7 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
         (429, None, dream_transport.TRIAGE_LANE, False),
     ],
 )
-async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, status, failure, lane, cools):
+async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, caplog, status, failure, lane, cools):
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     state = ReservationState(redis)
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_PROJECT', 'based-hardware')
@@ -112,6 +123,11 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
         else:
             assert await redis.get(key) is None
         assert available.await_count == (1 if lane == dream_transport.MAIN_LANE else 0)
+        decisions = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+        assert len(decisions) == int(cools)
+        if cools:
+            assert decisions[0]['decision'] == 'waiting'
+            assert decisions[0]['reason'] == 'saturated' and decisions[0]['source'] == 'gateway_response'
     finally:
         await redis.aclose()
 

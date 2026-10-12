@@ -1476,7 +1476,7 @@
             {
               "evaluator": {
                 "params": [
-                  2500
+                  4000
                 ],
                 "type": "gt"
               },
@@ -1510,12 +1510,12 @@
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "50",
-      "threshold": "2500ms (2.5s)",
+      "threshold": ">4000 ms for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >2500 ms threshold breached 6% of hours; p50 1280 / p90 2320 / max 3730 ms. Threshold above the measured maximum.",
       "summary": "Omi speech processing alert: VAD request latency is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi speech processing production service path.",
@@ -2616,7 +2616,7 @@
             {
               "evaluator": {
                 "params": [
-                  2
+                  5
                 ],
                 "type": "gt"
               },
@@ -2650,12 +2650,12 @@
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "34",
-      "threshold": "2",
+      "threshold": ">5 rps for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >2 rps threshold breached 9% of hours; p50 0.036 / p90 1.89 / max 2.85 rps. Threshold above the measured maximum.",
       "summary": "Omi API alert: Backend-sync - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",
@@ -2843,171 +2843,6 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
-  },
-  {
-    "id": 30,
-    "uid": "cew97d5vd0ttse",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "RPS",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_SUM",
-            "filters": [
-              "resource.label.backend_target_name",
-              "=",
-              "custom-domains-api-omi-me-backend-sync-49a4-be",
-              "AND",
-              "metric.type",
-              "=",
-              "loadbalancing.googleapis.com/https/backend_request_count"
-            ],
-            "groupBys": [
-              "resource.label.backend_target_name"
-            ],
-            "perSeriesAligner": "ALIGN_NONE",
-            "preprocessor": "rate",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  5
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "31",
-      "threshold": "5 RPS",
-      "summary": "Omi API alert: Backend-sync RPS is high.",
-      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
-      "scope": "The Omi API production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
-      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null,
-    "labels": {
-      "severity": "ticket",
-      "instatus_component": "api",
-      "alert_identity": "cew97d5vd0ttse",
-      "component": "api",
-      "impact": "infrastructure"
-    }
   },
   {
     "id": 35,
@@ -4038,149 +3873,6 @@
     "record": null
   },
   {
-    "id": 59,
-    "uid": "efpgg1kfjglj4d",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=~\".*prod-omi-parakeet.*\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  5
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "122",
-      "threshold": "5 req/s",
-      "summary": "Omi speech processing alert: Parakeet RPS is high.",
-      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
-      "scope": "The Omi speech processing production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
-      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
-    },
-    "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "warning",
-      "alert_identity": "efpgg1kfjglj4d",
-      "component": "speech-processing",
-      "impact": "infrastructure"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
     "uid": "omi-parakeet-stream-capacity-warning",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -4550,7 +4242,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  8
                 ],
                 "type": "gt"
               },
@@ -4584,12 +4276,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1",
+      "threshold": ">8 rps for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >1 rps threshold breached 71% of hours; p50 1.68 / p90 3.07 / p99 4.36 / max 4.79 rps. Threshold above the measured maximum.",
       "summary": "Omi live transcription alert: Backend-listen - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi live transcription production service path.",
@@ -4985,9 +4677,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  58
                 ],
-                "type": "gt"
+                "type": "gte"
               },
               "operator": {
                 "type": "and"
@@ -5019,12 +4711,12 @@
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "threshold": "50",
+      "threshold": ">=58 replicas for 30m (maxReplicas - 2). Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >50 threshold breached 13% of hours; p50 34 / p90 52 / max 60. backend/charts/backend-listen/prod_omi_backend_listen_values.yaml sets HPA maxReplicas=60.",
       "summary": "Omi live transcription alert: Backend-listen replica count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi live transcription production service path.",
@@ -13498,7 +13190,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 5 && $B > 0.10",
+          "expression": "$A >= 5 && $B > 0.35",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -13551,7 +13243,7 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
@@ -13560,9 +13252,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 5 && $B > 0.10",
-      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
-      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+      "threshold": "$A >= 5 && $B > 0.35 for 30m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: B p50 12.0% / p90 20.5% / max 31.8%; A sessions/10m p50 63. Threshold above the measured maximum.",
+      "evaluated_bad": "At least 5 window sessions/10m with no_text ratio above 35%, sustained for 30m, fires.",
+      "evaluated_good": "Fewer than 5 window sessions/10m or no_text ratio at most 35% does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-window-no-text",
@@ -13638,7 +13330,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 5 && $B >= 30",
+          "expression": "$A >= 5 && $B >= 55",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -13691,18 +13383,18 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "Parakeet canary first-text p95 exceeds the 30 s budget; roll allocation back to 0.",
+      "summary": "Parakeet canary first-text p95 reaches the 55 s alert threshold; roll allocation back to 0 if sustained for 30m.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 5 && $B >= 30",
-      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
-      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+      "threshold": "$A >= 5 && $B >= 55 for 30m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: first-text p95 B p50 13.8s / p90 41s / max 60s (histogram top). Threshold above the measured p90, below the histogram top.",
+      "evaluated_bad": "At least 5 first-text observations/10m with first-text p95 at least 55s, sustained for 30m, fires.",
+      "evaluated_good": "Fewer than 5 first-text observations/10m or first-text p95 below 55s does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-window-first-text",
@@ -14458,7 +14150,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.01",
+          "expression": "$A >= 20 && $B > 0.08",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -14511,7 +14203,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "1m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - mid-session terminal failures",
@@ -14520,9 +14212,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A >= 20 && $B > 0.01",
-      "evaluated_bad": "Synthetic fixture satisfies the volume floor and failure threshold.",
-      "evaluated_good": "Synthetic fixture has no failure or remains below the volume floor."
+      "threshold": "$A >= 20 && $B > 0.08 for 10m. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: B p50 1.0% / p90 5.8% / max 12%. Threshold above the measured p90.",
+      "evaluated_bad": "At least 20 listen admissions/10m with connection/send terminal failure ratio above 8%, sustained for 10m, fires.",
+      "evaluated_good": "Fewer than 20 listen admissions/10m or terminal failure ratio at most 8% does not fire this alert."
     },
     "labels": {
       "alert_identity": "omi-stt-mid-session-terminal",
@@ -15298,7 +14990,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0",
+          "expression": "$A > 0 && $B > 0.25",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -15351,7 +15043,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "2m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - managed leg lifecycle gap",
@@ -15360,9 +15052,9 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "Managed legs opened with any unexplained opened-minus-settled-minus-open gap.",
-      "evaluated_good": "Every opened managed leg is either settled or still open."
+      "threshold": "$A > 0 && $B > 0.25 for 30m, per instance and target. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: per-pod maximum B p50 1.1% / p90 16.7% / max 100% at pod start. A nonzero steady-state gap (p50 1.1%) is an accounting defect to investigate, not healthy; the sustained threshold filters pod-start transients.",
+      "evaluated_bad": "Managed legs opened on an instance/target with unexplained opened-minus-settled-minus-open ratio above 25%, sustained for 30m, fires.",
+      "evaluated_good": "No opened legs or per-instance/target gap at most 25% does not fire this alert. A nonzero steady-state gap remains an accounting defect to investigate, not healthy."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-lifecycle-gap",

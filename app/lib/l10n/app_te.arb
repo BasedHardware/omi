@@ -11440,5 +11440,6 @@
     "reviewProposalGeneric": "ఈ సూచించిన సవరణను వర్తింపజేయాలా?",
     "reviewProposalApply": "వర్తింపజేయి",
     "reviewProposalSuggested": "సూచించినది",
-    "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు."
+    "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.",
+    "itemLinkListTitle": "{count, plural, =0{అంశాలు లేవు} =1{1 అంశం} other{{count} అంశాలు}}"
 }

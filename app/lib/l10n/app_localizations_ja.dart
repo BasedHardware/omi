@@ -12823,4 +12823,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dreamが提案した後に内容が変わったため、何も適用されませんでした。';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のアイテム',
+      one: '1件のアイテム',
+      zero: 'アイテムなし',
+    );
+    return '$_temp0';
+  }
 }

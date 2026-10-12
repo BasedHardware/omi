@@ -15758,5 +15758,14 @@
     "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
     "@reviewProposalConflict": {
         "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"
+    },
+    "itemLinkListTitle": "{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}",
+    "@itemLinkListTitle": {
+        "description": "Title of the sheet that lists the items an Omi link points at (conversations, tasks, memories)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

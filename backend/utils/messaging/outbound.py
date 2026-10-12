@@ -2,6 +2,10 @@
 
 from datetime import datetime, timezone
 import time
+import logging
+
+from utils.observability.fallback import record_fallback
+from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 
 from utils.messaging.contracts import Artifact, ChannelCapabilities, SendClass
 
@@ -20,8 +24,9 @@ def authorize_send(capabilities: ChannelCapabilities, kind: SendClass, last_inbo
 
 
 class ChannelReplySink:
-    def __init__(self, adapter, message, *, kind: SendClass = 'reply', guard=None):
+    def __init__(self, adapter, message, *, kind: SendClass = 'reply', guard=None, reply_target=None):
         self.adapter, self.message, self.guard = adapter, message, guard
+        self.reply_target = reply_target
         self.kind: SendClass = kind
         self.buffer = ''
         self.sequence = 0
@@ -31,7 +36,7 @@ class ChannelReplySink:
     def response(self, stream, *, media_type):
         return stream
 
-    async def _send(self, *, text=None, artifact=None, draft=False):
+    async def _send(self, *, text=None, artifact=None, draft=False, link=None):
         authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
         if text is not None and len(text) > self.adapter.capabilities.max_text_len:
             raise ValueError('Adapter renderer exceeded max_text_len')
@@ -41,9 +46,13 @@ class ChannelReplySink:
 
         token = send_sequence.set(self.sequence)
         guard_token = send_guard.set(self.guard)
+        reply_token = send_reply_target.set(self.reply_target)
         try:
-            provider_id = await self.adapter.send(self.message, text=text, artifact=artifact, draft=draft)
+            provider_id = await self.adapter.send(
+                self.message, text=text, artifact=artifact, draft=draft, **({'link': link} if link is not None else {})
+            )
         finally:
+            send_reply_target.reset(reply_token)
             send_guard.reset(guard_token)
             send_sequence.reset(token)
         if not draft:
@@ -108,11 +117,14 @@ class ChannelReplySink:
         parts = self.adapter.render(text)
         markup = send_markup.get()
         token = send_markup.set(markup)
+        chunk_token = send_first_chunk.set(True)
         try:
             for index, part in enumerate(parts):
+                send_first_chunk.set(index == 0)
                 send_markup.set(markup if index == len(parts) - 1 else None)
                 await self._send(text=part)
         finally:
+            send_first_chunk.reset(chunk_token)
             send_markup.reset(token)
         self.finished = True
 
@@ -121,15 +133,18 @@ class ChannelReplySink:
 
         markup = self.adapter.receipt_buttons(receipt) if hasattr(self.adapter, 'receipt_buttons') else None
         token = send_markup.set(markup)
+        chunk_token = send_first_chunk.set(True)
         try:
             parts = self.adapter.render(receipt.text)
             provider_id = None
             for index, part in enumerate(parts):
+                send_first_chunk.set(index == 0)
                 # Only the final part owns the button when a receipt must split.
                 send_markup.set(markup if index == len(parts) - 1 else None)
                 provider_id = await self._send(text=part)
             return provider_id
         finally:
+            send_first_chunk.reset(chunk_token)
             send_markup.reset(token)
 
     async def edit_receipt(self, result):
@@ -161,13 +176,34 @@ class ChannelReplySink:
             markup = self.adapter.buttons(suggestions)
         items = linked_items(response)
         text = source_phrases(response['text'])
-        if items:
+        card = None
+        if hasattr(self.adapter, 'item_presentation'):
+            text, card = await self.adapter.item_presentation(self.message, text, items)
+        elif items:
             if hasattr(self.adapter, 'item_buttons'):
                 markup = self.adapter.item_buttons(items)
             else:
-                text += '\nOpen in Omi: ' + (items[0]['url'] if len(items) == 1 else 'https://h.omi.me')
+                text += '\n' + '\n'.join(item['title'] + ': ' + item['url'] for item in items[:5])
         token = send_markup.set(markup)
         try:
             await self.finish(text)
+            if card:
+                chunk_token = send_first_chunk.set(False)
+                try:
+                    await self._send(link=card)
+                except Exception as error:
+                    # The accepted text remains the answer; previews are optional.
+                    record_fallback(
+                        component='other',
+                        from_mode='imessage_link_card',
+                        to_mode='text',
+                        reason='other',
+                        outcome='degraded',
+                    )
+                    logging.getLogger(__name__).warning(
+                        'Messaging link card skipped error_type=%s', type(error).__name__
+                    )
+                finally:
+                    send_first_chunk.reset(chunk_token)
         finally:
             send_markup.reset(token)

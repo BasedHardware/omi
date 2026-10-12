@@ -13014,4 +13014,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Tämä on muuttunut Dreamin ehdotuksen jälkeen, joten mitään ei otettu käyttöön.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohdetta',
+      one: '1 kohde',
+      zero: 'Ei kohteita',
+    );
+    return '$_temp0';
+  }
 }

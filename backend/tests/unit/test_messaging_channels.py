@@ -168,7 +168,8 @@ def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
         assert store.jobs[second]['status'] == 'pending'
         proceed.set()
         await running
-        assert await gateway.process(second)
+        assert store.jobs[second]['status'] == 'done'
+        assert not await gateway.process(second)
         principal = Principal('u', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
         await gateway.reenter(message, ReentryEvent('result', 'finished task', 'task'), principal=principal)
         count = len(adapter.sent)
