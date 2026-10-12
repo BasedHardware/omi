@@ -84,4 +84,38 @@ void main() {
     expect(find.text('Action 1'), findsOneWidget);
     expect(find.text('Action 2'), findsOneWidget);
   });
+
+  testWidgets('OmiSectionHeader aligns trailing widget to the right edge on wide screens', (tester) async {
+    tester.view.physicalSize = const Size(500, 300);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                OmiSectionHeader(
+                  'Short Title',
+                  trailing: Text('Trailing Action'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    final headerTopRight = tester.getTopRight(find.byType(OmiSectionHeader));
+    final trailingTopRight = tester.getTopRight(find.text('Trailing Action'));
+    // The trailing text is flush right inside the header padding (right padding is OmiSpacing.xxs = 4.0)
+    expect((headerTopRight.dx - trailingTopRight.dx).abs(), lessThanOrEqualTo(5.0));
+  });
 }
