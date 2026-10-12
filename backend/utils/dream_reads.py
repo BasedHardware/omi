@@ -7,6 +7,8 @@ from database import review_store
 from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
+from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT
+from utils.dream_diagnostics import initialize
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
@@ -33,7 +35,11 @@ def read_record(uid, ref, *, control_cache=None):
         raise ValueError('Invalid dream read reference')
     if collection == 'conversations':
         row = next(iter(conversations.get_conversations_by_id_without_photos(uid, [key])), None)
-        return row if row and conversations.is_visible_conversation(row) and not row.get('is_locked') else None
+        if not row or not conversations.is_visible_conversation(row):
+            return None
+        if row.get('is_locked'):
+            raise HTTPException(423, 'Dream record locked')
+        return row
     if collection in {'memories', 'memory_items'}:
         canonical = read_canonical_memory_item(uid, key)
         if canonical and not filter_canonical_default_visible_items(
@@ -43,8 +49,10 @@ def read_record(uid, ref, *, control_cache=None):
         ):
             return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
-        if row.is_locked or row.user_review is False or row.visibility != 'private':
+        if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
             return None
+        if row.is_locked:
+            raise HTTPException(423, 'Dream record locked')
         return row.model_dump(mode='python')
     if collection in {'action_items', 'candidates'}:
         if 'generation' not in control_cache:
@@ -75,7 +83,7 @@ def read_entity_record(uid, entity_id):
     }
 
 
-def read_changes(uid, lease, caps, vocabulary=None):
+def cached_reader():
     cache, control_cache = {}, {}
 
     def read(ref_uid, ref):
@@ -83,36 +91,100 @@ def read_changes(uid, lease, caps, vocabulary=None):
             cache[ref] = read_record(ref_uid, ref, control_cache=control_cache)
         return cache[ref]
 
-    dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
+    return read
+
+
+def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnostics=None):
+    diagnostics = initialize({} if diagnostics is None else diagnostics)
+    seeds = set([ref for ref in records if ref in records.targets][:4])
+    diagnostics['target_context_counts'].update(retrieval_seeded=len(seeds), contextless=len(records.targets - seeds))
+    read = cached_reader() if read is None else read
+    return add_context(
+        records,
+        context_candidates(
+            uid,
+            EvidenceRecords(records, targets=seeds),
+            vocabulary or [],
+            read_record=read,
+            read_entity_record=read_entity_record,
+            diagnostics=diagnostics,
+        ),
+        caps,
+        vocabulary,
+        diagnostics=diagnostics,
+    )
+
+
+def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavailable=None):
+    unavailable = [] if unavailable is None else unavailable
+    diagnostics = initialize({} if diagnostics is None else diagnostics)
+    counts = diagnostics['dirty_counts']
+    read = cached_reader()
+
+    dirty = dream_store.dirty_refs(uid, limit=dream_store.DIRTY_INSPECTION_LIMIT)[: dream_store.DIRTY_INSPECTION_LIMIT]
     records = EvidenceRecords()
     consumed = []
-    for snapshot in dirty:
-        if len(records.targets) >= 4:
-            break
+    assessed = {}
+    counts['fetched'] = len(dirty)
+
+    def admit(snapshot):
+        nonlocal records
         item = snapshot.to_dict()
         # An update after admission belongs to a later pass, even if observed now.
         if item['last_changed_at'] > lease['started_at']:
-            continue
+            counts['newer'] += 1
+            return 'newer'
         ref = f"{item['collection']}/{item['id']}"
-        try:
-            row = read(uid, ref)
-        except review_store.ReviewNotFound:
-            row = None
-        except HTTPException as exc:
-            if exc.status_code not in {402, 404}:
+        if ref not in assessed:
+            counts['attempted'] += 1
+            transient = False
+            try:
+                assessed[ref] = read(uid, ref)
+            except review_store.ReviewNotFound:
+                assessed[ref] = None
+            except HTTPException as exc:
+                if exc.status_code not in {402, 404, 423}:
+                    counts['failed'] += 1
+                    raise
+                assessed[ref] = None
+                transient = exc.status_code in {402, 423}
+            except Exception:
+                counts['failed'] += 1
                 raise
-            row = None
-        if row:
-            candidate = {**records, ref: row}
-            if not fits_triage(candidate, caps, vocabulary):
-                break
-            records[ref] = row
-            records.targets.add(ref)
+            counts['found' if assessed[ref] else 'unavailable'] += 1
+            if not assessed[ref]:
+                counts['transient' if transient else 'permanent'] += 1
+                unavailable.append({**item, 'transient': transient})
+        row = assessed[ref]
+        if not row:
+            # Settlement independently fences permanent misses and bounds
+            # retries for 402/locked versions; neither counts as model evidence.
+            return 'unavailable'
+        candidate = EvidenceRecords({**records, ref: row}, targets=records.targets | {ref})
+        has_context = len(candidate) > len(candidate.targets)
+        if not fits_triage(candidate, caps, vocabulary) or (has_context and not fits_pass(candidate, caps, vocabulary)):
+            return 'budget'
+        records = candidate
         consumed.append(item)
-    records = add_context(
-        records,
-        context_candidates(uid, records, vocabulary or [], read_record=read, read_entity_record=read_entity_record),
-        caps,
-        vocabulary,
+        counts['admitted'] += 1
+        return 'admitted'
+
+    # Four is an initial neighbourhood seed allocation, never a final target cap.
+    position = 0
+    while position < len(dirty) and len(records.targets) < 4:
+        if admit(dirty[position]) == 'budget':
+            break
+        position += 1
+    records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics)
+    # Return unspent neighbourhood capacity to dirty targets. Only admitted
+    # target versions are consumed; unavailable versions settle separately.
+    while position < len(dirty) and len(records.targets) < REASONING_TARGET_LIMIT:
+        if admit(dirty[position]) == 'budget':
+            counts['budget_deferred'] = len(dirty) - position
+            break
+        position += 1
+    counts['budget_deferred'] = len(dirty) - position
+    diagnostics['target_context_counts']['contextless'] = (
+        len(records.targets) - diagnostics['target_context_counts']['retrieval_seeded']
     )
     return records, consumed
