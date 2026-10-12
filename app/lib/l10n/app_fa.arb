@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "اعمال",
     "reviewProposalSuggested": "پیشنهادی",
     "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.",
-    "itemLinkListTitle": "{count, plural, =0{هیچ موردی نیست} =1{۱ مورد} other{{count} مورد}}"
+    "itemLinkListTitle": "{count, plural, =0{هیچ موردی نیست} =1{۱ مورد} other{{count} مورد}}",
+    "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
+    "onboardingNoOmiYet": "هنوز Omi ندارید؟",
+    "onboardingOmiOrdered": "سفارش داده‌ام",
+    "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام"
 }

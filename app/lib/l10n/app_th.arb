@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "ใช้",
     "reviewProposalSuggested": "ที่แนะนำ",
     "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ",
-    "itemLinkListTitle": "{count, plural, =0{ไม่มีรายการ} =1{1 รายการ} other{{count} รายการ}}"
+    "itemLinkListTitle": "{count, plural, =0{ไม่มีรายการ} =1{1 รายการ} other{{count} รายการ}}",
+    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข",
+    "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
+    "onboardingOmiOrdered": "สั่งซื้อแล้ว",
+    "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ"
 }

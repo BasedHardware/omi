@@ -13056,4 +13056,16 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Націсніце, каб выправіць';
+
+  @override
+  String get onboardingNoOmiYet => 'Яшчэ няма Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Я ўжо замовіў';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Яшчэ не замовіў';
 }

@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "ಅನ್ವಯಿಸಿ",
     "reviewProposalSuggested": "ಸೂಚಿಸಲಾಗಿದೆ",
     "reviewProposalConflict": "Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.",
-    "itemLinkListTitle": "{count, plural, =0{ಯಾವುದೇ ಐಟಂ ಇಲ್ಲ} =1{1 ಐಟಂ} other{{count} ಐಟಂಗಳು}}"
+    "itemLinkListTitle": "{count, plural, =0{ಯಾವುದೇ ಐಟಂ ಇಲ್ಲ} =1{1 ಐಟಂ} other{{count} ಐಟಂಗಳು}}",
+    "onboardingPermissionTapToFix": "ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "onboardingNoOmiYet": "ಇನ್ನೂ ನಿಮ್ಮ Omi ಇಲ್ಲವೇ?",
+    "onboardingOmiOrdered": "ನಾನು ಆರ್ಡರ್ ಮಾಡಿದ್ದೇನೆ",
+    "onboardingOmiNotOrdered": "ಇನ್ನೂ ಆರ್ಡರ್ ಮಾಡಿಲ್ಲ"
 }

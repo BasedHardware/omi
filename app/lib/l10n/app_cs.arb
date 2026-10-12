@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Použít",
     "reviewProposalSuggested": "Navrženo",
     "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo.",
-    "itemLinkListTitle": "{count, plural, =0{Žádné položky} =1{1 položka} other{{count} položek}}"
+    "itemLinkListTitle": "{count, plural, =0{Žádné položky} =1{1 položka} other{{count} položek}}",
+    "onboardingPermissionTapToFix": "Klepnutím opravíte",
+    "onboardingNoOmiYet": "Ještě nemáte Omi?",
+    "onboardingOmiOrdered": "Už jsem ho objednal/a",
+    "onboardingOmiNotOrdered": "Ještě neobjednáno"
 }

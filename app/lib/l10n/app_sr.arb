@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "Primeni",
     "reviewProposalSuggested": "Predloženo",
     "reviewProposalConflict": "Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.",
-    "itemLinkListTitle": "{count, plural, =0{Нема ставки} =1{1 ставка} other{{count} ставки}}"
+    "itemLinkListTitle": "{count, plural, =0{Нема ставки} =1{1 ставка} other{{count} ставки}}",
+    "onboardingPermissionTapToFix": "Додирните да поправите",
+    "onboardingNoOmiYet": "Још немате Omi?",
+    "onboardingOmiOrdered": "Наручио/ла сам га",
+    "onboardingOmiNotOrdered": "Још нисам наручио/ла"
 }

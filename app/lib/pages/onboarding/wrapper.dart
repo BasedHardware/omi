@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +13,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
-import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
+import 'package:omi/pages/onboarding/connect_omi/connect_omi_step.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
@@ -22,6 +24,7 @@ import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
@@ -48,9 +51,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kAuthPage = 0;
   static const int kAiConsentPage = 1; // Data-and-AI disclosure with explicit consent
   static const int kNamePage = 2;
-  static const int kPrimaryLanguagePage = 3;
-  static const int kFoundOmiPage = 4;
-  static const int kPermissionsPage = 5;
+  static const int kPermissionsPage = 3;
+  static const int kPrimaryLanguagePage = 4;
+  static const int kConnectOmiPage = 5; // Finds the reader's Omi (search starts after sign-in)
   static const int kSpeechProfilePage = 6; // Guided voice introduction
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
@@ -66,9 +69,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   static const List<int> kProgressSteps = [
     kNamePage,
-    kPrimaryLanguagePage,
-    kFoundOmiPage,
     kPermissionsPage,
+    kPrimaryLanguagePage,
+    kConnectOmiPage,
     kSpeechProfilePage,
     if (kKnowledgeGraphStepEnabled) kKnowledgeGraphPage,
   ];
@@ -92,7 +95,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
-    // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
+    // Auth, AiConsent, Name, Permissions, Lang, ConnectOmi, SpeechProfile, KnowledgeGraph, Setup, Complete
     _controller = TabController(length: kPageCount, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
@@ -142,6 +145,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
+            _startDeviceSearch();
             _controller!.animateTo(_resumeStep());
           }
         }
@@ -177,6 +181,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (context.mounted) {
       routeToPage(context, const HomePageWrapper(), replace: true);
     }
+  }
+
+  /// Starts looking for the reader's Omi in the background so "Connect your Omi" can show it at once.
+  void _startDeviceSearch() {
+    if (widget.forceAuthPage) return;
+    unawaited(context.read<OnboardingProvider>().startQuietDeviceScan());
+  }
+
+  /// Leaving "Connect your Omi". A device connected here skips the post-onboarding device
+  /// tutorial (it stays in device settings).
+  void _leaveConnectOmi(OnboardingDeviceChoice choice) {
+    if (choice == OnboardingDeviceChoice.connected) {
+      SharedPreferencesUtil().deviceOnboardingCompleted = true;
+      unawaited(OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true));
+    }
+    PlatformManager.instance.analytics.onboardingStepCompleted('Connect Omi');
+    _goNext();
   }
 
   void _goNext() {
@@ -312,12 +333,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kAuthPage:
       case kAiConsentPage:
         return Assets.images.onboardingBg2.path;
-      case kNamePage:
-      case kFoundOmiPage:
-        return Assets.images.onboardingBg1.path;
-      case kPrimaryLanguagePage:
-        return Assets.images.onboardingBg4.path;
-      case kPermissionsPage:
       case kSpeechProfilePage:
         return Assets.images.onboardingBg3.path;
       case kKnowledgeGraphPage:
@@ -371,6 +386,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
+            _startDeviceSearch();
             _controller!.animateTo(_resumeStep());
           }
         },
@@ -386,6 +402,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
+            _startDeviceSearch();
             _controller!.animateTo(_resumeStep());
           }
         },
@@ -393,7 +410,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       NameWidget(
         goNext: () {
-          _goNext(); // Go to Primary Language page
+          _goNext(); // Go to Permissions page
           IntercomManager.instance.updateUser(
             FirebaseAuth.instance.currentUser!.email,
             FirebaseAuth.instance.currentUser!.displayName,
@@ -402,27 +419,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           PlatformManager.instance.analytics.onboardingStepCompleted('Name');
         },
       ),
-      PrimaryLanguageWidget(
-        goNext: () {
-          _goNext(); // Go to Found Omi page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
-        },
-      ),
-      FoundOmiWidget(
-        goNext: () {
-          _goNext(); // Go to Permissions page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Acquisition Source');
-        },
-      ),
       PermissionsWidget(
         goNext: () {
-          // Straight to the voice introduction (phone mic; no device step). The review step was
-          // removed from onboarding to comply with App Store Guideline 5.6.3 (no rating prompts
-          // during onboarding).
-          _goNext();
+          _goNext(); // Go to Primary Language page
           PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
       ),
+      PrimaryLanguageWidget(
+        goNext: () {
+          _goNext(); // Go to Connect Omi page
+          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
+        },
+      ),
+      widget.forceAuthPage ? const SizedBox.shrink() : ConnectOmiStep(onDone: _leaveConnectOmi),
       widget.forceAuthPage
           ? const SizedBox.shrink()
           // The guided introduction owns its transcription-only session and
@@ -473,7 +482,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,
     // matching the Settings redo page; the setup and completion screens draw their own.
-    final showBackground = index != kCompletePage && index != kSetupPage && index != kSpeechProfilePage;
+    // Name, permissions, language and connect sit on the plain surface, without artwork.
+    final showBackground = index == kAuthPage || index == kAiConsentPage;
     final previous = _previousStep;
 
     return PopScope(
@@ -489,12 +499,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           backgroundColor: OmiColors.surface0,
           body: Stack(
             children: [
-              if (index == kAuthPage || showBackground) _background(),
+              if (showBackground) _background(),
               OnboardingStepLayout(
-                reserveHeader: index == kSpeechProfilePage,
+                reserveHeader: index == kSpeechProfilePage || index == kConnectOmiPage,
                 onBack: previous == null ? null : _goBack,
                 progress: kProgressSteps.contains(index)
-                    ? OnboardingProgressDots(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
+                    ? OnboardingProgressLine(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
                 child: pages[index],
               ),
@@ -518,10 +528,10 @@ abstract final class OnboardingProgressStepsForTest {
       _OnboardingWrapperState.stepAfterKnowledgeGraph(setupPageEnabled: setupPageEnabled);
 }
 
-/// The first-run progress: one dot per real step, the current one larger, with a spoken
-/// "Step N of M".
-class OnboardingProgressDots extends StatelessWidget {
-  const OnboardingProgressDots({super.key, required this.current, required this.total});
+/// The first-run progress: one thin line that fills as the reader moves through the real steps,
+/// with a spoken "Step N of M".
+class OnboardingProgressLine extends StatelessWidget {
+  const OnboardingProgressLine({super.key, required this.current, required this.total});
 
   /// Zero-based position of the current step.
   final int current;
@@ -530,26 +540,39 @@ class OnboardingProgressDots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
+    final fraction = total <= 0 ? 0.0 : ((current + 1) / total).clamp(0.0, 1.0);
     return Semantics(
       label: context.l10n.onboardingStepOf(current + 1, total),
       excludeSemantics: true,
       child: SizedBox(
         height: kOmiMinTapTarget,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(total, (i) {
-            final isCurrent = i == current;
-            return AnimatedContainer(
-              duration: motion.quick,
-              margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-              width: isCurrent ? 12.0 : 8.0,
-              height: isCurrent ? 12.0 : 8.0,
-              decoration: BoxDecoration(
-                color: i <= current ? OmiColors.textPrimary : OmiColors.textTertiary,
-                shape: BoxShape.circle,
+        child: Center(
+          child: Padding(
+            // Clear of the back button on the left, balanced on the right.
+            padding: const EdgeInsets.symmetric(horizontal: kOmiMinTapTarget + OmiSpacing.md),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(
+                height: 4,
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: ColoredBox(color: OmiColors.surface3)),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(end: fraction),
+                      duration: motion.standard,
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, _) => FractionallySizedBox(
+                        widthFactor: value,
+                        heightFactor: 1,
+                        alignment: Alignment.centerLeft,
+                        child: ColoredBox(color: OmiColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            );
-          }),
+            ),
+          ),
         ),
       ),
     );

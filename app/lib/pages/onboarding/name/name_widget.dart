@@ -24,10 +24,10 @@ class _NameWidgetState extends State<NameWidget> {
     nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
     super.initState();
 
-    // Auto-focus the name input field after the widget is built
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   focusNode.requestFocus();
-    // });
+    // The step opens with the keyboard up, ready to type.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) focusNode.requestFocus();
+    });
   }
 
   @override

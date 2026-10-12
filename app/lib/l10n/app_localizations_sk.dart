@@ -13017,4 +13017,16 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Ťuknutím opravíte';
+
+  @override
+  String get onboardingNoOmiYet => 'Ešte nemáte Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Už som ho objednal/a';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Ešte neobjednané';
 }

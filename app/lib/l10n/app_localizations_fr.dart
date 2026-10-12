@@ -13124,4 +13124,16 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Touchez pour corriger';
+
+  @override
+  String get onboardingNoOmiYet => 'Vous n\'avez pas encore votre Omi ?';
+
+  @override
+  String get onboardingOmiOrdered => 'Je l\'ai commandé';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Pas encore commandé';
 }

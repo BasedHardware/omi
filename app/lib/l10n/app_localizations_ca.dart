@@ -13089,4 +13089,16 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Toca per solucionar-ho';
+
+  @override
+  String get onboardingNoOmiYet => 'Encara no tens l\'Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Ja l\'he demanat';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Encara no l\'he demanat';
 }

@@ -6,22 +6,23 @@ import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 
 void main() {
-  testWidgets('progress dots count only real steps and speak "Step N of M"', (tester) async {
+  testWidgets('progress line fills by real steps and speaks "Step N of M"', (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(
       const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: OnboardingProgressDots(current: 1, total: 6)),
+        home: Scaffold(body: OnboardingProgressLine(current: 1, total: 6)),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('Step 2 of 6'), findsOneWidget);
-    // One dot per step: no placeholder pages inflate the count.
-    expect(
-      find.descendant(of: find.byType(OnboardingProgressDots), matching: find.byType(AnimatedContainer)),
-      findsNWidgets(6),
+    // The fill covers the steps reached so far: 2 of 6.
+    final fill = tester.widget<FractionallySizedBox>(
+      find.descendant(of: find.byType(OnboardingProgressLine), matching: find.byType(FractionallySizedBox)),
     );
+    expect(fill.widthFactor, closeTo(2 / 6, 1e-9));
     handle.dispose();
   });
 
@@ -44,7 +45,7 @@ void main() {
             child: Scaffold(
               body: OnboardingStepLayout(
                 reserveHeader: false,
-                progress: progress == null ? null : OnboardingProgressDots(current: progress, total: 6),
+                progress: progress == null ? null : OnboardingProgressLine(current: progress, total: 6),
                 onBack: onBack,
                 child: const SafeArea(child: Text('step title', key: Key('title'))),
               ),
@@ -58,7 +59,7 @@ void main() {
     expect(await top(), 47, reason: 'no chrome, nothing reserved');
     final withDots = await top(progress: 4, onBack: () {});
     expect(withDots, 47 + kOnboardingChromeHeight);
-    expect(withDots, greaterThanOrEqualTo(tester.getBottomLeft(find.byType(OnboardingProgressDots)).dy));
+    expect(withDots, greaterThanOrEqualTo(tester.getBottomLeft(find.byType(OnboardingProgressLine)).dy));
     expect(withDots, greaterThanOrEqualTo(tester.getBottomLeft(find.byKey(const Key('onboarding_back'))).dy));
     expect(await top(onBack: () {}), 47 + kOnboardingChromeHeight, reason: 'the back button alone also reserves');
   });

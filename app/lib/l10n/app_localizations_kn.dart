@@ -13060,4 +13060,16 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get onboardingNoOmiYet => 'ಇನ್ನೂ ನಿಮ್ಮ Omi ಇಲ್ಲವೇ?';
+
+  @override
+  String get onboardingOmiOrdered => 'ನಾನು ಆರ್ಡರ್ ಮಾಡಿದ್ದೇನೆ';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ಇನ್ನೂ ಆರ್ಡರ್ ಮಾಡಿಲ್ಲ';
 }

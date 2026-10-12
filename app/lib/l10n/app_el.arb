@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Εφαρμογή",
     "reviewProposalSuggested": "Προτεινόμενο",
     "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.",
-    "itemLinkListTitle": "{count, plural, =0{Κανένα στοιχείο} =1{1 στοιχείο} other{{count} στοιχεία}}"
+    "itemLinkListTitle": "{count, plural, =0{Κανένα στοιχείο} =1{1 στοιχείο} other{{count} στοιχεία}}",
+    "onboardingPermissionTapToFix": "Πατήστε για διόρθωση",
+    "onboardingNoOmiYet": "Δεν έχετε ακόμα το Omi σας;",
+    "onboardingOmiOrdered": "Το έχω παραγγείλει",
+    "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα"
 }

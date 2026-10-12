@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "تطبيق",
     "reviewProposalSuggested": "مقترح",
     "reviewProposalConflict": "تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.",
-    "itemLinkListTitle": "{count, plural, =0{لا توجد عناصر} =1{عنصر واحد} other{{count} عناصر}}"
+    "itemLinkListTitle": "{count, plural, =0{لا توجد عناصر} =1{عنصر واحد} other{{count} عناصر}}",
+    "onboardingPermissionTapToFix": "اضغط للإصلاح",
+    "onboardingNoOmiYet": "ليس لديك Omi بعد؟",
+    "onboardingOmiOrdered": "لقد طلبته",
+    "onboardingOmiNotOrdered": "لم أطلبه بعد"
 }

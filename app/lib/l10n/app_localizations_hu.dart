@@ -13073,4 +13073,16 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get onboardingNoOmiYet => 'Még nincs meg az Omid?';
+
+  @override
+  String get onboardingOmiOrdered => 'Már megrendeltem';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Még nem rendeltem';
 }

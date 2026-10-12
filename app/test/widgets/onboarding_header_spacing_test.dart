@@ -36,7 +36,7 @@ void main() {
               body: OnboardingStepLayout(
                 reserveHeader: true,
                 onBack: () => backs++,
-                progress: const OnboardingProgressDots(current: 4, total: 6),
+                progress: const OnboardingProgressLine(current: 4, total: 6),
                 child: SpeechProfileWidget(controller: flow, goNext: () {}, onSkip: () {}),
               ),
             ),
@@ -46,7 +46,7 @@ void main() {
         final back = find.byKey(const Key('onboarding_back'));
         final title = find.text('Let Omi get to know you');
         final scroll = find.byKey(const Key('introduction_scroll'));
-        final headerBottom = tester.getRect(find.byType(OnboardingProgressDots)).bottom;
+        final headerBottom = tester.getRect(find.byType(OnboardingProgressLine)).bottom;
         expect(tester.getRect(title).top, greaterThanOrEqualTo(headerBottom));
         expect(tester.getRect(title).overlaps(tester.getRect(back)), isFalse);
         // SafeArea is consumed by the host once; the page starts directly below its header.

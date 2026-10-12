@@ -71,10 +71,10 @@ final onboardingScenarios = <AuditScenario>[
   AuditScenario(
     id: 'onboarding-progress-dots',
     title: 'Onboarding progress dots',
-    page: 'lib/pages/onboarding/wrapper.dart (OnboardingProgressDots)',
+    page: 'lib/pages/onboarding/wrapper.dart (OnboardingProgressLine)',
     state: 'Step 2 of 6',
     run: (a) async {
-      await a.pump(const Center(child: OnboardingProgressDots(current: 1, total: 6)));
+      await a.pump(const Center(child: OnboardingProgressLine(current: 1, total: 6)));
       await a.shot('Progress dots on step 2 of 6');
     },
   ),

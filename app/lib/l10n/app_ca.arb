@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Aplica",
     "reviewProposalSuggested": "Suggerit",
     "reviewProposalConflict": "Això ha canviat des que Dream ho va suggerir, així que no s'ha aplicat res.",
-    "itemLinkListTitle": "{count, plural, =0{Cap element} =1{1 element} other{{count} elements}}"
+    "itemLinkListTitle": "{count, plural, =0{Cap element} =1{1 element} other{{count} elements}}",
+    "onboardingPermissionTapToFix": "Toca per solucionar-ho",
+    "onboardingNoOmiYet": "Encara no tens l'Omi?",
+    "onboardingOmiOrdered": "Ja l'he demanat",
+    "onboardingOmiNotOrdered": "Encara no l'he demanat"
 }

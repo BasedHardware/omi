@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "প্রয়োগ করুন",
     "reviewProposalSuggested": "প্রস্তাবিত",
     "reviewProposalConflict": "Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।",
-    "itemLinkListTitle": "{count, plural, =0{কোনো আইটেম নেই} =1{১টি আইটেম} other{{count}টি আইটেম}}"
+    "itemLinkListTitle": "{count, plural, =0{কোনো আইটেম নেই} =1{১টি আইটেম} other{{count}টি আইটেম}}",
+    "onboardingPermissionTapToFix": "ঠিক করতে ট্যাপ করুন",
+    "onboardingNoOmiYet": "এখনও Omi নেই?",
+    "onboardingOmiOrdered": "আমি অর্ডার করেছি",
+    "onboardingOmiNotOrdered": "এখনও অর্ডার করিনি"
 }

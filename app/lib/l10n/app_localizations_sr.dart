@@ -13030,4 +13030,16 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Додирните да поправите';
+
+  @override
+  String get onboardingNoOmiYet => 'Још немате Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Наручио/ла сам га';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Још нисам наручио/ла';
 }

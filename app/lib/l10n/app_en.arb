@@ -15767,5 +15767,21 @@
                 "type": "int"
             }
         }
+    },
+    "onboardingPermissionTapToFix": "Tap to fix",
+    "@onboardingPermissionTapToFix": {
+        "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "onboardingNoOmiYet": "Don't have your Omi yet?",
+    "@onboardingNoOmiYet": {
+        "description": "Onboarding connect step: small prompt for people without their Omi device"
+    },
+    "onboardingOmiOrdered": "I've ordered mine",
+    "@onboardingOmiOrdered": {
+        "description": "Onboarding connect step: choice for people whose Omi device is on its way"
+    },
+    "onboardingOmiNotOrdered": "Not ordered yet",
+    "@onboardingOmiNotOrdered": {
+        "description": "Onboarding connect step: choice for people who have not ordered an Omi device"
     }
 }

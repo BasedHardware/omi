@@ -4100,5 +4100,9 @@
     "reviewProposalApply": "Alkalmaz",
     "reviewProposalSuggested": "Javasolt",
     "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.",
-    "itemLinkListTitle": "{count, plural, =0{Nincsenek elemek} =1{1 elem} other{{count} elem}}"
+    "itemLinkListTitle": "{count, plural, =0{Nincsenek elemek} =1{1 elem} other{{count} elem}}",
+    "onboardingPermissionTapToFix": "Koppints a javításhoz",
+    "onboardingNoOmiYet": "Még nincs meg az Omid?",
+    "onboardingOmiOrdered": "Már megrendeltem",
+    "onboardingOmiNotOrdered": "Még nem rendeltem"
 }

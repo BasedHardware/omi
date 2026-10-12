@@ -4039,5 +4039,9 @@
     "reviewProposalApply": "Uygula",
     "reviewProposalSuggested": "Önerilen",
     "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.",
-    "itemLinkListTitle": "{count, plural, =0{Öğe Yok} =1{1 Öğe} other{{count} Öğe}}"
+    "itemLinkListTitle": "{count, plural, =0{Öğe Yok} =1{1 Öğe} other{{count} Öğe}}",
+    "onboardingPermissionTapToFix": "Düzeltmek için dokunun",
+    "onboardingNoOmiYet": "Omi'n henüz yok mu?",
+    "onboardingOmiOrdered": "Sipariş verdim",
+    "onboardingOmiNotOrdered": "Henüz sipariş vermedim"
 }

@@ -13051,4 +13051,16 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Tapnite za popravilo';
+
+  @override
+  String get onboardingNoOmiYet => 'Še nimate Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Naročil/a sem ga';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Še nisem naročil/a';
 }

@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "వర్తింపజేయి",
     "reviewProposalSuggested": "సూచించినది",
     "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.",
-    "itemLinkListTitle": "{count, plural, =0{అంశాలు లేవు} =1{1 అంశం} other{{count} అంశాలు}}"
+    "itemLinkListTitle": "{count, plural, =0{అంశాలు లేవు} =1{1 అంశం} other{{count} అంశాలు}}",
+    "onboardingPermissionTapToFix": "సరిచేయడానికి నొక్కండి",
+    "onboardingNoOmiYet": "ఇంకా మీ Omi లేదా?",
+    "onboardingOmiOrdered": "నేను ఆర్డర్ చేశాను",
+    "onboardingOmiNotOrdered": "ఇంకా ఆర్డర్ చేయలేదు"
 }

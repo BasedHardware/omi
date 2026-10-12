@@ -13076,4 +13076,16 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Atinge pentru a remedia';
+
+  @override
+  String get onboardingNoOmiYet => 'Nu ai încă Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'L-am comandat';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Încă nu am comandat';
 }

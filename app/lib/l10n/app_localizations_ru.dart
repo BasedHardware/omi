@@ -13067,4 +13067,16 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Нажмите, чтобы исправить';
+
+  @override
+  String get onboardingNoOmiYet => 'Ещё нет Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Я уже заказал';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Ещё не заказал';
 }

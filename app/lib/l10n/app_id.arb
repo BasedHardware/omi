@@ -4039,5 +4039,9 @@
     "reviewProposalApply": "Terapkan",
     "reviewProposalSuggested": "Disarankan",
     "reviewProposalConflict": "Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan.",
-    "itemLinkListTitle": "{count, plural, =0{Tidak Ada Item} =1{1 Item} other{{count} Item}}"
+    "itemLinkListTitle": "{count, plural, =0{Tidak Ada Item} =1{1 Item} other{{count} Item}}",
+    "onboardingPermissionTapToFix": "Ketuk untuk memperbaiki",
+    "onboardingNoOmiYet": "Belum punya Omi?",
+    "onboardingOmiOrdered": "Saya sudah memesannya",
+    "onboardingOmiNotOrdered": "Belum memesan"
 }

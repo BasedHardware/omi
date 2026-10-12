@@ -13016,4 +13016,16 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
+
+  @override
+  String get onboardingNoOmiYet => 'هنوز Omi ندارید؟';
+
+  @override
+  String get onboardingOmiOrdered => 'سفارش داده‌ام';
+
+  @override
+  String get onboardingOmiNotOrdered => 'هنوز سفارش نداده‌ام';
 }

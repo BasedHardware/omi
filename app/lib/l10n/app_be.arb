@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "Ужыць",
     "reviewProposalSuggested": "Прапанавана",
     "reviewProposalConflict": "Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта.",
-    "itemLinkListTitle": "{count, plural, =0{Няма элементаў} =1{1 элемент} other{{count} элементаў}}"
+    "itemLinkListTitle": "{count, plural, =0{Няма элементаў} =1{1 элемент} other{{count} элементаў}}",
+    "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
+    "onboardingNoOmiYet": "Яшчэ няма Omi?",
+    "onboardingOmiOrdered": "Я ўжо замовіў",
+    "onboardingOmiNotOrdered": "Яшчэ не замовіў"
 }

@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "適用",
     "reviewProposalSuggested": "提案",
     "reviewProposalConflict": "Dreamが提案した後に内容が変わったため、何も適用されませんでした。",
-    "itemLinkListTitle": "{count, plural, =0{アイテムなし} =1{1件のアイテム} other{{count}件のアイテム}}"
+    "itemLinkListTitle": "{count, plural, =0{アイテムなし} =1{1件のアイテム} other{{count}件のアイテム}}",
+    "onboardingPermissionTapToFix": "タップして修正",
+    "onboardingNoOmiYet": "まだOmiをお持ちでないですか？",
+    "onboardingOmiOrdered": "注文済みです",
+    "onboardingOmiNotOrdered": "まだ注文していません"
 }

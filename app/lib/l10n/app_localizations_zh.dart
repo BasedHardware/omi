@@ -12816,4 +12816,16 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => '点按以修复';
+
+  @override
+  String get onboardingNoOmiYet => '还没有 Omi？';
+
+  @override
+  String get onboardingOmiOrdered => '我已下单';
+
+  @override
+  String get onboardingOmiNotOrdered => '还没下单';
 }

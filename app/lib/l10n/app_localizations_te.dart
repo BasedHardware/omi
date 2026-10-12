@@ -13073,4 +13073,16 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'సరిచేయడానికి నొక్కండి';
+
+  @override
+  String get onboardingNoOmiYet => 'ఇంకా మీ Omi లేదా?';
+
+  @override
+  String get onboardingOmiOrdered => 'నేను ఆర్డర్ చేశాను';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ఇంకా ఆర్డర్ చేయలేదు';
 }

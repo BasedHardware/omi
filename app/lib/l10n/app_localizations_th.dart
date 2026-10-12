@@ -12955,4 +12955,16 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'แตะเพื่อแก้ไข';
+
+  @override
+  String get onboardingNoOmiYet => 'ยังไม่มี Omi ใช่ไหม';
+
+  @override
+  String get onboardingOmiOrdered => 'สั่งซื้อแล้ว';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ยังไม่ได้สั่งซื้อ';
 }

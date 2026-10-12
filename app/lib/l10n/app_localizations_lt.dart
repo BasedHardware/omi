@@ -13045,4 +13045,16 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Bakstelėkite, kad pataisytumėte';
+
+  @override
+  String get onboardingNoOmiYet => 'Dar neturite Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Jau užsisakiau';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Dar neužsisakiau';
 }

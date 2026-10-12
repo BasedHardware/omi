@@ -13018,4 +13018,16 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'ঠিক করতে ট্যাপ করুন';
+
+  @override
+  String get onboardingNoOmiYet => 'এখনও Omi নেই?';
+
+  @override
+  String get onboardingOmiOrdered => 'আমি অর্ডার করেছি';
+
+  @override
+  String get onboardingOmiNotOrdered => 'এখনও অর্ডার করিনি';
 }

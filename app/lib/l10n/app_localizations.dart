@@ -23216,6 +23216,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
   String itemLinkListTitle(int count);
+
+  /// Onboarding permissions: shown on a denied permission card; tapping opens Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to fix'**
+  String get onboardingPermissionTapToFix;
+
+  /// Onboarding connect step: small prompt for people without their Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t have your Omi yet?'**
+  String get onboardingNoOmiYet;
+
+  /// Onboarding connect step: choice for people whose Omi device is on its way
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve ordered mine'**
+  String get onboardingOmiOrdered;
+
+  /// Onboarding connect step: choice for people who have not ordered an Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Not ordered yet'**
+  String get onboardingOmiNotOrdered;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

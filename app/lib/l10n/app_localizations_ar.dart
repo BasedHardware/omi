@@ -12948,4 +12948,16 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'اضغط للإصلاح';
+
+  @override
+  String get onboardingNoOmiYet => 'ليس لديك Omi بعد؟';
+
+  @override
+  String get onboardingOmiOrdered => 'لقد طلبته';
+
+  @override
+  String get onboardingOmiNotOrdered => 'لم أطلبه بعد';
 }

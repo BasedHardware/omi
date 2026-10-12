@@ -84,7 +84,7 @@ class _CaptureAppState extends State<_CaptureApp> {
           child: Scaffold(
             body: OnboardingStepLayout(
               reserveHeader: _fixed,
-              progress: const OnboardingProgressDots(current: 4, total: 6),
+              progress: const OnboardingProgressLine(current: 4, total: 6),
               onBack: () {},
               child: SpeechProfileWidget(controller: _flow, goNext: () {}, onSkip: () {}),
             ),

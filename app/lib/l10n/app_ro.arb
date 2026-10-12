@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Aplică",
     "reviewProposalSuggested": "Sugerat",
     "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.",
-    "itemLinkListTitle": "{count, plural, =0{Niciun element} =1{1 element} other{{count} elemente}}"
+    "itemLinkListTitle": "{count, plural, =0{Niciun element} =1{1 element} other{{count} elemente}}",
+    "onboardingPermissionTapToFix": "Atinge pentru a remedia",
+    "onboardingNoOmiYet": "Nu ai încă Omi?",
+    "onboardingOmiOrdered": "L-am comandat",
+    "onboardingOmiNotOrdered": "Încă nu am comandat"
 }

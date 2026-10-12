@@ -13026,4 +13026,16 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
+
+  @override
+  String get onboardingNoOmiYet => 'Eikö Omi ole vielä saapunut?';
+
+  @override
+  String get onboardingOmiOrdered => 'Olen tilannut sen';
+
+  @override
+  String get onboardingOmiNotOrdered => 'En ole vielä tilannut';
 }

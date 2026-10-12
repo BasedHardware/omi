@@ -13027,4 +13027,16 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'दुरुस्त करण्यासाठी टॅप करा';
+
+  @override
+  String get onboardingNoOmiYet => 'अजून तुमचा Omi आला नाही?';
+
+  @override
+  String get onboardingOmiOrdered => 'मी ऑर्डर केला आहे';
+
+  @override
+  String get onboardingOmiNotOrdered => 'अजून ऑर्डर केलेला नाही';
 }

@@ -1,46 +1,296 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
-import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
-/// First-run permissions step. Each row can allow its own permission; Continue asks for whatever is
-/// still missing, then moves on whatever the reader chose (docs/ux-contract.md §15).
-class PermissionsWidget extends StatelessWidget {
+/// How one card on the first-run permissions step looks.
+enum OnboardingPermissionCardState {
+  /// Not answered yet: grey, switch off.
+  unanswered,
+
+  /// Allowed: switch on.
+  allowed,
+
+  /// Answered with no (or switched off in Settings). Tapping opens Settings.
+  denied,
+}
+
+/// First-run permissions step: one switch card per permission (docs/ux-contract.md §15).
+///
+/// Each card is answered by toggling it, which shows that permission's system prompt. A "no" is an
+/// answer: the card turns orange (notifications: red with "Tap to fix") and the reader can still
+/// continue. Continue unlocks once every card has been answered. Bluetooth is asked as the app
+/// opens, so its card only appears when it was not allowed.
+class PermissionsWidget extends StatefulWidget {
   final VoidCallback goNext;
   final OnboardingPermissionsSource? source;
 
   const PermissionsWidget({super.key, required this.goNext, this.source});
 
   @override
+  State<PermissionsWidget> createState() => _PermissionsWidgetState();
+}
+
+class _PermissionsWidgetState extends State<PermissionsWidget> with WidgetsBindingObserver {
+  late final OnboardingPermissionsSource _source = resolveOnboardingPermissionsSource(context, widget.source);
+
+  /// The cards, fixed when the step opens: Bluetooth stays listed after it is allowed here.
+  List<OnboardingPermission>? _permissions;
+  final Map<OnboardingPermission, OmiPermissionStatus> _statuses = {};
+
+  /// Cards whose system prompt the reader has already seen (on this step, or Bluetooth at launch).
+  final Set<OnboardingPermission> _asked = {};
+  OnboardingPermission? _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (SharedPreferencesUtil().getBool('onboarding/bluetoothAskedAtLaunch')) {
+      _asked.add(OnboardingPermission.bluetooth);
+    }
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from Settings: show what the reader switched on there.
+    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+  }
+
+  Future<OmiPermissionStatus> _read(OnboardingPermission permission) async {
+    try {
+      return await _source.status(permission);
+    } catch (_) {
+      return OmiPermissionStatus.askable;
+    }
+  }
+
+  Future<void> _load() async {
+    final bluetooth = await _read(OnboardingPermission.bluetooth);
+    if (!mounted) return;
+    setState(() {
+      _permissions = [
+        if (bluetooth != OmiPermissionStatus.granted) OnboardingPermission.bluetooth,
+        ..._source.permissions,
+      ];
+      _statuses[OnboardingPermission.bluetooth] = bluetooth;
+    });
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final permissions = _permissions;
+    if (permissions == null) return;
+    for (final permission in permissions) {
+      final status = await _read(permission);
+      if (!mounted) return;
+      setState(() => _statuses[permission] = status);
+    }
+  }
+
+  OnboardingPermissionCardState _stateOf(OnboardingPermission permission) {
+    final status = _statuses[permission] ?? OmiPermissionStatus.askable;
+    if (status == OmiPermissionStatus.granted) return OnboardingPermissionCardState.allowed;
+    if (status == OmiPermissionStatus.blocked || status == OmiPermissionStatus.serviceOff) {
+      return OnboardingPermissionCardState.denied;
+    }
+    return _asked.contains(permission)
+        ? OnboardingPermissionCardState.denied
+        : OnboardingPermissionCardState.unanswered;
+  }
+
+  bool get _allAnswered {
+    final permissions = _permissions;
+    if (permissions == null) return false;
+    return permissions.every((p) => _stateOf(p) != OnboardingPermissionCardState.unanswered);
+  }
+
+  Future<void> _onTap(OnboardingPermission permission) async {
+    if (_busy != null) return;
+    final state = _stateOf(permission);
+    if (state == OnboardingPermissionCardState.allowed) return;
+    OmiHaptics.selection();
+    if (state == OnboardingPermissionCardState.denied) {
+      // The system will not ask again (or the reader said no): only Settings can turn it on.
+      await openAppSettings();
+      return;
+    }
+    setState(() => _busy = permission);
+    try {
+      await _source.request(permission);
+    } catch (e) {
+      Logger.debug('Onboarding permission request failed for ${permission.name}: $e');
+    } finally {
+      _asked.add(permission);
+      final status = await _read(permission);
+      if (mounted) {
+        setState(() {
+          _statuses[permission] = status;
+          _busy = null;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return OnboardingStep(
-      card: OnboardingCard(
-        content: [
-          Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
-          const SizedBox(height: OmiSpacing.xs),
-          Text(
-            context.l10n.permissionsChangeAnytime,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            textAlign: TextAlign.center,
+    final permissions = _permissions ?? const <OnboardingPermission>[];
+    // No artwork on this step: the title sits at the top, the cards under it, Continue at the bottom.
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: OmiSpacing.xl),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final permission in permissions) ...[
+                      _OnboardingPermissionCard(
+                        key: ValueKey('onboarding_permission_${permission.name}'),
+                        permission: permission,
+                        state: _stateOf(permission),
+                        busy: _busy == permission,
+                        onTap: () => _onTap(permission),
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: OmiSpacing.md),
+            OmiButton(
+              key: const Key('onboarding_permissions_continue'),
+              label: context.l10n.continueButton,
+              expand: true,
+              onPressed: _allAnswered
+                  ? () {
+                      OmiHaptics.selection();
+                      widget.goNext();
+                    }
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OnboardingPermissionCard extends StatelessWidget {
+  const _OnboardingPermissionCard({
+    super.key,
+    required this.permission,
+    required this.state,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final OnboardingPermission permission;
+  final OnboardingPermissionCardState state;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final denied = state == OnboardingPermissionCardState.denied;
+    // Notifications that are off are a problem worth fixing (red); the others are a caution (orange).
+    final deniedColor = permission == OnboardingPermission.notifications ? OmiColors.danger : OmiColors.warning;
+    final tint = switch (state) {
+      OnboardingPermissionCardState.unanswered => OmiColors.textSecondary,
+      OnboardingPermissionCardState.allowed => OmiColors.textPrimary,
+      OnboardingPermissionCardState.denied => deniedColor,
+    };
+    final String? note = !denied
+        ? null
+        : switch (permission) {
+            OnboardingPermission.notifications => l10n.onboardingPermissionTapToFix,
+            OnboardingPermission.bluetooth => l10n.onboardingBluetoothRequired,
+            _ => null,
+          };
+    final title = onboardingPermissionTitle(l10n, permission);
+
+    return Semantics(
+      button: true,
+      toggled: state == OnboardingPermissionCardState.allowed,
+      label: note == null ? title : '$title, $note',
+      excludeSemantics: true,
+      child: Material(
+        color: OmiColors.surface1,
+        shape: RoundedRectangleBorder(
+          borderRadius: OmiRadius.lgAll,
+          side: BorderSide(color: denied ? deniedColor : OmiColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: busy ? null : onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        child: Center(child: FaIcon(onboardingPermissionIcon(permission), size: 18, color: tint)),
+                      ),
+                      const SizedBox(width: OmiSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: OmiType.headline.copyWith(
+                            fontSize: OmiType.callout.fontSize,
+                            color: denied ? deniedColor : OmiColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (busy)
+                        const OmiSpinner(size: OmiSpinnerSize.small)
+                      else
+                        IgnorePointer(
+                          child: OmiSwitch(
+                            value: state == OnboardingPermissionCardState.allowed,
+                            onChanged: (_) {},
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (note != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24 + OmiSpacing.sm, bottom: OmiSpacing.xxs),
+                    child: Text(note, style: OmiType.footnote.copyWith(color: deniedColor)),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: OmiSpacing.xl),
-          OnboardingPermissionsPanel(source: source),
-        ],
-        footer: [
-          const SizedBox(height: OmiSpacing.xs),
-          OmiButton(
-            key: const Key('onboarding_permissions_continue'),
-            label: context.l10n.continueButton,
-            expand: true,
-            onPressed: () async {
-              OmiHaptics.selection();
-              await requestMissingOnboardingPermissions(resolveOnboardingPermissionsSource(context, source));
-              goNext();
-            },
-          ),
-        ],
+        ),
       ),
     );
   }

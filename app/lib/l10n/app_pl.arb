@@ -4039,5 +4039,9 @@
     "reviewProposalApply": "Zastosuj",
     "reviewProposalSuggested": "Sugerowane",
     "reviewProposalConflict": "To się zmieniło od czasu sugestii Dream, więc nic nie zostało zastosowane.",
-    "itemLinkListTitle": "{count, plural, =0{Brak elementów} =1{1 element} other{{count} elementów}}"
+    "itemLinkListTitle": "{count, plural, =0{Brak elementów} =1{1 element} other{{count} elementów}}",
+    "onboardingPermissionTapToFix": "Dotknij, aby naprawić",
+    "onboardingNoOmiYet": "Nie masz jeszcze Omi?",
+    "onboardingOmiOrdered": "Już zamówiłem/am",
+    "onboardingOmiNotOrdered": "Jeszcze nie zamówiłem/am"
 }

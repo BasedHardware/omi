@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "Primijeni",
     "reviewProposalSuggested": "Predloženo",
     "reviewProposalConflict": "Ovo se promijenilo nakon što je Dream to predložio, pa ništa nije primijenjeno.",
-    "itemLinkListTitle": "{count, plural, =0{Nema stavki} =1{1 stavka} other{{count} stavki}}"
+    "itemLinkListTitle": "{count, plural, =0{Nema stavki} =1{1 stavka} other{{count} stavki}}",
+    "onboardingPermissionTapToFix": "Dodirnite da popravite",
+    "onboardingNoOmiYet": "Još nemate Omi?",
+    "onboardingOmiOrdered": "Naručio/la sam ga",
+    "onboardingOmiNotOrdered": "Još nisam naručio/la"
 }

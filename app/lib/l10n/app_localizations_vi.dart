@@ -13019,4 +13019,16 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
+
+  @override
+  String get onboardingNoOmiYet => 'Bạn chưa có Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Tôi đã đặt hàng';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Chưa đặt hàng';
 }

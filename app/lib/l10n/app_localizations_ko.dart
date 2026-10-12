@@ -12840,4 +12840,16 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get onboardingNoOmiYet => '아직 Omi가 없으신가요?';
+
+  @override
+  String get onboardingOmiOrdered => '주문했어요';
+
+  @override
+  String get onboardingOmiNotOrdered => '아직 주문하지 않았어요';
 }

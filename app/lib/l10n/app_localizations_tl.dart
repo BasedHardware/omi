@@ -13126,4 +13126,16 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'I-tap para ayusin';
+
+  @override
+  String get onboardingNoOmiYet => 'Wala ka pang Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'Na-order ko na';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Hindi pa naka-order';
 }

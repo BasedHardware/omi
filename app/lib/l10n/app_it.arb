@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Applica",
     "reviewProposalSuggested": "Suggerito",
     "reviewProposalConflict": "È cambiato da quando Dream lo ha suggerito, quindi non è stato applicato nulla.",
-    "itemLinkListTitle": "{count, plural, =0{Nessun elemento} =1{1 elemento} other{{count} elementi}}"
+    "itemLinkListTitle": "{count, plural, =0{Nessun elemento} =1{1 elemento} other{{count} elementi}}",
+    "onboardingPermissionTapToFix": "Tocca per risolvere",
+    "onboardingNoOmiYet": "Non hai ancora il tuo Omi?",
+    "onboardingOmiOrdered": "L'ho ordinato",
+    "onboardingOmiNotOrdered": "Non ancora ordinato"
 }

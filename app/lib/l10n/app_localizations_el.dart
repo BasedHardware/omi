@@ -13104,4 +13104,16 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
+
+  @override
+  String get onboardingNoOmiYet => 'Δεν έχετε ακόμα το Omi σας;';
+
+  @override
+  String get onboardingOmiOrdered => 'Το έχω παραγγείλει';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Δεν το έχω παραγγείλει ακόμα';
 }

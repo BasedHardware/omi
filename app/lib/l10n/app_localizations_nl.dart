@@ -13057,4 +13057,16 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Tik om te herstellen';
+
+  @override
+  String get onboardingNoOmiYet => 'Heb je je Omi nog niet?';
+
+  @override
+  String get onboardingOmiOrdered => 'Ik heb hem besteld';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Nog niet besteld';
 }

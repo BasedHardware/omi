@@ -4004,5 +4004,9 @@
     "reviewProposalApply": "Bruk",
     "reviewProposalSuggested": "Foreslått",
     "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt.",
-    "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}"
+    "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}",
+    "onboardingPermissionTapToFix": "Trykk for å fikse",
+    "onboardingNoOmiYet": "Har du ikke fått Omi ennå?",
+    "onboardingOmiOrdered": "Jeg har bestilt den",
+    "onboardingOmiNotOrdered": "Ikke bestilt ennå"
 }

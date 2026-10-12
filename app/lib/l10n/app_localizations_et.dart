@@ -13015,4 +13015,16 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
+
+  @override
+  String get onboardingNoOmiYet => 'Sul pole veel Omit?';
+
+  @override
+  String get onboardingOmiOrdered => 'Olen selle tellinud';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Pole veel tellinud';
 }

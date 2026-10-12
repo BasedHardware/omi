@@ -165,6 +165,45 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  /// Whether Omi may scan for and connect to Bluetooth devices, read without prompting.
+  Future<bool> readBluetoothPermission() async {
+    final granted = Platform.isIOS
+        ? await Permission.bluetooth.isGranted
+        : await Permission.bluetoothScan.isGranted && await Permission.bluetoothConnect.isGranted;
+    if (granted != hasBluetoothPermission) updateBluetoothPermission(granted);
+    return granted;
+  }
+
+  /// The first-run Bluetooth ask, shown once over the welcome screen so that, after sign-in, the
+  /// reader's Omi can already be found by the time they reach "Connect your Omi". It only shows the
+  /// system prompt: no Bluetooth-off guidance before the reader has started.
+  Future<void> askForBluetoothAtLaunch() async {
+    const askedKey = 'onboarding/bluetoothAskedAtLaunch';
+    if (SharedPreferencesUtil().getBool(askedKey)) return;
+    SharedPreferencesUtil().saveBool(askedKey, true);
+    try {
+      if (Platform.isIOS) {
+        updateBluetoothPermission((await Permission.bluetooth.request()).isGranted);
+      } else {
+        final scan = await Permission.bluetoothScan.request();
+        final connect = await Permission.bluetoothConnect.request();
+        updateBluetoothPermission(scan.isGranted && connect.isGranted);
+      }
+    } catch (e) {
+      Logger.debug('Bluetooth ask at launch failed: $e');
+    }
+  }
+
+  /// Starts looking for nearby devices in the background, without prompts, when Bluetooth is
+  /// already allowed. "Connect your Omi" then shows the device the moment it opens.
+  Future<void> startQuietDeviceScan() async {
+    if (_isDisposed || isConnected) return;
+    if (!await readBluetoothPermission()) return;
+    if (_isDisposed) return;
+    ServiceManager.instance().device.subscribe(this, this);
+    await deviceProvider?.initiateConnection('OnboardingEarlyScan');
+  }
+
   Future askForNotificationPermissions() async {
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.permission,

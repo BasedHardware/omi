@@ -13008,4 +13008,16 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Tryk for at rette';
+
+  @override
+  String get onboardingNoOmiYet => 'Har du ikke din Omi endnu?';
+
+  @override
+  String get onboardingOmiOrdered => 'Jeg har bestilt den';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Ikke bestilt endnu';
 }

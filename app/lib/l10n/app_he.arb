@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "החל",
     "reviewProposalSuggested": "מוצע",
     "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.",
-    "itemLinkListTitle": "{count, plural, =0{אין פריטים} =1{פריט אחד} other{{count} פריטים}}"
+    "itemLinkListTitle": "{count, plural, =0{אין פריטים} =1{פריט אחד} other{{count} פריטים}}",
+    "onboardingPermissionTapToFix": "הקישו לתיקון",
+    "onboardingNoOmiYet": "עדיין אין לכם Omi?",
+    "onboardingOmiOrdered": "הזמנתי",
+    "onboardingOmiNotOrdered": "עוד לא הזמנתי"
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -33,6 +35,14 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _initializeVideo();
+
+    // Ask for Bluetooth as the app opens, once the welcome is on screen, so the search for the
+    // reader's Omi can start right after sign-in.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      await context.read<OnboardingProvider>().askForBluetoothAtLaunch();
+    });
   }
 
   void _initializeVideo() async {

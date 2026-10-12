@@ -13035,4 +13035,16 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'ٹھیک کرنے کے لیے ٹیپ کریں';
+
+  @override
+  String get onboardingNoOmiYet => 'ابھی تک Omi نہیں ہے؟';
+
+  @override
+  String get onboardingOmiOrdered => 'میں نے آرڈر کر دیا ہے';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ابھی آرڈر نہیں کیا';
 }

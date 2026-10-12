@@ -13034,4 +13034,16 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
+
+  @override
+  String get onboardingNoOmiYet => 'Omi\'n henüz yok mu?';
+
+  @override
+  String get onboardingOmiOrdered => 'Sipariş verdim';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Henüz sipariş vermedim';
 }

@@ -11441,5 +11441,9 @@
     "reviewProposalApply": "Ilapat",
     "reviewProposalSuggested": "Iminungkahi",
     "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.",
-    "itemLinkListTitle": "{count, plural, =0{Walang Item} =1{1 Item} other{{count} Item}}"
+    "itemLinkListTitle": "{count, plural, =0{Walang Item} =1{1 Item} other{{count} Item}}",
+    "onboardingPermissionTapToFix": "I-tap para ayusin",
+    "onboardingNoOmiYet": "Wala ka pang Omi?",
+    "onboardingOmiOrdered": "Na-order ko na",
+    "onboardingOmiNotOrdered": "Hindi pa naka-order"
 }

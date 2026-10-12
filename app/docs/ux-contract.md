@@ -303,6 +303,11 @@ guidance.
   Open Settings) — then the system prompt. A screen's Continue asks, in row order, for every
   permission still askable (`requestMissingOnboardingPermissions`), then moves on whatever the
   reader chose.
+- First-run exception (`pages/onboarding/permissions/permissions_widget.dart`): one switch card per
+  permission; toggling a card shows its system prompt. Continue unlocks once every card is
+  **answered**, never only when granted: a "no" turns the card orange (notifications red with
+  "Tap to fix", which opens Settings) and the reader moves on. Bluetooth is asked as the app
+  opens, so its card appears only when it was not allowed.
 - Permanently denied → the row says so and offers **Open Settings** (`l10n.openSettings`).
 - Ask when a feature needs the permission ("Always" location only when a feature requires it).
 

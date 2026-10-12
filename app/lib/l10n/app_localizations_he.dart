@@ -12928,4 +12928,16 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'הקישו לתיקון';
+
+  @override
+  String get onboardingNoOmiYet => 'עדיין אין לכם Omi?';
+
+  @override
+  String get onboardingOmiOrdered => 'הזמנתי';
+
+  @override
+  String get onboardingOmiNotOrdered => 'עוד לא הזמנתי';
 }

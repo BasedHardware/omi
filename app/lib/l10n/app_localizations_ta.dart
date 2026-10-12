@@ -13111,4 +13111,16 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get onboardingPermissionTapToFix => 'சரிசெய்ய தட்டவும்';
+
+  @override
+  String get onboardingNoOmiYet => 'இன்னும் உங்கள் Omi இல்லையா?';
+
+  @override
+  String get onboardingOmiOrdered => 'நான் ஆர்டர் செய்துவிட்டேன்';
+
+  @override
+  String get onboardingOmiNotOrdered => 'இன்னும் ஆர்டர் செய்யவில்லை';
 }
