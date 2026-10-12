@@ -21,9 +21,10 @@ from utils.dream_prompt import (
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
-from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT, CONTEXT_TARGET_LIMIT, query_content
+from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT, CONTEXT_TARGET_LIMIT, query_content, preserve_sources
 from utils.dream_diagnostics import initialize
 from utils.dream_guards import timestamp
+from utils.dream_cleanup import add_seed_safely
 from utils.observability.fallback import record_fallback
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -104,7 +105,8 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
             return row.model_dump(mode='python')
         return None
     if collection == 'people':
-        return users.get_person(uid, key)
+        row = users.get_person(uid, key)
+        return {**row, 'entity_id': 'person:' + key, 'type': 'person'} if row else None
     if collection in {'knowledge_nodes', 'workstreams'}:
         return resolve_entity(uid, key)
     return None
@@ -230,7 +232,7 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
     budget_counts['targets_deferred'] = len(original.targets - records.targets)
     diagnostics['target_context_counts']['contextless'] = len(records.targets - seeds)
     record_budget_counts(records, caps, vocabulary, diagnostics)
-    return records
+    return preserve_sources(records, original)
 
 
 def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavailable=None):
@@ -298,6 +300,8 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
             has_context and not fits_pass(candidate, caps, vocabulary)
         ):
             return 'budget'
+        candidate = preserve_sources(candidate, records)
+        candidate.target_sources[ref] = 'dirty'
         records = candidate
         consumed.append(item)
         counts['admitted'] += 1
@@ -317,6 +321,15 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         for snapshot in dirty[position:]
         if (item := snapshot.to_dict())['last_changed_at'] <= lease['started_at']
     } | paused
+    # History sampling must not retry an unavailable inspected version or turn
+    # an unread/paused dirty ref into a seed outside dirty admission.
+    seed_pending = set(pending)
+    for snapshot in dirty:
+        item = snapshot.to_dict()
+        seed_pending.add(f"{item['collection']}/{item['id']}")
+    records = add_seed_safely(
+        uid, records, lease, caps, vocabulary, read_record=read, pending_refs=seed_pending - records.targets
+    )
     records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics, pending_refs=pending)
     initial_consumed = len(consumed)
     consumed = [item for item in consumed if f"{item['collection']}/{item['id']}" in records.targets]

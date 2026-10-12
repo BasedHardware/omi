@@ -25,6 +25,7 @@ NOW = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
 def queue(monkeypatch):
     db = DreamFirestore()
     db.rows[('users', UID)] = {}
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
@@ -235,7 +236,7 @@ def test_legacy_events_are_ignored_and_idle_does_not_count(queue):
     report = asyncio.run(dream_agent.run_pass(UID, turn=AsyncMock(side_effect=AssertionError())))
     assert report['status'] == 'not_admitted'
     assert event in queue.rows
-    assert queue.rows[('dream_users', UID)]['passes'] == 0
+    assert queue.rows[('dream_users', UID)].get('passes', 0) == 0
 
 
 def gateway_response(status):

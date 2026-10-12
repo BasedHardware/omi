@@ -43,6 +43,28 @@ def entries():
             domains={'collection': ['conversations', 'screen_activity']},
             neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
         ),
+        DriverEntry(
+            'database.dream_history.history_page',
+            base={'uid': UID},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'after': [None, 'one'],
+                'limit': [1, 40],
+            },
+        ),
+        DriverEntry(
+            'database.dream_history.history_count',
+            base={'uid': UID},
+            domains={'collection': ['conversations', 'action_items', 'people', 'memory_items']},
+        ),
+        DriverEntry(
+            'database.dream_history.history_from_key',
+            base={'uid': UID},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'key': ['00000000', 'ffffffff'],
+            },
+        ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
         DriverEntry(
@@ -51,6 +73,7 @@ def entries():
             domains={'trigger': ['schedule', 'manual']},
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
+                'rng': (None, 'coin does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
             },
@@ -95,6 +118,9 @@ def entries():
             },
             neutrals={
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
+                'reviewed': ([], 'metadata writes only'),
+                'seeded': ([], 'direct settlement document selection only'),
+                'cleanup_cursor': (None, 'metadata writes only'),
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),

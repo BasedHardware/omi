@@ -183,6 +183,9 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
     }
     initialize(report)
     consumed = []
+    reviewed = set()
+    seeded = set()
+    cleanup_cursor = None
     deferred = set()
     unavailable = []
     refund = False
@@ -202,6 +205,12 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                 diagnostics=report,
                 unavailable=unavailable,
             )
+            reviewed = target_refs(records)
+            sources = getattr(records, 'target_sources', {ref: 'dirty' for ref in reviewed})
+            seeded = {ref for ref in reviewed if sources.get(ref) in {'seeded', 'random'}}
+            cleanup_cursor = getattr(records, 'cleanup_cursor', None)
+            report['target_source_counts'] = dict(Counter(sources.values()))
+            report['seed_errors'] = getattr(records, 'seed_errors', 0)
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
             report['role_counts'] = {
@@ -392,10 +401,15 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
         deferred=deferred,
         unavailable=unavailable,
+        reviewed=reviewed - deferred,
+        seeded=seeded,
+        cleanup_cursor=cleanup_cursor,
         release=release,
         refund=refund,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
     )
+    if report.get('reason') == 'idle':
+        report.pop('run_id', None)
     record_pass(report)
     return report
 

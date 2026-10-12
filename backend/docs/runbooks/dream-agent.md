@@ -659,3 +659,15 @@ change cohorts/schedules, or deploy anything.
 
 
 Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.
+
+### Older cleanup admission
+
+`DREAM_AGENT_BACKFILL_SHARE` defaults to 0.1; `DREAM_AGENT_RANDOM_SEED_SHARE` defaults to 0.1 of those attempts. Seeds must be at least 7 days old and not reviewed within 30 days. Weighted selection uses problem score times days since review/creation within a rotating 40-ID collection page. Seeds joining dirty targets must share identity, rare terms or the same week. At most one seed or one duplicate pair is added, then ordinary neighbourhood retrieval runs. Target/context roles and per-pass budget remain authoritative; reports carry `target_source_counts` without content.
+
+Registered, previously processed owners with empty dirty queues may run again after one hour under the same daily caps. Successful model passes record target review timestamps atomically with completion; failed passes do not. Empty passes refund inference admission but persist page progress. Synthetic canaries skip backfill.
+
+Epsilon sampling picks a collection proportional to count and a random-key successor with wraparound, bounded to two limit(1) queries. Pivots match the writers: `mem_` plus 32 hex digits for canonical memories, 20 mixed-case alphanumeric characters for Firestore action-item auto-IDs, and UUIDv4 for conversations and people. This avoids billed skipped reads and namespace collapse. Unequal ID gaps and legacy ID formats can still introduce bias; random-source outcomes do not measure unbiased precision. Attention-capped seeds share the next-UTC-midnight deferral metadata and skip hydration in either sampling path.
+
+Idle owners have an hourly attempt clock. Acquire draws the backfill coin before creating a lease or reserving spend; a declined idle coin writes only the clock, no dream_runs doc. Selected but empty seed attempts also leave no run-history doc. Weighted pages batch-check review cooldowns before hydrating eligible records; seed failures emit telemetry/counts and preserve dirty work.
+
+Older targets join before retrieval and must fit the 70% target slice with at most four initial targets, including duplicate operands. The 30% context slice and smaller context excerpts stay reserved when visible neighbours exist. Only an empty neighbourhood returns that slice to additional dirty targets. Pending or paused dirty refs cannot be sampled as older seeds. Dirty inspection remains oldest-first, at most 32 refs; permanently unavailable refs are acknowledged and transient versions expire after three attempts. Seed-only daily deferrals write review metadata without consuming dirty-inspection slots.
