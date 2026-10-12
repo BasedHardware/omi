@@ -267,16 +267,17 @@ class SpeakerMatcher:
             if carried is not None:
                 carried = {voice for voice in carried if old_origins.get(voice) == 'manual'}
             count_rollover = self._profile_conversation_id is not None and carried is not None
-            # Preserve candidate carry attempts across the awaits too: a match
-            # may run while the profiles/donor are loading. Uncarried ids get
-            # a fresh per-conversation allowance after validation completes.
+            # Carry quota and its decision fence across profile/donor awaits;
+            # uncarried ids reset both after validation.
             retained_attempts = {
                 voice: attempts
                 for voice, attempts in self._embedding_attempts.items()
                 if voice in candidates or voice in (carried or set())
             }
             retained_recovery = {v: r for v, r in self._voice_recovery.items() if v in retained_attempts}
+            retained_decided = self._rejectors.retained_recovery_decisions(retained_attempts)
             self.clear()
+            self._rejectors.recovery_decided.update(retained_decided)
             self._embedding_attempts.update(retained_attempts)
             self._voice_recovery.update(retained_recovery)
             self._profile_conversation_id = conversation_id
@@ -433,6 +434,7 @@ class SpeakerMatcher:
             if voice not in carried:
                 self._embedding_attempts[voice] -= attempts
                 self._voice_recovery.pop(voice, None)
+                self._rejectors.recovery_decided.discard(voice)
                 if self._embedding_attempts[voice] >= MAX_VOICE_EMBEDDING_ATTEMPTS:
                     self._voice_recovery[voice] = VoiceRecovery.checkpoint(
                         self.host.state.audio_ring_buffer, time.monotonic()

@@ -33,6 +33,9 @@ class RejectorHistory:
         # -1 permanently protects any other completed result in this generation.
         self.comparisons: dict[int, int] = {}
         self.manual: set[int] = set()
+        # Only carried quota retains this bounded eligibility fence; it never
+        # supplies rejector scheduling proof or identity authority.
+        self.recovery_decided: set[int] = set()
 
     def proven(self, voice: int) -> bool:
         return (
@@ -49,12 +52,17 @@ class RejectorHistory:
         previous = self.comparisons.get(voice, 0)
         self.comparisons[voice] = min(3, previous + 1) if clear and previous >= 0 else -1
 
+    def retained_recovery_decisions(self, voices: Mapping[int, int]) -> set[int]:
+        decided = self.recovery_decided | self.comparisons.keys() | self.matcher._voice_decisions.keys()
+        decided.update(v for v in voices if self.matcher._mapping_origin.get(v) == 'manual')
+        return decided.intersection(voices)
+
     def recovery_denial(self, voice: int) -> Optional[str]:
         """Classify extra-query eligibility without changing scheduling proof."""
         if self.proven(voice):
             return 'proven_rejector'
         decision = self.matcher._voice_decisions.get(voice)
-        if voice not in self.comparisons and decision is None:
+        if voice not in self.comparisons and voice not in self.recovery_decided and decision is None:
             return None
         if decision is not None and policy.owner_near_miss(decision):
             return None
@@ -83,3 +91,4 @@ class RejectorHistory:
     def clear(self) -> None:
         self.comparisons.clear()
         self.manual.clear()
+        self.recovery_decided.clear()

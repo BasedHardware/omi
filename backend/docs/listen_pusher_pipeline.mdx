@@ -3937,7 +3937,7 @@ owner carry and copied manual mappings retain both. Same-conversation profile
 refresh and provider scope changes do not reset them. Accepted voices stop spending.
 Within the initial allowance, rejected voices can retry with later provider audio.
 Beyond it, recovery is restricted to a current calibrated owner near-miss or a
-voice with no completed owner/person comparison in this generation. Completed
+voice with no completed owner/person comparison in its retained session ledger. Completed
 clear-far voices are excluded after even one round, before they can qualify as
 proven rejectors. Other completed results outside the calibrated owner near-miss
 predicate (including margin abstention and contention) receive no extra quota. A recovered owner re-arbitrates
@@ -3958,6 +3958,11 @@ in an already granted tranche. The existing near-miss predicate requires the own
 to be nearest with distance in [0.65, 0.70), the existing 0.10 runner-up gap and no
 contention. The completed-comparison ledger and any already-decided carried/manual row,
 not attempts, failures or pending evidence, distinguish undecided voices.
+Before rollover clears decision rows, retained quota snapshots a bounded decided
+marker. An absent row remains ineligible until a current rebuilt near-miss permits
+recovery; profile/donor awaits cannot turn an accepted carried owner into an
+undecided voice or replace its multi-clip centroid with a recovery clip. The marker
+supplies no identity authority or rejector proof, and resets with uncarried quota.
 Roster re-evaluation alone never counts as a completed round. Current profile
 distances are rechecked, so a later close/far result can change eligibility without
 resetting attempts, tranches, freshness checkpoints or cooldowns;
@@ -3996,7 +4001,8 @@ counts each otherwise attempted extra reservation refused by eligibility, includ
 a grant request or an unused attempt in an existing tranche. `proven_rejector`
 requires the unchanged three-round proof; `clearly_far` covers completed clear
 rejection before that proof; `completed_not_near_owner` covers other completed
-results outside the current calibrated near-miss predicate. These refusals spend
+results outside the current calibrated near-miss predicate, including a retained
+decided voice whose current row is absent during refresh. These refusals spend
 no attempt/token and never advance the tranche checkpoint. Freshness, cooldown,
 tranche/attempt ceilings and socket refusals are not counted in this eligibility
 family; they retain the existing cap/legacy telemetry. Rates measure refusals,

@@ -591,3 +591,124 @@ async def test_retained_decided_row_is_not_undecided_when_round_history_is_absen
     assert len(calls) == matcher._embedding_attempts[1] == 12
     assert recovery.tranches == 0
     assert _metric(RECOVERY_DENIALS, reason='clearly_far') == before + 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('refresh_before_query_result', [False, True])
+async def test_real_runner_refresh_cannot_recover_carried_decided_owner(monkeypatch, refresh_before_query_result):
+    from database import live_owner_continuity as cache
+
+    matcher, host, clock, calls, _ = _setup(monkeypatch)
+    scope = 'socket:0'
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    # Reach an automatic owner decision on reservation twelve, with a real
+    # three-clip centroid that differs from a single fresh query.
+    for i in range(12):
+        clock.now = i * 2
+        if i == 11:
+            monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: calls.append(1) or owner)
+        host.state.audio_ring_buffer.write_positioned(_pcm(2), i * 2)
+        await matcher.match(1, dict(_segment(f'initial-{i}', i * 2, 2), speaker_id_scope=scope))
+    assert len(calls) == matcher._embedding_attempts[1] == 12
+    assert matcher.speaker_to_person[1] == ('user', 'User')
+    centroid = matcher._voice_centroids[1].copy()
+    evidence = matcher.speaker_evidence[1]
+    assert len(evidence) == 3 and not np.array_equal(centroid, owner)
+    covered = list(matcher._covered_audio[1])
+    recovery = matcher._voice_recovery[1]
+    clock.now = recovery.next_grant_at
+    matcher._socket_embedding_tokens = 16
+    matcher._socket_embedding_refilled_at = clock.now
+    tokens = matcher._socket_embedding_tokens
+    checkpoint = (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
+    grants = _metric(RECOVERY_GRANTS, tranche='first')
+    denials = _metric(RECOVERY_DENIALS, reason='completed_not_near_owner')
+    profiles = dict(matcher.person_embeddings)
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=scope))
+    host.state.current_conversation_id = 'next'
+    profiles_paused, resume_profiles = asyncio.Event(), asyncio.Event()
+    reserved, resume_query = asyncio.Event(), asyncio.Event()
+    query_calls = []
+
+    async def load():
+        matcher.person_embeddings.update(profiles)
+        profiles_paused.set()
+        await resume_profiles.wait()
+
+    async def read(fn, *args, **kwargs):
+        if fn is cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
+        return {'id': 'c'} if fn is speakers.conversations_db.get_conversation else {}
+
+    async def query(pcm):
+        query_calls.append(pcm)
+        if refresh_before_query_result:
+            await resume_query.wait()
+        return owner
+
+    original_reserve = matcher._reserve_embedding
+
+    def reserve(*args, **kwargs):
+        result = original_reserve(*args, **kwargs)
+        reserved.set()
+        return result
+
+    monkeypatch.setattr(matcher, '_load_profiles', load)
+    monkeypatch.setattr(matcher, '_extract_query', query)
+    monkeypatch.setattr(matcher, '_reserve_embedding', reserve)
+    host.persistence.call = read
+    matcher.note_rollover_carry(set())
+    generation = matcher._generation
+    refresh = asyncio.create_task(
+        matcher.refresh_for_conversation('next', owner_carry_scope=scope, owner_carry_donor={'id': 'c'})
+    )
+    runner = None
+    try:
+        await asyncio.wait_for(profiles_paused.wait(), timeout=2)
+        assert matcher._generation == generation + 1  # real clear(), no retained decision row
+        assert not matcher._voice_decisions and not matcher._rejectors.comparisons and not matcher.speaker_to_person
+        assert matcher._rejectors.recovery_decided == {1}
+        assert matcher._voice_recovery[1] is recovery and matcher._embedding_attempts[1] == 12
+        host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+        matcher.queue.put_nowait(dict(_segment('during-refresh', 24, 10), speaker_id=1, speaker_id_scope=scope))
+        runner = asyncio.create_task(serve(matcher, host, monkeypatch, 1))
+        await asyncio.wait_for(reserved.wait(), timeout=2)
+        if refresh_before_query_result:
+            # The regressed query would remain in extraction until after restore.
+            resume_profiles.set()
+            await asyncio.wait_for(asyncio.shield(refresh), timeout=2)
+            resume_query.set()
+            await asyncio.wait_for(asyncio.shield(runner), timeout=2)
+        else:
+            # The regressed query would finish and install current_evidence first.
+            await asyncio.wait_for(asyncio.shield(runner), timeout=2)
+            resume_profiles.set()
+            await asyncio.wait_for(asyncio.shield(refresh), timeout=2)
+        assert not query_calls
+        assert matcher._embedding_attempts[1] == len(calls) == 12
+        assert matcher._socket_embedding_tokens == tokens
+        assert matcher._voice_recovery[1] is recovery and recovery.tranches == 0
+        assert checkpoint == (
+            recovery.checkpoint_audio_watermark,
+            recovery.query_audio_watermark,
+            recovery.next_grant_at,
+        )
+        assert _metric(RECOVERY_GRANTS, tranche='first') == grants
+        assert _metric(RECOVERY_DENIALS, reason='completed_not_near_owner') == denials + 1
+        assert matcher.speaker_evidence[1] is evidence
+        np.testing.assert_array_equal(matcher._voice_centroids[1], centroid)
+        assert matcher._covered_audio[1] == covered
+        assert matcher.speaker_to_person[1] == ('user', 'User')
+        # An uncarried rollover resets the fence together with its old quota.
+        matcher.note_rollover_carry(set())
+        host.state.current_conversation_id = 'uncarried'
+        await matcher.refresh_for_conversation('uncarried')
+        assert not matcher._rejectors.recovery_decided
+        assert not matcher._embedding_attempts and not matcher._voice_recovery
+    finally:
+        resume_profiles.set()
+        resume_query.set()
+        for task in (runner, refresh):
+            if task is not None and not task.done():
+                task.cancel()
+        await asyncio.gather(*(task for task in (runner, refresh) if task is not None), return_exceptions=True)
