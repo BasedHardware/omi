@@ -96,4 +96,67 @@ void main() {
     expect(transport.disposeCalls, 1);
     expect(await service.ensureConnection(device.id), isNull);
   });
+
+  test('launch timeout preserves the connection and transport for native background reconnection', () async {
+    final device = BtDevice(
+      id: 'omi-pendant-1',
+      name: 'Omi Pendant',
+      type: DeviceType.omi,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'omi-pendant-1'),
+    );
+    await SharedPreferencesUtil().btDeviceSet(device);
+
+    final transport = _TimingOutTransport();
+    final connection = _TimingOutConnection(device, transport);
+    final service = DeviceService(connectionBuilder: (_) => connection);
+
+    // Initial connection attempt times out
+    final initialResult = await service.ensureConnection(device.id, force: true);
+    expect(initialResult, isNull);
+
+    // Transport and connection must NOT be disposed or disconnected
+    expect(transport.disconnectCalls, 0);
+    expect(transport.disposeCalls, 0);
+    expect(service.connectionFor(device.id), same(connection));
+    expect(connection.status, DeviceConnectionState.disconnected);
+
+    // Later native event brings the device back in range
+    transport.emitConnected();
+    expect(connection.status, DeviceConnectionState.connected);
+
+    // When connection is up, ensureConnection cleanly returns the existing connection
+    final reconnected = await service.ensureConnection(device.id);
+    expect(reconnected, same(connection));
+  });
+}
+
+class _TimingOutTransport extends _TrackingTransport {
+  final _stateController = StreamController<DeviceTransportState>.broadcast();
+
+  @override
+  Stream<DeviceTransportState> get connectionStateStream => _stateController.stream;
+
+  @override
+  Future<void> connect() async {
+    throw TimeoutException('Device ready timeout after 60s');
+  }
+
+  void emitConnected() {
+    connected = true;
+    _stateController.add(DeviceTransportState.connected);
+  }
+}
+
+class _TimingOutConnection extends DeviceConnection {
+  _TimingOutConnection(super.device, super.transport);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
+  Future<int> performRetrieveBatteryLevel() async => -1;
+
+  @override
+  Future<List<int>> performGetButtonState() async => const [];
 }
