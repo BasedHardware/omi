@@ -289,10 +289,11 @@ send. Existing scoped receipt callbacks keep their receipt target.
 For iMessage, zero matched items add nothing. Several matched items get short
 `h.omi.me/<kind>/<id>` links next to their complete title mentions, at most five;
 unmentioned titles get no inline link. One matched item gets its ordinary text answer
-then a separate single `link` part message, only if this chat had accepted outbound
-traffic before the answer began. New or legacy chats with unknown accepted history
+then a separate single `link` part message, only if this chat had an accepted outbound
+message before the answer began. New or legacy chats with unknown accepted history
 skip that first card conservatively. Accepted receipts and the outbound-history marker
-commit atomically; reserved/ambiguous sends do not enable previews. Optional card
+commit atomically; reserved/ambiguous sends and reaction/contact actions do not
+enable previews. Optional card
 failure preserves the accepted text and records a degraded fallback. Bare web-root
 URLs are removed from iMessage text. Preview URLs contain only item kind/ID; public
 Open Graph metadata and `web/` are unchanged.

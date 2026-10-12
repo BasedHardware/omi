@@ -74,9 +74,10 @@ class FixtureLedger:
         self.receipts[operation] = 'reserved'
         return True
 
-    async def commit(self, message, operation, provider_id):
+    async def commit(self, message, operation, provider_id, *, message_sent=False):
         self.receipts[operation] = 'accepted'
-        self.accepted_chats.add(message.external_chat_id)
+        if message_sent:
+            self.accepted_chats.add(message.external_chat_id)
 
     async def has_outbound(self, message):
         return message.external_chat_id in self.accepted_chats

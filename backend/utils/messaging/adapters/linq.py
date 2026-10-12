@@ -299,7 +299,7 @@ class IMessageAdapter(BaseAdapter):
         provider_id = result.get('id') or result.get('message', {}).get('id')
         if not provider_id:
             raise ProviderError('Missing provider delivery receipt')
-        await self.ledger.commit(message, operation, provider_id)
+        await self.ledger.commit(message, operation, provider_id, message_sent=True)
 
     async def action(self, message, action, value):
         if action == 'contact' and not self.contact_card:

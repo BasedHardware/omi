@@ -58,14 +58,15 @@ class DeliveryLedger:
             self.store.db.transaction, apply, operation_name='channel_delivery'
         )
 
-    def accepted(self, message, operation, provider_id):
+    def accepted(self, message, operation, provider_id, *, message_sent=False):
         chat = self._chat(message)
         batch = self.store.db.batch()
         batch.update(
             chat.collection('receipts').document(key(operation)),
             {'state': 'accepted', 'provider_id': str(provider_id), 'at': datetime.now(timezone.utc)},
         )
-        batch.set(chat, {'outbound_accepted': True}, merge=True)
+        if message_sent:
+            batch.set(chat, {'outbound_accepted': True}, merge=True)
         batch.commit()
 
     async def has_outbound(self, message):
@@ -78,5 +79,5 @@ class DeliveryLedger:
     async def begin(self, message, operation, **kwargs):
         return await run_blocking(db_executor, self.reserve, message, operation, **kwargs)
 
-    async def commit(self, message, operation, provider_id):
-        await run_blocking(db_executor, self.accepted, message, operation, provider_id)
+    async def commit(self, message, operation, provider_id, *, message_sent=False):
+        await run_blocking(db_executor, self.accepted, message, operation, provider_id, message_sent=message_sent)

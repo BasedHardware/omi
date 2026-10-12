@@ -67,7 +67,7 @@ def test_receipt_retry_and_ambiguous_telegram_reconciliation(store):
     with pytest.raises(RuntimeError, match='reconciliation'):
         ledger.reserve(incoming, 'telegram')
     assert ledger.reserve(incoming, 'telegram', retry_reserved=True)
-    ledger.accepted(incoming, 'telegram', 'receipt-1')
+    ledger.accepted(incoming, 'telegram', 'receipt-1', message_sent=True)
     assert not ledger.reserve(incoming, 'telegram', retry_reserved=True)
     assert ledger._chat(incoming).get().to_dict()['sent'] == 1
     assert ledger._chat(incoming).get().to_dict()['outbound_accepted'] is True
@@ -341,7 +341,10 @@ def test_preview_history_is_accepted_delivery_not_a_reservation(store):
     assert not asyncio.run(ledger.has_outbound(incoming))
     ledger.reserve(incoming, 'operation')
     assert not asyncio.run(ledger.has_outbound(incoming))
-    ledger.accepted(incoming, 'operation', 'receipt')
+    ledger.accepted(incoming, 'operation', 'reaction-receipt')
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.reserve(incoming, 'message-operation')
+    ledger.accepted(incoming, 'message-operation', 'receipt', message_sent=True)
     assert asyncio.run(ledger.has_outbound(incoming))
     assert not asyncio.run(ledger.has_outbound(replace(incoming, external_chat_id='other-chat')))
 
