@@ -26,11 +26,9 @@ export const cache = {
   // The server view represented by `list`. Keeping this beside the list avoids
   // showing a cached history row when the default useful-now view is selected.
   view: null as MemoryReadView | null,
-  // Whether the server exposes canonical memory tiering for this account
-  // (X-Omi-Memory-Canonical-Lifecycle-Exposed). Prod runs MEMORY_MODE=off, so
-  // this stays false and the tier/device filters never render. Set from the
-  // fetch response immediately BEFORE publish(), so the list re-render that
-  // publish triggers reads the fresh value.
+  // The device-scope capability also establishes canonical lifecycle on this
+  // route, including for an empty account. Set before publish() so its
+  // re-render sees the value.
   canonicalLifecycleExposed: false,
   // null means the current backend has not advertised the beta capability yet.
   // This is intentionally separate from canonical tiering: a legacy backend may

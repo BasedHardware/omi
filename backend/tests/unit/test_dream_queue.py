@@ -23,6 +23,9 @@ NOW = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
 
 @pytest.fixture
 def queue(monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     db = DreamFirestore()
     db.rows[('users', UID)] = {}
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
@@ -683,3 +686,20 @@ def test_settlement_rejects_more_than_inspection_limit(queue):
     with pytest.raises(ValueError, match='dream_settlement_limit'):
         dream_store.finish(UID, lease, {}, success=True, consumed=[s.to_dict() for s in dream_store.dirty_refs(UID)])
     assert dream_store.dirty_count(UID) == 35
+
+
+def test_capacity_failure_after_triage_keeps_versions_without_poison(queue, monkeypatch):
+    seed(queue, 1)
+
+    async def planning(uid, records, caps, **kwargs):
+        kwargs['usage_sink'].update(tokens=17, reasoning_attempted=True, usage_unknown=False)
+        raise dream_transport.CapacityWait('synthetic')
+
+    monkeypatch.setattr(dream_agent, 'plan_pass', planning)
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == 'waiting' and report['tokens'] == 17
+    assert dream_store.dirty_count(UID) == 1
+    assert dream_store.dirty_refs(UID)[0].to_dict().get('failed_passes', 0) == 0
+    state = queue.rows[('dream_users', UID)]
+    assert state['lease'] is None and state['passes'] == 1
+    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == pytest.approx(0.24)

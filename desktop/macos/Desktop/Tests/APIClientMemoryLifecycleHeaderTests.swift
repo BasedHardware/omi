@@ -79,10 +79,9 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     return client
   }
 
-  func testExplicitLifecycleHeaderTrueExposesCanonicalLifecycle() async throws {
+  func testEmptyCanonicalListUsesDeviceScopeCapability() async throws {
     MemoryLifecycleURLStub.headers = [
-      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
-      "X-Omi-Memory-Device-Scope-Supported": "false",
+      "X-Omi-Memory-Device-Scope-Supported": "true",
       "X-Omi-Memory-Default-Delete-Supported": "true",
     ]
     let client = await makeClient()
@@ -90,26 +89,27 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     let page = try await client.getMemoriesPage()
 
     XCTAssertTrue(page.canonicalLifecycleExposed)
-    XCTAssertEqual(page.deviceScopeSupported, false)
+    XCTAssertEqual(page.deviceScopeSupported, true)
     XCTAssertTrue(page.defaultMemoryDeleteSupported)
   }
 
-  func testDeviceScopeHeaderAloneDoesNotExposeCanonicalLifecycle() async throws {
+  func testEmptyLegacyListDoesNotExposeCanonicalLifecycle() async throws {
     MemoryLifecycleURLStub.headers = [
-      "X-Omi-Memory-Device-Scope-Supported": "true"
+      "X-Omi-Memory-Device-Scope-Supported": "false",
+      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
     ]
     let client = await makeClient()
 
     let page = try await client.getMemoriesPage()
 
     XCTAssertFalse(page.canonicalLifecycleExposed)
-    XCTAssertEqual(page.deviceScopeSupported, true)
+    XCTAssertEqual(page.deviceScopeSupported, false)
     XCTAssertFalse(page.defaultMemoryDeleteSupported)
   }
 
-  func testLifecycleHeaderMustBeLiteralLowercaseTrue() async throws {
+  func testRetiredLifecycleHeaderDoesNotControlExposure() async throws {
     MemoryLifecycleURLStub.headers = [
-      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "True",
+      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "false",
       "X-Omi-Memory-Device-Scope-Supported": "true",
       "X-Omi-Memory-Default-Delete-Supported": "True",
     ]
@@ -117,14 +117,14 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
 
     let page = try await client.getMemoriesPage()
 
-    XCTAssertFalse(page.canonicalLifecycleExposed)
+    XCTAssertTrue(page.canonicalLifecycleExposed)
     XCTAssertEqual(page.deviceScopeSupported, true)
     XCTAssertFalse(page.defaultMemoryDeleteSupported)
   }
 
   func testNextCursorHeaderIsExposedOnMemoryListPage() async throws {
     MemoryLifecycleURLStub.headers = [
-      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
+      "X-Omi-Memory-Device-Scope-Supported": "true",
       "X-Omi-Memory-Next-Cursor": "uml.test.cursor",
     ]
     let client = await makeClient()
@@ -137,7 +137,7 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
 
   func testTruncatedHeaderIsExposedOnMemoryListPage() async throws {
     MemoryLifecycleURLStub.headers = [
-      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
+      "X-Omi-Memory-Device-Scope-Supported": "true",
       "X-Omi-List-Truncated": "true",
     ]
     let client = await makeClient()
