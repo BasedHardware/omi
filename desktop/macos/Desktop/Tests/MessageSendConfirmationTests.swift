@@ -1,78 +1,128 @@
-import GRDB
+import OmiSupport
 import XCTest
 
 @testable import Omi_Computer
 
-/// Confirms `send_message` against a small store shaped like the Messages
-/// history (`chat.db`), built here rather than read from a real Mac. The fake
-/// send writes the row Messages would write; the injected clock and sleeper
-/// stand in for the poll so nothing waits on the wall clock.
+/// Confirms `send_message` against `MessagesHistoryFixture`, a store shaped
+/// like the Messages history. The fake send writes the rows Messages would
+/// write; the injected clock and sleeper drive the poll, so nothing waits on
+/// the wall clock.
 final class MessageSendConfirmationTests: XCTestCase {
-  private static let sendStart = Date(timeIntervalSince1970: 1_800_000_000)
-  private static let recipient = "+15555550123"
+  static let sendStart = Date(timeIntervalSince1970: 1_800_000_000)
+  static let recipient = "+14155550123"
+  private static let fullWindowChecks = Int(MessageSendConfirmer.window / MessageSendConfirmer.pollInterval) + 1
 
   private let clock = ConfirmationTestClock(MessageSendConfirmationTests.sendStart)
-  private let sends = CallCounter()
-  private let lookups = CallCounter()
+  private let sends = LockedCounter()
 
   // MARK: - Outcomes
 
-  func testDeliveredRowReportsDeliveredOnTheFirstCheck() async throws {
+  func testDeliveredRowReportsDelivered() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
+    let confirmation = try await confirm("On my way", in: history) {
       try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
     }
 
     XCTAssertEqual(confirmation.status, .delivered)
     XCTAssertNil(confirmation.unconfirmedReason)
-    XCTAssertEqual(confirmation.checks, 1)
+    XCTAssertFalse(confirmation.succeededAfterError)
     XCTAssertEqual(sends.count, 1)
   }
 
-  func testSentButNotDeliveredReportsSentWhenTheWindowEnds() async throws {
+  func testTheWholeWindowIsReadBeforeDeciding() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
+    let confirmation = try await confirm("On my way", in: history) {
+      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.checks, Self.fullWindowChecks)
+    XCTAssertEqual(confirmation.waitedMilliseconds, Int(MessageSendConfirmer.window * 1000))
+  }
+
+  func testSentButNotDeliveredReportsSent() async throws {
+    let (history, chat) = try makeHistory()
+    let confirmation = try await confirm("On my way", in: history) {
       try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: false)
     }
 
     XCTAssertEqual(confirmation.status, .sent)
     XCTAssertNil(confirmation.unconfirmedReason)
-    XCTAssertEqual(confirmation.waitedMilliseconds, Int(MessageSendConfirmer.window * 1000))
-    XCTAssertGreaterThan(confirmation.checks, 1)
-    XCTAssertEqual(sends.count, 1)
   }
 
   func testDeliveryMarkedDuringThePollIsReported() async throws {
     let (history, chat) = try makeHistory()
-    let rowID = LockedValue<Int64>(0)
-    clock.onSleep = { [history] sleeps in
-      if sleeps == 2 { try history.markDelivered(rowID.value) }
+    clock.onSleep = { sleeps in
+      if sleeps == 2 { try history.markDelivered(text: "On my way") }
     }
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      rowID.value = try history.addOutgoing(
-        chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: false)
+    let confirmation = try await confirm("On my way", in: history) {
+      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: false)
     }
 
     XCTAssertEqual(confirmation.status, .delivered)
-    XCTAssertEqual(confirmation.checks, 3)
-    XCTAssertEqual(confirmation.waitedMilliseconds, 1000)
   }
 
-  func testRowWithAnErrorReportsNotDelivered() async throws {
+  func testErrorOnlyReportsNotDelivered() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
+    let confirmation = try await confirm("On my way", in: history) {
       try history.addOutgoing(
         chat: chat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, error: 22)
     }
 
     XCTAssertEqual(confirmation.status, .notDelivered)
-    XCTAssertEqual(confirmation.checks, 1)
+    XCTAssertEqual(confirmation.checks, Self.fullWindowChecks, "an error must not end the check early")
     XCTAssertEqual(sends.count, 1, "an error on the row must never trigger a second send")
+  }
+
+  func testErrorThenLaterTextMessageSuccessReportsDelivered() async throws {
+    let (history, iMessageChat) = try makeHistory()
+    let smsChat = try history.directChat(with: Self.recipient, service: "SMS")
+    clock.onSleep = { sleeps in
+      if sleeps == 2 {
+        try history.addOutgoing(
+          chat: smsChat, text: "On my way", at: Self.sendStart.addingTimeInterval(1), sent: true, delivered: true,
+          service: "SMS")
+      }
+    }
+    let confirmation = try await confirm("On my way", in: history) {
+      try history.addOutgoing(
+        chat: iMessageChat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, error: 22)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+    XCTAssertTrue(confirmation.succeededAfterError)
+  }
+
+  func testErrorBesideASentTextMessageReportsSent() async throws {
+    let (history, iMessageChat) = try makeHistory()
+    let smsChat = try history.directChat(with: Self.recipient, service: "SMS")
+    let confirmation = try await confirm("On my way", in: history) {
+      try history.addOutgoing(
+        chat: iMessageChat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, error: 22)
+      try history.addOutgoing(
+        chat: smsChat, text: "On my way", at: Self.sendStart, sent: true, delivered: false, service: "SMS")
+    }
+
+    XCTAssertEqual(confirmation.status, .sent)
+    XCTAssertTrue(confirmation.succeededAfterError)
+  }
+
+  func testErrorBesideAnUnsentRowIsUnconfirmed() async throws {
+    let (history, iMessageChat) = try makeHistory()
+    let smsChat = try history.directChat(with: Self.recipient, service: "SMS")
+    let confirmation = try await confirm("On my way", in: history) {
+      try history.addOutgoing(
+        chat: iMessageChat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, error: 22)
+      try history.addOutgoing(
+        chat: smsChat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, service: "SMS")
+    }
+
+    XCTAssertEqual(confirmation.status, .unconfirmed)
+    XCTAssertEqual(confirmation.unconfirmedReason, .notYetSent)
   }
 
   func testRowNotYetMarkedSentIsUnconfirmedNotSent() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
+    let confirmation = try await confirm("On my way", in: history) {
       try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: false, delivered: false)
     }
 
@@ -80,112 +130,104 @@ final class MessageSendConfirmationTests: XCTestCase {
     XCTAssertEqual(confirmation.unconfirmedReason, .notYetSent)
   }
 
-  func testNoRowIsUnconfirmedAndNotRetried() async throws {
+  func testNoRowIsUnconfirmed() async throws {
     let (history, _) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { _ = 0 }
+    let confirmation = try await confirm("On my way", in: history) {}
 
     XCTAssertEqual(confirmation.status, .unconfirmed)
     XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
-    XCTAssertEqual(confirmation.waitedMilliseconds, Int(MessageSendConfirmer.window * 1000))
     XCTAssertEqual(sends.count, 1)
   }
 
-  // MARK: - Only this send's row counts
+  // MARK: - More than one new row
 
-  func testOlderIdenticalRowDoesNotCount() async throws {
+  func testDeliveredBesideASentIdenticalRowIsAmbiguous() async throws {
     let (history, chat) = try makeHistory()
-    try history.addOutgoing(
-      chat: chat, text: "On my way", at: Self.sendStart.addingTimeInterval(-3600), sent: true, delivered: true)
-
-    let confirmation = try await confirm("On my way", store: history.url) { _ = 0 }
-
-    XCTAssertEqual(confirmation.status, .unconfirmed)
-    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
-  }
-
-  func testIdenticalRowInsideTheToleranceThatExistedBeforeTheSendDoesNotCount() async throws {
-    let (history, chat) = try makeHistory()
-    try history.addOutgoing(
-      chat: chat, text: "On my way", at: Self.sendStart.addingTimeInterval(-1), sent: true, delivered: true)
-
-    let confirmation = try await confirm("On my way", store: history.url) { _ = 0 }
-
-    XCTAssertEqual(confirmation.status, .unconfirmed)
-    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
-  }
-
-  func testSecondIdenticalSendIsJudgedOnlyByItsOwnRow() async throws {
-    let (history, chat) = try makeHistory()
-    let first = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
-    }
-    XCTAssertEqual(first.status, .delivered)
-
-    clock.advance(1)
-    let secondStart = clock.now()
-    let second = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: secondStart, sent: true, delivered: false)
-    }
-    XCTAssertEqual(second.status, .sent, "the first send's delivered row must not make the second read delivered")
-    XCTAssertEqual(sends.count, 2)
-  }
-
-  func testSecondIdenticalSendThatWroteNothingIsUnconfirmed() async throws {
-    let (history, chat) = try makeHistory()
-    let first = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
-    }
-    XCTAssertEqual(first.status, .delivered)
-
-    clock.advance(1)
-    let second = try await confirm("On my way", store: history.url) { _ = 0 }
-    XCTAssertEqual(second.status, .unconfirmed, "the first send's row must not confirm a send that wrote nothing")
-    XCTAssertEqual(sends.count, 2)
-  }
-
-  func testDisagreeingNewIdenticalRowsAreUnconfirmed() async throws {
-    let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
-      try history.addOutgoing(
-        chat: chat, text: "On my way", at: Self.sendStart, sent: false, delivered: false, error: 22)
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: false)
     }
 
     XCTAssertEqual(confirmation.status, .unconfirmed)
     XCTAssertEqual(confirmation.unconfirmedReason, .ambiguous)
   }
 
-  func testIdenticalTextInAGroupChatWithTheRecipientDoesNotCount() async throws {
-    let (history, _) = try makeHistory()
-    let recipient = try history.handleID(Self.recipient)
-    let other = try history.addHandle("+15555550199")
-    let group = try history.addChat(handles: [recipient, other], service: "iMessage")
-
-    let confirmation = try await confirm("On my way", store: history.url) { [history] in
-      try history.addOutgoing(chat: group, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
+  func testTwoDeliveredIdenticalRowsAreAmbiguous() async throws {
+    let (history, chat) = try makeHistory()
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
     }
 
-    XCTAssertEqual(confirmation.status, .unconfirmed)
+    XCTAssertEqual(confirmation.unconfirmedReason, .ambiguous)
+  }
+
+  func testIdenticalRowsInTheIMessageAndTextMessageChatsAreAmbiguous() async throws {
+    let (history, iMessageChat) = try makeHistory()
+    let smsChat = try history.directChat(with: Self.recipient, service: "SMS")
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: iMessageChat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+      try history.addOutgoing(chat: smsChat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .ambiguous)
+  }
+
+  // MARK: - Only this send's rows count
+
+  func testOlderIdenticalRowDoesNotCount() async throws {
+    let (history, chat) = try makeHistory()
+    try history.addOutgoing(
+      chat: chat, text: "On my way", at: Self.sendStart.addingTimeInterval(-3600), sent: true, delivered: true)
+
+    let confirmation = try await confirm("On my way", in: history) {}
+
     XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
   }
 
-  func testIncomingIdenticalRowDoesNotCount() async throws {
+  func testIdenticalRowWrittenJustBeforeTheSendDoesNotCount() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addMessage(
-        chat: chat, text: "On my way", at: Self.sendStart, fromMe: false, sent: false, delivered: true)
-    }
+    try history.addOutgoing(
+      chat: chat, text: "On my way", at: Self.sendStart.addingTimeInterval(-0.5), sent: true, delivered: true)
 
-    XCTAssertEqual(confirmation.status, .unconfirmed)
+    let confirmation = try await confirm("On my way", in: history) {}
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
   }
 
-  // MARK: - Clock tolerance
-
-  func testRowDatedSlightlyBeforeTheSendStartCounts() async throws {
+  func testSecondIdenticalSendIsJudgedOnlyByItsOwnRow() async throws {
     let (history, chat) = try makeHistory()
-    let skewed = Self.sendStart.addingTimeInterval(-2)
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: skewed, sent: true, delivered: true)
+    let first = try await confirm("On my way", in: history) {
+      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
+    }
+    XCTAssertEqual(first.status, .delivered)
+
+    let secondStart = clock.now()
+    let second = try await confirm("On my way", in: history) {
+      try history.addOutgoing(chat: chat, text: "On my way", at: secondStart, sent: true, delivered: false)
+    }
+    XCTAssertEqual(second.status, .sent, "the first send's delivered row must not make the second read delivered")
+
+    let third = try await confirm("On my way", in: history) {}
+    XCTAssertEqual(third.unconfirmedReason, .noMatchingRow, "earlier rows must not confirm a send that wrote nothing")
+    XCTAssertEqual(sends.count, 3)
+  }
+
+  func testOldRowSyncedInDuringTheWindowDoesNotCount() async throws {
+    let (history, chat) = try makeHistory()
+    let synced = Self.sendStart.addingTimeInterval(-60)
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: synced, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
+  }
+
+  func testRowDatedWithinTheToleranceCounts() async throws {
+    let (history, chat) = try makeHistory()
+    let skewed = Self.sendStart.addingTimeInterval(-MessageSendConfirmer.clockTolerance / 2)
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: skewed, sent: true, delivered: true)
     }
 
     XCTAssertEqual(confirmation.status, .delivered)
@@ -193,20 +235,85 @@ final class MessageSendConfirmationTests: XCTestCase {
 
   func testRowDatedBeyondTheToleranceDoesNotCount() async throws {
     let (history, chat) = try makeHistory()
-    let tooEarly = Self.sendStart.addingTimeInterval(-(MessageSendConfirmer.clockTolerance + 1))
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: tooEarly, sent: true, delivered: true)
+    let tooEarly = Self.sendStart.addingTimeInterval(-(MessageSendConfirmer.clockTolerance + 0.5))
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: chat, text: "ok", at: tooEarly, sent: true, delivered: true)
     }
 
-    XCTAssertEqual(confirmation.status, .unconfirmed)
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
   }
 
-  // MARK: - Text and handle matching
+  func testToleranceStaysSmall() {
+    XCTAssertLessThanOrEqual(MessageSendConfirmer.clockTolerance, 1)
+  }
+
+  // MARK: - Which chats count
+
+  func testTextMessageChatForTheSamePersonCounts() async throws {
+    let (history, _) = try makeHistory()
+    let smsChat = try history.directChat(with: Self.recipient, service: "SMS")
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(
+        chat: smsChat, text: "ok", at: Self.sendStart, sent: true, delivered: true, service: "SMS")
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+  }
+
+  func testAnotherPersonsChatWithIdenticalTextDoesNotCount() async throws {
+    let (history, _) = try makeHistory()
+    let india = try history.directChat(with: "+914155550123")
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: india, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
+  }
+
+  func testTheSamePersonsEmailChatDoesNotCountForAPhoneSend() async throws {
+    let (history, _) = try makeHistory()
+    let email = try history.directChat(with: "sam@example.com")
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: email, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
+  }
+
+  func testIdenticalTextInAGroupChatWithTheRecipientDoesNotCount() async throws {
+    let (history, _) = try makeHistory()
+    let group = try history.chat(
+      handles: [history.handle(Self.recipient), history.handle("+14155550199")], service: "iMessage")
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addOutgoing(chat: group, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
+  }
+
+  func testIncomingIdenticalRowDoesNotCount() async throws {
+    let (history, chat) = try makeHistory()
+    let confirmation = try await confirm("ok", in: history) {
+      try history.addMessage(chat: chat, text: "ok", at: Self.sendStart, fromMe: false, sent: false, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
+  }
+
+  func testHandleSpelledTheContactsWayFindsTheChat() async throws {
+    let (history, chat) = try makeHistory()
+    let confirmation = try await confirm("ok", in: history, handle: "(415) 555-0123") {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
+
+    XCTAssertEqual(confirmation.status, .delivered)
+  }
+
+  // MARK: - Text matching
 
   func testLineEndingsAndWhitespaceAreNormalised() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("  Running late\r\nsee you   at\t5 \r\n", store: history.url) {
-      [history, chat] in
+    let confirmation = try await confirm("  Running late\r\nsee you   at\t5 \r\n", in: history) {
       try history.addOutgoing(
         chat: chat, text: "Running late\nsee you at 5", at: Self.sendStart, sent: true, delivered: true)
     }
@@ -216,51 +323,37 @@ final class MessageSendConfirmationTests: XCTestCase {
 
   func testDifferentTextDoesNotCount() async throws {
     let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("Running late", store: history.url) { [history, chat] in
+    let confirmation = try await confirm("Running late", in: history) {
       try history.addOutgoing(chat: chat, text: "Running later", at: Self.sendStart, sent: true, delivered: true)
     }
 
-    XCTAssertEqual(confirmation.status, .unconfirmed)
+    XCTAssertEqual(confirmation.unconfirmedReason, .noMatchingRow)
   }
 
-  func testBodyStoredOnlyInTheAttributedBlobIsMatched() async throws {
-    let (history, chat) = try makeHistory()
-    let blob = MessagesHistoryFixture.attributedBody("On my way")
-    let confirmation = try await confirm("On my way", store: history.url) { [history, chat] in
-      try history.addOutgoing(
-        chat: chat, text: nil, attributedBody: blob, at: Self.sendStart, sent: true, delivered: true)
+  func testBodiesStoredOnlyInTheAttributedBlobAreMatched() async throws {
+    let bodies = [
+      "On my way",
+      String(repeating: "a", count: 127),
+      String(repeating: "b", count: 128),
+      String(repeating: "Running late, ", count: 12) + "😀 see you",
+      String(repeating: "Long message ", count: 40),
+    ]
+    for body in bodies {
+      let (history, chat) = try makeHistory()
+      let blob = MessagesHistoryFixture.attributedBody(body)
+      let start = clock.now()
+      let confirmation = try await confirm(body, in: history) {
+        try history.addOutgoing(chat: chat, text: nil, attributedBody: blob, at: start, sent: true, delivered: true)
+      }
+      XCTAssertEqual(confirmation.status, .delivered, "\(body.utf8.count)-byte body")
     }
-
-    XCTAssertEqual(confirmation.status, .delivered)
-  }
-
-  func testHandleSpelledTheContactsWayFindsTheChat() async throws {
-    let (history, chat) = try makeHistory()
-    let confirmation = try await confirm("On my way", handle: "(555) 555-0123", store: history.url) { [history, chat] in
-      try history.addOutgoing(chat: chat, text: "On my way", at: Self.sendStart, sent: true, delivered: true)
-    }
-
-    XCTAssertEqual(confirmation.status, .delivered)
-  }
-
-  func testHandleMatching() {
-    XCTAssertTrue(MessagesReaderService.isSameMessagingHandle("+15555550123", "(555) 555-0123"))
-    XCTAssertTrue(MessagesReaderService.isSameMessagingHandle("+15555550123", "+1 555-555-0123"))
-    XCTAssertTrue(MessagesReaderService.isSameMessagingHandle("+447700900123", "07700 900123"))
-    XCTAssertTrue(MessagesReaderService.isSameMessagingHandle("Sam@Example.com", "sam@example.com"))
-    XCTAssertTrue(MessagesReaderService.isSameMessagingHandle("12345", "12345"))
-    XCTAssertFalse(MessagesReaderService.isSameMessagingHandle("+15555550123", "+15555550124"))
-    XCTAssertFalse(MessagesReaderService.isSameMessagingHandle("+15555550123", "0123"))
-    XCTAssertFalse(MessagesReaderService.isSameMessagingHandle("512345", "12345"))
-    XCTAssertFalse(MessagesReaderService.isSameMessagingHandle("sam@example.com", "sam@example.org"))
-    XCTAssertFalse(MessagesReaderService.isSameMessagingHandle("", ""))
   }
 
   // MARK: - Unreadable history
 
   func testUnreadableHistoryIsUnconfirmedAndStillSendsOnce() async throws {
-    let missing = URL(fileURLWithPath: "/nonexistent/omi-send-check-fixture.db")
-    let confirmation = try await confirm("On my way", store: missing) { _ = 0 }
+    let missing = MessageSendHistory.store(URL(fileURLWithPath: "/nonexistent/omi-send-check-fixture.db"))
+    let confirmation = try await confirm("ok", history: missing) {}
 
     XCTAssertEqual(confirmation.status, .unconfirmed)
     XCTAssertEqual(confirmation.unconfirmedReason, .historyUnreadable)
@@ -268,93 +361,135 @@ final class MessageSendConfirmationTests: XCTestCase {
     XCTAssertEqual(sends.count, 1)
   }
 
-  func testHistoryBecomingUnreadableAfterTheSendIsUnconfirmed() async throws {
-    let lookups = CallCounter()
-    let result = try await MessageSendConfirmer.sendThenConfirm(
-      handle: Self.recipient,
-      text: "On my way",
-      lookup: { _, _, _ in
-        if lookups.increment() > 1 { throw MessagesReaderError.authorizationDenied(path: "chat.db") }
-        return []
-      },
-      now: { [clock] in clock.now() },
-      sleep: { [clock] in try clock.sleep($0) },
-      send: { [sends] in sends.increment() })
+  func testAFailedReadMidPollIsRetriedOnTheNextTick() async throws {
+    let (history, chat) = try makeHistory()
+    let reads = LockedCounter()
+    let store = MessageSendHistory.store(history.url, callingCode: "1")
+    let flaky = MessageSendHistory(
+      latestRowID: store.latestRowID,
+      outgoingStates: { handle, text, since, after in
+        if reads.increment() == 1 { throw MessagesReaderError.storeReadFailed(path: "chat.db", reason: "locked") }
+        return try await store.outgoingStates(handle, text, since, after)
+      })
+    let confirmation = try await confirm("ok", history: flaky) {
+      try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+    }
 
-    XCTAssertEqual(result.confirmation.status, .unconfirmed)
-    XCTAssertEqual(result.confirmation.unconfirmedReason, .historyUnreadable)
+    XCTAssertEqual(confirmation.status, .delivered)
+  }
+
+  func testEveryReadAfterTheSendFailingIsUnreadable() async throws {
+    let failing = MessageSendHistory(
+      latestRowID: { 0 },
+      outgoingStates: { _, _, _, _ in throw MessagesReaderError.authorizationDenied(path: "chat.db") })
+    let confirmation = try await confirm("ok", history: failing) {}
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .historyUnreadable)
     XCTAssertEqual(sends.count, 1)
   }
 
-  func testDeviceToolsProbeReportsAnUnreadableHistoryAsUnconfirmed() async {
-    let detail = await DeviceToolsProbe.run(messagesDbPath: nil)
-
-    XCTAssertEqual(detail["sendCheckStatus"], "unconfirmed")
-    XCTAssertEqual(detail["sendCheckReason"], "history_unreadable")
-    XCTAssertEqual(detail["sendCheckSends"], "1")
-  }
-
-  // MARK: - Never retried
+  // MARK: - Never retried, and stopping
 
   func testFailedSendIsNotRetriedOrChecked() async throws {
-    let (history, _) = try makeHistory()
+    let reads = LockedCounter()
+    let counting = MessageSendHistory(
+      latestRowID: {
+        reads.increment()
+        return 0
+      },
+      outgoingStates: { _, _, _, _ in
+        reads.increment()
+        return []
+      })
     do {
-      _ = try await confirm("On my way", store: history.url) {
-        throw MessagesSenderError.allServicesFailed(detail: "refused")
-      }
+      _ = try await confirm("ok", history: counting) { throw MessagesSenderError.allServicesFailed(detail: "refused") }
       XCTFail("Expected the send error to reach the caller")
     } catch MessagesSenderError.allServicesFailed {
       XCTAssertEqual(sends.count, 1)
-      XCTAssertEqual(lookups.count, 1, "only the baseline read runs when the send itself fails")
+      XCTAssertEqual(reads.count, 1, "only the baseline read runs when the send itself fails")
     }
   }
 
-  func testStoppedCheckIsUnconfirmed() async throws {
-    let (history, _) = try makeHistory()
-    clock.onSleep = { _ in throw CancellationError() }
-    let confirmation = try await confirm("On my way", store: history.url) { _ = 0 }
+  func testStopDuringTheBaselineReadSendsNothing() async throws {
+    let stopping = MessageSendHistory(
+      latestRowID: {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return 0
+      },
+      outgoingStates: { _, _, _, _ in [] })
+    do {
+      _ = try await confirm("ok", history: stopping) {}
+      XCTFail("Expected the stop to reach the caller")
+    } catch is CancellationError {
+      XCTAssertEqual(sends.count, 0)
+    }
+  }
 
-    XCTAssertEqual(confirmation.status, .unconfirmed)
+  func testStopBetweenPollsEndsTheCheck() async throws {
+    clock.onSleep = { sleeps in
+      if sleeps == 1 { withUnsafeCurrentTask { $0?.cancel() } }
+    }
+    // Reads that ignore cancellation, so only the loop's own check can stop it.
+    let delivered = MessageSendHistory(
+      latestRowID: { 0 },
+      outgoingStates: { _, _, _, _ in
+        [OutgoingMessageState(rowID: 1, service: "iMessage", isSent: true, isDelivered: true, errorCode: 0)]
+      })
+    let confirmation = try await confirm("ok", history: delivered) {}
+
+    XCTAssertEqual(confirmation.unconfirmedReason, .checkStopped)
+    XCTAssertEqual(confirmation.checks, 1)
+  }
+
+  func testStopDuringTheSleepEndsTheCheck() async throws {
+    clock.onSleep = { _ in throw CancellationError() }
+    let (history, _) = try makeHistory()
+    let confirmation = try await confirm("ok", in: history) {}
+
     XCTAssertEqual(confirmation.unconfirmedReason, .checkStopped)
     XCTAssertEqual(sends.count, 1)
   }
 
-  // MARK: - Result wording
+  func testStopSurfacingFromAReadEndsTheCheck() async throws {
+    let stopping = MessageSendHistory(latestRowID: { 0 }, outgoingStates: { _, _, _, _ in throw CancellationError() })
+    let confirmation = try await confirm("ok", history: stopping) {}
 
-  @MainActor
-  func testResultTellsTheModelWhatHappened() throws {
-    let outcome = MessageSendOutcome(handle: Self.recipient, service: "iMessage", attachedFile: nil)
-    func result(_ status: MessageSendOutcomeStatus, _ reason: MessageSendConfirmation.UnconfirmedReason? = nil)
-      throws -> [String: Any]
-    {
-      let json = ChatToolExecutor.sendMessageResult(
-        outcome,
-        confirmation: MessageSendConfirmation(
-          status: status, unconfirmedReason: reason, checks: 1, waitedMilliseconds: 0),
-        charactersSent: 9)
-      return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    XCTAssertEqual(confirmation.unconfirmedReason, .checkStopped)
+  }
+
+  func testTimedOutSendIsStillChecked() async throws {
+    let (history, chat) = try makeHistory()
+    let result = try await MessageSendConfirmer.sendThenConfirm(
+      handle: Self.recipient, text: "ok", history: .store(history.url, callingCode: "1"),
+      now: { [clock] in clock.now() }, sleep: { [clock] in try clock.sleep($0) },
+      send: { [sends] in
+        sends.increment()
+        try history.addOutgoing(chat: chat, text: "ok", at: Self.sendStart, sent: true, delivered: true)
+        return try await ChatToolExecutor.sendAttempt { throw MessagesSenderError.sendTimedOut(seconds: 30) }
+      })
+
+    XCTAssertEqual(result.sent, .timedOut)
+    XCTAssertEqual(result.confirmation.status, .delivered)
+    XCTAssertEqual(sends.count, 1)
+  }
+
+  func testOtherSendErrorsAreNotTreatedAsTimeouts() async {
+    do {
+      _ = try await ChatToolExecutor.sendAttempt { throw MessagesSenderError.allServicesFailed(detail: "refused") }
+      XCTFail("Expected the send error to reach the caller")
+    } catch {
+      XCTAssertEqual((error as? MessagesSenderError)?.reasonCode, "send_failed")
     }
+  }
 
-    let delivered = try result(.delivered)
-    XCTAssertEqual(delivered["ok"] as? Bool, true)
-    XCTAssertEqual(delivered["status"] as? String, "delivered")
+  // MARK: - Probe
 
-    let sent = try result(.sent)
-    XCTAssertEqual(sent["status"] as? String, "sent")
-    XCTAssertTrue((sent["summary"] as? String ?? "").contains("not yet delivered"))
+  func testDeviceToolsProbeReportsAnUnreadableHistoryAsUnconfirmed() async {
+    let detail = await DeviceToolsProbe.sendCheckDetail()
 
-    let unconfirmed = try result(.unconfirmed, .historyUnreadable)
-    XCTAssertEqual(unconfirmed["ok"] as? Bool, true, "an unknown outcome is not a failure")
-    XCTAssertNil(unconfirmed["error"], "an error key would record the call as failed")
-    XCTAssertEqual(unconfirmed["unconfirmed_reason"] as? String, "history_unreadable")
-    let unconfirmedSummary = unconfirmed["summary"] as? String ?? ""
-    XCTAssertTrue(unconfirmedSummary.contains("check Messages"))
-    XCTAssertTrue(unconfirmedSummary.contains("Do not send it again"))
-
-    let notDelivered = try result(.notDelivered)
-    XCTAssertEqual(notDelivered["ok"] as? Bool, false)
-    XCTAssertEqual(notDelivered["status"] as? String, "not_delivered")
-    XCTAssertEqual(notDelivered["reason"] as? String, "not_delivered")
+    XCTAssertEqual(detail["sendCheckStatus"], "unconfirmed")
+    XCTAssertEqual(detail["sendCheckReason"], "history_unreadable")
+    XCTAssertEqual(detail["sendCheckSends"], "1")
   }
 
   // MARK: - Helpers
@@ -363,200 +498,34 @@ final class MessageSendConfirmationTests: XCTestCase {
   private func makeHistory() throws -> (MessagesHistoryFixture, Int64) {
     let history = try MessagesHistoryFixture()
     addTeardownBlock { history.remove() }
-    let handle = try history.addHandle(Self.recipient)
-    return (history, try history.addChat(handles: [handle], service: "iMessage"))
+    return (history, try history.directChat(with: Self.recipient))
   }
 
   private func confirm(
     _ text: String,
+    in fixture: MessagesHistoryFixture,
     handle: String = MessageSendConfirmationTests.recipient,
-    store storeURL: URL,
     send: @escaping @Sendable () async throws -> Void
   ) async throws -> MessageSendConfirmation {
-    let result = try await MessageSendConfirmer.sendThenConfirm(
+    try await confirm(text, history: .store(fixture.url, callingCode: "1"), handle: handle, send: send)
+  }
+
+  private func confirm(
+    _ text: String,
+    history: MessageSendHistory,
+    handle: String = MessageSendConfirmationTests.recipient,
+    send: @escaping @Sendable () async throws -> Void
+  ) async throws -> MessageSendConfirmation {
+    try await MessageSendConfirmer.sendThenConfirm(
       handle: handle,
       text: text,
-      lookup: { [lookups] handle, text, since in
-        lookups.increment()
-        return try await MessagesReaderService.shared.outgoingMessageStates(
-          sentTo: handle, text: text, createdSince: since, storeOverride: storeURL)
-      },
+      history: history,
       now: { [clock] in clock.now() },
       sleep: { [clock] in try clock.sleep($0) },
       send: { [sends] in
         sends.increment()
         try await send()
-      })
-    return result.confirmation
-  }
-}
-
-// MARK: - Fixture
-
-/// The tables and columns of `chat.db` that the reader touches.
-private final class MessagesHistoryFixture: @unchecked Sendable {
-  let directory: URL
-  let url: URL
-  private let queue: DatabaseQueue
-
-  init() throws {
-    directory = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-send-check-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    url = directory.appendingPathComponent("chat.db")
-    queue = try DatabaseQueue(path: url.path)
-    try queue.write { db in
-      try db.execute(
-        sql: """
-          CREATE TABLE handle (ROWID INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, service TEXT);
-          CREATE TABLE chat (
-            ROWID INTEGER PRIMARY KEY AUTOINCREMENT, chat_identifier TEXT, service_name TEXT, display_name TEXT);
-          CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
-          CREATE TABLE message (
-            ROWID INTEGER PRIMARY KEY AUTOINCREMENT,
-            text TEXT,
-            attributedBody BLOB,
-            handle_id INTEGER DEFAULT 0,
-            service TEXT,
-            date INTEGER,
-            is_from_me INTEGER DEFAULT 0,
-            is_sent INTEGER DEFAULT 0,
-            is_delivered INTEGER DEFAULT 0,
-            error INTEGER DEFAULT 0);
-          CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER, message_date INTEGER);
-          CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);
-          """)
-    }
-  }
-
-  func remove() {
-    try? FileManager.default.removeItem(at: directory)
-  }
-
-  func addHandle(_ id: String) throws -> Int64 {
-    try queue.write { db in
-      try db.execute(sql: "INSERT INTO handle (id, service) VALUES (?, 'iMessage')", arguments: [id])
-      return db.lastInsertedRowID
-    }
-  }
-
-  func handleID(_ id: String) throws -> Int64 {
-    try queue.read { db in
-      try XCTUnwrap(try Int64.fetchOne(db, sql: "SELECT ROWID FROM handle WHERE id = ?", arguments: [id]))
-    }
-  }
-
-  func addChat(handles: [Int64], service: String) throws -> Int64 {
-    try queue.write { db in
-      try db.execute(sql: "INSERT INTO chat (service_name) VALUES (?)", arguments: [service])
-      let chat = db.lastInsertedRowID
-      for handle in handles {
-        try db.execute(
-          sql: "INSERT INTO chat_handle_join (chat_id, handle_id) VALUES (?, ?)", arguments: [chat, handle])
       }
-      return chat
-    }
-  }
-
-  @discardableResult
-  func addOutgoing(
-    chat: Int64, text: String?, attributedBody: Data? = nil, at date: Date, sent: Bool, delivered: Bool,
-    error: Int64 = 0
-  ) throws -> Int64 {
-    try addMessage(
-      chat: chat, text: text, attributedBody: attributedBody, at: date, fromMe: true, sent: sent,
-      delivered: delivered, error: error)
-  }
-
-  @discardableResult
-  func addMessage(
-    chat: Int64, text: String?, attributedBody: Data? = nil, at date: Date, fromMe: Bool, sent: Bool,
-    delivered: Bool, error: Int64 = 0
-  ) throws -> Int64 {
-    try queue.write { db in
-      let stamp = MessagesReaderService.appleTimestamp(from: date)
-      try db.execute(
-        sql: """
-          INSERT INTO message (text, attributedBody, service, date, is_from_me, is_sent, is_delivered, error)
-          VALUES (?, ?, 'iMessage', ?, ?, ?, ?, ?)
-          """,
-        arguments: [text, attributedBody, stamp, fromMe ? 1 : 0, sent ? 1 : 0, delivered ? 1 : 0, error])
-      let message = db.lastInsertedRowID
-      try db.execute(
-        sql: "INSERT INTO chat_message_join (chat_id, message_id, message_date) VALUES (?, ?, ?)",
-        arguments: [chat, message, stamp])
-      return message
-    }
-  }
-
-  func markDelivered(_ rowID: Int64) throws {
-    try queue.write { db in
-      try db.execute(sql: "UPDATE message SET is_sent = 1, is_delivered = 1 WHERE ROWID = ?", arguments: [rowID])
-    }
-  }
-
-  /// The typedstream layout `MessagesReaderService.decodeAttributedBody` reads:
-  /// the class name, a five-byte header, a length byte, then UTF-8.
-  static func attributedBody(_ text: String) -> Data {
-    let utf8 = Data(text.utf8)
-    var data = Data("streamtyped NSAttributedString NSObject NSString".utf8)
-    data.append(contentsOf: [0x01, 0x94, 0x84, 0x01, 0x2B, UInt8(utf8.count)])
-    data.append(utf8)
-    return data
-  }
-}
-
-/// A clock that only moves when the confirmer sleeps or a test advances it.
-private final class ConfirmationTestClock: @unchecked Sendable {
-  private let lock = NSLock()
-  private var current: Date
-  private var sleeps = 0
-  /// Runs on each sleep with the sleep's ordinal, before time moves.
-  var onSleep: (@Sendable (Int) throws -> Void)?
-
-  init(_ start: Date) { current = start }
-
-  func now() -> Date {
-    lock.withLock { current }
-  }
-
-  func advance(_ seconds: TimeInterval) {
-    lock.withLock { current = current.addingTimeInterval(seconds) }
-  }
-
-  func sleep(_ seconds: TimeInterval) throws {
-    let ordinal = lock.withLock {
-      sleeps += 1
-      return sleeps
-    }
-    try onSleep?(ordinal)
-    advance(seconds)
-  }
-}
-
-private final class CallCounter: @unchecked Sendable {
-  private let lock = NSLock()
-  private var calls = 0
-
-  var count: Int { lock.withLock { calls } }
-
-  @discardableResult
-  func increment() -> Int {
-    lock.withLock {
-      calls += 1
-      return calls
-    }
-  }
-}
-
-private final class LockedValue<Value: Sendable>: @unchecked Sendable {
-  private let lock = NSLock()
-  private var stored: Value
-
-  init(_ value: Value) { stored = value }
-
-  var value: Value {
-    get { lock.withLock { stored } }
-    set { lock.withLock { stored = newValue } }
+    ).confirmation
   }
 }

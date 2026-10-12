@@ -45,7 +45,7 @@ extension ChatToolExecutor {
     }
   }
 
-  static func deviceToolJSON(_ payload: [String: Any]) -> String {
+  nonisolated static func deviceToolJSON(_ payload: [String: Any]) -> String {
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
       let json = String(data: data, encoding: .utf8)
@@ -298,21 +298,32 @@ extension ChatToolExecutor {
     log("Executing send_message to a resolved handle via \(service.rawValue)")
 
     do {
-      let (outcome, confirmation) = try await MessageSendConfirmer.sendThenConfirm(handle: to, text: text) {
-        try await offMainActor {
-          try MessagesSenderService.send(
-            to: to,
-            text: text,
-            service: service,
-            filePath: filePath,
-            cancellationCheck: $0)
+      let (attempt, confirmation) = try await MessageSendConfirmer.sendThenConfirm(handle: to, text: text) {
+        try await sendAttempt {
+          try await offMainActor {
+            try MessagesSenderService.send(
+              to: to,
+              text: text,
+              service: service,
+              filePath: filePath,
+              cancellationCheck: $0)
+          }
         }
       }
       log(
         "send_message outcome=\(confirmation.status.rawValue)"
           + " reason=\(confirmation.unconfirmedReason?.rawValue ?? "none")"
+          + " timed_out=\(attempt == .timedOut) after_error=\(confirmation.succeededAfterError)"
           + " checks=\(confirmation.checks) waited_ms=\(confirmation.waitedMilliseconds)")
-      return sendMessageResult(outcome, confirmation: confirmation, charactersSent: text.count)
+      let outcome: MessageSendOutcome
+      switch attempt {
+      case .completed(let completed): outcome = completed
+      case .timedOut:
+        let attached = filePath.flatMap { $0.isEmpty ? nil : $0 }
+        outcome = MessageSendOutcome(handle: to, service: service.rawValue, attachedFile: attached)
+      }
+      return sendMessageResult(
+        outcome, confirmation: confirmation, sendTimedOut: attempt == .timedOut, charactersSent: text.count)
     } catch let error as AppleScriptRunnerError {
       return deviceToolFailure(
         reason: error.reasonCode,
@@ -327,15 +338,37 @@ extension ChatToolExecutor {
     }
   }
 
+  /// How Omi's one send attempt ended, before the history check.
+  enum SendAttempt: Sendable, Equatable {
+    case completed(MessageSendOutcome)
+    /// Messages did not answer within the time limit; it may still have sent.
+    case timedOut
+  }
+
+  /// Runs Omi's one send. A timeout becomes `.timedOut` instead of an error:
+  /// Messages may still have sent the message, and the history check says
+  /// what happened, which is more use than "may or may not have been sent".
+  nonisolated static func sendAttempt(
+    _ send: @Sendable () async throws -> MessageSendOutcome
+  ) async throws -> SendAttempt {
+    do {
+      return .completed(try await send())
+    } catch MessagesSenderError.sendTimedOut {
+      return .timedOut
+    }
+  }
+
   /// The `send_message` result, with the outcome in plain words for the model.
   ///
-  /// Only `not_delivered` is a failure. `unconfirmed` means Omi has no
-  /// evidence either way, so it is reported as unknown rather than failed, and
-  /// it asks for a check in Messages because a second send could duplicate it.
-  static func sendMessageResult(
-    _ outcome: MessageSendOutcome, confirmation: MessageSendConfirmation, charactersSent: Int
+  /// Only `not_delivered` is a failure. `unconfirmed` is an unknown outcome:
+  /// `outcome_unknown` makes the kernel ledger record it that way rather than
+  /// as a success, and the summary asks for a check in Messages because a
+  /// second send could duplicate it.
+  nonisolated static func sendMessageResult(
+    _ outcome: MessageSendOutcome, confirmation: MessageSendConfirmation, sendTimedOut: Bool = false,
+    charactersSent: Int
   ) -> String {
-    let summary: String
+    var summary: String
     switch confirmation.status {
     case .delivered:
       summary = "Sent and delivered: Messages marked this message as delivered."
@@ -349,13 +382,20 @@ extension ChatToolExecutor {
       let why: String
       switch confirmation.unconfirmedReason {
       case .historyUnreadable: why = "Omi could not read the Messages history"
-      case .ambiguous: why = "more than one identical message appeared and they disagree"
+      case .ambiguous: why = "more than one identical message appeared at the same moment"
       case .notYetSent: why = "Messages had not yet marked it as sent"
       case .checkStopped: why = "the check was stopped"
       case .noMatchingRow, nil: why = "the message did not appear in the Messages history in time"
       }
       summary =
         "Unconfirmed: Omi asked Messages to send this, but could not confirm it (\(why)). It may or may not have been sent. Do not send it again; ask the person to check Messages first."
+    }
+    if confirmation.succeededAfterError {
+      summary +=
+        " Messages recorded an error on one attempt first, and the message then went through on another, for example as a text message."
+    }
+    if sendTimedOut {
+      summary = "Messages did not answer in time, so Omi checked the Messages history. " + summary
     }
 
     var payload: [String: Any] = [
@@ -370,8 +410,17 @@ extension ChatToolExecutor {
     if let reason = confirmation.unconfirmedReason {
       payload["unconfirmed_reason"] = reason.rawValue
     }
+    if confirmation.status == .unconfirmed {
+      payload["outcome_unknown"] = true
+    }
     if confirmation.status == .notDelivered {
       payload["reason"] = "not_delivered"
+    }
+    if confirmation.succeededAfterError {
+      payload["succeeded_after_error"] = true
+    }
+    if sendTimedOut {
+      payload["send_timed_out"] = true
     }
     return deviceToolJSON(payload)
   }
