@@ -1466,6 +1466,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     NSLog("OMI AppDelegate: Received URL event: %@", urlString)
 
     Task { @MainActor in
+      // Item links route first and claim only their own hosts
+      // (`items`, `conversation`, `task`, `memory`); every other URL —
+      // the auth callback included — takes the existing path unchanged.
+      if ItemLinkPresenter.shared.receive(url) { return }
       if !ThreeDoorsDemoPage.handleReturnURL(url) { AuthService.shared.handleOAuthCallback(url: url) }
       // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
       // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.
