@@ -41,7 +41,7 @@ from utils.stt.speaker_match import (
     owner_near_miss,
     select_speaker_match,
 )
-from utils.stt.speaker_recovery import VoiceRecovery, recovery_voice_blocked, MAX_RECOVERED_VOICE_ATTEMPTS
+from utils.stt.speaker_recovery import VoiceRecovery, recovery_voice_blocked
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
 from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL, OMI_LIVE_SPEAKER_COLLAPSE_TOTAL
