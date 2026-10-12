@@ -77,7 +77,7 @@ steps:
 
   - id: S4B
     name: Verify silent microphone recovery outcome
-    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and Omi remains usable without a repeated hardware alert. If microphone permission is not granted, verify 'Omi Needs Microphone Access' is presented with an OK action while the window remains responsive; repeat with the main shell hidden and confirm Omi reveals its main window before presenting that permission alert."
+    do: "With system audio recording, make the selected microphone silent. Verify bounded microphone recovery does not stop/recreate the system tap or split the recording; after exhaustion the Audio status reports no microphone signal and that system audio continues. Restore microphone signal and verify that warning clears without a restart. Without a live system tap, verify exhausted recovery still stops or waits for a microphone without repeated hardware alerts. If microphone permission is not granted, verify 'Omi Needs Microphone Access' is presented with an OK action while the window remains responsive; repeat with the main shell hidden and confirm Omi reveals its main window before presenting that permission alert."
     expect:
       interactive_count: { min: 1 }
 

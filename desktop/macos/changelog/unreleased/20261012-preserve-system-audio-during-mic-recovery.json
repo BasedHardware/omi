@@ -1,0 +1,3 @@
+{
+  "change": "Fixed silent microphone recovery interrupting system-audio recordings, with a microphone-signal warning that clears when audio returns"
+}

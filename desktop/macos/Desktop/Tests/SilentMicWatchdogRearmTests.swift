@@ -8,6 +8,43 @@ import XCTest
 /// `AudioCaptureService.evaluateSilentMicWindow` (the per-window decision extracted from the
 /// audio callback) so the fire-more-than-once contract is verified without real CoreAudio buffers.
 final class SilentMicWatchdogRearmTests: XCTestCase {
+  private final class RecoveryCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func record() { lock.withLock { value += 1 } }
+    var count: Int { lock.withLock { value } }
+  }
+
+  func testLiveSignalNotifiesOnceEvenAfterSilentRecoveryBudgetExhaustion() {
+    let svc = makeWatchdog()
+    let recovered = RecoveryCount()
+    svc.onLiveMicRecovered = { recovered.record() }
+    for time in 0..<40 {
+      _ = svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: Double(time) * 4)
+    }
+    XCTAssertEqual(recovered.count, 0)
+    _ = svc.evaluateSilentMicWindow(peak: 6, isBluetooth: false, now: 161)
+    XCTAssertEqual(recovered.count, 1, "a retained silent mic must recover without a recording restart")
+    _ = svc.evaluateSilentMicWindow(peak: 8000, isBluetooth: false, now: 162)
+    XCTAssertEqual(recovered.count, 1, "ordinary audio must not spam recovery callbacks")
+    XCTAssertNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 163))
+    XCTAssertNotNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 164))
+    _ = svc.evaluateSilentMicWindow(peak: 8000, isBluetooth: false, now: 165)
+    XCTAssertEqual(recovered.count, 2, "later silence and unmute must remain observable without rebuilding")
+  }
+
+  func testQuietPCMDoesNotClearMissingSignalAndResetRevokesOldRecovery() {
+    let svc = makeWatchdog()
+    let recovered = RecoveryCount()
+    svc.onLiveMicRecovered = { recovered.record() }
+    _ = svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 0)
+    _ = svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 1)
+    _ = svc.evaluateSilentMicWindow(peak: 5, isBluetooth: false, now: 2)
+    XCTAssertEqual(recovered.count, 0)
+    svc.resetSilentMicWatchdog()
+    _ = svc.evaluateSilentMicWindow(peak: 8000, isBluetooth: false, now: 3)
+    XCTAssertEqual(recovered.count, 0, "a retired detection must not mark a new capture recovered")
+  }
 
   func testResetClearsWatchdogEvaluationState() {
     let svc = AudioCaptureService()

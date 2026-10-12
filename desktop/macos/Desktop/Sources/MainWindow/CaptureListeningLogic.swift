@@ -27,6 +27,7 @@ enum CaptureListeningLogic {
   /// `isLiveCapturing`, which the live-transcript surfaces read directly.
   static func listeningStatus(appState: AppState) -> HomeStatusState {
     if appState.transcriptionServiceError != nil { return .blocked }
+    if appState.isMicrophoneSignalMissing, appState.isLiveCapturing { return .blocked }
     if appState.isWaitingForMicrophone { return .armed }
     if appState.isLiveCapturing { return .active }
     return appState.isAwaitingMeeting ? .armed : .inactive
