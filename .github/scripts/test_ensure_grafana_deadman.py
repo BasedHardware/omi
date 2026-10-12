@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from ensure_grafana_deadman import CONFIG, MonitoringAPI, ensure_deadman
+from ensure_grafana_deadman import MonitoringAPI, ensure_deadman
 
 PROJECT = 'based-hardware'
 CHANNEL = f'projects/{PROJECT}/notificationChannels/1'
@@ -29,7 +29,25 @@ class FakeAPI:
             return copy.deepcopy(self.resources[path])
         if method == 'POST':
             path += '/123'
-        result = copy.deepcopy(body)
+        if method == 'PATCH':
+            # Independent service allowlists: do not import implementation constants.
+            allowed = (
+                {'displayName', 'httpCheck', 'tcpCheck', 'timeout', 'contentMatchers', 'selectedRegions'}
+                if '/uptimeCheckConfigs/' in path else
+                {'displayName', 'documentation', 'userLabels', 'conditions', 'combiner',
+                 'enabled', 'notificationChannels', 'alertStrategy', 'severity'}
+            )
+            fields = query.get('updateMask', '').split(',')
+            if not fields or set(fields) - allowed:
+                raise RuntimeError('INVALID_ARGUMENT: unsupported updateMask')
+            result = copy.deepcopy(self.resources[path])
+            for field in fields:
+                if field in body:
+                    result[field] = copy.deepcopy(body[field])
+                else:
+                    result.pop(field, None)
+        else:
+            result = copy.deepcopy(body)
         result['name'] = path
         if 'conditions' in result:
             result['conditions'][0].setdefault('name', path + '/conditions/456')
@@ -61,10 +79,24 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
         self.assertIn('metric.label.check_id="123"', threshold['filter'])
         self.assertIn('monitoring.googleapis.com/uptime_check/check_passed', threshold['filter'])
         self.assertEqual(threshold['duration'], '300s')
-        self.assertEqual(threshold['comparison'], 'COMPARISON_LT')
+        self.assertEqual(threshold['comparison'], 'COMPARISON_GT')
         self.assertEqual(threshold['thresholdValue'], 1)
         self.assertEqual(threshold['trigger'], {'count': 1})
-        self.assertEqual(threshold['aggregations'], [{'alignmentPeriod': '60s', 'perSeriesAligner': 'ALIGN_FRACTION_TRUE'}])
+        aggregation, = threshold['aggregations']
+        self.assertEqual(aggregation['alignmentPeriod'], '60s')
+        self.assertEqual(aggregation['perSeriesAligner'], 'ALIGN_NEXT_OLDER')
+        self.assertEqual(aggregation['crossSeriesReducer'], 'REDUCE_COUNT_FALSE')
+        self.assertEqual(aggregation['groupByFields'], ['metric.label.check_id'])
+        # The aligner keeps each location's Boolean sample, the reducer counts
+        # false locations within this check, and GT 1 compares that reduced count.
+        # Six one-minute snapshots cover the full five-minute dwell.
+        import operator
+        compare = {'COMPARISON_GT': operator.gt}[threshold['comparison']]
+        for locations, should_page in (((False, True, True), False), ((False, False, True), True)):
+            with self.subTest(locations=locations):
+                failures = sum(passed is False for passed in locations)
+                satisfies_dwell = all(compare(failures, threshold['thresholdValue']) for _ in range(6))
+                self.assertEqual(satisfies_dwell, should_page)
         self.assertEqual(p['notificationChannels'], [CHANNEL])
 
     def test_unchanged_second_run_performs_no_writes(self):
@@ -77,16 +109,52 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
         check, policy = self.ensure()
         name = self.api.resources[policy]['conditions'][0]['name']
         self.api.resources[check]['httpCheck']['path'] = '/login'
-        self.api.resources[check]['disabled'] = True
         self.api.resources[policy]['enabled'] = False
         self.api.resources[policy]['conditions'][0]['conditionThreshold']['duration'] = '60s'
         self.api.calls.clear()
         self.assertEqual(self.ensure(), (check, policy))
         writes = [c for c in self.api.calls if c[0] != 'GET']
         self.assertEqual([c[0] for c in writes], ['PATCH', 'PATCH'])
-        self.assertTrue(all('name' not in c[3]['updateMask'].split(',') for c in writes))
+        self.assertEqual(writes[0][3]['updateMask'], 'httpCheck')
+        self.assertEqual(set(writes[1][3]['updateMask'].split(',')),
+                         {'displayName', 'enabled', 'combiner', 'notificationChannels', 'documentation', 'conditions'})
         self.assertEqual(self.api.resources[policy]['conditions'][0]['name'], name)
         self.assertEqual(self.api.resources[check]['httpCheck']['path'], '/api/health')
+
+    def test_check_mask_contains_only_supported_drifted_fields(self):
+        check, _ = self.ensure()
+        self.api.resources[check]['timeout'] = '30s'
+        self.api.resources[check]['selectedRegions'] = ['USA']
+        self.api.calls.clear()
+        self.ensure()
+        writes = [c for c in self.api.calls if c[0] == 'PATCH']
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(set(writes[0][3]['updateMask'].split(',')), {'timeout', 'selectedRegions'})
+        self.assertEqual(self.api.resources[check]['timeout'], '10s')
+        self.assertEqual(set(self.api.resources[check]['selectedRegions']), {'USA', 'EUROPE', 'ASIA_PACIFIC'})
+
+    def test_immutable_check_drift_fails_without_writes_and_names_remediation(self):
+        replacements = {'monitoredResource': {'type': 'uptime_url', 'labels': {'host': 'other.example'}},
+                        'period': '300s', 'checkerType': 'VPC_CHECKERS', 'disabled': True}
+        for field, value in replacements.items():
+            with self.subTest(field=field):
+                self.api = FakeAPI()
+                check, _ = self.ensure()
+                self.api.resources[check][field] = value
+                # Even mixed mutable/immutable drift must fail before PATCH.
+                self.api.resources[check]['timeout'] = '30s'
+                self.api.calls.clear()
+                with self.assertRaisesRegex(RuntimeError, field + r'.*delete and recreate'):
+                    self.ensure()
+                self.assertTrue(all(c[0] == 'GET' for c in self.api.calls))
+
+    def test_fake_rejects_invalid_check_and_policy_masks(self):
+        check, policy = self.ensure()
+        for path, mask in ((check, 'period'), (check, 'disabled'), (check, 'checkerType'),
+                           (check, 'monitoredResource'), (check, 'httpCheck,period'),
+                           (policy, 'creationRecord'), (policy, 'name')):
+            with self.subTest(mask=mask), self.assertRaisesRegex(RuntimeError, 'unsupported updateMask'):
+                self.api('PATCH', path, self.api.resources[path], updateMask=mask)
 
     def test_reconciles_changed_channels(self):
         _, policy = self.ensure()
@@ -132,7 +200,7 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
                 self.api = FakeAPI()
                 if method == 'PATCH':
                     check, _ = self.ensure()
-                    self.api.resources[check]['period'] = '300s'
+                    self.api.resources[check]['timeout'] = '30s'
                 self.api.calls.clear()
                 self.api.fail = method
                 with self.assertRaisesRegex(RuntimeError, 'PERMISSION_DENIED'):
@@ -175,11 +243,11 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
         with patch('ensure_grafana_deadman.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'test-token\n', '')):
             api = MonitoringAPI()
         with patch('ensure_grafana_deadman.urlopen', return_value=io.StringIO('{"name":"resource"}')) as opened:
-            self.assertEqual(api('PATCH', 'projects/p/uptimeCheckConfigs/1', {'period': '60s'}, updateMask='period'), {'name': 'resource'})
+            self.assertEqual(api('PATCH', 'projects/p/uptimeCheckConfigs/1', {'timeout': '20s'}, updateMask='timeout'), {'name': 'resource'})
         request = opened.call_args.args[0]
         self.assertEqual(request.get_method(), 'PATCH')
-        self.assertEqual(request.full_url, 'https://monitoring.googleapis.com/v3/projects/p/uptimeCheckConfigs/1?updateMask=period')
-        self.assertEqual(json.loads(request.data), {'period': '60s'})
+        self.assertEqual(request.full_url, 'https://monitoring.googleapis.com/v3/projects/p/uptimeCheckConfigs/1?updateMask=timeout')
+        self.assertEqual(json.loads(request.data), {'timeout': '20s'})
         self.assertEqual(request.get_header('Authorization'), 'Bearer test-token')
         self.assertEqual(opened.call_args.kwargs['timeout'], 60)
 

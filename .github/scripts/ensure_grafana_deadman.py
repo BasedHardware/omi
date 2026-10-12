@@ -21,6 +21,12 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 CONFIG = Path(__file__).resolve().parents[2] / 'backend/deploy/monitoring/grafana-deadman.json'
+# UpdateUptimeCheckConfigRequest allowlist, expressed in REST FieldMask JSON camelCase:
+# https://github.com/googleapis/googleapis/blob/master/google/monitoring/v3/uptime_service.proto
+UPTIME_PATCH_FIELDS = frozenset({'displayName', 'httpCheck', 'tcpCheck', 'timeout', 'contentMatchers', 'selectedRegions'})
+# Managed writable AlertPolicy fields; name and output-only records are excluded.
+# https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies/patch
+POLICY_PATCH_FIELDS = frozenset({'displayName', 'documentation', 'conditions', 'combiner', 'enabled', 'notificationChannels'})
 
 
 class MonitoringAPI:
@@ -108,7 +114,22 @@ def _reconcile(api, collection: str, key: str, body: dict) -> dict:
         if _matches(existing, body):
             return existing
         body['name'] = name
-        result = api('PATCH', name, body, updateMask=','.join(k for k in body if k != 'name'))
+        if key == 'uptimeCheckConfigs':
+            drifted = [field for field in body if field != 'name' and not _matches(existing.get(field), body[field])]
+            immutable = sorted(set(drifted) - UPTIME_PATCH_FIELDS)
+            if immutable:
+                raise RuntimeError(
+                    f'Uptime check {name} has immutable field drift: {", ".join(immutable)}. '
+                    'Manual remediation: delete and recreate the uptime check, then rerun '
+                    'this script to bind the policy to the new check ID.'
+                )
+            mask = ','.join(drifted)
+        else:
+            fields = set(body) - {'name'}
+            if fields - POLICY_PATCH_FIELDS:
+                raise RuntimeError('Unsupported managed alert policy PATCH fields: ' + ', '.join(sorted(fields - POLICY_PATCH_FIELDS)))
+            mask = ','.join(field for field in body if field != 'name')
+        result = api('PATCH', name, body, updateMask=mask)
     name = result.get('name')
     if not name:
         raise RuntimeError('Monitoring write returned no resource name; re-run to reconcile')

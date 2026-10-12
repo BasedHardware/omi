@@ -53,9 +53,9 @@ health failing for 5 minutes**, declared in
 `https://monitor.omi.me/api/health` over validated HTTPS every 60 seconds from
 USA, Europe and Asia Pacific, with a 10-second request timeout and exactly HTTP
 200 accepted. The policy scopes `uptime_check/check_passed` to the assigned check
-ID; a failing checker series for 300 seconds pages (60-second fraction-true
-alignment, any one series). Detection also includes Monitoring ingestion/evaluation
-latency. This tests endpoint health, not end-to-end notification delivery or all
+ID; more than one failing checker location for 300 seconds pages (60-second
+next-older alignment, count-false reduction grouped by check ID, count > 1).
+Detection also includes Monitoring ingestion/evaluation latency. This tests endpoint health, not end-to-end notification delivery or all
 rule evaluations, and no samples are not treated as a failed HTTP check.
 
 Before merge/deployment, create the repo or `prod` Environment variable
@@ -71,7 +71,10 @@ After merge, `workflow_dispatch` **Deploy Cloud Run Metrics Egress**
 `prod` Environment approval. The ensure step runs before Helm, independently of
 Grafana, reconciles unique display names, preserves assigned check/policy and
 condition IDs, verifies writes, and fails on duplicates/API errors. Unchanged
-runs do not write. After rollout, operators should confirm Grafana readiness,
+runs do not write. Updates patch only supported drifted uptime-check fields;
+immutable drift (resource, period, checker type or disabled state) fails with a
+manual delete-and-recreate instruction. Rerun afterward to bind the policy to
+the new check ID. After rollout, operators should confirm Grafana readiness,
 healthy multi-region samples and approved channel delivery; this change has only
 local validation, not a live acceptance receipt.
 

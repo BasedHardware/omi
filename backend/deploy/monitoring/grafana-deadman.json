@@ -26,16 +26,16 @@
     "notificationChannels": [],
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "External Grafana /api/health has failed for at least five minutes. Grafana evaluation and notifications may be unavailable; this synthetic infrastructure signal does not prove a user outage. Check GKE Grafana readiness, SQLite lock logs, PVC health and ingress before intervention. See backend/charts/monitoring/README.md. This policy runs in Cloud Monitoring, independently of Grafana."
+      "content": "External Grafana /api/health has failed from more than one checker location for at least five minutes. Grafana evaluation and notifications may be unavailable; this synthetic infrastructure signal does not prove a user outage. Check GKE Grafana readiness, SQLite lock logs, PVC health and ingress before intervention. See backend/charts/monitoring/README.md. This policy runs in Cloud Monitoring, independently of Grafana."
     },
     "conditions": [{
       "displayName": "Grafana health check failing for 5 minutes",
       "conditionThreshold": {
         "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${CHECK_ID}\"",
-        "comparison": "COMPARISON_LT",
+        "comparison": "COMPARISON_GT",
         "thresholdValue": 1,
         "duration": "300s",
-        "aggregations": [{"alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_FRACTION_TRUE"}],
+        "aggregations": [{"alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["metric.label.check_id"]}],
         "trigger": {"count": 1}
       }
     }]
