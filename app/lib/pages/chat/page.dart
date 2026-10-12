@@ -336,6 +336,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Widget _buildTranscript(MessageProvider provider) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final messageKeys = [for (final message in provider.messages) _chatMessageRowKey(message)];
         return Theme(
           data: Theme.of(context).copyWith(
             textSelectionTheme: TextSelectionThemeData(
@@ -359,14 +360,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(18, 16, 18, ChatScrollPolicy.transcriptBottomPadding),
                       childrenDelegate: _StableChatMessageDelegate(
-                        messageIds: [for (final message in provider.messages) message.id],
+                        messageKeys: messageKeys,
                         builder: (context, chatIndex) {
                           if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
                             _hasInitialScrolled = true;
                             _schedulePostFrameModeAwareScroll();
                           }
                           return _ChatMessageSlot(
-                            key: ValueKey(provider.messages[chatIndex].id),
+                            key: messageKeys[chatIndex],
                             index: chatIndex,
                             sendMessage: _sendMessageUtil,
                             onAskOmi: (text) {
@@ -1181,29 +1182,38 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
   }
 }
 
-/// Keeps already-built chat rows when a reply is appended or an existing id
-/// stays put. Content changes reach the row through [_ChatMessageSlot].
+/// Row identity for the transcript sliver. Persisted messages use their id.
+/// Placeholder replies all keep id `0000`, so those rows use the message object.
+Key _chatMessageRowKey(ServerMessage message) => message.isEmpty ? ObjectKey(message) : ValueKey<String>(message.id);
+
+/// Same identity as [_chatMessageRowKey], namespaced for persisted ids so the
+/// visibility detector does not share a key with the row widget.
+Key _chatMessageVisibilityKey(ServerMessage message) =>
+    message.isEmpty ? ObjectKey(message) : ValueKey<String>('chat-result-visibility-${message.id}');
+
+/// Keeps already-built chat rows when a reply is appended or an existing
+/// identity stays put. Relocation looks up these keys, because placeholder
+/// ids are not unique. Content changes reach the row through [_ChatMessageSlot].
 class _StableChatMessageDelegate extends SliverChildBuilderDelegate {
-  _StableChatMessageDelegate({required List<String> messageIds, required NullableIndexedWidgetBuilder builder})
-      : _messageIds = messageIds,
+  _StableChatMessageDelegate({required List<Key> messageKeys, required NullableIndexedWidgetBuilder builder})
+      : _messageKeys = messageKeys,
         super(
           builder,
-          childCount: messageIds.length,
+          childCount: messageKeys.length,
           findChildIndexCallback: (Key key) {
-            if (key is! ValueKey<String>) return null;
-            final index = messageIds.indexOf(key.value);
+            final index = messageKeys.indexOf(key);
             return index < 0 ? null : index;
           },
         );
 
-  final List<String> _messageIds;
+  final List<Key> _messageKeys;
 
   @override
   bool shouldRebuild(covariant _StableChatMessageDelegate oldDelegate) {
-    final previous = oldDelegate._messageIds;
-    if (_messageIds.length < previous.length) return true;
+    final previous = oldDelegate._messageKeys;
+    if (_messageKeys.length < previous.length) return true;
     for (var i = 0; i < previous.length; i++) {
-      if (_messageIds[i] != previous[i]) return true;
+      if (_messageKeys[i] != previous[i]) return true;
     }
     return false;
   }
@@ -1252,14 +1262,14 @@ class _ChatMessageSlot extends StatelessWidget {
           )
         : HumanMessage(message: message, onAskOmi: onAskOmi);
     return VisibilityDetector(
-      key: ValueKey('chat-result-visibility-${message.id}'),
+      key: _chatMessageVisibilityKey(message),
       onVisibilityChanged: (info) {
         if (message.sender == MessageSender.ai && !message.isEmpty && info.visibleFraction > 0 && context.mounted) {
           provider.markChatResultVisible(message.id);
         }
       },
       child: Padding(
-        key: ValueKey(message.id),
+        key: _chatMessageRowKey(message),
         padding: EdgeInsets.only(bottom: index == 0 ? 16 : 0, top: last ? 8 : 16),
         child: messageBody,
       ),
