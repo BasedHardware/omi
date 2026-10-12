@@ -402,12 +402,17 @@ actor MessagesReaderService {
   /// The comparison runs inside SQLite, so only chat ids leave this query.
   static func chatsForHandle(_ db: Database, handle: String, region: String?) throws -> [HandleChat] {
     db.add(
-      function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 2, pure: true) { values in
+      function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 3, pure: true) { values in
         guard let stored = String.fromDatabaseValue(values[0]),
           let requested = String.fromDatabaseValue(values[1])
         else { return false }
-        return MessagingHandle.isSame(stored, requested, region: region)
+        return MessagingHandle.isSame(
+          stored, requested, region: region, accountLogin: String.fromDatabaseValue(values[2]))
       })
+    // The sending account decides how Messages resolved a national number.
+    // Older stores without the column fall back to every calling code.
+    let accountLogin =
+      try db.columns(in: "chat").contains { $0.name == "account_login" } ? "chat.account_login" : "NULL"
     let rows = try Row.fetchAll(
       db,
       sql: """
@@ -418,7 +423,7 @@ actor MessagesReaderService {
         FROM chat
         JOIN chat_handle_join chj ON chj.chat_id = chat.ROWID
         JOIN handle h ON h.ROWID = chj.handle_id
-        WHERE omi_same_messaging_handle(h.id, ?)
+        WHERE omi_same_messaging_handle(h.id, ?, \(accountLogin))
         GROUP BY chat.ROWID
         ORDER BY
           participants ASC,
@@ -479,9 +484,10 @@ actor MessagesReaderService {
       return try await dbQueue.read { db in
         let directChats = try Self.chatsForHandle(db, handle: handle, region: region)
           .filter { $0.participantCount == 1 }
-        let recipients = Set(
-          directChats.flatMap(\.matchedHandles).map { MessagingHandle.identityKey($0, region: region) ?? $0 })
-        guard recipients.count <= 1 else { return OutgoingMessageRead(rows: [], recipientIsAmbiguous: true) }
+        let recipients = Array(Set(directChats.flatMap(\.matchedHandles))).sorted()
+        guard !MessagingHandle.containsDistinctAddresses(recipients, region: region) else {
+          return OutgoingMessageRead(rows: [], recipientIsAmbiguous: true)
+        }
         let chatIDs = directChats.map(\.chatID)
         guard !chatIDs.isEmpty else { return OutgoingMessageRead(rows: [], recipientIsAmbiguous: false) }
         let chatPlaceholders = Array(repeating: "?", count: chatIDs.count).joined(separator: ", ")

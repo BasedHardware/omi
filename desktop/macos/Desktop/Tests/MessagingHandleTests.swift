@@ -3,8 +3,10 @@ import XCTest
 @testable import Omi_Computer
 
 final class MessagingHandleTests: XCTestCase {
-  private func same(_ stored: String, _ requested: String, region: String?) -> Bool {
-    MessagingHandle.isSame(stored, requested, region: region)
+  private static let usAccount = "P:+12673618369"
+
+  private func same(_ stored: String, _ requested: String, region: String?, account: String? = nil) -> Bool {
+    MessagingHandle.isSame(stored, requested, region: region, accountLogin: account)
   }
 
   // MARK: - Different people never match
@@ -18,25 +20,40 @@ final class MessagingHandleTests: XCTestCase {
       same("+14155550123", "+4155550123", region: "US"), "two international forms never go through the region")
   }
 
-  func testShortNationalNumberDoesNotMatchAForeignNumberEndingTheSameWay() {
-    XCTAssertFalse(same("+85291234567", "91234567", region: "US"))
-    XCTAssertFalse(same("+6591234567", "91234567", region: "US"))
-    XCTAssertFalse(same("+12391234567", "91234567", region: "US"))
+  func testAPhoneSendingAccountLimitsNationalNumbersToItsCallingCode() {
+    XCTAssertFalse(same("+85291234567", "91234567", region: "US", account: Self.usAccount))
+    XCTAssertFalse(same("+6591234567", "91234567", region: "US", account: Self.usAccount))
+    XCTAssertFalse(same("+12391234567", "91234567", region: "US", account: Self.usAccount))
+    XCTAssertFalse(same("+914155550123", "(415) 555-0123", region: "IN", account: Self.usAccount))
+    XCTAssertTrue(same("+14155550123", "(415) 555-0123", region: "IN", account: Self.usAccount))
+  }
+
+  func testWithoutAPhoneAccountAnyRealCallingCodeCounts() {
+    // The live case: a Mac set to India texting a US number typed nationally.
+    XCTAssertTrue(same("+12673618369", "2673618369", region: "IN"))
+    XCTAssertTrue(same("+12673618369", "2673618369", region: "IN", account: "E:sam@icloud.com"))
+    // The same national digits behind another real code also match, which is
+    // why a request that matches two stored numbers is treated as ambiguous.
+    XCTAssertTrue(same("+912673618369", "2673618369", region: "IN"))
+    XCTAssertTrue(same("+85291234567", "91234567", region: nil))
+    XCTAssertTrue(same("+14155550123", "(415) 555-0123", region: "001"))
+    XCTAssertTrue(same("+14155550123", "14155550123", region: nil), "North American trunk 1")
+    XCTAssertFalse(same("+99912345678", "12345678", region: nil), "999 is not a calling code")
   }
 
   func testNationalNumberDoesNotMatchAnotherCountrysNumber() {
     XCTAssertFalse(same("+14412345678", "0412345678", region: "AU"), "AU 04… vs Bermuda +1441…")
     XCTAssertFalse(same("+14412345678", "0412345678", region: "US"))
-    XCTAssertFalse(same("+914155550123", "(415) 555-0123", region: "US"))
   }
 
-  func testNationalAndInternationalNeedAKnownRegion() {
-    XCTAssertFalse(same("+14155550123", "(415) 555-0123", region: nil))
-    XCTAssertFalse(same("+14155550123", "(415) 555-0123", region: "001"), "the World region has no calling code")
-    XCTAssertFalse(same("+14155550123", "(415) 555-0123", region: "ZZ"))
-    XCTAssertFalse(same("+14155550123", "14155550123", region: nil), "without a region only same-form spellings match")
-    XCTAssertTrue(same("+14155550123", "+1 415 555 0123", region: nil))
-    XCTAssertTrue(same("+14155550123", "0014155550123", region: "001"))
+  func testTheSendingAccountsCallingCode() {
+    XCTAssertEqual(MessagingHandle.accountCallingCode("P:+12673618369"), "1")
+    XCTAssertEqual(MessagingHandle.accountCallingCode("p:+447700900123"), "44")
+    XCTAssertEqual(MessagingHandle.accountCallingCode("P:+351912345678"), "351")
+    XCTAssertEqual(MessagingHandle.accountCallingCode("P:+919876543210"), "91")
+    XCTAssertNil(MessagingHandle.accountCallingCode("E:sam@icloud.com"))
+    XCTAssertNil(MessagingHandle.accountCallingCode("P:2673618369"), "a national account number names no code")
+    XCTAssertNil(MessagingHandle.accountCallingCode(nil))
   }
 
   func testTrunkPrefixesOtherThanZero() {
@@ -46,7 +63,9 @@ final class MessagingHandleTests: XCTestCase {
     XCTAssertTrue(same("+37061234567", "0 612 34567", region: "LT"))
     XCTAssertTrue(same("+3612345678", "06 1 234 5678", region: "HU"))
     XCTAssertTrue(same("+14155550123", "1 (415) 555-0123", region: "US"))
-    XCTAssertFalse(same("+74951234567", "8 495 123-45-67", region: "GB"), "8 is not a trunk prefix in the UK")
+    XCTAssertFalse(
+      same("+74951234567", "8 495 123-45-67", region: "GB", account: "P:+447700900123"),
+      "a UK account resolves through +44, where 8 is not a trunk prefix")
   }
 
   func testNorthAmericanInternationalPrefix() {
@@ -74,12 +93,10 @@ final class MessagingHandleTests: XCTestCase {
   func testOneNationalNumberCanStandForTwoStoredNumbersInItaly() {
     XCTAssertTrue(same("+390612345678", "06 1234 5678", region: "IT"))
     XCTAssertTrue(same("+39612345678", "06 1234 5678", region: "IT"))
-    XCTAssertNotEqual(
-      MessagingHandle.identityKey("+390612345678", region: "IT"),
-      MessagingHandle.identityKey("+39612345678", region: "IT"))
-    XCTAssertEqual(
-      MessagingHandle.identityKey("+14155550123", region: "US"), MessagingHandle.identityKey("4155550123", region: "US")
-    )
+    XCTAssertTrue(MessagingHandle.containsDistinctAddresses(["+390612345678", "+39612345678"], region: "IT"))
+    XCTAssertFalse(MessagingHandle.containsDistinctAddresses(["+14155550123", "4155550123"], region: "US"))
+    XCTAssertFalse(MessagingHandle.containsDistinctAddresses(["+14155550123"], region: "US"))
+    XCTAssertTrue(MessagingHandle.containsDistinctAddresses(["+12673618369", "+912673618369"], region: "IN"))
   }
 
   func testNearMissNumbersDoNotMatch() {
@@ -100,7 +117,7 @@ final class MessagingHandleTests: XCTestCase {
   func testIndianTrunkPrefixedNumberMatchesItsInternationalForm() {
     XCTAssertTrue(same("+919876543210", "09876543210", region: "IN"))
     XCTAssertTrue(same("+919876543210", "98765 43210", region: "IN"))
-    XCTAssertFalse(same("+919876543210", "09876543210", region: "US"))
+    XCTAssertFalse(same("+919876543210", "09876543210", region: "US", account: Self.usAccount))
   }
 
   func testOtherSpellingsOfTheSameNumberMatch() {
@@ -110,6 +127,12 @@ final class MessagingHandleTests: XCTestCase {
     XCTAssertTrue(same("+14155550123", "+1 (415) 555-0123", region: nil))
     XCTAssertTrue(same("12345", "12345", region: nil))
     XCTAssertTrue(same("Sam@Example.com", "sam@example.com", region: nil))
+  }
+
+  func testCallingCodeTableListsEachRegionOnce() {
+    let regions = MessagingHandle.callingCodeTable.flatMap(\.regions)
+    XCTAssertEqual(regions.count, Set(regions).count)
+    XCTAssertEqual(MessagingHandle.allCallingCodes.count, MessagingHandle.callingCodeTable.count)
   }
 
   func testCallingCodeTable() {

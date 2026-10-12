@@ -111,14 +111,22 @@ of the person's devices within a second of Omi's send can confirm it.
 - Email addresses match without case, so `sam@example.com` reads the
   `Sam@Example.com` chat.
 - Phone numbers match when both are international (`+`, `00`, or `011` in North
-  America) or both national with equal digits, or when one is the international
-  form of the other's national number in the Mac's region: the region's calling
-  code followed by the national digits, as written or without the region's trunk
-  prefix ("0" in most places, "8" in Russia and some neighbours, "8 0" in
-  Belarus, "06" in Hungary, "1" in North America).
+  America) or both national with equal digits, or when a national number, after
+  an optional trunk prefix ("0" in most places, "8" in Russia and some
+  neighbours, "8 0" in Belarus, "06" in Hungary, "1" in North America), is the
+  international number without a real calling code.
+- Which calling codes count: when the chat's sending account is a phone number
+  (`chat.account_login` "P:+1…"), only that account's code, because Messages
+  resolves a national number through the account. Otherwise every code in the
+  ITU table counts; the Mac's region is not preferred. A Mac set to India that
+  texts a US number typed nationally therefore matches the +1 chat.
+- A request that matches two different stored numbers (for example "+1…" and
+  "+91…" with the same national digits, or an Italian "06…" against both
+  "+3906…" and "+396…") makes the send check unconfirmed (`ambiguous_recipient`)
+  rather than choosing. `read_message_history` still reads one chat: direct
+  first, then the most recently active.
+- Two different international numbers never match.
 - Extensions and a "(0)" inside an international number are ignored.
-- With no region (or the World region), a national number never matches an
-  international one, so the check reads as unconfirmed.
 - Argentine mobiles written nationally with the "15" prefix are not rewritten to
   the international "9" form and do not match.
 

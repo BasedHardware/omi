@@ -28,7 +28,8 @@ final class MessagesHistoryFixture: @unchecked Sendable {
           CREATE TABLE handle (
             ROWID INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL, service TEXT NOT NULL, UNIQUE (id, service));
           CREATE TABLE chat (
-            ROWID INTEGER PRIMARY KEY AUTOINCREMENT, chat_identifier TEXT, service_name TEXT, display_name TEXT);
+            ROWID INTEGER PRIMARY KEY AUTOINCREMENT, chat_identifier TEXT, service_name TEXT, display_name TEXT,
+            account_login TEXT);
           CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER, UNIQUE (chat_id, handle_id));
           CREATE TABLE message (
             ROWID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,14 +64,17 @@ final class MessagesHistoryFixture: @unchecked Sendable {
   }
 
   /// A direct chat with one address on one service.
-  func directChat(with id: String, service: String = "iMessage") throws -> Int64 {
-    try chat(handles: [handle(id, service: service)], service: service, identifier: id)
+  /// A direct chat with one address on one service. `accountLogin` is the
+  /// sending account Messages records, such as "P:+12673618369" or "E:sam@icloud.com".
+  func directChat(with id: String, service: String = "iMessage", accountLogin: String? = nil) throws -> Int64 {
+    try chat(handles: [handle(id, service: service)], service: service, identifier: id, accountLogin: accountLogin)
   }
 
-  func chat(handles: [Int64], service: String, identifier: String? = nil) throws -> Int64 {
+  func chat(handles: [Int64], service: String, identifier: String? = nil, accountLogin: String? = nil) throws -> Int64 {
     try queue.write { db in
       try db.execute(
-        sql: "INSERT INTO chat (chat_identifier, service_name) VALUES (?, ?)", arguments: [identifier, service])
+        sql: "INSERT INTO chat (chat_identifier, service_name, account_login) VALUES (?, ?, ?)",
+        arguments: [identifier, service, accountLogin])
       let chat = db.lastInsertedRowID
       for handle in handles {
         try db.execute(
