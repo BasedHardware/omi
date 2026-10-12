@@ -72,8 +72,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final state = tester.state(find.byType(MemoryGraphPage));
+      final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
       expect(state, isNotNull);
+      expect(state.hasFittedBounds, isTrue);
+      expect(state.zoom, lessThan(0.72));
     });
 
     testWidgets('OnboardingKnowledgeGraphStep configures MemoryGraphPage with fitToBounds', (tester) async {
