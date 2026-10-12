@@ -16,6 +16,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -45,7 +46,10 @@ def _circular_import_fakes():
     # subscription.py imports the public name `compare_versions`; expose it on the
     # stub so the fresh exec resolves without the real database.announcements.
     announcements.compare_versions = _compare_versions
+    client = ModuleType("database._client")
+    client.get_customer_firestore_client = MagicMock()
     return {
+        "database._client": client,
         "database.users": SimpleNamespace(),
         "database.user_usage": SimpleNamespace(),
         "database.announcements": announcements,
