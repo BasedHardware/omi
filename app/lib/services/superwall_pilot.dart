@@ -65,6 +65,9 @@ class SuperwallPilot {
   /// Placement for the Upgrade button on the Settings plan card.
   static const settingsUpgradePlacement = 'settings_upgrade';
 
+  /// Placement for tapping a conversation or memory locked after the free minutes run out.
+  static const lockedContentPlacement = 'locked_content';
+
   /// Returns false if the pilot could not register its test placement.
   Future<bool> showUsageUpgrade(String uid) => showPlacement('omi_usage_upgrade_test', uid);
 

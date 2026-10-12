@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/subscription.dart';
-import 'package:omi/pages/settings/widgets/standalone_plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The Plan & Usage row on the Settings sheet, plus — for Free and Plus — this month's minutes and
 /// an Upgrade button, so upgrading is one tap from Settings instead of two.
@@ -60,15 +58,12 @@ class SettingsPlanSection extends StatelessWidget {
 
 /// Free users go through the Superwall `settings_upgrade` placement when the pilot is on; Plus
 /// users (and any fallback) get the existing plans sheet.
-Future<void> openSettingsUpgrade(BuildContext context, PlanType plan) async {
-  PlatformManager.instance.analytics.paywallOpened('Settings Plan Card');
-  final user = FirebaseAuth.instance.currentUser;
-  if (plan == PlanType.basic && SuperwallPilot.instance.isEnabled && user != null && !user.isAnonymous) {
-    final shown = await SuperwallPilot.instance.showPlacement(SuperwallPilot.settingsUpgradePlacement, user.uid);
-    if (shown) return;
-  }
-  if (context.mounted) await showStandalonePlansSheet(context);
-}
+Future<void> openSettingsUpgrade(BuildContext context, PlanType plan) => openUpgradePaywall(
+      context,
+      placement: SuperwallPilot.settingsUpgradePlacement,
+      source: 'Settings Plan Card',
+      freeUser: plan == PlanType.basic,
+    );
 
 class _MinutesMeter extends StatelessWidget {
   const _MinutesMeter({required this.subscription});

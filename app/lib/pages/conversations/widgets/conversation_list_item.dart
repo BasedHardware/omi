@@ -15,7 +15,8 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
-import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -176,8 +177,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-      routeToPage(context, const UsagePage(showUpgradeDialog: true));
+      await openUpgradePaywall(
+        context,
+        placement: SuperwallPilot.lockedContentPlacement,
+        source: 'Conversation List Item',
+      );
       return;
     }
     HapticFeedback.selectionClick();
@@ -851,8 +855,11 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-    routeToPage(context, const UsagePage(showUpgradeDialog: true));
+    await openUpgradePaywall(
+      context,
+      placement: SuperwallPilot.lockedContentPlacement,
+      source: 'Conversation List Item',
+    );
   }
 
   @override
