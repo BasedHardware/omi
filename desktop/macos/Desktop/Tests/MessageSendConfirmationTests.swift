@@ -286,6 +286,14 @@ final class MessageSendConfirmationTests: XCTestCase {
     XCTAssertEqual(sends.count, 1)
   }
 
+  func testDeviceToolsProbeReportsAnUnreadableHistoryAsUnconfirmed() async {
+    let detail = await DeviceToolsProbe.run(messagesDbPath: nil)
+
+    XCTAssertEqual(detail["sendCheckStatus"], "unconfirmed")
+    XCTAssertEqual(detail["sendCheckReason"], "history_unreadable")
+    XCTAssertEqual(detail["sendCheckSends"], "1")
+  }
+
   // MARK: - Never retried
 
   func testFailedSendIsNotRetriedOrChecked() async throws {

@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/Services/AppleMailReaderService.swift
   - desktop/macos/Desktop/Sources/Services/FullDiskAccessProbe.swift
   - desktop/macos/Desktop/Sources/Services/MessagesSenderService.swift
+  - desktop/macos/Desktop/Sources/Services/MessageSendConfirmation.swift
   - desktop/macos/Desktop/Sources/Services/AppleScriptRunner.swift
   - desktop/macos/Desktop/Sources/Services/ContactsReaderService.swift
   - desktop/macos/Desktop/Sources/Services/DeviceToolsProbe.swift
@@ -39,6 +40,12 @@ steps:
       # An empty body must be rejected by validation, never forwarded to
       # Messages.app — this is what keeps the probe non-sending.
       result.detail.sendValidation: "empty_body"
+      # The send check reads the same absent store with a stand-in send that
+      # delivers nothing: an unreadable history is unconfirmed, never failed,
+      # and the send runs exactly once.
+      result.detail.sendCheckStatus: "unconfirmed"
+      result.detail.sendCheckReason: "history_unreadable"
+      result.detail.sendCheckSends: "1"
       # Untrusted text reaches osascript as argv: the marker comes back byte
       # for byte instead of being compiled as AppleScript.
       result.detail.appleScriptOk: "true"
