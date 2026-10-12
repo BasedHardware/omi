@@ -721,6 +721,52 @@ def test_a_labeled_transcript_keeps_its_speakers(text):
     assert all(not (cue.speaker or '').startswith('Weekly') for cue in parsed.cues)
 
 
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        pytest.param(
+            'Meeting notes\nAlice: hi there\n\nBob: hello\nAlice: how are you\n',
+            [
+                (None, 'Meeting notes'),
+                ('Alice', 'hi there'),
+                ('Bob', 'hello'),
+                ('Alice', 'how are you'),
+            ],
+            id='one-line-title',
+        ),
+        pytest.param(
+            'Weekly sync\n2024-01-15\nAlice: hi there\n\nBob: hello\nAlice: how are you\n',
+            [
+                (None, 'Weekly sync 2024-01-15'),
+                ('Alice', 'hi there'),
+                ('Bob', 'hello'),
+                ('Alice', 'how are you'),
+            ],
+            id='two-line-title',
+        ),
+    ],
+)
+def test_a_title_above_a_single_label_is_its_own_cue_not_part_of_the_speaker(text, expected):
+    """With one label in the block the whole paragraph used to join, gluing the title onto the name."""
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == expected
+
+
+def test_a_lone_colon_label_in_prose_still_keeps_every_word():
+    """Splitting the title off must not turn a one-off "Note:" in prose into a speaker."""
+    text = 'Meeting notes for Tuesday.\n\nTODO: send the deck\n\nWe agreed on the scope.\n'
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [cue.text for cue in parsed.cues] == [
+        'Meeting notes for Tuesday.',
+        'TODO: send the deck',
+        'We agreed on the scope.',
+    ]
+
+
 @pytest.mark.parametrize('body', ['Note:see you then', 'see http://x.io/a', 'B:c'])
 def test_one_line_cue_text_that_looks_like_a_setting_is_kept(body):
     text = f'00:00:01,000 --> 00:00:04,000 {body}\n\n00:00:05,000 --> 00:00:06,000 bye\n'
