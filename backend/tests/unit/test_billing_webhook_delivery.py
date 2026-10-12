@@ -12,7 +12,7 @@ from utils import product_telemetry
 from utils.observability import billing_webhook, subscription_events
 
 
-def _obj(price_id=None, amount=1799, interval='month', status='active', cancel=False):
+def _obj(price_id=None, amount=1799, interval='month', status='active', cancel=False, currency='usd'):
     price_id = price_id or next(k for k, v in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if v == PlanType.plus)
     return {
         'id': 'sub-fixture',
@@ -20,7 +20,18 @@ def _obj(price_id=None, amount=1799, interval='month', status='active', cancel=F
         'status': status,
         'cancel_at_period_end': cancel,
         'metadata': {'uid': 'user-fixture'},
-        'items': {'data': [{'price': {'id': price_id, 'unit_amount': amount, 'recurring': {'interval': interval}}}]},
+        'items': {
+            'data': [
+                {
+                    'price': {
+                        'id': price_id,
+                        'currency': currency,
+                        'unit_amount': amount,
+                        'recurring': {'interval': interval},
+                    }
+                }
+            ]
+        },
     }
 
 
@@ -81,7 +92,11 @@ def test_scheduled_cancellation_is_a_transition_not_churn(captures, previous, st
     assert len(captures) == expected
     if expected:
         assert captures[0]['event'] == 'Billing Subscription Cancellation Scheduled'
-        assert captures[0]['properties']['mrr_cents'] == 1799
+        if status == 'trialing':
+            assert 'mrr_cents' not in captures[0]['properties']
+        else:
+            assert captures[0]['properties']['mrr_cents'] == 1799
+        assert captures[0]['properties']['is_trial'] is (status == 'trialing')
         assert captures[0]['properties']['reason'] == 'none'
 
 
@@ -91,7 +106,9 @@ def test_paid_price_change_emits_both_tiers_and_monthly_amounts(captures, revers
     operator_id = next(k for k, v in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if v == PlanType.operator)
     operator = _obj(operator_id, amount=58800, interval='year')
     before, after = (operator, plus) if reverse else (plus, operator)
-    billing_webhook.emit_billing_webhook_events(**_args(subscription_obj=after, previous_attributes=before))
+    billing_webhook.emit_billing_webhook_events(
+        **_args(subscription_obj=after, previous_attributes={'items': before['items']})
+    )
     assert len(captures) == 1
     e = captures[0]
     assert e['event'] == 'Billing Subscription Plan Changed'
@@ -109,8 +126,9 @@ def test_missing_prior_price_does_not_invent_a_plan_change(captures, prior):
 
 def test_simultaneous_price_and_cancel_transition_emits_both(captures):
     before = _obj()
+    previous = {'items': before['items'], 'cancel_at_period_end': False}
     after = _obj(next(k for k, v in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if v == PlanType.operator), cancel=True)
-    billing_webhook.emit_billing_webhook_events(**_args(subscription_obj=after, previous_attributes=before))
+    billing_webhook.emit_billing_webhook_events(**_args(subscription_obj=after, previous_attributes=previous))
     assert {e['event'] for e in captures} == {
         'Billing Subscription Plan Changed',
         'Billing Subscription Cancellation Scheduled',
@@ -212,3 +230,92 @@ def test_capture_failure_after_response_preserves_entitlement(monkeypatch):
         assert state['captures'] == 1
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('failed_status', ['past_due', 'unpaid'])
+def test_payment_recovery_is_a_later_distinct_started_event(captures, failed_status):
+    initial = _args(
+        stripe_event_type='customer.subscription.created',
+        stripe_event_id='evt-initial',
+        previous_paid_subscription_id=None,
+    )
+    loss = _args(
+        stripe_event_id='evt-loss',
+        stripe_event_created=1758700900,
+        subscription_obj=_obj(status=failed_status),
+        resulting_paid_subscription_id=None,
+        previous_attributes={'status': 'active'},
+    )
+    recovery = _args(
+        stripe_event_id='evt-recovery',
+        stripe_event_created=1758701000,
+        previous_paid_subscription_id=None,
+        previous_attributes={'status': failed_status},
+    )
+    for delivery in (initial, loss, recovery, recovery):
+        billing_webhook.emit_billing_webhook_events(**delivery)
+    assert [event['event'] for event in captures] == [
+        'Billing Subscription Started',
+        'Billing Subscription Churned',
+        'Billing Subscription Started',
+        'Billing Subscription Started',
+    ]
+    first, churn, recovered, replay = [event['properties'] for event in captures]
+    assert recovered['$insert_id'] != first['$insert_id']
+    assert first['occurred_at'] < churn['occurred_at'] < recovered['occurred_at']
+    assert recovered['$insert_id'] == replay['$insert_id']
+    assert recovered['occurred_at'] == replay['occurred_at']
+
+
+@pytest.mark.parametrize(
+    'status,currency',
+    [('active', 'usd'), ('active', ' USD '), ('trialing', 'usd'), ('active', 'eur'), ('active', None)],
+)
+def test_lifecycle_currency_and_trial_gate_catalog_mrr(captures, status, currency):
+    billing_webhook.emit_billing_webhook_events(
+        **_args(
+            stripe_event_type='customer.subscription.created',
+            previous_paid_subscription_id=None,
+            subscription_obj=_obj(status=status, currency=currency),
+        )
+    )
+    properties = captures[0]['properties']
+    assert properties['currency'] == (currency.strip().lower() if currency else 'unknown')
+    assert properties['is_trial'] is (status == 'trialing')
+    assert properties['billing_measurement'] == (
+        'trial_plan_entitlement' if status == 'trialing' else 'paid_plan_entitlement'
+    )
+    if status != 'trialing' and currency and currency.strip().lower() == 'usd':
+        assert properties['mrr_cents'] == 1799
+    else:
+        assert 'mrr_cents' not in properties
+
+
+@pytest.mark.parametrize('status,currency', [('trialing', 'usd'), ('active', 'eur'), ('active', None)])
+def test_plan_movement_keeps_tiers_but_omits_ineligible_mrr(captures, status, currency):
+    before = _obj(status=status, currency=currency)
+    operator_id = next(k for k, v in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if v == PlanType.operator)
+    after = _obj(operator_id, amount=4900, status=status, currency=currency)
+    billing_webhook.emit_billing_webhook_events(
+        **_args(
+            subscription_obj=after,
+            previous_attributes={'items': before['items']},
+        )
+    )
+    properties = captures[0]['properties']
+    assert properties['previous_plan'] == 'plus'
+    assert properties['new_plan'] == 'operator'
+    assert properties['currency'] == (currency.strip().lower() if currency else 'unknown')
+    assert properties['is_trial'] is (status == 'trialing')
+    assert not {'mrr_cents', 'mrr_before_cents', 'mrr_after_cents'} & properties.keys()
+
+
+def test_annual_catalog_mrr_matches_w2_round_half_up(captures):
+    billing_webhook.emit_billing_webhook_events(
+        **_args(
+            stripe_event_type='customer.subscription.created',
+            previous_paid_subscription_id=None,
+            subscription_obj=_obj(amount=19990, interval='year'),
+        )
+    )
+    assert captures[0]['properties']['mrr_cents'] == 1666

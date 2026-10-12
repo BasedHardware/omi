@@ -143,6 +143,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speakerTagPromptsViewed | Speaker Tag Prompts Viewed | prompt_count, first_time | active | speaker-tag-prompts-funnel |
 | speakerTagPromptClipPlayed | Speaker Tag Prompt Clip Played | kind, loaded | active | speaker-tag-prompts-funnel |
 | speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
+| billingSubscriptionStarted | Billing Subscription Started | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
+| billingSubscriptionChurned | Billing Subscription Churned | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
+| billingSubscriptionCancellationScheduled | Billing Subscription Cancellation Scheduled | plan, interval, reason, price_generation, is_trial, billing_measurement, mrr_cents | active | billing-lifecycle-events |
 | billingSubscriptionPlanChanged | Billing Subscription Plan Changed | previous_plan, new_plan, interval, mrr_before_cents, mrr_after_cents | active | billing-plan-changes |
 | speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
 | voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |
