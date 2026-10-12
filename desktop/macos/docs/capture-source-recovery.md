@@ -148,5 +148,22 @@ uses a unique ownership token so concurrent worktrees cannot make ownership
 ambiguous. The success, failure, TERM, timeout and deliberate port-collision
 assertions remain intact. No production launcher policy or budget is changed.
 
+The hosted run on `10f8567fb2c023b71b655f57d443c151b39e9e39` reports
+the embedding capture-path suite passing, but exposed a different screenshot
+evidence fixture failure. That failure reproduced locally: its fake signatures
+expired relative to historical capture timestamps, and an instant fake fetch
+could finish before the second purportedly concurrent refresh began. The
+fixture now mints fresh signatures and explicitly holds the first refresh
+until the second caller has tested the in-flight guard. All 23 screenshot-pass
+tests then passed, including three fresh isolated repetitions. Production
+screenshot code, assertions and deadline budgets are unchanged.
+
+Final local verification used CI's compiler and fresh per-suite Foundation
+home/temp isolation: all 16 capture, embedding and screenshot suite invocations
+passed. A combined-process diagnostic run of 167 tests passed the corrected
+screenshot suite but hit the embedding background-observation timeout. Its
+isolated invocation passed, as did the hosted invocation above; the combined
+run is not counted as green or substituted for the runner's isolation policy.
+
 Customer diagnostic exports can contain transcript text despite their redacted
 header. Never commit the export, its transcript text, or account/session IDs.
