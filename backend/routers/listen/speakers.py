@@ -58,6 +58,7 @@ from utils.observability.speaker_embedding_budget import (
     BUDGET_VOICES,
     BUDGET_SOCKETS,
     EMBEDDING_ATTEMPTS,
+    REJECTOR_TAIL_DENIALS,
 )
 from routers.listen.speaker_queue import SpeakerMatchQueue, subtract_audio_ranges
 
@@ -107,6 +108,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'voice_capacity',
         'embedding_budget',
         'authority_unavailable',
+        'rejector_tail_reserved',
     }
 )
 
@@ -131,7 +133,7 @@ def _read_file(path: str) -> bytes:
 class SpeakerMatcher:
     def __init__(self, host: Any):
         self.host = host
-        self.queue = SpeakerMatchQueue(generation=lambda: self._generation)
+        self.queue = SpeakerMatchQueue(generation=lambda: self._generation, rejector=self._is_proven_rejector)
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
@@ -164,6 +166,10 @@ class SpeakerMatcher:
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._pending_audio: Dict[int, list[tuple[float, float]]] = {}
         self._embedding_attempts: Dict[int, int] = {}
+        # Saturated clear-reject rounds; -1 permanently protects any other
+        # completed result in this generation. Admission bounds this inventory.
+        self._rejector_comparisons: Dict[int, int] = {}
+        self._manual_voices: set[int] = set()
         self._socket_embedding_tokens = float(SOCKET_EMBEDDING_BURST)
         self._socket_embedding_refilled_at = time.monotonic()
         # Voice incidence resets with generation; socket incidence never does.
@@ -779,10 +785,48 @@ class SpeakerMatcher:
                 segment,
             )
             return False
+        if self._socket_embedding_tokens <= 2 and self._is_proven_rejector(speaker_id):
+            REJECTOR_TAIL_DENIALS.labels(reason='reserved_tail').inc()
+            self._record_exit('rejector_tail_reserved', speaker_id)
+            return False
         self._socket_embedding_tokens -= 1
         self._embedding_attempts[speaker_id] += 1
         EMBEDDING_ATTEMPTS.labels(outcome='reserved').inc()
         return True
+
+    def _is_clear_reject(self, decision: Optional[SpeakerMatchDecision], distances: Mapping[str, float]) -> bool:
+        # A below-threshold margin abstention is ambiguous, even though the
+        # legacy live decision counter calls it rejected. Protect the whole
+        # calibrated owner near band, including a close person runner-up.
+        return bool(
+            decision is not None
+            and decision.best_id is not None
+            and not decision.accepted
+            and not decision.owner_contended
+            and distances
+            and all(
+                np.isfinite(distance) and distance >= match_policy.SPEAKER_MATCH_THRESHOLD
+                for distance in distances.values()
+            )
+            and distances.get(USER_SELF_PERSON_ID, float('inf')) >= match_policy.OWNER_NEAR_MISS_THRESHOLD
+        )
+
+    def _is_proven_rejector(self, speaker_id: int) -> bool:
+        return (
+            self._rejector_comparisons.get(speaker_id, 0) >= 3
+            and speaker_id not in self._manual_voices
+            and self._mapping_origin.get(speaker_id) != 'manual'
+            and self._is_clear_reject(self._voice_decisions.get(speaker_id), self._voice_distances.get(speaker_id, {}))
+        )
+
+    def _note_rejector_comparison(
+        self, speaker_id: int, decision: Optional[SpeakerMatchDecision], evidence_seconds: float
+    ) -> None:
+        clear = evidence_seconds >= SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and self._is_clear_reject(
+            decision, self._voice_distances.get(speaker_id, {})
+        )
+        previous = self._rejector_comparisons.get(speaker_id, 0)
+        self._rejector_comparisons[speaker_id] = min(3, previous + 1) if clear and previous >= 0 else -1
 
     @diagnostics.observe_match
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
@@ -918,6 +962,13 @@ class SpeakerMatcher:
         Callers must fence the matcher generation before entering this gate.
         """
         rejected = manual_rejected_speakers(authority.receipt)
+        # Known manual authority protects scheduling too. This does not read
+        # again or weaken the existing final publication/veto gate.
+        self._manual_voices.update(
+            voice
+            for voice in self._embedding_attempts
+            if voice in rejected or self._manual_voice_decision(authority.receipt, voice) is not None
+        )
         for voice in rejected:
             self._retract_rejected_voice(voice, segment_id if voice == speaker_id else self._voice_segments.get(voice))
         if rejected:
@@ -1019,11 +1070,11 @@ class SpeakerMatcher:
             self._covered_audio[speaker_id] = covered
             # Retain interval metadata only; PCM stays in the bounded ring.
             # Coalesce provider repeats before subtracting successful evidence.
-            incoming = (
-                max(buffer_start, segment['abs_start']),
-                min(buffer_end, segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])),
+            incoming = segment.get(
+                '_speaker_audio_ranges',
+                [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
             )
-            ranges = self._pending_audio.get(speaker_id, []) + [incoming]
+            ranges = self._pending_audio.get(speaker_id, []) + incoming
             fresh = []
             for start, end in sorted(ranges):
                 start, end = max(start, buffer_start), min(end, buffer_end)
@@ -1232,6 +1283,7 @@ class SpeakerMatcher:
                 voice_groups=voice_groups,
             )
             decision = decisions.get(speaker_id)
+            self._note_rejector_comparison(speaker_id, decision, evidence_seconds)
             decision_kind = 'rejected'
             if decision is not None:
                 decision_target, decision_kind = live_decision_labels(
@@ -1479,6 +1531,8 @@ class SpeakerMatcher:
         self._covered_audio.clear()
         self._pending_audio.clear()
         self._embedding_attempts.clear()
+        self._rejector_comparisons.clear()
+        self._manual_voices.clear()
         self._budget_blocked_voices.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

@@ -24,6 +24,16 @@ BUDGET_SOCKETS = _counter(
 EMBEDDING_ATTEMPTS = _counter(
     'omi_speaker_id_embedding_attempts_total', 'Live query reservations and extraction completions', 'outcome'
 )
+REJECTOR_DEMOTIONS = _counter(
+    'omi_speaker_id_rejector_demotions_total',
+    'Proven-rejector pending entries deferred or provider updates coalesced',
+    'action',
+)
+REJECTOR_TAIL_DENIALS = _counter(
+    'omi_speaker_id_rejector_tail_denials_total',
+    'Proven-rejector reservations denied to preserve the socket tail',
+    'reason',
+)
 
 for _cap in ('voice', 'socket', 'both'):
     BUDGET_EXITS.labels(cap=_cap)
@@ -31,3 +41,6 @@ for _cap in ('voice', 'socket', 'both'):
     BUDGET_SOCKETS.labels(cap=_cap)
 for _outcome in ('reserved', 'succeeded', 'failed'):
     EMBEDDING_ATTEMPTS.labels(outcome=_outcome)
+for _action in ('deferred', 'coalesced'):
+    REJECTOR_DEMOTIONS.labels(action=_action)
+REJECTOR_TAIL_DENIALS.labels(reason='reserved_tail')

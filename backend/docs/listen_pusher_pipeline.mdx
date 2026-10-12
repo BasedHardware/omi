@@ -3173,11 +3173,13 @@ Live query admission additionally records the following closed-label counters:
 | `omi_speaker_id_embedding_attempts_total{outcome="reserved\|succeeded\|failed"}` | `reserved` counts synchronously spent voice attempts/socket tokens. `succeeded` means query extraction returned, even if matching subsequently rejects, loses authority, or becomes stale. `failed` means encoding/extraction raised or the caller was cancelled; a cancelled executor request may still finish remotely. Neither completion refunds budget. Completions can lag reservations. |
 | `omi_speaker_id_budget_voices_total{cap="voice\|socket\|both"}` | First denial per admitted numeric voice per matcher generation, classified by its first cap. Provider scope changes of the same numeric voice do not reset the admission cap or incidence marker. Rollovers reset this marker, including for carried voices whose attempts remain spent. |
 | `omi_speaker_id_budget_sockets_total{cap="voice\|socket\|both"}` | First denial per socket lifetime, classified by the first cap, including a voice-only denial. It counts sockets experiencing any budget denial, not exclusively sockets exhausting tokens; rollovers do not reset it. |
+| `omi_speaker_id_rejector_demotions_total{action="deferred\|coalesced"}` | `deferred` counts newly created or converted proven-rejector pending entries placed behind ordinary work; `coalesced` counts provider updates absorbed into an existing pending rejector entry. Repeated queue inspection does not recount either. These measure scheduling opportunities, not comparisons or saved GPU calls. |
+| `omi_speaker_id_rejector_tail_denials_total{reason="reserved_tail"}` | One otherwise-admissible reservation denied because a proven rejector would spend the last two socket tokens. No token or voice attempt is spent. Actual voice/socket exhaustion still uses the existing exclusive cap counters instead. |
 
 Compare exit rates by cap to locate pressure. Compare summed exits with summed
 voice/socket incidence over a long window to distinguish repeated blocked updates
 from affected voices/sockets; these are incidence cohorts, not active gauges or
-distinct-user counts. Each counter has exactly three preinitialized label values:
+distinct-user counts. Each of the four original budget/extraction counters has exactly three preinitialized label values:
 12 counter series per target, plus 12 Prometheus `_created` series. No UID, socket,
 recording, conversation, generation, speaker, or provider scope is a metric label.
 
@@ -3190,11 +3192,33 @@ UIDs occur only in this log; there is no transcript, PCM, or embedding payload.
 The old per-update `speaker_id_exit reason=embedding_budget` log is suppressed;
 its legacy metric continues to increment alongside the exclusive counter.
 
-The live matcher queue holds at most 100 pending provider updates in FIFO arrival
-order. Same-voice updates remain separate; there is no untried, near-owner,
-duration, or age-based priority. Queued work carries timing/identity metadata
+The live matcher queue holds at most 100 pending entries. Ordinary provider
+updates remain separate and in exact FIFO arrival order; there is no untried,
+near-owner, duration, or age-based priority. Queued work carries timing/identity metadata
 and the enqueue-time matcher generation, never PCM or transcript text. The
 existing per-voice lock serializes tasks, and at most 16 matcher tasks run.
+
+Only a proven rejector is deferred behind all ordinary work, and its pending
+updates coalesce with merged audio intervals and the latest segment ID. Three
+completed comparison rounds in the current matcher generation must all clearly
+reject every enrolled owner/person candidate. Each round requires the existing
+five-second evidence floor; attempts, extraction failures, duplicate audio,
+pending evidence and roster re-evaluations do not count as completed rounds.
+Any non-clear completed result permanently prevents proof in that generation:
+accepts, margin ambiguity, contention, invalid/empty comparisons and the whole
+calibrated owner near band remain protected. Known manual authority also
+prevents demotion. Current distances are rechecked, so profile re-evaluation
+cannot leave a newly close voice in the rejector tail. Proof resets on rollover.
+Coalescing never crosses generation, conversation or provider-scope fences;
+each entry retains at most 128 disjoint intervals. Other voices use identical
+per-update clip selection and initial-evidence cadence.
+
+After the existing monotonic socket refill and actual cap checks, a proven
+rejector cannot reserve with two or fewer tokens remaining. Those tokens remain
+available to any ordinary voice, including a tried voice still building initial
+evidence. This records `rejector_tail_reserved` in the bounded exit/diagnostic
+reason vocabulary, separately from actual `embedding_budget` exhaustion. It
+does not add tokens, refund failures, or create retries.
 
 Each dequeued update contributes its own audio interval to the existing pending
 minimum-evidence accumulation. Successful queries subtract already-embedded
@@ -3204,18 +3228,20 @@ queue entry: only an ordinary provider update can drive another query. Duplicate
 or overlapping updates cannot double-count successful evidence. Failures and
 budget denials retain pending metadata, but introduce no autonomous retry.
 
-This restores the scheduling/query cadence preceding #21181 while preserving
-its budget telemetry and all authority/stale-generation guards. The telemetry
+This retains the restored scheduling/query cadence for all ordinary voices,
+while preserving #21181 budget telemetry and all authority/stale-generation guards. The telemetry
 names, labels, first-block semantics, and exclusive-cap/legacy-count equality
 above remain compatible with owner-recognition diagnostics. The 12-attempt
 voice cap, shared 16-token burst/refill of 240 per hour, acceptance thresholds,
 margins, manual veto, and contention remain unchanged. Actual calls and latency
-can differ from the coalescing scheduler inside the same request ceiling.
+can differ for proven rejectors inside the same request ceiling. The new
+counters add exactly three `_total` series (plus three `_created` series) using
+closed labels and no UID, socket, conversation, scope or speaker labels.
 
 Owner diagnostics keep their query/comparison, budget, progress/refusal and
 stop hooks with this FIFO scheduler. Stop/checkpoint `pending_queue` samples
-`queue.qsize()`: it counts pending provider updates, including separate entries
-for the same voice. Closed generation summaries stay frozen when stale queued
+`queue.qsize()`: it counts pending entries, including separate ordinary updates
+for the same voice and a collapsed entry per proven rejector/fence. Closed generation summaries stay frozen when stale queued
 work is examined after a rollover.
 
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
