@@ -212,6 +212,38 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
+  for (final scenario in [(name: 'Plus', cap: 90000), (name: 'Unlimited-v2', cap: 0)]) {
+    testWidgets('LLM-only BYOK ${scenario.name} meter follows enforcement despite Neo identity', (tester) async {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active, features: ['byok']),
+        showSubscriptionUi: false,
+        transcriptionSecondsUsed: 1200,
+        transcriptionSecondsLimit: scenario.cap,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 8000,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ));
+      provider.debugSetUsage('today', stats(), []);
+      await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+      await tester.pump();
+      await tester.drag(find.byKey(const Key('usage_scroll_today')), const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 300));
+      if (scenario.cap > 0) {
+        final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 1500);
+        expect(find.text(text), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
+      } else {
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      }
+      expect(provider.subscription!.subscription.plan, PlanType.unlimited);
+      expect(provider.subscription!.subscription.plan.hasUnlimitedTranscription, isTrue);
+      expect(provider.subscription!.subscription.features, ['byok']);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('plan card is a child of the period scroll view', (tester) async {
     final provider = UsageProvider();
     final now = DateTime.now().toUtc();
