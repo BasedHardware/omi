@@ -240,3 +240,71 @@ def test_temporal_neighbours_exclude_eight_inputs_before_nearest_selection(colle
     assert [row['id'] for row in rows] == ['context-3', 'context-0', 'context-1', 'context-4']
     # No targets, wrong-generation/opted-out screens or out-of-window rows.
     assert all(row['id'].startswith('context-') for row in rows)
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_context_reservation_settles_only_admitted_dirty_versions(monkeypatch, level):
+    from database import _client, conversations
+    from utils import dream_context, dream_reads
+
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    now = datetime.now(timezone.utc)
+    source = database.collection('users').document(uid).collection('conversations')
+    for key in [str(i) for i in range(8)] + ['neighbour']:
+        row = conversations.encode_conversation_for_write(
+            uid,
+            {
+                'id': key,
+                'created_at': now,
+                'discarded': False,
+                'transcript_segments': [
+                    {
+                        'id': 'synthetic-segment',
+                        'text': 'Bún bò ở phố, garden boat. ' * 200,
+                        'speaker': 'SPEAKER_00',
+                        'start': 0,
+                        'end': 50,
+                        'is_user': True,
+                    }
+                ],
+                'structured': {
+                    'title': '',
+                    'overview': '',
+                    'sections': [
+                        {'heading': 'Garden boat', 'body_markdown': 'Bún bò, garden boat. ' * 50},
+                    ],
+                },
+            },
+            level,
+        )
+        source.document(key).set({**row, 'data_protection_level': level})
+    dream_store.mark_dirty(uid, [('conversations', str(i)) for i in range(8)], firestore_client=database)
+    lease = dream_store.acquire(uid, Caps(), firestore_client=database)
+    monkeypatch.setattr(
+        dream_reads,
+        'context_candidates',
+        lambda *a, **k: [
+            ('conversations/neighbour', lambda: dream_reads.read_record(uid, 'conversations/neighbour'), 'temporal'),
+        ],
+    )
+    report = {}
+    records, consumed = dream_reads.read_changes(uid, lease, Caps(), diagnostics=report)
+    assert 1 <= len(records.targets) <= 4 and len(records) > len(records.targets)
+    assert {f"{item['collection']}/{item['id']}" for item in consumed} == records.targets
+    assert dream_context.fits_pass(records, Caps())
+    assert report['context_budget_counts']['reservation_kept'] == 1
+    assert report['dirty_counts']['budget_deferred'] == 8 - len(consumed)
+    # Concurrent refresh survives along with every target deferred for context.
+    refreshed = consumed[0]['id']
+    dream_store.mark_dirty(uid, [('conversations', refreshed)], firestore_client=database)
+    dream_store.finish(uid, lease, report, success=True, consumed=consumed, firestore_client=database)
+    remaining = {s.to_dict()['id'] for s in dream_store.dirty_refs(uid, firestore_client=database)}
+    assert remaining == (set(str(i) for i in range(8)) - {item['id'] for item in consumed}) | {refreshed}
+    assert dream_store.dirty_count(uid, firestore_client=database) == 8 - len(consumed) + 1

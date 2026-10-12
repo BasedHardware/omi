@@ -280,18 +280,14 @@ def test_later_path_retries_transient_hydration_failure():
     'row', [None, {'discarded': True}, {'deleted': True}, {'deleted': True, 'sync_merged_into': 'synthetic-successor'}]
 )
 def test_permanent_conversation_states_are_not_transient_locks(monkeypatch, row):
-    monkeypatch.setattr(
-        dream_reads.conversations, 'get_conversations_by_id_without_photos', lambda *a: [row] if row else []
-    )
+    monkeypatch.setattr(dream_reads.conversations, 'get_conversation_raw_snapshot', lambda *a: row)
     assert dream_reads.read_record('synthetic', 'conversations/permanent') is None
 
 
 def test_locked_conversation_is_transient(monkeypatch):
     from fastapi import HTTPException
 
-    monkeypatch.setattr(
-        dream_reads.conversations, 'get_conversations_by_id_without_photos', lambda *a: [{'is_locked': True}]
-    )
+    monkeypatch.setattr(dream_reads.conversations, 'get_conversation_raw_snapshot', lambda *a: {'is_locked': True})
     with pytest.raises(HTTPException) as raised:
         dream_reads.read_record('synthetic', 'conversations/locked')
     assert raised.value.status_code == 423
@@ -384,8 +380,8 @@ def test_eight_ordinary_speech_targets_search_without_rare_tokens_and_exclude_al
     assert result['retrieval_counts']['semantic']['attempted'] == 8
     assert result['retrieval_counts']['temporal']['failed'] == 4
     assert result['retrieval_failure_counts']['temporal'] == {'TypeError': 4}
-    assert result['target_context_counts'] == {'retrieval_seeded': 4, 'contextless': 4}
-    assert result['role_counts'] == {'target': 8, 'context': 1} and result['triage_fits']
+    assert result['target_context_counts'] == {'retrieval_seeded': 4, 'contextless': 0}
+    assert result['role_counts'] == {'target': 4, 'context': 1} and result['triage_fits']
     for collection, start, end, excluded in windows:
         if collection == 'conversations':
             assert {f'target-{i}' for i in range(8)} <= excluded
@@ -415,7 +411,7 @@ def test_semantic_short_and_nonlatin_text_does_not_depend_on_lexical_gate(monkey
         )
     )
     assert queries == ['AI', '猫']
-    assert report['retrieval_counts']['lexical']['query_empty'] == 2
+    assert report['retrieval_counts']['lexical']['query_empty'] == 1
     assert report['retrieval_counts']['semantic']['query_empty'] == 0
     assert report['retrieval_counts']['semantic']['attempted'] == 4
 
@@ -521,5 +517,5 @@ def test_scheduled_pending_targets_are_excluded_before_first_seed_temporal_selec
     rows, consumed = dream_reads.read_changes('synthetic', {'started_at': now}, Caps(tokens=100000))
     assert exclusions == [{str(i) for i in range(8)}]
     assert 'conversations/neighbour' in rows and 'conversations/neighbour' not in rows.targets
-    assert rows.targets == {f'conversations/{i}' for i in range(8)} and len(consumed) == 8
-    assert len(calls) == 9  # Four initial targets, one neighbour, four reclaimed targets.
+    assert rows.targets == {f'conversations/{i}' for i in range(4)} and len(consumed) == 4
+    assert len(calls) == 5  # Context keeps its slice; four pending targets remain unread.

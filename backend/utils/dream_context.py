@@ -19,6 +19,7 @@ from utils.dream_prompt import (
     TRIAGE_INSTRUCTIONS,
     person_names,
     text,
+    conversation_summary,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
@@ -26,7 +27,7 @@ from fastapi import HTTPException
 from database import review_store
 from utils.memory.memory_service import MemoryService
 from utils.executors import llm_executor, submit_with_context
-from utils.dream_diagnostics import path_count, path_failure
+from utils.dream_diagnostics import path_count, path_failure, initialize
 
 
 class EvidenceRecords(dict):
@@ -42,6 +43,7 @@ def target_refs(records):
 
 
 REASONING_TARGET_LIMIT = 8
+CONTEXT_TARGET_LIMIT = 4
 
 
 PROBLEMS = ('spelling', 'duplicates', 'entity', 'tasks', 'quality')
@@ -107,23 +109,25 @@ NEGATIVE_CONTRACTIONS = re.compile(
 def query_content(row):
     # Query content, never the projector's synthetic "title/overview" headers.
     return ' '.join(
-        [str(row.get('user_title') or '')]
-        + [str((row.get('structured') or {}).get(key) or '') for key in ('title', 'overview')]
-        + [str(row.get(key) or '') for key in ('name', 'content', 'description', 'summary', 'label')]
+        [text(row.get('user_title'))]
+        + [text((row.get('structured') or {}).get('title')), conversation_summary(row)]
+        + [text(row.get(key)) for key in ('name', 'content', 'description', 'summary', 'label')]
         + [text(segment.get('text')) for segment in row.get('transcript_segments') or []]
     )[:3000]
 
 
 def query_terms(row, vocabulary=()):
     words = list(
-        dict.fromkeys(word for word in tokens(NEGATIVE_CONTRACTIONS.sub('', query_content(row))) if len(word) >= 3)
+        dict.fromkeys(word for word in tokens(NEGATIVE_CONTRACTIONS.sub('', query_content(row))) if len(word) >= 2)
     )
     rare = [word for word in words if word not in common_words()]
     near = [
         entry['spelling']
         for entry in vocabulary
         if entry.get('spelling')
-        and any(SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in rare)
+        and any(
+            SequenceMatcher(None, word, entry['spelling'].casefold()).ratio() >= 0.75 for word in rare if len(word) > 3
+        )
     ]
     # Rarity prioritizes spelling anchors; ordinary speech must still search.
     preferred = rare or [word for word in words if word not in QUERY_STOP_WORDS]
@@ -255,8 +259,10 @@ def context_candidates(
             yield 'screen/' + screen['id'], screen, 'temporal'
 
 
-def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None, excluded_refs=None):
-    diagnostics = {} if diagnostics is None else diagnostics
+def add_context(
+    targets, candidates, caps, vocabulary=None, *, diagnostics=None, excluded_refs=None, reserve_context=False
+):
+    diagnostics = initialize({} if diagnostics is None else diagnostics)
     records = EvidenceRecords(targets, targets=target_refs(targets))
     seen = set(records) if excluded_refs is None else excluded_refs
     seen.update(records)
@@ -271,6 +277,15 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None,
             {**records, ref: {}},
             targets=records.targets,
         )
+        # A supplied eight-target dry run must not consume the context slice.
+        # Defer a target before abandoning a real neighbour, retaining its queue
+        # version for the next pass. Record snapshots themselves are untouched.
+        while reserve_context and not fits_pass(probe, caps, vocabulary) and len(records.targets) > 1:
+            drop = next(ref for ref in reversed(records) if ref in records.targets)
+            records = EvidenceRecords(
+                {key: row for key, row in records.items() if key != drop}, targets=records.targets - {drop}
+            )
+            probe = EvidenceRecords({**records, ref: {}}, targets=records.targets)
         if not fits_pass(probe, caps, vocabulary):
             path_count(diagnostics, path, 'budget_skipped')
             break
@@ -294,7 +309,15 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None,
         if not row:
             path_count(diagnostics, path, 'unavailable')
             continue
+        if reserve_context:
+            diagnostics['context_budget_counts']['visible_found'] += 1
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
+        while reserve_context and not fits_pass(candidate, caps, vocabulary) and len(records.targets) > 1:
+            drop = next(key for key in reversed(records) if key in records.targets)
+            records = EvidenceRecords(
+                {key: value for key, value in records.items() if key != drop}, targets=records.targets - {drop}
+            )
+            candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):
             path_count(diagnostics, path, 'budget_skipped')
             break

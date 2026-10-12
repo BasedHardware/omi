@@ -2,9 +2,20 @@
 
 ## Target neighbourhoods and read-only planning
 
-Dirty reads initially admit up to four editable targets for neighbourhood retrieval,
-then return unused context capacity to additional dirty targets under the existing
-triage budget and eight-target reasoning limit. This is an initial allocation, not a four-target pass cap.
+Dirty reads and the supplied-record retrieval dry run reserve 30% of the triage
+ceiling for context before admitting at most four editable targets. Initial
+target admission must fit the remaining 70%, including instructions/schema and
+completion reserve. Neighbour admission can defer more targets to keep the
+complete triage-plus-reasoning input within the existing token cap. Deferred dirty
+versions stay queued and never enter the settlement's consumed list.
+Only a neighbourhood with no visible context and no budget-blocked candidate
+releases the slice to additional targets (up to the existing eight-target limit).
+Short/missing/hidden neighbours can use less than the reserved capacity; reports
+distinguish capacity from actual excerpt bytes rather than padding evidence.
+Triage targets have at most 600-character excerpts and context at most 300;
+reasoning keeps the existing 1500-character target floor and uses 300–600 characters
+for context. All framing, roles, schema, vocabulary and completion bytes still
+enter the transport's conservative budget gate. No token budget is increased.
 Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits
 (ordinary content words excluding a small stopword set when no rare tokens exist),
@@ -20,10 +31,12 @@ hydrating potential targets 5–8. Those exclusions neither consume queue versio
 nor add product reads. The fixed 12-row scans remain bounded rather than exhaustive.
 Negative contractions are removed from lexical term extraction so fragments such
 as `don` cannot suppress ordinary-word fallback; vocabulary fuzzy matching still
-considers rare tokens only. Semantic text retains the original speech.
+considers rare tokens longer than three characters only. Lexical content accepts
+two-character words so short Vietnamese syllables remain searchable. Semantic
+text retains the original speech and has no language or minimum-word-length gate.
 Screen rows still require `captureEligible is True` and the current task-control
 `accountGeneration`. Reads remain owner scoped and visibility checked.
-Queries and result counts are bounded. User-authored title and structured title/overview terms precede
+Queries and result counts are bounded. User-authored title and structured title/overview or section text precede
 long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
 the affected path's failure count and emit shared degraded fallback telemetry;
 remaining paths can still contribute. Missing/locked/hidden hydration results
@@ -35,6 +48,17 @@ the shared byte-based budget gate. Context admission also reserves worst-case
 triage input/completion before fitting reasoning. Reports include role counts;
 diagnostics never include record contents.
 
+Conversation evidence uses a single full owner-scoped raw document read with no
+photo subcollection. The stored transcript is verified with the canonical codec
+before the normal read/decrypt projection runs; a corrupt or wrong-key blob raises
+`DreamTranscriptReadError` instead of becoming empty speech. Plain, compressed
+standard and encrypted enhanced transcripts all retain `transcript_segments[].text`.
+The existing photo-free bulk reader also reads full documents; it does not strip
+speech. Both retrieval queries and prompt evidence now recognize the real
+section-only notes shape, `structured.sections[].heading/body_markdown`, through
+the shared summary renderer. They do not invent queries for genuinely empty text
+or serialize arbitrary metadata as text.
+
 Encrypted pass reports and the counts-only pass log include `retrieval_counts`
 for `links`, `lexical`, `semantic`, and `temporal`. Each path has `attempted`
 (provider/query and reference-hydration calls), `found` (returned candidate refs,
@@ -43,8 +67,8 @@ including duplicates), `added` (unique visible context admitted), and `failed`
 `budget_skipped` and `query_empty` (seed records without an applicable query).
 A zero attempted count means that path was not reached or had
 no applicable query; it does not certify provider health. A budget stop leaves
-later tiers unattempted. Context added during retrieval may subsequently become
-a dirty target; final `role_counts` describes the model input.
+later tiers unattempted. Final `role_counts` describes the model input after
+target deferral for context.
 `retrieval_failure_counts` breaks failures down by path and exception class name
 only. Names are allowlisted; unknown/custom classes collapse to `Exception`.
 Provider exception messages, module paths and tracebacks never enter these counters.
@@ -52,8 +76,9 @@ Provider exception messages, module paths and tracebacks never enter these count
 `dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
 `failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
 `permanent_acknowledged` and `transient_expired`. A pass fetches and inspects at
-most 32 dirty refs, rather than the full 500-ref queue. Budget-deferred refs and
-refs outside this window remain queued without product reads. `dirty_read`
+most 32 dirty refs, rather than the full 500-ref queue. Refs outside this window
+remain queued without product reads. Budget-deferred versions also remain queued,
+including initially read targets later deferred to admit context. `dirty_read`
 counts only versions admitted as editable targets.
 
 Authoritative missing/404, deleted, discarded, soft-deleted, merged-away,
@@ -73,10 +98,19 @@ queue rows to maintain the diagnostic watermark, instead of rescanning all
 and transient expiry separately from model failure poisoning.
 
 `target_context_counts` contains `retrieval_seeded` and `contextless`. Retrieval
-runs for the initial four targets. Reclaimed targets 5–8 are explicitly reported
+runs for the initially admitted targets (at most four). Reclaimed targets 5–8 are explicitly reported
 as contextless (no retrieval for their neighbourhood); they can still see the
 shared evidence set, but no second search round is purchased. Zero added context
 does not mean that a seeded target received useful grounding.
+
+`input_content_counts` reports supplied conversations with scalar title, overview,
+section text or transcript text, plus empty/missing transcripts, empty query
+content and failed transcript decoding. `context_budget_counts` reports supplied
+and deferred targets, reserved triage bytes, the target triage limit, visible
+neighbours found, whether the reservation was kept or reclaimed, final triage
+input bytes and target/context excerpt bytes. Counters contain no text, refs,
+field values or provider bodies. With the default 24000-token cap the triage
+ceiling is 12000, of which 3600 is reserved and targets must fit 8400.
 
 Prometheus exports `omi_dream_retrieval_total{path,count}` and
 `omi_dream_dirty_read_total{count}` and `omi_dream_target_context_total{coverage}`
@@ -84,6 +118,8 @@ with only these closed labels. These diagnostics
 and the dry-run result contain no refs, IDs, provider messages or user text.
 `omi_dream_retrieval_failure_total{path,exception_class}` exports the same
 allowlisted class breakdown.
+`omi_dream_input_content_total{count}` and `omi_dream_context_budget_total{count}`
+export the same closed content-availability/allocation fields.
 
 For the counts-only owner investigation, use the retrieval entrypoint inside a pod
 running this source, with `uid` and `records` already obtained by the authorized
@@ -100,7 +136,8 @@ print(json.dumps(counts, sort_keys=True))
 
 This runs the pass's linked, lexical, semantic and temporal retrieval with the
 same budget and hydration checks, and returns only `role_counts`, `triage_fits`,
-`retrieval_counts`, `target_context_counts` and zero-initialized `dirty_counts`. It does not acquire a
+`retrieval_counts`, `retrieval_failure_counts`, `target_context_counts`,
+`input_content_counts`, `context_budget_counts` and zero-initialized `dirty_counts`. It does not acquire a
 lease, admit a pass, call the planning model, settle dirty versions, mutate
 product records or persist a report. It reads vocabulary unless explicitly
 supplied; semantic retrieval can make ordinary embedding-provider calls with
@@ -120,13 +157,20 @@ not failures. Eligible owner screen data must have synced rows under
 matching `users/{uid}/task_intelligence_control/state.account_generation` (zero
 by default). Legacy/unattested captures remain excluded; do not rewrite them to
 bypass eligibility.
+Also include `utils/conversations/summary_selection.py` from the same source when
+using an overlay; Dream uses its section renderer. Rebuild the eight records with
+the new `read_record` in a fresh process. An undecodable transcript is now an
+explicit failure when selecting readable records; do not reuse a dict whose
+speech was already lost by a previous tolerant decoder.
 
 With `uid` and the eight newest readable conversations already held locally in
 `records` as `{ "conversations/<id>": read_record(uid, ref), ... }`, rerun the exact
 call above. No new target-selection or cap override is needed. Check
 `retrieval_counts.lexical/semantic.attempted` and `query_empty`, then
-`retrieval_failure_counts.temporal` and final `role_counts`. Four seeded targets
-still means four target neighbourhoods, not four queries from every path: identical
+`retrieval_failure_counts.temporal`, `input_content_counts`,
+`context_budget_counts` and final `role_counts`. Supplied targets can be deferred
+by the context slice; the input dict is not mutated. Seeded targets describe
+queried neighbourhoods, not a guaranteed useful context set or four queries from every path: identical
 text queries are deduplicated and the evidence budget can stop later queries.
 
 Listen and Cloud Run use the same backend Dockerfile, but are separately deployed.
