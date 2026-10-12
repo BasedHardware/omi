@@ -6,7 +6,8 @@
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_speaker_queue_fairness.py",
     "backend/tests/unit/test_speaker_budget_telemetry.py",
-    "backend/tests/unit/test_owner_recognition_embedding_budget.py"
+    "backend/tests/unit/test_owner_recognition_embedding_budget.py",
+    "backend/tests/unit/test_speaker_fifo_diagnostics.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

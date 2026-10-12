@@ -5,18 +5,125 @@ synthetic demo project. No cloud credentials or customer data are accepted.
 """
 
 import os
-from datetime import datetime, timezone
+import asyncio
+import json
+from datetime import datetime, timedelta, timezone
+from functools import partial
 from uuid import uuid4
+from unittest.mock import Mock
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from config.dream_agent import Caps
-from database import _client, conversations, dream_store
-from utils import dream_reads
+from database import _client, conversations, dream_store, dream_history
+from utils import dream_reads, dream_agent, dream_cleanup, dream_context
+from utils.dream_diagnostics import path_count
+from utils.llm.shaped_agent import Turn
+from models.dream_agent import Triage, Cluster, Plan, Edit
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def deterministic_cleanup_admission(monkeypatch):
+    # Queue-only proofs must not draw a random cleanup page. The cleanup proof
+    # explicitly enables seeding with its own deterministic draw.
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
+
+
+def test_retrieved_sections_ground_spelling_and_settle_unavailable_refs(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_AUTO_APPLY_KINDS', 'title,overview,spelling')
+    database.collection('users').document(uid).set({})
+    source = database.collection('users').document(uid).collection('conversations')
+    source.document('film').set({'transcript_segments': [{'text': 'The invented film is called Zuvra.'}]})
+    neighbours = [f'conversations/neighbour-{i}' for i in range(6)]
+    for ref in neighbours:
+        row = conversations.encode_conversation_for_write(
+            uid,
+            {
+                'transcript_segments': [],
+                'structured': {
+                    'sections': [{'heading': 'Invented reference', 'body_markdown': 'The spelling is Zuvrah.'}]
+                },
+            },
+            'enhanced',
+        )
+        source.document(ref.split('/')[1]).set({**row, 'data_protection_level': 'enhanced'})
+    dream_store.mark_dirty(
+        uid,
+        [('conversations', 'film')] + [('conversations', f'missing-{i}') for i in range(31)],
+        firestore_client=database,
+    )
+
+    def candidates(uid, records, vocabulary, *, read_record, diagnostics, **kwargs):
+        path_count(diagnostics, 'semantic', 'attempted')
+        path_count(diagnostics, 'semantic', 'found', len(neighbours))
+        for ref in neighbours:
+            yield ref, partial(read_record, uid, ref), 'semantic'
+
+    monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
+    caps = Caps()
+    lease = dream_store.acquire(uid, caps, firestore_client=database)
+    report, unavailable = {}, []
+    evidence, consumed = dream_reads.read_changes(uid, lease, caps, diagnostics=report, unavailable=unavailable)
+    assert evidence.targets == {'conversations/film'} and neighbours[0] in evidence
+    assert len(unavailable) == report['dirty_counts']['permanent'] == 31
+
+    async def turn(uid, lane, mount, messages):
+        if mount.schema is Triage:
+            value = Triage(clusters=[Cluster(refs=['conversations/film'], problem='spelling')])
+        else:
+            payload = json.loads(messages[-1]['content'])
+            assert payload['roles'][neighbours[0]] == 'context'
+            assert 'Zuvrah' in payload['records'][neighbours[0]]
+            value = Plan(
+                edits=[
+                    Edit(
+                        kind='spelling',
+                        target='conversations/film',
+                        before='Zuvra',
+                        after='Zuvrah',
+                        reason='Invented independent reference',
+                        evidence=['conversations/film', neighbours[0]],
+                    ),
+                    Edit(
+                        kind='spelling',
+                        target=neighbours[0],
+                        before='Zuvrah',
+                        after='Zuvra',
+                        reason='Invented invalid context edit',
+                        evidence=[neighbours[0]],
+                    ),
+                ]
+            )
+        return Turn(value=value, tokens=10)
+
+    result = asyncio.run(dream_agent.dry_run(uid, evidence, caps=caps, turn=turn, vocabulary=[]))
+    assert len(result['plan']['edits']) == 1 and result['plan']['edits'][0]['policy'] == 'auto'
+    assert result['role_counts']['target'] == 1 and result['role_counts']['context'] >= 1
+    assert not result['plan']['questions']
+    dream_store.finish(
+        uid,
+        lease,
+        report,
+        success=True,
+        refund=True,
+        consumed=consumed,
+        unavailable=unavailable,
+        firestore_client=database,
+    )
+    assert report['dirty_counts']['permanent_acknowledged'] == 31
+    assert dream_store.dirty_count(uid, firestore_client=database) == 0
 
 
 def test_unverifiable_speech_retries_without_blocking_and_fences_refresh(monkeypatch):
@@ -408,3 +515,86 @@ def test_context_reservation_settles_only_admitted_dirty_versions(monkeypatch, l
     remaining = {s.to_dict()['id'] for s in dream_store.dirty_refs(uid, firestore_client=database)}
     assert remaining == (set(str(i) for i in range(8)) - {item['id'] for item in consumed}) | {refreshed}
     assert dream_store.dirty_count(uid, firestore_client=database) == 8 - len(consumed) + 1
+
+
+def test_older_seed_context_and_deferral_settle_with_full_inspection_window(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '1')
+    monkeypatch.setenv('DREAM_AGENT_RANDOM_SEED_SHARE', '0')
+    now = datetime.now(timezone.utc)
+    old = now - timedelta(days=60)
+    database.collection('users').document(uid).set({})
+    source = database.collection('users').document(uid).collection('conversations')
+    speech = 'Garden boat planning. ' * 200
+    for key in ('older', 'neighbour'):
+        row = conversations.encode_conversation_for_write(
+            uid,
+            {
+                'created_at': old,
+                'structured': {'title': '', 'overview': '', 'sections': []},
+                'transcript_segments': [{'text': speech}],
+            },
+            'enhanced',
+        )
+        source.document(key).set({**row, 'data_protection_level': 'enhanced'})
+    rng = Mock()
+    rng.random.return_value = 0.5
+    rng.choice.return_value = 'conversations'
+    rng.choices.return_value = ['conversations/older']
+    monkeypatch.setattr(dream_cleanup.random, 'SystemRandom', lambda: rng)
+    dream_store.mark_dirty(uid, [('conversations', f'missing-{i}') for i in range(32)], firestore_client=database)
+
+    def candidates(owner, records, vocabulary, *, read_record, diagnostics, **kwargs):
+        assert records.targets == {'conversations/older'}
+        yield 'conversations/neighbour', partial(read_record, owner, 'conversations/neighbour'), 'semantic'
+
+    monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
+    lease = dream_store.acquire(uid, Caps(), now=now + timedelta(seconds=1), firestore_client=database)
+    report, unavailable = {}, []
+    records, consumed = dream_reads.read_changes(uid, lease, Caps(), diagnostics=report, unavailable=unavailable)
+    assert len(unavailable) == 32 and not consumed
+    assert records.targets == {'conversations/older'}
+    assert records.target_sources == {'conversations/older': 'seeded'}
+    assert set(records) - records.targets == {'conversations/neighbour'}
+    assert report['context_budget_counts']['reservation_kept'] == 1
+    assert dream_context.fits_pass(records, Caps())
+    dream_store.finish(
+        uid,
+        lease,
+        report,
+        success=True,
+        unavailable=unavailable,
+        reviewed=records.targets,
+        deferred=records.targets,
+        seeded=records.targets,
+        cleanup_cursor=records.cleanup_cursor,
+        now=now,
+        firestore_client=database,
+    )
+    assert report['dirty_counts']['permanent_acknowledged'] == 32
+    assert dream_store.dirty_count(uid, firestore_client=database) == 0
+    review = dream_history.review_states(uid, records.targets, firestore_client=database)['conversations/older']
+    assert review == {'deferred_until': now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)}
+    state = dream_store.own_state(uid, firestore_client=database)
+    assert state['cleanup_cursor']['conversations'] == 'older'
+    # The actual persisted review batch prevents another same-day hydration.
+    monkeypatch.setattr(dream_history, 'history_page', lambda *a, **k: ['older'])
+    hydration = Mock(side_effect=AssertionError('daily-capped seed hydrated'))
+    selected = dream_cleanup.add_seed(
+        uid,
+        dream_context.EvidenceRecords(),
+        {'started_at': now, 'cleanup_selected': True},
+        Caps(),
+        [],
+        read_record=hydration,
+        rng=rng,
+    )
+    assert not selected
+    hydration.assert_not_called()

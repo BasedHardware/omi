@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from config.dream_agent import Caps
-from database import dream_feedback, dream_store, dream_dirty
+from database import dream_history, dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
@@ -107,6 +107,10 @@ def store(monkeypatch):
     db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
+    db.rows[('dream_users', UID, 'dirty', 'fixture')] = {
+        'version': 'fixture',
+        'last_changed_at': datetime.now(timezone.utc),
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
@@ -192,6 +196,8 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     assert set(store.rows) == {
         ('users', UID),
         ('dream_users', UID),
+        ('dream_users', UID, 'dirty', 'fixture'),
+        ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
         ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }

@@ -12,6 +12,7 @@ from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
 import config.speaker_match_scores as match_scores
+from utils.observability import owner_recognition_diagnostics as diagnostics
 import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
@@ -188,6 +189,7 @@ class SpeakerMatcher:
         self._owner_audio_repairs = 0
         self._owner_audio_retry_after = 0.0
         self.continuity = OwnerContinuity(self)
+        self.diagnostics = diagnostics.LiveDiagnostics(host)
 
     def note_rollover_carry(self, carried_speaker_ids: set[int]) -> None:
         """Manual receipt ids copied by this rollover; automatic ids join after validation."""
@@ -272,6 +274,7 @@ class SpeakerMatcher:
             self.clear()
             self._embedding_attempts.update(retained_attempts)
             self._profile_conversation_id = conversation_id
+            self.diagnostics.begin(conversation_id, self._generation)
             carry_generation = self._generation
             automatic_carry: set[int] = set()
             if self.host.state.speaker_id_enabled:
@@ -461,6 +464,7 @@ class SpeakerMatcher:
             return bool(self._named_speakers_allowed)
 
     async def _load_profiles(self, *, owner_only: bool = False) -> None:
+        diagnostic_generation = self.diagnostics.current
         eligible = (
             getattr(self.host.request, 'include_speech_profile', True)
             and not getattr(self.host.request, 'onboarding_mode', False)
@@ -508,6 +512,8 @@ class SpeakerMatcher:
                         'name': await self.resolve_owner_name() or 'The User',
                     }
                 else:
+                    if diagnostic_generation is not None:
+                        diagnostic_generation.observe('profile_invalid' if stored_embedding else 'profile_missing')
                     self._owner_load_failed = True
                     self.person_embeddings.pop(USER_SELF_PERSON_ID, None)
                     if self.host.has_speech_profile:
@@ -517,6 +523,13 @@ class SpeakerMatcher:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
             if self._owner_load_failed:
                 self._owner_failed_loads += 1
+        self.diagnostics.profile(
+            diagnostic_generation,
+            eligible,
+            self._owner_load_failed,
+            USER_SELF_PERSON_ID in self.person_embeddings,
+            self._owner_failed_loads,
+        )
         self._profile_retry_after = time.monotonic() + min(480.0, 30.0 * 2 ** max(0, self._owner_failed_loads - 1))
         if owner_only:
             if not self._owner_load_failed and USER_SELF_PERSON_ID in self.person_embeddings:
@@ -660,13 +673,13 @@ class SpeakerMatcher:
     def _record_exit(self, reason: str, speaker_id: int) -> None:
         assert reason in SPEAKER_ID_EXIT_REASONS, reason
         OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=reason).inc()
-        if reason != 'embedding_budget':
-            logger.info('speaker_id_exit reason=%s speaker=%s session=%s', reason, speaker_id, self._session_log_id())
+        self.diagnostics.observe(reason, self._voice_scopes.get(speaker_id, ''))
 
     def _record_budget_exit(self, cap: str, speaker_id: int, segment: Optional[dict[str, Any]]) -> None:
         # This synchronous pair increments once per blocked reservation; no
         # per-segment budget log. The one first-block log is attributable by UID.
         BUDGET_EXITS.labels(cap=cap).inc()
+        self.diagnostics.budget(cap)
         self._record_exit('embedding_budget', speaker_id)
         if not self._budget_socket_blocked:
             self._budget_socket_blocked = True
@@ -771,6 +784,7 @@ class SpeakerMatcher:
         EMBEDDING_ATTEMPTS.labels(outcome='reserved').inc()
         return True
 
+    @diagnostics.observe_match
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
         conversation_id = self._profile_conversation_id
         if segment.get('_matcher_generation', self._generation) != self._generation:
@@ -1086,6 +1100,7 @@ class SpeakerMatcher:
                 # Accumulation, not a drop: this speaker's next clip reuses the
                 # evidence and reaches a decision, so it logs (below) but is not
                 # an exit reason.
+                self.diagnostics.observe('evidence_pending', segment.get('speaker_id_scope') or '')
                 record_live_speaker_decision(
                     pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings),
                     'pending',
@@ -1104,6 +1119,7 @@ class SpeakerMatcher:
                 vector = validated_embedding(value.get('embedding'))
                 if vector is not None and vector.size == centroid.size:
                     distances[person_id] = compare_embeddings(centroid, vector)
+            diagnostics.live_comparison(distances, evidence_seconds)
             query_decision = self._evidence_decision(speaker_id, centroid, distances)
             short_reconnect = evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
             if short_reconnect:
@@ -1293,6 +1309,7 @@ class SpeakerMatcher:
             if short_reconnect and not reconnect_recorded:
                 record_owner_reconnect('rejected', 'arbitration')
 
+    @diagnostics.observe_query
     async def _extract_query(self, pcm: bytes) -> Any:
         try:
             samples = np.frombuffer(pcm, dtype=np.int16)
@@ -1363,6 +1380,7 @@ class SpeakerMatcher:
                 )
                 if prior:
                     self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
+            self.diagnostics.observe('published', self._voice_scopes.get(voice, ''))
             self._record_match_score(voice, result)
             self.voice_identity_status[voice] = status
             self.segment_identity_status[segment_id] = status
@@ -1404,7 +1422,11 @@ class SpeakerMatcher:
                     )
                     row['status'] = 'user' if manual.get('is_user') else 'not_user'
                 self.match_scores = match_scores.merge(self.match_scores, [row])
+                self.diagnostics.observe('scores_generated', self._voice_scopes.get(voice, ''))
+            else:
+                self.diagnostics.observe('scores_disabled')
         except Exception:
+            self.diagnostics.observe('scores_failed')
             match_scores.record_failure(logger)
 
     def _offer_pinned_suggestion(
@@ -1443,6 +1465,7 @@ class SpeakerMatcher:
             await self.host.drain(list(self.tasks), timeout=timeout, label=label)
 
     def clear(self) -> None:
+        self.diagnostics.stop('rollover', self.queue, self.tasks)
         self._generation += 1
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self._profile_conversation_id = None

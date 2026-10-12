@@ -2067,6 +2067,8 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
     ('conversations', 'live_transcript_replay_receipt'),
+    # Internal, bounded metadata read by document ID only; descendants inherit.
+    ('conversations', 'owner_recognition_diagnostics'),
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (

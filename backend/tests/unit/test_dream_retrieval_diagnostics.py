@@ -89,26 +89,29 @@ def test_context_metadata_probe_admits_short_real_neighbour():
         },
         targets=targets.targets,
     )
-    fitting = next(
-        (
-            Caps(tokens=t)
-            for t in range(16000, 25000, 1000)
-            if not dream_context.fits_pass(probe, Caps(tokens=t))
-            and dream_context.fits_pass(
-                dream_context.EvidenceRecords({**targets, 'conversations/context': {}}, targets=targets.targets),
-                Caps(tokens=t),
-            )
-        ),
-        None,
-    )
-    assert fitting is not None
+    empty = dream_context.EvidenceRecords({**targets, 'conversations/context': {}}, targets=targets.targets)
+    context = {'transcript_segments': [{'text': 'Nuvra'}]}
+    short = dream_context.EvidenceRecords({**targets, 'conversations/context': context}, targets=targets.targets)
+    # Find the real framing threshold within the default cap. Coarse 1000-token
+    # steps can jump over this narrow boundary when grounding instructions grow.
+    lower, upper = 0, Caps().tokens
+    assert dream_context.fits_pass(short, Caps(tokens=upper))
+    while lower < upper:
+        middle = (lower + upper) // 2
+        if dream_context.fits_pass(short, Caps(tokens=middle)):
+            upper = middle
+        else:
+            lower = middle + 1
+    fitting = Caps(tokens=lower)
+    assert dream_context.fits_pass(empty, fitting)
+    assert not dream_context.fits_pass(probe, fitting)
     calls = []
     rows = dream_context.add_context(
         targets,
         [
             (
                 'conversations/context',
-                lambda: calls.append('read') or {'transcript_segments': [{'text': 'Nuvra'}]},
+                lambda: calls.append('read') or context,
                 'lexical',
             )
         ],
