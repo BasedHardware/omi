@@ -30,6 +30,15 @@ struct MessageRecord: Identifiable, Sendable {
   let attachmentCount: Int
 }
 
+/// What Messages recorded for one outgoing row, without its text or handle.
+struct OutgoingMessageState: Sendable, Equatable {
+  let rowID: Int64
+  let isSent: Bool
+  let isDelivered: Bool
+  /// `message.error`; zero means Messages recorded no failure.
+  let errorCode: Int64
+}
+
 enum MessagesReaderError: LocalizedError {
   case storeNotFound(path: String)
   case authorizationDenied(path: String)
@@ -96,6 +105,52 @@ actor MessagesReaderService {
     let value = Double(raw)
     let seconds = value > 1_000_000_000_000 ? value / nanosecondsPerSecond : value
     return Date(timeIntervalSince1970: seconds + appleEpochOffset)
+  }
+
+  /// The nanosecond Apple timestamp current stores write for `date`.
+  static func appleTimestamp(from date: Date) -> Int64 {
+    Int64(((date.timeIntervalSince1970 - appleEpochOffset) * nanosecondsPerSecond).rounded(.down))
+  }
+
+  /// Whether two handles name the same Messages address.
+  ///
+  /// The handle a send is given is often how Contacts spells it, such as
+  /// "(555) 123-4567", while Messages stores "+15551234567". Email addresses
+  /// compare without case. Phone numbers compare by digits: equal, or one side
+  /// adds a one-to-three-digit country code to a national number of seven or
+  /// more digits, after dropping a national trunk "0".
+  static func isSameMessagingHandle(_ stored: String, _ requested: String) -> Bool {
+    let left = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+    let right = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !left.isEmpty, !right.isEmpty else { return false }
+    if left.contains("@") || right.contains("@") {
+      return left.caseInsensitiveCompare(right) == .orderedSame
+    }
+    let leftDigits = phoneDigits(left)
+    let rightDigits = phoneDigits(right)
+    guard !leftDigits.isEmpty, !rightDigits.isEmpty else { return false }
+    if leftDigits == rightDigits { return true }
+    let (shorter, longer) =
+      leftDigits.count < rightDigits.count ? (leftDigits, rightDigits) : (rightDigits, leftDigits)
+    let national = shorter.hasPrefix("0") ? String(shorter.dropFirst()) : shorter
+    let countryCodeLength = longer.count - national.count
+    return national.count >= 7 && (1...3).contains(countryCodeLength) && longer.hasSuffix(national)
+  }
+
+  private static func phoneDigits(_ handle: String) -> String {
+    String(handle.filter { $0.isASCII && $0.isNumber })
+  }
+
+  /// A message body compared for equality: line endings unified, runs of
+  /// spaces and tabs collapsed, each line and the whole body trimmed.
+  static func normalizedMessageBody(_ text: String) -> String {
+    let unified = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    let lines = unified.components(separatedBy: "\n").map { line in
+      line.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+    return lines.joined(separator: "\n")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .precomposedStringWithCanonicalMapping
   }
 
   /// Whether the store is there, missing, or being withheld.
@@ -365,6 +420,73 @@ actor MessagesReaderService {
             sentAt: Self.date(fromAppleTimestamp: row["date"] as Int64? ?? 0),
             service: row["service"] as String? ?? "",
             attachmentCount: Int(row["attachment_count"] as Int64? ?? 0))
+        }
+      }
+    } catch {
+      throw Self.classifyReadError(error, path: path)
+    }
+  }
+
+  /// Outgoing rows in the direct chat with `handle` that were created at or
+  /// after `createdSince` and whose body equals `text` once normalised.
+  ///
+  /// This is the evidence `send_message` checks after a send. It reads only
+  /// rows from that one person's direct chat (one per service, such as
+  /// iMessage and SMS) created inside the check window, compares bodies here
+  /// and returns delivery state alone, so no text or handle leaves the reader.
+  /// A chat that does not exist yet reads as no rows: the first message to a
+  /// new address creates it.
+  func outgoingMessageStates(
+    sentTo handle: String, text: String, createdSince: Date, storeOverride: URL? = nil
+  ) async throws -> [OutgoingMessageState] {
+    let dbQueue = try openReadOnlyStore(at: storeOverride)
+    let path = (storeOverride ?? Self.storeURL()).path
+    let expectedBody = Self.normalizedMessageBody(text)
+    let since = Self.appleTimestamp(from: createdSince)
+    do {
+      return try await dbQueue.read { db in
+        // The stored handle and the requested one can be spelled differently,
+        // so the comparison runs inside SQLite and only the matching chat's
+        // rows come back.
+        db.add(
+          function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 2, pure: true) { values in
+            guard let stored = String.fromDatabaseValue(values[0]),
+              let requested = String.fromDatabaseValue(values[1])
+            else { return false }
+            return Self.isSameMessagingHandle(stored, requested)
+          })
+        let rows = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT
+              message.ROWID AS message_id,
+              message.text AS text,
+              message.attributedBody AS attributed_body,
+              message.is_sent AS is_sent,
+              message.is_delivered AS is_delivered,
+              message.error AS error
+            FROM message
+            JOIN chat_message_join cmj ON cmj.message_id = message.ROWID
+            WHERE cmj.chat_id IN (
+                SELECT chj.chat_id
+                FROM chat_handle_join chj
+                JOIN handle h ON h.ROWID = chj.handle_id
+                WHERE omi_same_messaging_handle(h.id, ?)
+                  AND (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chj.chat_id) = 1
+              )
+              AND message.is_from_me = 1
+              AND message.date >= ?
+            ORDER BY message.ROWID ASC
+            """,
+          arguments: [handle, since])
+        return rows.compactMap { row -> OutgoingMessageState? in
+          let body = Self.body(text: row["text"] as String?, attributedBody: row["attributed_body"] as Data?)
+          guard Self.normalizedMessageBody(body) == expectedBody else { return nil }
+          return OutgoingMessageState(
+            rowID: row["message_id"],
+            isSent: (row["is_sent"] as Int64? ?? 0) == 1,
+            isDelivered: (row["is_delivered"] as Int64? ?? 0) == 1,
+            errorCode: row["error"] as Int64? ?? 0)
         }
       }
     } catch {
