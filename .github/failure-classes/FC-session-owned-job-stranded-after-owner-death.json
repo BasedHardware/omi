@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-session-owned-job-stranded-after-owner-death",
+  "violated_contract": "A durable job that only one kind of owner may execute (a BYOK finalization job runnable only inside the user's live pusher session) must still be discoverable by some recovery path after that owner dies. BYOK resume and claim deleted reconcile_after_at so the credential-free reconciler would never touch the row; when the live session died mid-lease the job sat leased with an expired lease, invisible to the replay scan and ignored by the reconnect resume (which only acted on blocked_byok). The critical oldest-nonterminal alert fired for 10 days on one such job while no path could recover it.",
+  "canonical_prevention": "Exclusivity of execution must not be implemented by removing a row from recovery discovery. Keep due timestamps on owner-only rows and teach the recovery transaction to return them to the state their legitimate owner can resume (blocked_byok), bumping the lease epoch so a stale owner is fenced, and never dispatching them to a credential-free worker. Keep the bounded age-based abandonment as the terminal backstop. Cover owner death after resume and after claim, legacy rows with no due timestamp, and reconnect/reclaim/abandonment races with behavioral tests.",
+  "canonical_prevention_artifact": [
+    "backend/database/conversation_finalization_jobs.py",
+    "backend/services/conversation_finalization.py",
+    "backend/tests/unit/test_stale_processing_emulator_concurrency.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversation_finalization_jobs.py",
+    "backend/services/conversation_finalization.py"
+  ],
+  "status": "open"
+}
