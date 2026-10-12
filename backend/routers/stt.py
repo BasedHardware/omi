@@ -162,6 +162,10 @@ async def stt_transcribe(
         raise HTTPException(status_code=503, detail='Transcription service busy — try again shortly')
 
     try:
+        # Initial admission precedes the slot. Recheck after queueing so
+        # stale admissions cannot escape the in-flight accounting bound.
+        await _admit(uid, source, seconds)
+
         # Buffer only after holding a slot, so at most 4 request bodies are
         # resident in RAM at once — waiters keep theirs in the disk spool.
         # The bounded read is defense-in-depth should file.size be absent.
@@ -171,10 +175,6 @@ async def stt_transcribe(
         if len(audio_bytes) > _MAX_UPLOAD_BYTES:
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
-
-        # Initial admission precedes the slot. Recheck after queueing so
-        # stale admissions cannot escape the in-flight accounting bound.
-        await _admit(uid, source, seconds)
 
         files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
         data = {'diarize': 'true' if diarize else 'false'}
