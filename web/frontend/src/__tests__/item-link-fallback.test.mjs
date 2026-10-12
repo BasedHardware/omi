@@ -5,9 +5,19 @@ import { describe, it } from 'node:test';
 import {
   ITEM_LINK_KINDS,
   ITEM_LINK_METADATA,
+  ITEM_LIST_MAX,
+  ITEM_LIST_QUERY_HEADER,
+  MAC_APP_URL_SCHEME,
   isItemLinkId,
+  isMacDesktopUserAgent,
   itemLinkWebAppPath,
   itemLinkWebHandoff,
+  itemListFromSearchParams,
+  itemListMacDeepLink,
+  itemListMetadata,
+  itemListWebAppPath,
+  itemListWebHandoff,
+  parseItemListQuery,
 } from '../lib/item-link.mjs';
 import { getOmiPlatformDeepLink } from '../lib/conversation-share-platform-link.mjs';
 
@@ -16,6 +26,9 @@ const fallbackSource = read('../components/item-link/item-link-fallback.tsx');
 const pageSources = Object.fromEntries(
   ITEM_LINK_KINDS.map((kind) => [kind, read(`../app/${kind}/[id]/page.tsx`)]),
 );
+const itemListPage = read('../app/items/page.tsx');
+const macButton = read('../components/item-link/mac-open-button.tsx');
+const proxySource = read('../proxy.ts');
 const aasa = JSON.parse(read('../../public/.well-known/apple-app-site-association'));
 
 describe('private item links', () => {
@@ -89,5 +102,109 @@ describe('private item links', () => {
       assert.ok(paths.includes(existing), existing);
     }
     assert.ok(!paths.includes('/conversations/*'), 'public shares stay on the web');
+  });
+});
+
+describe('private item lists (/items)', () => {
+  it('keep URL order across kinds and drop unknown keys, bad ids and repeats', () => {
+    assert.deepEqual(
+      parseItemListQuery(
+        '?task=t-1&utm_source=x&conversation=c-1&memory=m-1&task=t-1&memory=../x&conversation=',
+      ),
+      [
+        { kind: 'task', id: 't-1' },
+        { kind: 'conversation', id: 'c-1' },
+        { kind: 'memory', id: 'm-1' },
+      ],
+    );
+    assert.deepEqual(parseItemListQuery('%zz=1&memory=%E0'), []);
+  });
+
+  it('stop at ten items', () => {
+    const query = Array.from({ length: 12 }, (_, i) => `task=t-${i}`).join('&');
+    const items = parseItemListQuery(query);
+    assert.equal(ITEM_LIST_MAX, 10);
+    assert.equal(items.length, 10);
+    assert.equal(items.at(-1).id, 't-9');
+  });
+
+  it('fall back to a parsed searchParams object when the raw query is missing', () => {
+    assert.deepEqual(
+      itemListFromSearchParams({ conversation: ['c-1', 'c-2'], task: 't-1', x: 'y' }),
+      [
+        { kind: 'conversation', id: 'c-1' },
+        { kind: 'conversation', id: 'c-2' },
+        { kind: 'task', id: 't-1' },
+      ],
+    );
+  });
+
+  it('hand off to the web app /items page through login', () => {
+    const items = parseItemListQuery('memory=m-1&conversation=c-1');
+    assert.equal(itemListWebAppPath(items), '/items?memory=m-1&conversation=c-1');
+    assert.equal(itemListWebAppPath([]), '/home');
+    assert.equal(
+      itemListWebHandoff(items),
+      'https://app.omi.me/login?next=%2Fitems%3Fmemory%3Dm-1%26conversation%3Dc-1',
+    );
+  });
+
+  it('open the phone app and the released Mac app with the same ordered query', () => {
+    const items = parseItemListQuery('task=t-1&conversation=c-1');
+    assert.equal(MAC_APP_URL_SCHEME, 'omi-computer');
+    assert.equal(
+      itemListMacDeepLink(items),
+      'omi-computer://items?task=t-1&conversation=c-1',
+    );
+    assert.equal(
+      getOmiPlatformDeepLink(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+        'items?task=t-1&conversation=c-1',
+      ),
+      'omi://h.omi.me/items?task=t-1&conversation=c-1',
+    );
+    assert.ok(
+      isMacDesktopUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+      ),
+    );
+    assert.ok(
+      !isMacDesktopUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'),
+    );
+    assert.ok(!isMacDesktopUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'));
+    assert.match(macButton, /maxTouchPoints/);
+    assert.match(macButton, /Open in Omi for Mac/);
+  });
+
+  it('give link previews generic Omi metadata with the count only', () => {
+    const meta = itemListMetadata(3);
+    assert.deepEqual(meta.title, { absolute: 'Omi' });
+    assert.equal(meta.openGraph.title, 'Omi');
+    assert.equal(meta.description, '3 items in Omi');
+    assert.equal(meta.openGraph.description, '3 items in Omi');
+    assert.deepEqual(meta.robots, { index: false, follow: false });
+    assert.equal(itemListMetadata(0).description, ITEM_LINK_METADATA.description);
+    assert.match(
+      itemListPage,
+      /itemListMetadata\(\(await itemsFor\(props\.searchParams\)\)\.length\)/,
+    );
+  });
+
+  it('never read the items and never echo ids as HTML', () => {
+    for (const source of [itemListPage, macButton]) {
+      assert.doesNotMatch(source, /\bfetch\(|API_URL|sharedApiUrl|actions\//);
+      assert.doesNotMatch(source, /dangerouslySetInnerHTML|innerHTML/);
+    }
+  });
+
+  it('get the raw query from the proxy, which overwrites any client copy', () => {
+    assert.equal(ITEM_LIST_QUERY_HEADER, 'x-omi-item-list-query');
+    assert.match(proxySource, /'\/items'/);
+    assert.match(proxySource, /forwarded\.set\(ITEM_LIST_QUERY_HEADER/);
+  });
+
+  it('are universal links for the app', () => {
+    const paths = aasa.applinks.details[0].components.map((c) => c['/']);
+    assert.ok(paths.includes('/items'));
   });
 });

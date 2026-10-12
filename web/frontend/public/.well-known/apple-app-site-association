@@ -36,6 +36,10 @@
             {
               "/":"/memory/*",
               "comment":"Private memory link (singular)."
+            },
+            {
+              "/":"/items",
+              "comment":"Private list of items: /items?conversation=<id>&task=<id>&memory=<id> (any query)."
             }
           ]
         }

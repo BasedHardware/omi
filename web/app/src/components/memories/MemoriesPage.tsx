@@ -39,6 +39,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { readHighlightParam } from '@/lib/itemList';
 
 // Lazy load heavy components for better performance
 const KnowledgeGraph = lazy(() =>
@@ -258,6 +259,17 @@ export function MemoriesPage() {
       }
     }, 100);
   }, []);
+
+  // `/memories?highlight=<id>` (from an item-list link): scroll to and highlight that memory once
+  // it is in the loaded list.
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(() =>
+    readHighlightParam(),
+  );
+  useEffect(() => {
+    if (!pendingHighlight || loading || !memoriesById.has(pendingHighlight)) return;
+    setPendingHighlight(null);
+    handleMemoryClick(pendingHighlight);
+  }, [pendingHighlight, loading, memoriesById, handleMemoryClick]);
 
   // Handle selection toggle for a single memory
   const handleToggleSelect = useCallback((memoryId: string) => {

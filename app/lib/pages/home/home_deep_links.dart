@@ -18,6 +18,7 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/home/item_list_sheet.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
@@ -38,11 +39,14 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+/// One entry of an `/items` link: its kind (`conversation`, `task`, `memory`) and server id.
+typedef ItemLinkRef = ({String kind, String id});
+
 /// A parsed in-app link (`/conversation/abc?share=1`, `/apps/xyz`, `/settings/data-privacy`) as
 /// notifications, quick actions and app links deliver it to the home shell.
 @immutable
 class HomeDeepLink {
-  const HomeDeepLink(this.alias, {this.id, this.query = const {}});
+  const HomeDeepLink(this.alias, {this.id, this.query = const {}, this.rawQuery = ''});
 
   /// First path segment: `conversation`, `apps`, `chat`, `settings`, `memories`, …
   final String alias;
@@ -50,6 +54,12 @@ class HomeDeepLink {
   /// Second path segment, when present and not empty.
   final String? id;
   final Map<String, String> query;
+
+  /// The query string as given, for links whose repeated keys and their order matter (`/items`).
+  final String rawQuery;
+
+  /// The ordered items of an `/items` link (see [parseItemList]).
+  List<ItemLinkRef> get itemList => parseItemList(rawQuery);
 
   static HomeDeepLink? parse(String? route) {
     if (route == null || route.isEmpty) return null;
@@ -60,6 +70,7 @@ class HomeDeepLink {
       segments[0],
       id: segments.length > 1 ? segments[1] : null,
       query: uri?.queryParameters ?? const {},
+      rawQuery: uri?.query ?? '',
     );
   }
 
@@ -70,13 +81,51 @@ class HomeDeepLink {
   /// own handling. Returns the in-app route, or null for any other link.
   static const itemLinkKinds = {'conversation', 'task', 'memory'};
 
+  ///
+  /// `https://h.omi.me/items?conversation=a&task=b&memory=c` is a list of up to [maxListItems]
+  /// items in URL order; it routes to `/items?…` with only the recognised pairs kept.
   static String? itemRouteFromAppLink(Uri uri, {String? shareBase}) {
     final hosts = {'h.omi.me', Uri.tryParse(shareBaseUrl(shareBase))?.host};
     if (!hosts.contains(uri.host.toLowerCase())) return null;
     if (uri.scheme != 'https' && uri.scheme != 'omi') return null;
     final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segments.length == 1 && segments[0] == 'items') {
+      final items = parseItemList(uri.query);
+      if (items.isEmpty) return '/items';
+      return '/items?${items.map((i) => '${i.kind}=${Uri.encodeQueryComponent(i.id)}').join('&')}';
+    }
     if (segments.length != 2 || !itemLinkKinds.contains(segments[0])) return null;
     return '/${segments[0]}/${Uri.encodeComponent(segments[1])}';
+  }
+
+  /// Most items one `/items` link lists; later pairs are ignored.
+  static const maxListItems = 10;
+
+  /// The `(kind, id)` pairs of an `/items` query in the order they appear: repeated keys, one per
+  /// item, kinds from [itemLinkKinds]. Unknown keys, empty ids and repeats are dropped, and the
+  /// list stops at [maxListItems].
+  static List<ItemLinkRef> parseItemList(String query) {
+    final items = <ItemLinkRef>[];
+    final seen = <String>{};
+    for (final pair in query.split('&')) {
+      if (items.length >= maxListItems) break;
+      final eq = pair.indexOf('=');
+      if (eq <= 0) continue;
+      final String kind;
+      final String id;
+      try {
+        kind = Uri.decodeQueryComponent(pair.substring(0, eq));
+        id = Uri.decodeQueryComponent(pair.substring(eq + 1)).trim();
+      } on ArgumentError {
+        continue;
+      } on FormatException {
+        continue;
+      }
+      if (!itemLinkKinds.contains(kind) || id.isEmpty || id.length > 128) continue;
+      if (!seen.add('$kind\u0000$id')) continue;
+      items.add((kind: kind, id: id));
+    }
+    return items;
   }
 
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
@@ -89,7 +138,8 @@ class HomeDeepLink {
         'memory' ||
         'search' ||
         'conversations' ||
-        'conversation' =>
+        'conversation' ||
+        'items' =>
           HomeProvider.homeTab,
         _ => null,
       };
@@ -168,6 +218,9 @@ Future<bool> openHomeDeepLink(
       } else {
         unawaited(showActionItemFormSheet(context, actionItem: task));
       }
+    case 'items':
+      // The list resolves its rows itself; missing or foreign items show as unavailable rows.
+      unawaited(showItemListSheet(context, link.itemList));
     case 'search':
       final query = link.query['q']?.trim() ?? '';
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
@@ -247,7 +300,26 @@ Future<Memory?> resolveIndexedMemoryById(
   required bool Function() ownerIsCurrent,
   IndexedMemoryPageFetcher? fetchPage,
 }) async {
+  final found = await resolveIndexedMemoriesByIds(
+    {id},
+    uid: uid,
+    ownerIsCurrent: ownerIsCurrent,
+    fetchPage: fetchPage,
+  );
+  return found[id];
+}
+
+/// [resolveIndexedMemoryById] for several ids in one walk (an `/items` link). Stops once every id
+/// is found. A failed, truncated or foreign-owner read ends the walk with what was found so far.
+Future<Map<String, Memory>> resolveIndexedMemoriesByIds(
+  Set<String> ids, {
+  required String uid,
+  required bool Function() ownerIsCurrent,
+  IndexedMemoryPageFetcher? fetchPage,
+}) async {
   const limit = 500;
+  final found = <String, Memory>{};
+  if (ids.isEmpty) return found;
   var offset = 0;
   String? cursor;
   final seenCursors = <String>{};
@@ -260,21 +332,23 @@ Future<Memory?> resolveIndexedMemoryById(
           view: memories_api.MemoryReadView.all,
           forceView: true,
         ));
-    if (!ownerIsCurrent() || !result.ok || result.truncated) return null;
+    if (!ownerIsCurrent()) return const {};
+    if (!result.ok || result.truncated) return found;
     for (final row in result.memories) {
-      if (row.id == id && row.uid == uid && siriMemoryIsIndexable(row, DateTime.now())) return row;
+      if (ids.contains(row.id) && row.uid == uid && siriMemoryIsIndexable(row, DateTime.now())) found[row.id] = row;
     }
+    if (found.length == ids.length) return found;
     final next = result.nextCursor;
     if (next != null) {
-      if (!seenCursors.add(next)) return null;
+      if (!seenCursors.add(next)) return found;
       cursor = next;
     } else if (cursor != null || result.memories.length < limit) {
-      return null;
+      return found;
     } else {
       offset += result.memories.length;
     }
   }
-  return null;
+  return found;
 }
 
 Future<void> _prepareChat(BuildContext context, String? id) async {

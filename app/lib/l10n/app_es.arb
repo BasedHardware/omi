@@ -4003,5 +4003,6 @@
     "reviewProposalGeneric": "¿Aplicar esta corrección sugerida?",
     "reviewProposalApply": "Aplicar",
     "reviewProposalSuggested": "Sugerido",
-    "reviewProposalConflict": "Esto cambió desde que Dream lo sugirió, así que no se aplicó nada."
+    "reviewProposalConflict": "Esto cambió desde que Dream lo sugirió, así que no se aplicó nada.",
+    "itemLinkListTitle": "{count, plural, =0{Sin elementos} =1{1 elemento} other{{count} elementos}}"
 }

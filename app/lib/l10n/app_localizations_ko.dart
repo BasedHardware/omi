@@ -12828,4 +12828,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '항목 $count개',
+      one: '항목 1개',
+      zero: '항목 없음',
+    );
+    return '$_temp0';
+  }
 }

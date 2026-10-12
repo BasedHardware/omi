@@ -13114,4 +13114,16 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Item',
+      one: '1 Item',
+      zero: 'Walang Item',
+    );
+    return '$_temp0';
+  }
 }

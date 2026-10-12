@@ -12990,4 +12990,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dream के सुझाव के बाद यह बदल गया, इसलिए कुछ भी लागू नहीं किया गया।';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count आइटम',
+      one: '1 आइटम',
+      zero: 'कोई आइटम नहीं',
+    );
+    return '$_temp0';
+  }
 }

@@ -12996,4 +12996,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dette er ændret, siden Dream foreslog det, så intet blev anvendt.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementer',
+      one: '1 element',
+      zero: 'Ingen elementer',
+    );
+    return '$_temp0';
+  }
 }
