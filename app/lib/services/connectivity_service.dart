@@ -12,7 +12,8 @@ class ConnectivityService {
 
   ConnectivityService._internal();
 
-  final InternetConnection _internetConnection = createConnectivityChecker(
+  // Lazy: Env is not initialized when tests construct the singleton.
+  late final InternetConnection _internetConnection = createConnectivityChecker(
     physicalQualification: PhysicalQualification.enabled,
     profile: Env.profile,
     apiBaseUrl: Env.apiBaseUrl!,
