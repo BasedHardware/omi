@@ -175,12 +175,14 @@ as failure, and returns online as soon as any host succeeds when
 exactly HTTP 200. We explicitly keep that status rule, three-second timeout,
 no default host additions, and non-strict checks.
 
-Production checks Cloudflare, Baidu and Taobao; Baidu and Taobao are independent
-China-oriented operators, rather than two hostnames sharing Cloudflare.
-Unauthenticated HEADs to Baidu and Taobao returned 200 from the validation
-machine on 2026-10-12. That validates HEAD/status behavior here, not reachability
-from every Chinese/corporate network. Geography-specific device testing was not
-performed. A failed single host cannot force offline state.
+Production checks only `https://one.one.one.one` and
+`https://captive.apple.com/`, Apple's connectivity-check host. These provide
+independent alternatives without sending periodic checks to commerce sites.
+An unauthenticated Apple HEAD returned 200 from the validation machine on
+2026-10-12. That validates HEAD/status behavior here, not reachability from
+every Chinese/corporate network. Geography-specific device testing was not
+performed. Either host's success is enough; a failed single host cannot force
+offline state.
 
 Non-production profiles (`local_dev`, `local_prod`, `mobile_beta`) and
 physical qualification check only `v1/health` relative to the configured API
@@ -189,8 +191,9 @@ An accidental `api.omi.me` override falls back to public probes rather than
 putting that production edge back on the timer.
 
 The hermetic connectivity test calls the real package through a mocked HTTP
-client. A successful Baidu or Taobao HEAD preserves live transport even with
-Cloudflare blocked. All failed HEADs feed the actual capture reducer and produce
+client. A successful Apple HEAD preserves live transport with Cloudflare blocked,
+and a successful Cloudflare HEAD does the same with Apple blocked. All failed
+HEADs feed the actual capture reducer and produce
 `phoneBatchLive`, a batch session and `StartPhoneSessionStage(batch)`.
 This proves transport selection at unit level; it does not claim microphone or
 filesystem acceptance on a physical phone. Backend routes and Cloud Armor

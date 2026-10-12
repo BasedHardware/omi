@@ -78,8 +78,8 @@ class ConnectivityService {
 }
 
 /// Ordinary production consumers need internet access, not backend readiness.
-/// Any successful non-Omi HEAD is enough. Baidu and Taobao provide independent
-/// China-oriented alternatives when Cloudflare is blocked. Local/non-prod
+/// Any successful non-Omi HEAD is enough. Apple's connectivity host provides
+/// an independent alternative when Cloudflare is blocked. Local/non-prod
 /// profiles instead check their configured backend so a private offline fixture
 /// cannot be made "online" by an unrelated public host.
 InternetConnection createConnectivityChecker({
@@ -110,8 +110,7 @@ List<InternetCheckOption> connectivityProbeOptions({
       ? [base.resolve('v1/health')]
       : [
           Uri.parse('https://one.one.one.one'),
-          Uri.parse('https://www.baidu.com/'),
-          Uri.parse('https://www.taobao.com/'),
+          Uri.parse('https://captive.apple.com/'),
         ];
   return [
     for (final uri in uris)

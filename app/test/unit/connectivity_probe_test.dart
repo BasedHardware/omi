@@ -25,13 +25,13 @@ CaptureEnvironment captureEnvironment(bool connected) => CaptureEnvironment(
     );
 
 void main() {
-  test('production has independent China-oriented alternatives and never probes Omi', () {
+  test('production probes only Cloudflare and Apple connectivity hosts, never Omi', () {
     final options = connectivityProbeOptions(
       physicalQualification: false,
       profile: AppEnvironmentProfile.production,
       apiBaseUrl: 'https://api.omi.me/',
     );
-    expect(options.map((o) => o.uri.host).toSet(), {'one.one.one.one', 'www.baidu.com', 'www.taobao.com'});
+    expect(options.map((o) => o.uri.host).toSet(), {'one.one.one.one', 'captive.apple.com'});
     for (final option in options) {
       expect(option.timeout, const Duration(seconds: 3));
       expect(option.responseStatusFn(http.Response('', 200)), isTrue);
@@ -64,7 +64,7 @@ void main() {
     expect(accidentalProdOverride.any((o) => o.uri.host == 'api.omi.me'), isFalse);
   });
 
-  for (final successfulHost in ['www.baidu.com', 'www.taobao.com']) {
+  for (final successfulHost in ['one.one.one.one', 'captive.apple.com']) {
     test('real package uses HEAD and any $successfulHost success keeps capture live', () async {
       final seen = <String>[];
       final connected = await http.runWithClient(
@@ -76,11 +76,11 @@ void main() {
         () => MockClient((request) async {
           expect(request.method, 'HEAD');
           seen.add(request.url.host);
-          if (request.url.host == 'one.one.one.one') throw const SocketException('blocked');
+          if (request.url.host != successfulHost) throw const SocketException('blocked');
           return http.Response('', request.url.host == successfulHost ? 200 : 503);
         }),
       );
-      expect(seen.toSet(), {'one.one.one.one', 'www.baidu.com', 'www.taobao.com'});
+      expect(seen.toSet(), {'one.one.one.one', 'captive.apple.com'});
       expect(connected, isTrue);
       final transition = transitionCapture(
         CaptureCoordinatorState.idle(),
