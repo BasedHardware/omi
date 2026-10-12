@@ -634,7 +634,7 @@
             {
               "evaluator": {
                 "params": [
-                  30
+                  75
                 ],
                 "type": "gt"
               },
@@ -673,7 +673,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "88",
-      "threshold": "30",
+      "threshold": ">75 concurrent requests for 5m. Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 36 / p90 42 / max 58; threshold above the measured normal maximum.",
       "summary": "Omi live transcription alert: Pusher max concurrent requests are high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi live transcription production service path.",
