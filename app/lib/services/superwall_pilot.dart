@@ -62,13 +62,20 @@ class SuperwallPilot {
     return _identityQueue;
   }
 
+  /// Placement for the Upgrade button on the Settings plan card.
+  static const settingsUpgradePlacement = 'settings_upgrade';
+
   /// Returns false if the pilot could not register its test placement.
-  Future<bool> showUsageUpgrade(String uid) async {
+  Future<bool> showUsageUpgrade(String uid) => showPlacement('omi_usage_upgrade_test', uid);
+
+  /// Registers [placement] for [uid]. Returns false when the pilot is off or registration failed,
+  /// so the caller can fall back to the existing plans sheet.
+  Future<bool> showPlacement(String placement, String uid) async {
     if (!_configured) return false;
     await syncUser(uid);
     if (_identifiedUid != uid) return false;
     try {
-      await Superwall.shared.registerPlacement('omi_usage_upgrade_test');
+      await Superwall.shared.registerPlacement(placement);
       return true;
     } catch (error) {
       Logger.debug('Superwall pilot placement failed: $error');
