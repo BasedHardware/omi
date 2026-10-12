@@ -6,6 +6,14 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
+managed-transcription allowance before calling the provider. It probes the
+uploaded media duration and rejects a file that exceeds the remaining allowance;
+successful provider responses increment root `hourly_usage.transcription_seconds`
+by that duration, rounded up to a second. Deepgram BYOK cannot exempt this
+Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
+live-listen, offline-sync, or locked-conversation policies.
+
 > Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation

@@ -12,8 +12,12 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 
 import asyncio
 import logging
+import json
+import math
 import os
 import re
+import subprocess
+import tempfile
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -21,6 +25,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.analytics import record_usage
+from utils.executors import db_executor, storage_executor, run_blocking
+from utils.subscription import resolve_transcription_allowance
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,34 @@ _UPSTREAM_WAIT_SECS = 30.0
 _SAFE_FILENAME_RE = re.compile(r'[^A-Za-z0-9._-]')
 _MAX_FILENAME_LEN = 64
 _MAX_EXTENSION_LEN = 8
+
+
+def _audio_seconds(audio_bytes: bytes) -> int:
+    """Probe the uploaded media, rather than billing transcript timestamp gaps.
+
+    A seekable input supports containers whose duration metadata is at the end.
+    ffprobe is already part of the serving image's FFmpeg dependency. Only the
+    duration is returned; neither filenames nor decoder stderr enter logs.
+    """
+    try:
+        with tempfile.NamedTemporaryFile(prefix='omi-stt-meter-') as audio:
+            audio.write(audio_bytes)
+            audio.flush()
+            result = subprocess.run(
+                ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'json', audio.name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+                check=True,
+            )
+        seconds = float(json.loads(result.stdout)['format']['duration'])
+        if not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError('invalid duration')
+        return math.ceil(seconds)
+    except (ValueError, KeyError, subprocess.SubprocessError):
+        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+    except OSError:
+        raise HTTPException(status_code=503, detail='Audio duration service unavailable') from None
 
 
 def _safe_upstream_filename(filename) -> str:
@@ -102,6 +137,20 @@ async def stt_transcribe(
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
+        # This route always calls Omi's Parakeet. A Deepgram BYOK header
+        # cannot make that Omi-paid call exempt from the transcription meter.
+        seconds = await run_blocking(storage_executor, _audio_seconds, audio_bytes)
+        allowance = await run_blocking(
+            db_executor,
+            resolve_transcription_allowance,
+            uid,
+            source=request.headers.get('x-app-platform'),
+            byok_active=False,
+        )
+        if not allowance.managed or (allowance.remaining_seconds is not None and seconds > allowance.remaining_seconds):
+            del audio_bytes
+            raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
+
         files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
         data = {'diarize': 'true' if diarize else 'false'}
         try:
@@ -133,7 +182,10 @@ async def stt_transcribe(
         raise HTTPException(status_code=502, detail='Transcription failed upstream')
 
     try:
-        return resp.json()
+        payload = resp.json()
     except ValueError:
         logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
         raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
+
+    await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+    return payload

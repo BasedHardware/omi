@@ -18,6 +18,9 @@ os.environ.setdefault(
 )
 
 import asyncio
+import io
+import wave
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -27,9 +30,80 @@ from fastapi.testclient import TestClient
 import routers.stt as stt_router
 from utils.other import endpoints as auth
 from utils.rate_limit_config import RATE_POLICIES
+from utils.subscription import TranscriptionAllowance, TRANSCRIPTION_MODE_MANAGED, TRANSCRIPTION_MODE_ON_DEVICE
 
 _PARAKEET_URL = 'http://parakeet.internal:8000'
 _UID = 'test-uid'
+
+
+@pytest.fixture(autouse=True)
+def metering(monkeypatch):
+    # Every request exercises real route control flow without touching account
+    # data or the production usage ledger. Media probing has its own WAV test.
+    allowance = Mock(return_value=TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, 100, 'plan_within_allowance'))
+    record = Mock()
+    monkeypatch.setattr(stt_router, '_audio_seconds', lambda data: 10)
+    monkeypatch.setattr(stt_router, 'resolve_transcription_allowance', allowance)
+    monkeypatch.setattr(stt_router, 'record_usage', record)
+    return allowance, record
+
+
+@pytest.mark.parametrize('remaining', [0, 9])
+def test_exhausted_or_insufficient_allowance_never_calls_provider(monkeypatch, metering, remaining):
+    allowance, record = metering
+    allowance.return_value = TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance')
+    fake = _FakeSttClient()
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 402
+    assert fake.calls == []
+    record.assert_not_called()
+
+
+def test_unavailable_allowance_never_calls_provider(monkeypatch, metering):
+    allowance, record = metering
+    allowance.return_value = TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, 'allowance_unavailable')
+    fake = _FakeSttClient()
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 402
+    assert fake.calls == []
+    record.assert_not_called()
+
+
+@pytest.mark.parametrize('remaining', [10, None])
+def test_success_charges_media_duration_even_without_transcript(monkeypatch, metering, remaining):
+    allowance, record = metering
+    allowance.return_value = TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance')
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 200
+    record.assert_called_once_with(_UID, transcription_seconds=10)
+    allowance.assert_called_once_with(_UID, source=None, byok_active=False)
+
+
+def test_provider_failure_does_not_record_success_usage(monkeypatch, metering):
+    _, record = metering
+    fake = _FakeSttClient(response=_FakeResponse(status_code=503))
+    assert _upload(_make_client(monkeypatch, fake)).status_code == 503
+    record.assert_not_called()
+
+
+def test_duration_probe_uses_media_frames_and_rounds_up(monkeypatch):
+    # Restore the production probe masked by the autouse route fixture.
+    monkeypatch.undo()
+    data = io.BytesIO()
+    with wave.open(data, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(b'\x00\x00' * 10000)
+    assert stt_router._audio_seconds(data.getvalue()) == 2
+
+
+def test_duration_probe_rejects_unreadable_media(monkeypatch):
+    monkeypatch.undo()
+    with pytest.raises(HTTPException) as exc:
+        stt_router._audio_seconds(b'not audio')
+    assert exc.value.status_code == 400
 
 
 class _FakeResponse:
