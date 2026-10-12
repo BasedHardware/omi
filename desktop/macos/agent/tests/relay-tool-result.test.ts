@@ -289,14 +289,26 @@ describe("executor-reported unknown outcomes", () => {
 
   it("records an unconfirmed send as outcome_unknown, never succeeded, and keeps the summary for the model", () => {
     const result = finalize(JSON.stringify(unconfirmed), "succeeded", sendIdentity);
-    expect(finalizedToolInvocationLedgerOutcome(result)).toBe("outcome_unknown");
+    expect(finalizedToolInvocationLedgerOutcome(result, "send_message")).toBe("outcome_unknown");
     expect(JSON.parse(result)).toMatchObject({ status: "unconfirmed", summary: unconfirmed.summary });
   });
 
   it("leaves confirmed sends succeeded and failures failed", () => {
     const delivered = finalize(JSON.stringify({ ok: true, status: "delivered" }), "succeeded", sendIdentity);
-    expect(finalizedToolInvocationLedgerOutcome(delivered)).toBe("succeeded");
+    expect(finalizedToolInvocationLedgerOutcome(delivered, "send_message")).toBe("succeeded");
     const failed = finalize(JSON.stringify({ ok: false, outcome_unknown: true, reason: "x" }), "succeeded", sendIdentity);
-    expect(finalizedToolInvocationLedgerOutcome(failed)).toBe("failed");
+    expect(finalizedToolInvocationLedgerOutcome(failed, "send_message")).toBe("failed");
+  });
+
+  it("honours only the exact boolean flag", () => {
+    for (const flag of ["true", 1, "yes", {}]) {
+      const result = finalize(JSON.stringify({ ok: true, outcome_unknown: flag }), "succeeded", sendIdentity);
+      expect(finalizedToolInvocationLedgerOutcome(result, "send_message"), String(flag)).toBe("succeeded");
+    }
+  });
+
+  it("ignores the flag from tools that cannot report an unknown outcome", () => {
+    const result = finalize(JSON.stringify(unconfirmed), "succeeded", identity);
+    expect(finalizedToolInvocationLedgerOutcome(result, "capture_screen")).toBe("succeeded");
   });
 });
