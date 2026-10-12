@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from itertools import count
 from math import isfinite
 from typing import Any, Callable
 
@@ -69,6 +70,7 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
         super().__init__(maxsize=MAX_QUEUED_SEGMENTS)
         self._generation = generation
         self._rejector = rejector
+        self._arrival = count()
 
     def _is_rejector(self, work: dict[str, Any]) -> bool:
         return work['_matcher_generation'] == self._generation() and self._rejector(work['speaker_id'])
@@ -95,7 +97,9 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
                 ranges[-1] = (ranges[-1][0], max(ranges[-1][1], end))
             else:
                 ranges.append((start, end))
+        first_arrival = min(pending['_queue_order'], latest['_queue_order'])
         pending.update(latest)
+        pending['_queue_order'] = first_arrival
         pending['_speaker_audio_ranges'] = ranges[-128:]
         if ranges:
             pending['abs_start'] = ranges[-128:][0][0]
@@ -112,6 +116,7 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
         removed = 0
         for work in self._queue:
             if not self._is_rejector(work):
+                work.pop('_rejector_pending', None)
                 ordinary.append(work)
                 continue
             key = self._key(work)
@@ -124,7 +129,7 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
                     REJECTOR_DEMOTIONS.labels(action='deferred').inc()
                 rejectors[key] = work
         self._queue.clear()
-        self._queue.extend([*ordinary, *rejectors.values()])
+        self._queue.extend([*sorted(ordinary, key=lambda work: work['_queue_order']), *rejectors.values()])
         self._unfinished_tasks -= removed
         for _ in range(removed):
             while self._putters:
@@ -145,6 +150,7 @@ class SpeakerMatchQueue(asyncio.Queue[dict[str, Any]]):
             if field in item
         }
         work['_matcher_generation'] = self._generation()
+        work['_queue_order'] = next(self._arrival)
         self._normalize()
         if self._is_rejector(work):
             for pending in self._queue:

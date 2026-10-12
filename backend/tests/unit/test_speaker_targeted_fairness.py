@@ -301,6 +301,47 @@ def test_targeted_metric_labels_have_closed_cardinality():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('tokens', [2.0, 2.1, 2.9, 3.0])
+async def test_approved_tail_cutoff_uses_literal_fractional_balance(monkeypatch, tokens):
+    _clock(monkeypatch)
+    matcher, host, _ = live(monkeypatch, [FAR] * 4)
+    await prove(matcher, host, monkeypatch)
+    matcher._socket_embedding_tokens = tokens
+    matcher.queue.put_nowait(work(start=20))
+    await serve(matcher, host, monkeypatch, 1)
+    allowed = tokens > 2
+    assert matcher._embedding_attempts[2] == 3 + allowed
+    assert matcher._socket_embedding_tokens == pytest.approx(tokens - allowed)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('revocation', ['manual', 'profile'])
+async def test_revoked_rejector_returns_to_earliest_fifo_position_with_latest_id(monkeypatch, revocation):
+    _clock(monkeypatch)
+    matcher, host, _ = live(monkeypatch, [FAR] * 6)
+    await prove(matcher, host, monkeypatch)
+    matcher.queue.put_nowait(work(start=20, segment='earliest'))
+    matcher.queue.put_nowait(work(3, 30, segment='later-ordinary'))
+    matcher.queue.put_nowait(work(start=21, segment='latest-rejector'))
+    assert matcher.queue.qsize() == 2
+    if revocation == 'manual':
+        host.persistence.call = AsyncMock(
+            return_value={'segments': {'manual-2': {'speaker_id': 2, 'is_user': True, 'generation': 1}}}
+        )
+        # Another real in-flight comparison observes the manual authority.
+        await matcher.match(4, work(4, 40))
+    else:
+        direction = FAR / np.linalg.norm(FAR)
+        orthogonal = np.array([[1.0, -1.0]], dtype=np.float32) / np.sqrt(2)
+        matcher.person_embeddings['user']['embedding'] = 0.32 * direction + np.sqrt(1 - 0.32**2) * orthogonal
+        await matcher._reevaluate_loaded_owner()
+        assert matcher._voice_distances[2]['user'] == pytest.approx(0.68)
+    assert not matcher._rejectors.proven(2)
+    order = await serve(matcher, host, monkeypatch, 2)
+    assert order == [(2, 'latest-rejector'), (3, 'later-ordinary')]
+
+
+@pytest.mark.anyio
 async def test_queue_coalescing_releases_all_open_slots_and_preserves_join_accounting(monkeypatch):
     _clock(monkeypatch)
     matcher, host, _ = live(monkeypatch, [FAR] * 3)

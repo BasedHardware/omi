@@ -3212,6 +3212,9 @@ cannot leave a newly close voice in the rejector tail. Proof resets on rollover.
 Coalescing never crosses generation, conversation or provider-scope fences;
 each entry retains at most 128 disjoint intervals. Other voices use identical
 per-update clip selection and initial-evidence cadence.
+Deferred entries retain their earliest enqueue position. If current proof is
+revoked by manual authority or profile re-evaluation, the pending entry returns
+to that position among ordinary work; later arrivals cannot keep overtaking it.
 
 After the existing monotonic socket refill and actual cap checks, a proven
 rejector cannot reserve with two or fewer tokens remaining. Those tokens remain
@@ -3219,6 +3222,9 @@ available to any ordinary voice, including a tried voice still building initial
 evidence. This records `rejector_tail_reserved` in the bounded exit/diagnostic
 reason vocabulary, separately from actual `embedding_budget` exhaustion. It
 does not add tokens, refund failures, or create retries.
+The approved cutoff applies to the fractional balance literally: a balance of
+2.1 can spend one token and leave 1.1. It does not reserve two whole request
+opportunities at every fractional balance; that would require a different cutoff.
 
 Each dequeued update contributes its own audio interval to the existing pending
 minimum-evidence accumulation. Successful queries subtract already-embedded
