@@ -141,5 +141,12 @@ The Xcode 26.6 capture/embedding matrix passes all 130 tests. These local passes
 do not substitute for hosted verification, and fixture hardening is not a
 verified cause of the previous hosted missing-session hang.
 
+The local push gate also exposed a mock-launch fixture whose unconditional
+sleep loop delayed PID ownership evidence after the server was already ready.
+Its stub now publishes the PID atomically only after bind succeeds. Each run
+uses a unique ownership token so concurrent worktrees cannot make ownership
+ambiguous. The success, failure, TERM, timeout and deliberate port-collision
+assertions remain intact. No production launcher policy or budget is changed.
+
 Customer diagnostic exports can contain transcript text despite their redacted
 header. Never commit the export, its transcript text, or account/session IDs.
