@@ -147,10 +147,13 @@ On 2026-10-11 the sandbox did deliver the code: the Linq link became active at
 content-free worker `ProviderError` logs at 09:24:39.945Z and 09:25:06.421Z.
 The next inbound at 09:25:28Z remained pending behind the failed turn's lease.
 The old logs did not retain provider status codes, so they cannot establish
-sandbox quota rejection. The adapter sent the wrong v3 body shape: Linq's
+sandbox quota rejection. The adapter sent the wrong v3 body shape: `parts` and `idempotency_key` were
+not inside `message`. Linq's
 [SendMessage contract](https://docs.linqapp.com/channel/imessage/api/resources/chats/subresources/messages/methods/send/)
-requires `message.parts` and `message.idempotency_key`, with `preferred_service`
-at the top level. Synthetic transport replay now rejects the old shape.
+and [protocol selection](https://docs.linqapp.com/channel/imessage/guides/messaging/protocol-selection/)
+put `parts`, `idempotency_key`, `preferred_service`, and `reply_to` inside
+`message`. Synthetic transport replay rejects a missing message container and a
+top-level `preferred_service`.
 
 Current worker logs report provider, bounded reason, exception type and HTTP
 status only, including terminal 429 responses. A handled turn failure attempts one short guarded failure reply,

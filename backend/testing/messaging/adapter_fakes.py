@@ -28,9 +28,10 @@ class FixtureTransport:
             if (
                 not parts
                 or not message.get('idempotency_key')
-                or any(part.get('type') == 'link' for part in parts)
-                and len(parts) != 1
+                or message.get('preferred_service') != 'iMessage'
+                or 'preferred_service' in body
                 or 'reply_to' in body
+                or (any(part.get('type') == 'link' for part in parts) and len(parts) != 1)
             ):
                 return httpx.Response(400, json={'error': 'invalid request'})
             return httpx.Response(200, json={'chat_id': 'fixture-chat', 'message': {'id': 'provider-receipt'}})

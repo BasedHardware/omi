@@ -187,6 +187,8 @@ def test_imessage_zero_single_and_many_item_navigation(adapter, count, prior):
 
     asyncio.run(run())
     bodies = sends(adapter)
+    assert 'preferred_service' not in bodies[0]
+    assert bodies[0]['message']['preferred_service'] == 'iMessage'
     assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': text}]
     if count and prior:
         assert len(bodies) == 2
