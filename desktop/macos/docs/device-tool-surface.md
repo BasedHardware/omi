@@ -69,6 +69,27 @@ A `send_message` grant carries a `resourceRef` of the recipient handle.
 Approving a message to one person does not authorize a message to anyone else;
 the policy re-requires dispatch when the handle differs.
 
+### Checking a send
+
+After `send_message` runs, the executor confirms the send from the Messages
+history through `MessagesReaderService`, the same reader behind
+`read_message_history`. It looks for an outgoing row in the direct chat with the
+recipient, created at or after the send started (less a 3-second clock
+tolerance), whose text equals what was sent once line endings and whitespace
+are normalised. Matching rows that existed before the send never count. It
+polls every half second for up to 5 seconds and reports one status:
+
+| Status | Meaning |
+|---|---|
+| `delivered` | The row is marked delivered. |
+| `sent` | The row is marked sent, not yet delivered, when the check ends. |
+| `not_delivered` | Messages recorded an error on the row (`ok: false`). |
+| `unconfirmed` | No matching row, an ambiguous match, or the history could not be read. |
+
+`unconfirmed` is an unknown outcome, not a failure. The send is never retried,
+and the result asks the model to have the person check Messages before anything
+is sent again. Only the status and timing are logged.
+
 ### AppleScript injection
 
 Recipient handles, message bodies, and attachment paths are passed to

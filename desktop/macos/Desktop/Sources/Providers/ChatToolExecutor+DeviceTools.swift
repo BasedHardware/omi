@@ -298,22 +298,21 @@ extension ChatToolExecutor {
     log("Executing send_message to a resolved handle via \(service.rawValue)")
 
     do {
-      let outcome = try await offMainActor {
-        try MessagesSenderService.send(
-          to: to,
-          text: text,
-          service: service,
-          filePath: filePath,
-          cancellationCheck: $0)
+      let (outcome, confirmation) = try await MessageSendConfirmer.sendThenConfirm(handle: to, text: text) {
+        try await offMainActor {
+          try MessagesSenderService.send(
+            to: to,
+            text: text,
+            service: service,
+            filePath: filePath,
+            cancellationCheck: $0)
+        }
       }
-      return deviceToolJSON([
-        "ok": true,
-        "status": "sent",
-        "to": outcome.handle,
-        "service": outcome.service,
-        "attached_file": outcome.attachedFile ?? "",
-        "characters_sent": text.count,
-      ])
+      log(
+        "send_message outcome=\(confirmation.status.rawValue)"
+          + " reason=\(confirmation.unconfirmedReason?.rawValue ?? "none")"
+          + " checks=\(confirmation.checks) waited_ms=\(confirmation.waitedMilliseconds)")
+      return sendMessageResult(outcome, confirmation: confirmation, charactersSent: text.count)
     } catch let error as AppleScriptRunnerError {
       return deviceToolFailure(
         reason: error.reasonCode,
@@ -326,6 +325,55 @@ extension ChatToolExecutor {
     } catch {
       return deviceToolFailure(reason: "send_failed", message: error.localizedDescription)
     }
+  }
+
+  /// The `send_message` result, with the outcome in plain words for the model.
+  ///
+  /// Only `not_delivered` is a failure. `unconfirmed` means Omi has no
+  /// evidence either way, so it is reported as unknown rather than failed, and
+  /// it asks for a check in Messages because a second send could duplicate it.
+  static func sendMessageResult(
+    _ outcome: MessageSendOutcome, confirmation: MessageSendConfirmation, charactersSent: Int
+  ) -> String {
+    let summary: String
+    switch confirmation.status {
+    case .delivered:
+      summary = "Sent and delivered: Messages marked this message as delivered."
+    case .sent:
+      summary =
+        "Sent, not yet delivered: Messages recorded this message as sent, but had not marked it delivered when Omi stopped checking. The recipient's device may be offline. Do not send it again."
+    case .notDelivered:
+      summary =
+        "Not delivered: Messages marked this message with an error. Omi did not send it again. Tell the person, and send it again only if they ask."
+    case .unconfirmed:
+      let why: String
+      switch confirmation.unconfirmedReason {
+      case .historyUnreadable: why = "Omi could not read the Messages history"
+      case .ambiguous: why = "more than one identical message appeared and they disagree"
+      case .notYetSent: why = "Messages had not yet marked it as sent"
+      case .checkStopped: why = "the check was stopped"
+      case .noMatchingRow, nil: why = "the message did not appear in the Messages history in time"
+      }
+      summary =
+        "Unconfirmed: Omi asked Messages to send this, but could not confirm it (\(why)). It may or may not have been sent. Do not send it again; ask the person to check Messages first."
+    }
+
+    var payload: [String: Any] = [
+      "ok": confirmation.status != .notDelivered,
+      "status": confirmation.status.rawValue,
+      "summary": summary,
+      "to": outcome.handle,
+      "service": outcome.service,
+      "attached_file": outcome.attachedFile ?? "",
+      "characters_sent": charactersSent,
+    ]
+    if let reason = confirmation.unconfirmedReason {
+      payload["unconfirmed_reason"] = reason.rawValue
+    }
+    if confirmation.status == .notDelivered {
+      payload["reason"] = "not_delivered"
+    }
+    return deviceToolJSON(payload)
   }
 
   // MARK: - AppleScript
