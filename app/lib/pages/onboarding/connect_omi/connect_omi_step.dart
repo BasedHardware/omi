@@ -135,7 +135,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
   void _finish(OnboardingDeviceChoice choice) {
     if (_done) return;
     _done = true;
-    PlatformManager.instance.analytics.track('Onboarding Device Choice', properties: {'choice': choice.wireValue});
+    PlatformManager.instance.analytics.onboardingDeviceChoice(choice.wireValue);
     widget.onDone(choice);
   }
 

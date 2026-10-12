@@ -776,6 +776,13 @@ class AnalyticsManager {
   void onboardingUserAcquisitionSource(String source) =>
       track('User Acquisition Source', properties: {'source': source});
 
+  /// How the reader left the Connect Omi step: `connected`, `ordered` or `not_ordered`. Also kept on
+  /// the person, so buyers who say they ordered can be matched to Shopify orders later.
+  void onboardingDeviceChoice(String choice) {
+    track('Onboarding Device Choice', properties: {'choice': choice});
+    setUserProperty('Onboarding Device Choice', choice);
+  }
+
   // Interactive device onboarding
   void deviceOnboardingStarted({String source = 'auto'}) =>
       track('Device Onboarding Started', properties: {'source': source});
