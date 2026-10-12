@@ -116,6 +116,15 @@ class PhoneCallProvider extends ChangeNotifier {
 
   @visibleForTesting
   void debugSetCallStateForTesting(PhoneCallState state) => _setCallState(state);
+
+  @visibleForTesting
+  Future<void> connectTranscriptionSocketForTesting() => _connectTranscriptionSocket();
+
+  @visibleForTesting
+  int get wsReconnectAttemptsForTesting => _wsReconnectAttempts;
+
+  @visibleForTesting
+  Timer? get wsReconnectTimerForTesting => _wsReconnectTimer;
   // Verified phone numbers
   List<VerifiedPhoneNumber> _verifiedNumbers = [];
   List<VerifiedPhoneNumber> get verifiedNumbers => _verifiedNumbers;
@@ -633,6 +642,7 @@ class PhoneCallProvider extends ChangeNotifier {
             _transcriptionStatus = TranscriptionStatus.active;
             _wsAccepted = true;
             _wsAcceptedAt ??= DateTime.now();
+            _wsReconnectAttempts = 0;
             notifyListeners();
             _armNoAudioWatchdog();
           }
@@ -648,12 +658,13 @@ class PhoneCallProvider extends ChangeNotifier {
         },
         onDone: () {
           if (generation != _sessionGeneration || !_sessionEnabled) return;
-          Logger.info('PhoneCallProvider: WebSocket closed');
+          final closeCode = _transcriptionSocket?.closeCode;
+          final closeReason = _transcriptionSocket?.closeReason;
+          Logger.info('PhoneCallProvider: WebSocket closed (code: $closeCode, reason: $closeReason)');
           _transcriptionSocket = null;
           _scheduleReconnect();
         },
       );
-      _wsReconnectAttempts = 0;
     } on AuthTokenUnavailableException catch (e) {
       Logger.debug('PhoneCallProvider: authenticated WebSocket blocked before connect: ${e.result.runtimeType}');
       _transcriptionSocket = null;
