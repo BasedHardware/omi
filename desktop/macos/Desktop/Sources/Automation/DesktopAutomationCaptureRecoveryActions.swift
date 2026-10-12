@@ -30,13 +30,16 @@ extension DesktopAutomationActionRegistry {
       let generation = state.recordingGeneration
       let tap = state.systemAudioCaptureService as AnyObject?
       let mixer = state.audioMixer
-      // The driver is real. Only its watchdog observation is injected; no fake
-      // liveness, authorization, STT, or session authority is installed.
-      await state.handleSharedCaptureSilentMicDetection(
-        detection: AudioCaptureService.SilentMicDetection(
-          deviceID: microphone.activeDeviceID, deviceDescription: "injected watchdog event",
-          consecutiveSilentWindows: 2, isBluetoothTransport: false,
-          framesReceived: 32000, peak: 0, secondsToFirstFrame: nil))
+      // Drive the production watchdog too, so real returning PCM owns recovery
+      // notification. Injecting only the AppState event would leave the driver's
+      // awaiting-live latch unarmed and could not verify warning clearance.
+      let now = CFAbsoluteTimeGetCurrent()
+      let first = microphone.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: now)
+      guard
+        let detection = first
+          ?? microphone.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: now)
+      else { return ["error": "watchdog is cooling down or awaiting real microphone recovery"] }
+      await state.handleSharedCaptureSilentMicDetection(detection: detection)
       var result = state.captureSourceRecoverySnapshot()
       result["same_session"] = "\(state.currentSessionId == session && state.recordingGeneration == generation)"
       result["same_system_tap"] = "\((state.systemAudioCaptureService as AnyObject?) === tap)"
