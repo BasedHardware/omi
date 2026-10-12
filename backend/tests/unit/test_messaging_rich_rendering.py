@@ -164,10 +164,17 @@ def test_button_labels_do_not_split_joiners_or_leak_into_urls():
     title = ('x' * 30) + '👨\u200d👩'
     rows = rendering.item_buttons([dict(title=title, url=rendering.item_link('memory', 'id'))])['inline_keyboard']
     label = rows[0][0]['text']
-    assert len(label) <= 32
+    assert len(label) <= 30
     assert not label.endswith('\u200d')
     assert title not in rows[0][0]['url']
     assert rows[0][0]['url'] == 'https://h.omi.me/memory/id'
+
+
+def test_narrow_table_escapes_markup_inside_pre():
+    text = '| a | b |\n|---|---|\n| </pre><b>x</b> | y |'
+    result = rendering.render_markdown(text, rich=True)
+    assert '&lt;/pre&gt;&lt;b&gt;x&lt;/b&gt;' in result
+    assert result.count('<pre>') == result.count('</pre>') == 1
 
 
 def test_adversarial_unclosed_citation_does_not_backtrack():
