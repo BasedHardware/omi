@@ -20,7 +20,14 @@ def setup_turn():
     )
     store = MemoryStore()
     message = ChannelMessage(
-        'telegram', 'telegram', 'fixture-user', 'fixture-chat', 'first', 'Synthetic request', datetime.now(timezone.utc)
+        'telegram',
+        'telegram',
+        'fixture-user',
+        'fixture-chat',
+        'first',
+        'Synthetic request',
+        datetime.now(timezone.utc),
+        reply_to='1',
     )
     store.identities[('telegram', 'telegram', 'fixture-user')] = dict(uid='test', active=True, generation='gen')
     return adapter, store, message
@@ -488,9 +495,14 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
     monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
 
+    completed = asyncio.Event()
+
     async def dispatch(paths):
-        for path in paths:
-            await gateway.process(path)
+        try:
+            for path in paths:
+                await gateway.process(path)
+        finally:
+            completed.set()
 
     gateway.wake = dispatch
     monkeypatch.setattr(messaging, '_gateways', {'telegram': gateway})
@@ -510,12 +522,11 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
                         'update_id': i + 1,
                         'callback_query': {'id': 'fixture-callback', 'from': sender, 'message': item, 'data': 'undo'},
                     }
+                completed.clear()
                 response = await client.post('/v1/messaging/webhooks/telegram', headers=headers, json=body)
                 assert response.status_code == 202
-                for _ in range(100):
-                    if all(job['status'] == 'done' for job in store.jobs.values()):
-                        break
-                    await asyncio.sleep(0.005)
+                await asyncio.wait_for(completed.wait(), 5)
+                assert all(job['status'] == 'done' for job in store.jobs.values())
                 assert not store.leases
             bad = await client.post('/v1/messaging/webhooks/telegram', json=body)
             assert bad.status_code == 401

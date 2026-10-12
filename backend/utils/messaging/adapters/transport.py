@@ -63,16 +63,22 @@ class Transport:
             raise ProviderError('Media transport failed') from None
 
 
-async def request_json(transport, method, url, *, idempotent=False, sleep=asyncio.sleep, **kwargs) -> dict[str, Any]:
+async def request_json(
+    transport, method, url, *, idempotent=False, sleep=asyncio.sleep, before_request=None, **kwargs
+) -> dict[str, Any]:
     from utils.messaging.delivery_context import send_guard
 
+    safe_to_prepare = True
     for attempt in range(4):
         guard = send_guard.get()
         if guard is not None:
             await guard()
+        if before_request is not None and safe_to_prepare:
+            await before_request()
         try:
             response = await transport.request(method, url, **kwargs)
         except DeliveryUncertain:
+            safe_to_prepare = False  # a potentially accepted request must remain identical
             if not idempotent or attempt == 3:
                 raise
             await sleep(2**attempt)
@@ -95,6 +101,7 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
             await sleep(max(delay, 0.1))
             continue
         if status >= 500:
+            safe_to_prepare = False
             if not idempotent:
                 raise DeliveryUncertain('Provider send outcome unknown')
             if attempt < 3:

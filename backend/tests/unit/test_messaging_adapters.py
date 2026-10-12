@@ -61,9 +61,9 @@ def adapter(request, monkeypatch):
     result.sent = []
     send = result.send
 
-    async def record(message, *, text=None, artifact=None, draft=False):
+    async def record(message, *, text=None, artifact=None, draft=False, link=None):
         result.sent.append(dict(message=message, text=text, artifact=artifact, draft=draft))
-        await send(message, text=text, artifact=artifact, draft=draft)
+        await send(message, text=text, artifact=artifact, draft=draft, **({'link': link} if link else {}))
 
     async def owned_bytes(artifact):
         return b'abc'
@@ -654,7 +654,7 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         }
         assert '[1]' not in payload['text']
     else:
-        assert 'https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
 
 
@@ -679,7 +679,8 @@ def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
         assert payload['text'].count('https://') == 0
     else:
         body = payload['message']['parts'][0]['value']
-        assert body.count('https://') == 5
+        assert body.count('h.omi.me/task/') == 5
+        assert body.count('https://') == 0
         assert 'Open in Omi' not in body
         assert '/task/' in body
         assert '[#1]' not in body
@@ -719,7 +720,7 @@ def test_real_followup_wire_block_and_source_title(adapter):
         assert payload['reply_markup']['inline_keyboard'][0][0]['url'] == 'https://h.omi.me/conversation/conv-1'
     else:
         assert 'What changed?' not in str(payload)
-        assert 'https://h.omi.me/conversation/conv-1' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):

@@ -24,7 +24,14 @@ class FixtureTransport:
             # container is required by Linq's public SendMessage contract.
             body = kwargs.get('json', {})
             message = body.get('message', {})
-            if not message.get('parts') or not message.get('idempotency_key'):
+            parts = message.get('parts', ())
+            if (
+                not parts
+                or not message.get('idempotency_key')
+                or any(part.get('type') == 'link' for part in parts)
+                and len(parts) != 1
+                or 'reply_to' in body
+            ):
                 return httpx.Response(400, json={'error': 'invalid request'})
             return httpx.Response(200, json={'chat_id': 'fixture-chat', 'message': {'id': 'provider-receipt'}})
         if url.endswith('/getFile'):
@@ -48,6 +55,7 @@ class FixtureTransport:
 class FixtureLedger:
     def __init__(self):
         self.received, self.sent, self.receipts = set(), 0, {}
+        self.accepted_chats = set()
 
     async def receive(self, message):
         self.received.add((message.external_chat_id, message.provider_message_id))
@@ -68,6 +76,10 @@ class FixtureLedger:
 
     async def commit(self, message, operation, provider_id):
         self.receipts[operation] = 'accepted'
+        self.accepted_chats.add(message.external_chat_id)
+
+    async def has_outbound(self, message):
+        return message.external_chat_id in self.accepted_chats
 
 
 async def no_sleep(seconds):

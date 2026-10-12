@@ -7,13 +7,14 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 from uuid import uuid4
 
-from utils.messaging.identity import key
+from utils.messaging.identity import key, advances_inbound_head
 from database.messaging import STALE_SECONDS, PENDING_MAX_SECONDS
 
 
 class MemoryStore:
     def __init__(self):
         self.proofs, self.identities, self.jobs, self.sessions, self.logs, self.leases = {}, {}, {}, {}, {}, {}
+        self.chat_heads = {}
         self.lock = RLock()
 
     def mint(self, uid, channel, provider, kind, *, now=None):
@@ -59,7 +60,26 @@ class MemoryStore:
                 created_at=datetime.now(timezone.utc),
                 identity=(message.channel, message.provider, message.external_user_id),
             )
+            chat = (message.channel, message.provider, message.external_user_id, message.external_chat_id)
+            prior = self.chat_heads.get(chat)
+            previous = (
+                {'received_at': prior.received_at, 'provider_message_id': prior.provider_message_id} if prior else {}
+            )
+            if advances_inbound_head(message, previous):
+                self.chat_heads[chat] = message
         return path
+
+    def reply_target(self, message):
+        if message.callback_id:
+            return message.reply_to
+        latest = self.chat_heads.get(
+            (message.channel, message.provider, message.external_user_id, message.external_chat_id)
+        )
+        return (
+            (message.reply_to or message.provider_message_id)
+            if latest and latest.provider_message_id != message.provider_message_id
+            else None
+        )
 
     def claim(self, path, *, now=None):
         result = self._claim(path, False, now)

@@ -117,6 +117,23 @@ def linked_items(response):
     return [item for _, item in sorted(referenced, key=lambda pair: pair[0])][:5]
 
 
+def inline_item_links(text, items):
+    """Place short item URLs at their named mention, never in a trailing URL block."""
+    text = plain(text)
+    insertions = []
+    for item in items[:5]:
+        title = plain(item['title']).strip()
+        if not title or title.lower() in {'task', 'memory', 'conversation'}:
+            continue
+        pattern = r'(?<!\w)' + r'\s+'.join(re.escape(word) for word in title.split()) + r'(?!\w)'
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match and item['url'] not in text and item['url'].removeprefix('https://') not in text:
+            insertions.append((match.end(), ' (' + item['url'].removeprefix('https://') + ')'))
+    for position, value in sorted(insertions, reverse=True):
+        text = text[:position] + value + text[position:]
+    return text
+
+
 def button_label(title):
     """Keep complete words within a phone-sized row, including the ellipsis."""
     text = ' '.join(str(title or '').split())

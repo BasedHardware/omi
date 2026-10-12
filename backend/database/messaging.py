@@ -20,7 +20,7 @@ from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils import encryption
-from utils.messaging.identity import key
+from utils.messaging.identity import key, advances_inbound_head
 from utils.observability.fallback import record_fallback
 
 # A worker is bounded to 180s; allow 120s for cancellation/provider cleanup.
@@ -184,17 +184,40 @@ class MessagingStore:
         ref = identity.collection('inbox').document(key(message.external_chat_id, message.provider_message_id))
         payload = asdict(message)
         payload['received_at'] = message.received_at.isoformat()
-        try:
-            ref.create(
-                {
-                    'payload': encryption.encrypt(json.dumps(payload), identity.id),
-                    'status': 'pending',
-                    'created_at': datetime.now(timezone.utc),
-                }
-            )
-        except AlreadyExists:
-            return None
-        return ref.path
+        head = identity.collection('inbound_chat_heads').document(key(message.external_chat_id))
+        now = datetime.now(timezone.utc)
+        encrypted = encryption.encrypt(json.dumps(payload), identity.id)
+
+        @firestore.transactional
+        def apply(tx):
+            exists = ref.get(transaction=tx).exists
+            prior = head.get(transaction=tx).to_dict() or {}
+            if exists:
+                return None
+            tx.create(ref, {'payload': encrypted, 'status': 'pending', 'created_at': now})
+            if advances_inbound_head(message, prior):
+                tx.set(head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at})
+            return ref.path
+
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_enqueue')
+
+    def reply_target(self, message):
+        if message.callback_id:
+            return message.reply_to
+        head = (
+            self.identity(message.channel, message.provider, message.external_user_id)
+            .collection('inbound_chat_heads')
+            .document(key(message.external_chat_id))
+            .get()
+            .to_dict()
+            or {}
+        )
+        latest = head.get('provider_message_id')
+        return (
+            (message.reply_to or message.provider_message_id)
+            if latest and latest != message.provider_message_id
+            else None
+        )
 
     def claim(self, path, *, now=None):
         result = self._claim(path, take_head=False, now=now)

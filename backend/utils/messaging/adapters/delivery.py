@@ -59,9 +59,18 @@ class DeliveryLedger:
         )
 
     def accepted(self, message, operation, provider_id):
-        self._chat(message).collection('receipts').document(key(operation)).update(
-            {'state': 'accepted', 'provider_id': str(provider_id), 'at': datetime.now(timezone.utc)}
+        chat = self._chat(message)
+        batch = self.store.db.batch()
+        batch.update(
+            chat.collection('receipts').document(key(operation)),
+            {'state': 'accepted', 'provider_id': str(provider_id), 'at': datetime.now(timezone.utc)},
         )
+        batch.set(chat, {'outbound_accepted': True}, merge=True)
+        batch.commit()
+
+    async def has_outbound(self, message):
+        snapshot = await run_blocking(db_executor, self._chat(message).get)
+        return bool((snapshot.to_dict() or {}).get('outbound_accepted'))
 
     async def receive(self, message):
         await run_blocking(db_executor, self.inbound, message)

@@ -259,4 +259,43 @@ lists, fences and rules pass through the shared token renderer. Item buttons/lin
 are selected only when the final reply references the candidate's ID, URL or complete
 normalized title, in reply order, up to five. Rephrased or ambiguous titles may therefore
 omit a button. Labels use complete words and an ellipsis within thirty characters.
-Generic `Open in Omi` navigation is removed; iMessage lists item-specific URLs only.
+Generic `Open in Omi` navigation is removed; iMessage attaches item-specific navigation as described below.
+
+### Stacked messages and iMessage item previews
+
+Each distinct fresh user message is a separate FIFO turn, including trivial pings;
+this implementation does not coalesce questions or fold pings. Duplicate provider
+messages are deduplicated, and pendings over thirty minutes old are retired without
+answering. Admission atomically writes the encrypted inbox row and a content-free
+per-chat newest-inbound pointer. Late older webhooks and duplicates cannot move the
+pointer backward; Telegram message IDs break ties in its one-second provider clock
+(other equal-clock arrivals use admission order). Callback clicks do not become
+user-message heads. The inbound
+provider message ID/reply target already lives in the encrypted normalized payload.
+Older inbox rows without a chat pointer receive normal replies until new admission
+establishes one; no backfill is required.
+
+At actual outbound pacing completion, the adapter resolves the newest pointer. An
+answer to an older user message is threaded; an answer to the newest is sent normally.
+Only the first chunk is threaded when text splits. A known rate-limit rejection
+rechecks the pointer before retrying; an ambiguous outcome freezes the original
+request rather than changing a possibly accepted message. Telegram uses `reply_parameters`
+with `allow_sending_without_reply`; Linq uses `message.reply_to` beside `parts` on
+`POST /api/partner/v3/chats/{chatId}/messages`. Definite 400/404/422 rejections can retry
+without the thread target, with observable fallback telemetry. Ambiguous transport
+outcomes keep the original request/idempotency identity and never switch to a plain
+send. Existing scoped receipt callbacks keep their receipt target.
+
+For iMessage, zero matched items add nothing. Several matched items get short
+`h.omi.me/<kind>/<id>` links next to their complete title mentions, at most five;
+unmentioned titles get no inline link. One matched item gets its ordinary text answer
+then a separate single `link` part message, only if this chat had accepted outbound
+traffic before the answer began. New or legacy chats with unknown accepted history
+skip that first card conservatively. Accepted receipts and the outbound-history marker
+commit atomically; reserved/ambiguous sends do not enable previews. Optional card
+failure preserves the accepted text and records a degraded fallback. Bare web-root
+URLs are removed from iMessage text. Preview URLs contain only item kind/ID; public
+Open Graph metadata and `web/` are unchanged.
+
+Provider contracts: [Linq sending messages](https://docs.linqapp.com/channel/imessage/guides/messaging/sending-messages/)
+and [rich link previews](https://docs.linqapp.com/channel/imessage/guides/messaging/rich-link-previews/).

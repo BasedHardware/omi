@@ -40,6 +40,12 @@ class Gateway:
         self.store = store or MessagingStore()
         self.turn, self.admission, self.wake = turn, admission, wake
 
+    def _reply_sink(self, message, **kwargs):
+        async def reply_target():
+            return await run_blocking(db_executor, self.store.reply_target, message)
+
+        return ChannelReplySink(self.adapter, message, reply_target=reply_target, **kwargs)
+
     async def webhook(self, body, headers):
         if not self.adapter.verify_webhook(body, headers):
             raise PermissionError('Invalid webhook signature')
@@ -176,16 +182,14 @@ class Gateway:
                 )
                 # Same fixed reply as an unknown sender. Do not distinguish a bad,
                 # expired, or unauthorized proof.
-                await ChannelReplySink(self.adapter, message, guard=inbox_guard).finish(
-                    'Link your account in Omi to chat here.'
-                )
+                await self._reply_sink(message, guard=inbox_guard).finish('Link your account in Omi to chat here.')
                 await run_blocking(db_executor, self.store.complete, path)
                 return True
         if not link or not link.get('active'):
             logging.getLogger(__name__).info(
                 'Messaging reply provider=%s reason=unlinked_sender', self.adapter.provider
             )
-            sink = ChannelReplySink(self.adapter, message, guard=inbox_guard)
+            sink = self._reply_sink(message, guard=inbox_guard)
             await sink.finish('Link your account in Omi to chat here.')
             await run_blocking(db_executor, self.store.complete, path)
             return True
@@ -197,9 +201,7 @@ class Gateway:
             return True
         await run_blocking(db_executor, self.admission, uid)
         if message.link_proof:
-            await ChannelReplySink(self.adapter, message, guard=inbox_guard).finish(
-                'Account linked. You can chat with Omi here.'
-            )
+            await self._reply_sink(message, guard=inbox_guard).finish('Account linked. You can chat with Omi here.')
             await run_blocking(db_executor, self.store.complete, path)
             return True
 
@@ -212,7 +214,7 @@ class Gateway:
         async def guard():
             await run_blocking(db_executor, turn_guard)
 
-        sink = ChannelReplySink(self.adapter, message, guard=guard)
+        sink = self._reply_sink(message, guard=guard)
         session = token = None
         async with _typing(sink) as stop_typing:
             try:
@@ -272,7 +274,7 @@ class Gateway:
                             async def undo_guard():
                                 await run_blocking(db_executor, self._assert_link, message, link)
 
-                            undo_sink = ChannelReplySink(self.adapter, message, guard=undo_guard)
+                            undo_sink = self._reply_sink(message, guard=undo_guard)
                             start_background_task(
                                 self._undo_action(uid, session, message, undo_sink), name='messaging-undo-action'
                             )
@@ -377,7 +379,7 @@ class Gateway:
         async def send_guard():
             await run_blocking(db_executor, reentry_guard)
 
-        sink = ChannelReplySink(self.adapter, message, kind='deferred_reply', guard=send_guard)
+        sink = self._reply_sink(message, kind='deferred_reply', guard=send_guard)
         try:
             async with _typing(sink):
                 await self._turn(
@@ -429,9 +431,7 @@ class Gateway:
         async def send_guard():
             await run_blocking(db_executor, guard)
 
-        sink = reply_sink or ChannelReplySink(
-            self.adapter, message, kind='deferred_reply' if event else 'reply', guard=send_guard
-        )
+        sink = reply_sink or self._reply_sink(message, kind='deferred_reply' if event else 'reply', guard=send_guard)
         events = await run_blocking(db_executor, self.store.events, uid, session['id'])
         await append_digest(self.store, uid, session, events)
         event_id = event.event_id if event else key(message.provider, message.provider_message_id)

@@ -12,7 +12,9 @@ from urllib.parse import quote, urlparse
 
 from utils.messaging.adapters.base import BaseAdapter
 from utils.messaging.adapters.media import MEDIA_TYPES
-from utils.messaging.adapters.rendering import plain, split_text
+from utils.messaging.adapters.rendering import plain, split_text, inline_item_links
+from utils.observability.fallback import record_fallback
+from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.adapters.transport import request_json, ProviderError
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 from utils.messaging.turn_context import bound_provider_clock, parse_provider_instant
@@ -50,7 +52,7 @@ class IMessageProvider(Protocol):
 
     def verify(self, body, headers) -> bool: ...
     def parse(self, body) -> tuple[ChannelMessage, ...]: ...
-    async def send(self, chat, parts, operation) -> dict[str, Any]: ...
+    async def send(self, chat, parts, operation, *, reply_to=None) -> dict[str, Any]: ...
     async def typing(self, chat, active) -> None: ...
     async def react(self, message_id, reaction) -> dict[str, Any]: ...
     async def upload(self, artifact, data) -> str: ...
@@ -146,7 +148,7 @@ class LinqProvider:
             ),
         )
 
-    async def api(self, method, path, *, body=None, idempotent=False):
+    async def api(self, method, path, *, body=None, idempotent=False, before_request=None):
         return await request_json(
             self.transport,
             method,
@@ -155,15 +157,38 @@ class LinqProvider:
             json=body,
             idempotent=idempotent,
             sleep=self.sleep,
+            before_request=before_request,
         )
 
-    async def send(self, chat, parts, operation):
-        return await self.api(
-            'POST',
-            '/chats/' + quote(chat, safe='') + '/messages',
-            body={'message': {'parts': parts, 'idempotency_key': operation}, 'preferred_service': 'iMessage'},
-            idempotent=True,
-        )
+    async def send(self, chat, parts, operation, *, reply_to=None):
+        message = {'parts': parts, 'idempotency_key': operation, 'preferred_service': 'iMessage'}
+        if reply_to:
+            message['reply_to'] = {'message_id': reply_to}
+        path = '/chats/' + quote(chat, safe='') + '/messages'
+
+        async def prepare_thread():
+            resolver = send_reply_target.get()
+            if resolver is None or not send_first_chunk.get():
+                return
+            current = await resolver()
+            if current:
+                message['reply_to'] = {'message_id': current}
+            else:
+                message.pop('reply_to', None)
+
+        try:
+            return await self.api(
+                'POST', path, body={'message': message}, idempotent=True, before_request=prepare_thread
+            )
+        except ProviderError as error:
+            if not message.get('reply_to') or error.status_code not in (400, 404, 422):
+                raise  # ambiguous delivery must not change the request or replay
+            record_fallback(
+                component='other', from_mode='threaded_reply', to_mode='plain_reply', reason='other', outcome='degraded'
+            )
+            message.pop('reply_to')
+            message['idempotency_key'] = operation + ':unthreaded'
+            return await self.api('POST', path, body={'message': message}, idempotent=True)
 
     async def typing(self, chat, active):
         await self.api('POST' if active else 'DELETE', '/chats/' + quote(chat, safe='') + '/typing', idempotent=True)
@@ -229,7 +254,15 @@ class IMessageAdapter(BaseAdapter):
         return self.client.parse(body)
 
     def render(self, text):
-        return split_text(plain(text), self.capabilities.max_text_len)
+        return split_text(
+            re.sub(r'https://h\.omi\.me/?(?=[\s).,!?#]|$)', 'Omi', plain(text)), self.capabilities.max_text_len
+        )
+
+    async def item_presentation(self, message, text, items):
+        if len(items) > 1:
+            return inline_item_links(text, items), None
+        card = items[0]['url'] if items and await self.ledger.has_outbound(message) else None
+        return text, card
 
     async def typing(self, message, active=True):
         await self.client.typing(message.external_chat_id, active)
@@ -237,22 +270,32 @@ class IMessageAdapter(BaseAdapter):
     async def download(self, attachment):
         return await self.client.download(attachment)
 
-    async def send(self, message, *, text=None, artifact=None, draft=False):
+    async def send(self, message, *, text=None, artifact=None, draft=False, link=None):
         if draft:
             return
         await self.pace(message.external_chat_id, 2.05)
         operation = self.operation(
-            message, 'artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or '')
+            message,
+            (
+                ('link:' + link)
+                if link
+                else ('artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or ''))
+            ),
         )
         if not await self.ledger.begin(message, operation, ratio=self.max_ratio, retry_reserved=True):
             return
-        if artifact:
+        if link:
+            if not re.fullmatch(r'https://h\.omi\.me/(?:task|memory|conversation)/[^\s]+', link):
+                raise ValueError('Item link required')
+            parts = [{'type': 'link', 'value': link}]
+        elif artifact:
             data = await self.owned_bytes(artifact)
             attachment_id = await self.client.upload(artifact, data)
             parts = [{'type': 'media', 'attachment_id': attachment_id}]
         else:
             parts = [{'type': 'text', 'value': text}]
-        result = await self.client.send(message.external_chat_id, parts, operation)
+        reply_to = await self.reply_target(message)
+        result = await self.client.send(message.external_chat_id, parts, operation, reply_to=reply_to)
         provider_id = result.get('id') or result.get('message', {}).get('id')
         if not provider_id:
             raise ProviderError('Missing provider delivery receipt')

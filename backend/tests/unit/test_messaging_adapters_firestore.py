@@ -70,6 +70,7 @@ def test_receipt_retry_and_ambiguous_telegram_reconciliation(store):
     ledger.accepted(incoming, 'telegram', 'receipt-1')
     assert not ledger.reserve(incoming, 'telegram', retry_reserved=True)
     assert ledger._chat(incoming).get().to_dict()['sent'] == 1
+    assert ledger._chat(incoming).get().to_dict()['outbound_accepted'] is True
 
 
 def test_undo_encrypted_scoped_expired_once_and_ambiguous_inverse(store, monkeypatch):
@@ -307,3 +308,48 @@ def test_newest_wake_drains_older_pending_in_order_once(store, monkeypatch):
     assert seen == ['0', '1', '2'] and len(adapter.sent) == 3
     assert not asyncio.run(gateway.process(paths[-1]))
     assert len(adapter.sent) == 3
+
+
+def test_durable_chat_head_survives_completion_duplicate_and_late_webhooks(store):
+    incoming = replace(message(), reply_to='answered-provider-message')
+    first = store.enqueue(incoming)
+    second_message = replace(
+        incoming, provider_message_id='second', received_at=incoming.received_at + timedelta(seconds=1)
+    )
+    second = store.enqueue(second_message)
+    assert store.reply_target(incoming) == incoming.reply_to
+    assert store.reply_target(second_message) is None
+    assert store.enqueue(incoming) is None
+    store.complete(first)
+    store.complete(second)
+    assert store.reply_target(incoming) == incoming.reply_to
+    late = replace(incoming, provider_message_id='late', received_at=incoming.received_at - timedelta(seconds=1))
+    store.enqueue(late)
+    assert store.reply_target(second_message) is None
+    other_chat = replace(incoming, external_chat_id='other-chat', provider_message_id='other')
+    store.enqueue(other_chat)
+    assert store.reply_target(other_chat) is None
+    callback = replace(second_message, provider_message_id='callback', callback_id='click', reply_to='receipt')
+    store.enqueue(callback)
+    assert store.reply_target(second_message) is None
+    assert store.reply_target(callback) == 'receipt'
+
+
+def test_preview_history_is_accepted_delivery_not_a_reservation(store):
+    ledger, incoming = DeliveryLedger(store), message()
+    ledger.inbound(incoming)
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.reserve(incoming, 'operation')
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.accepted(incoming, 'operation', 'receipt')
+    assert asyncio.run(ledger.has_outbound(incoming))
+    assert not asyncio.run(ledger.has_outbound(replace(incoming, external_chat_id='other-chat')))
+
+
+def test_transactional_telegram_clock_tie_keeps_the_newer_provider_id(store):
+    old = replace(message(), channel='telegram', provider='telegram', provider_message_id='10', reply_to='10')
+    newer = replace(old, provider_message_id='11', reply_to='11')
+    store.enqueue(newer)
+    store.enqueue(old)
+    assert store.reply_target(newer) is None
+    assert store.reply_target(old) == '10'
