@@ -3,10 +3,11 @@
 import html
 import re
 from html.parser import HTMLParser
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qsl, quote, unquote, urlparse
 
 from markdown_it import MarkdownIt
 from utils.observability.fallback import record_fallback
+from utils.share_links import build_share_url
 
 _CITATION_LIST = r'#?\s*+\d++(?:\s*+[,;–-]\s*+#?\s*+\d++)*+'
 # ASCII [1]/[#1]/[1][2], fullwidth 【1】, and markdown footnotes [^1].
@@ -23,7 +24,37 @@ _BUTTON_LABEL_LIMIT = 30
 def item_link(kind, item_id):
     if kind not in {'conversation', 'task', 'memory'} or not isinstance(item_id, str) or not item_id.strip():
         raise ValueError('Invalid Omi item link')
-    return 'https://h.omi.me/' + kind + '/' + quote(item_id, safe='')
+    return build_share_url('/' + kind + '/' + quote(item_id, safe=''))
+
+
+def item_list_link(items):
+    """Content-free ordered navigation; encode IDs without changing repeated keys."""
+    pairs = []
+    for item in items[:10]:
+        item_link(item['kind'], item['id'])  # Apply the singular-link validation.
+        pairs.append(item['kind'] + '=' + quote(item['id'], safe=''))
+    if not pairs:
+        raise ValueError('Items required')
+    return build_share_url('/items?' + '&'.join(pairs))
+
+
+def valid_item_link(url):
+    """Accept only canonical singular/list links on the configured share base."""
+    if not isinstance(url, str):
+        return False
+    try:
+        if url.startswith(build_share_url('/items?')):
+            pairs = parse_qsl(urlparse(url).query, keep_blank_values=True)
+            return 1 < len(pairs) <= 10 and url == item_list_link(
+                [{'kind': kind, 'id': item_id} for kind, item_id in pairs]
+            )
+        for kind in ('conversation', 'task', 'memory'):
+            prefix = build_share_url('/' + kind + '/')
+            if url.startswith(prefix):
+                return url == item_link(kind, unquote(url[len(prefix) :]))
+    except (ValueError, KeyError, TypeError):
+        return False
+    return False
 
 
 def _https_url(url):
@@ -114,24 +145,7 @@ def linked_items(response):
                 positions.append(match.start())
         if positions:
             referenced.append((min(positions), item))
-    return [item for _, item in sorted(referenced, key=lambda pair: pair[0])][:5]
-
-
-def inline_item_links(text, items):
-    """Place short item URLs at their named mention, never in a trailing URL block."""
-    text = plain(text)
-    insertions = []
-    for item in items[:5]:
-        title = plain(item['title']).strip()
-        if not title or title.lower() in {'task', 'memory', 'conversation'}:
-            continue
-        pattern = r'(?<!\w)' + r'\s+'.join(re.escape(word) for word in title.split()) + r'(?!\w)'
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match and item['url'] not in text and item['url'].removeprefix('https://') not in text:
-            insertions.append((match.end(), ' (' + item['url'].removeprefix('https://') + ')'))
-    for position, value in sorted(insertions, reverse=True):
-        text = text[:position] + value + text[position:]
-    return text
+    return [item for _, item in sorted(referenced, key=lambda pair: pair[0])][:10]
 
 
 def button_label(title):

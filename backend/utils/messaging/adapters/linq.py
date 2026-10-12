@@ -12,7 +12,8 @@ from urllib.parse import quote, urlparse
 
 from utils.messaging.adapters.base import BaseAdapter
 from utils.messaging.adapters.media import MEDIA_TYPES
-from utils.messaging.adapters.rendering import plain, split_text, inline_item_links
+from utils.share_links import share_base_url
+from utils.messaging.adapters.rendering import plain, split_text, item_list_link, valid_item_link
 from utils.observability.fallback import record_fallback
 from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.adapters.transport import request_json, ProviderError
@@ -255,13 +256,20 @@ class IMessageAdapter(BaseAdapter):
 
     def render(self, text):
         return split_text(
-            re.sub(r'https://h\.omi\.me/?(?=[\s).,!?#]|$)', 'Omi', plain(text)), self.capabilities.max_text_len
+            re.sub(re.escape(share_base_url()) + r'/?(?=[\s).,!?#]|$)', 'Omi', plain(text)),
+            self.capabilities.max_text_len,
         )
 
     async def item_presentation(self, message, text, items):
         if len(items) > 1:
-            return inline_item_links(text, items), None
-        card = items[0]['url'] if items and await self.ledger.has_outbound(message) else None
+            text = plain(text)
+            for item in items:
+                for url in (item['url'], item['url'].removeprefix('https://')):
+                    text = text.replace(' (' + url + ')', '').replace(url, '')
+            text = text.strip()
+        card = None
+        if items and await self.ledger.has_outbound(message):
+            card = items[0]['url'] if len(items) == 1 else item_list_link(items)
         return text, card
 
     async def typing(self, message, active=True):
@@ -285,7 +293,7 @@ class IMessageAdapter(BaseAdapter):
         if not await self.ledger.begin(message, operation, ratio=self.max_ratio, retry_reserved=True):
             return
         if link:
-            if not re.fullmatch(r'https://h\.omi\.me/(?:task|memory|conversation)/[^\s]+', link):
+            if not valid_item_link(link):
                 raise ValueError('Item link required')
             parts = [{'type': 'link', 'value': link}]
         elif artifact:

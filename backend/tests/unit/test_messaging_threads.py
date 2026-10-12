@@ -169,7 +169,9 @@ def test_ambiguous_thread_outcome_never_changes_to_a_plain_send(adapter):
     assert all(target(adapter, body) == expected_target(adapter) for body in sends(adapter))
 
 
-@pytest.mark.parametrize('count,prior', [(0, False), (1, False), (1, True), (3, True), (6, True)])
+@pytest.mark.parametrize(
+    'count,prior', [(0, False), (0, True), (1, False), (1, True), (2, False), (2, True), (3, True), (11, True)]
+)
 def test_imessage_zero_single_and_many_item_navigation(adapter, count, prior):
     if adapter.channel != 'imessage':
         return
@@ -185,21 +187,18 @@ def test_imessage_zero_single_and_many_item_navigation(adapter, count, prior):
 
     asyncio.run(run())
     bodies = sends(adapter)
-    if count == 1 and prior:
+    assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': text}]
+    if count and prior:
         assert len(bodies) == 2
-        assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': '• Do task 0'}]
-        assert bodies[1]['message']['parts'] == [{'type': 'link', 'value': 'https://h.omi.me/task/0'}]
+        url = (
+            'https://h.omi.me/task/0'
+            if count == 1
+            else ('https://h.omi.me/items?' + '&'.join(f'task={i}' for i in range(min(count, 10))))
+        )
+        assert bodies[1]['message']['parts'] == [{'type': 'link', 'value': url}]
         assert 'reply_to' not in bodies[1]['message']
     else:
         assert len(bodies) == 1
-        value = bodies[0]['message']['parts'][0]['value']
-        assert 'https://h.omi.me' not in value
-        if count > 1:
-            for i in range(min(count, 5)):
-                assert f'Do task {i} (h.omi.me/task/{i})' in value
-            assert value.count('h.omi.me/task/') == min(count, 5)
-        else:
-            assert 'h.omi.me' not in value
 
 
 def test_imessage_omits_unmentioned_items_and_bare_domain(adapter):
@@ -284,3 +283,29 @@ def test_stacking_during_retry_rechecks_only_when_previous_attempt_was_rejected(
         assert all(target(adapter, body) is None for body in bodies)
     else:
         assert len(bodies) == 2 and target(adapter, bodies[1]) == expected_target(adapter)
+
+
+def test_imessage_list_card_uses_reply_order_and_configured_base(adapter, monkeypatch):
+    if adapter.channel != 'imessage':
+        return
+    monkeypatch.setenv('OMI_SHARE_BASE_URL', 'https://share.example.com/omi')
+    message = incoming(adapter)
+    adapter.ledger.accepted_chats.add(message.external_chat_id)
+    sources = [
+        {'kind': 'task', 'id': 'a/b &=雪', 'title': 'Send the documents'},
+        {'kind': 'memory', 'id': 'second', 'title': 'Plan the session'},
+        {'kind': 'task', 'id': 'unused', 'title': 'Unrelated task'},
+    ]
+    text = 'Plan the session. Then [send the documents](https://share.example.com/omi/task/a%2Fb%20%26%3D%E9%9B%AA).'
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload({'text': text, 'conversations': sources})
+
+    asyncio.run(run())
+    bodies = sends(adapter)
+    assert bodies[0]['message']['parts'] == [{'type': 'text', 'value': 'Plan the session. Then send the documents.'}]
+    assert bodies[1]['message']['parts'] == [
+        {'type': 'link', 'value': 'https://share.example.com/omi/items?memory=second&task=a%2Fb%20%26%3D%E9%9B%AA'}
+    ]
+    assert 'share.example.com' not in ''.join(adapter.render('Open https://share.example.com/omi.'))

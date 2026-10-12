@@ -679,10 +679,9 @@ def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
         assert payload['text'].count('https://') == 0
     else:
         body = payload['message']['parts'][0]['value']
-        assert body.count('h.omi.me/task/') == 5
+        assert 'h.omi.me' not in body
         assert body.count('https://') == 0
         assert 'Open in Omi' not in body
-        assert '/task/' in body
         assert '[#1]' not in body
 
 

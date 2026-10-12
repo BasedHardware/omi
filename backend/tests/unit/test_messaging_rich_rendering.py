@@ -233,3 +233,45 @@ def test_item_selection_matches_answer_in_order_and_rejects_unmentioned_tools():
 def test_gfm_strikethrough_does_not_leak_markers():
     assert rendering.telegram('~~retired~~') == ('<s>retired</s>',)
     assert rendering.plain('~~retired~~') == 'retired'
+
+
+def test_exact_list_order_encoding_and_shared_base(monkeypatch):
+    monkeypatch.setenv('OMI_SHARE_BASE_URL', 'https://share.example.com/omi/')
+    items = [
+        {'kind': 'memory', 'id': 'space &+=/雪'},
+        {'kind': 'task', 'id': 'two'},
+        {'kind': 'memory', 'id': 'three'},
+        {'kind': 'conversation', 'id': 'four'},
+    ]
+    url = rendering.item_list_link(items)
+    assert (
+        url
+        == 'https://share.example.com/omi/items?memory=space%20%26%2B%3D%2F%E9%9B%AA&task=two&memory=three&conversation=four'
+    )
+    assert (
+        rendering.item_link('memory', items[0]['id'])
+        == 'https://share.example.com/omi/memory/space%20%26%2B%3D%2F%E9%9B%AA'
+    )
+    assert rendering.valid_item_link(url)
+    assert rendering.valid_item_link(rendering.item_link('task', 'two'))
+    assert not rendering.valid_item_link('https://h.omi.me/task/two')
+    assert not rendering.valid_item_link(url + '&title=private')
+    assert not rendering.valid_item_link('https://share.example.com/omi')
+
+
+def test_list_cap_and_reply_order():
+    sources = [{'kind': 'task', 'id': f'id-{i}', 'title': f'Complete action {i} now'} for i in range(12)]
+    items = rendering.linked_items(
+        {'text': '\n'.join(item['title'] for item in reversed(sources)), 'conversations': sources}
+    )
+    assert [item['id'] for item in items] == [f'id-{i}' for i in range(11, 1, -1)]
+    assert rendering.item_list_link(items + sources) == 'https://h.omi.me/items?' + '&'.join(
+        f'task=id-{i}' for i in range(11, 1, -1)
+    )
+    assert len(rendering.item_buttons(items)['inline_keyboard']) == 5
+
+
+@pytest.mark.parametrize('items', [[], [{'kind': 'unknown', 'id': 'a'}], [{'kind': 'task', 'id': ''}]])
+def test_list_requires_valid_items(items):
+    with pytest.raises(ValueError):
+        rendering.item_list_link(items)

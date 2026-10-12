@@ -257,7 +257,7 @@ Telegram GFM tables use plain, padded `<pre>` columns up to forty characters wid
 wider tables and all iMessage tables become per-row lists. Markdown headings, quotes,
 lists, fences and rules pass through the shared token renderer. Item buttons/links
 are selected only when the final reply references the candidate's ID, URL or complete
-normalized title, in reply order, up to five. Rephrased or ambiguous titles may therefore
+normalized title, in reply order. Telegram shows up to five buttons; iMessage lists up to ten items. Rephrased or ambiguous titles may therefore
 omit a button. Labels use complete words and an ellipsis within thirty characters.
 Generic `Open in Omi` navigation is removed; iMessage attaches item-specific navigation as described below.
 
@@ -286,10 +286,13 @@ without the thread target, with observable fallback telemetry. Ambiguous transpo
 outcomes keep the original request/idempotency identity and never switch to a plain
 send. Existing scoped receipt callbacks keep their receipt target.
 
-For iMessage, zero matched items add nothing. Several matched items get short
-`h.omi.me/<kind>/<id>` links next to their complete title mentions, at most five;
-unmentioned titles get no inline link. One matched item gets its ordinary text answer
-then a separate single `link` part message, only if this chat had an accepted outbound
+For iMessage, zero matched items add nothing. One matched item gets its ordinary
+text answer then a separate single `link` part message using its singular item URL.
+Two or more matched items get unchanged answer text then one single `link` part message
+with `/items?conversation=<id>&task=<id>&memory=<id>`: repeated keys retain reply order,
+at most ten items, IDs percent-encoded, and no titles or other content in the URL.
+Both URL forms use `OMI_SHARE_BASE_URL` (default `https://h.omi.me`); no per-item URLs
+are appended to multi-item answer text. Cards are sent only if this chat had an accepted outbound
 message before the answer began. New or legacy chats with unknown accepted history
 skip that first card conservatively. Accepted receipts and the outbound-history marker
 commit atomically; reserved/ambiguous sends and reaction/contact actions do not
