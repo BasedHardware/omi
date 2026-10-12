@@ -4,6 +4,7 @@ import logging
 import json
 
 from prometheus_client import Counter
+from utils.dream_diagnostics import counts_only
 
 POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
 
@@ -33,6 +34,11 @@ REJECTION_REASONS = {
 
 logger = logging.getLogger(__name__)
 EVIDENCE_CHARS = Counter('omi_dream_evidence_chars_total', 'Projected dream evidence characters', ['lane'])
+RETRIEVAL = Counter(
+    'omi_dream_retrieval_total', 'Dream retrieval operations and candidate dispositions', ['path', 'count']
+)
+TARGET_CONTEXT = Counter('omi_dream_target_context_total', 'Dream target retrieval coverage', ['coverage'])
+DIRTY_READS = Counter('omi_dream_dirty_read_total', 'Dream queue selection dispositions', ['count'])
 
 ERROR_TYPES = {
     'TimeoutError',
@@ -68,9 +74,17 @@ def record_pass(report):
     reasoning = max(0, int(report.get('reasoning_evidence_chars', 0)))
     EVIDENCE_CHARS.labels('triage').inc(triage)
     EVIDENCE_CHARS.labels('reasoning').inc(reasoning)
+    diagnostics = counts_only(report)
+    for path, counts in diagnostics['retrieval_counts'].items():
+        for key, count in counts.items():
+            RETRIEVAL.labels(path, key).inc(count)
+    for key, count in diagnostics['dirty_counts'].items():
+        DIRTY_READS.labels(key).inc(count)
+    for key, count in diagnostics['target_context_counts'].items():
+        TARGET_CONTEXT.labels(key).inc(count)
     logger.info(
         'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
-        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d',
+        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s dirty_counts=%s target_context_counts=%s',
         status,
         triage,
         reasoning,
@@ -78,4 +92,7 @@ def record_pass(report):
         json.dumps(report.get('validation_errors', {}), sort_keys=True),
         json.dumps(report.get('rejected', {}), sort_keys=True),
         max(0, int(report.get('poisoned', 0))),
+        json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
+        json.dumps(diagnostics['dirty_counts'], sort_keys=True),
+        json.dumps(diagnostics['target_context_counts'], sort_keys=True),
     )

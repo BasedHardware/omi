@@ -2,19 +2,91 @@
 
 ## Target neighbourhoods and read-only planning
 
-Dirty reads admit at most four editable targets to leave prompt capacity for
-context. Retrieval adds explicit people/entities and conversation tasks,
+Dirty reads initially admit up to four editable targets for neighbourhood retrieval,
+then return unused context capacity to additional dirty targets under the existing
+triage budget and eight-target reasoning limit. This is an initial allocation, not a four-target pass cap.
+Retrieval adds explicit people/entities and conversation tasks,
 same-subject canonical facts, Typesense rare-token/vocabulary-near-match hits,
 existing Pinecone conversation and canonical memory semantic hits, then nearby
 conversations and screen records. Reads remain owner scoped and visibility checked.
-Queries and result counts are bounded; a retrieval failure fails the pass, rather
-than silently treating a partial neighbourhood as complete evidence.
+Queries and result counts are bounded. User-authored title and structured title/overview terms precede
+long transcripts. A later bounded path may retry a transient hydration failure. Failed queries or hydration reads increment
+the affected path's failure count and emit shared degraded fallback telemetry;
+remaining paths can still contribute. Missing/locked/hidden hydration results
+count as unavailable rather than provider failures.
 
 Context is evidence only in both stages. Guards reject context targets and
 merges whose second operand is context. All role and eligibility metadata enters
 the shared byte-based budget gate. Context admission also reserves worst-case
 triage input/completion before fitting reasoning. Reports include role counts;
 diagnostics never include record contents.
+
+Encrypted pass reports and the counts-only pass log include `retrieval_counts`
+for `links`, `lexical`, `semantic`, and `temporal`. Each path has `attempted`
+(provider/query and reference-hydration calls), `found` (returned candidate refs,
+including duplicates), `added` (unique visible context admitted), and `failed`
+(query/hydration errors). Additional counts are `duplicate`, `unavailable`, and
+`budget_skipped`. A zero attempted count means that path was not reached or had
+no applicable query; it does not certify provider health. A budget stop leaves
+later tiers unattempted. Context added during retrieval may subsequently become
+a dirty target; final `role_counts` describes the model input.
+
+`dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
+`failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
+`permanent_acknowledged` and `transient_expired`. A pass fetches and inspects at
+most 32 dirty refs, rather than the full 500-ref queue. Budget-deferred refs and
+refs outside this window remain queued without product reads. `dirty_read`
+counts only versions admitted as editable targets.
+
+Authoritative missing/404, deleted, discarded, soft-deleted, merged-away,
+wrong-generation and non-pending results are permanent for the observed version.
+Settlement acknowledges these separately from model targets, even on an idle
+refunded pass. HTTP 402 and locked (423) results are transient: the observed
+version remains queued for up to three attempts using `failed_passes`, then
+expires. Product writes re-mark the ref with a new version and reset that counter.
+Provider errors never classify a ref as permanent. Every acknowledgement and
+retry update rechecks the exact dirty version in the transaction; concurrent
+refreshes survive, and ambiguous retained leases do not settle unavailable refs.
+There is no unavailable-only account pause.
+
+Settlement rereads only inspected refs, plus at most `acknowledged + 1` oldest
+queue rows to maintain the diagnostic watermark, instead of rescanning all
+500 dirty documents. Counts-only reports and logs describe permanent settlement
+and transient expiry separately from model failure poisoning.
+
+`target_context_counts` contains `retrieval_seeded` and `contextless`. Retrieval
+runs for the initial four targets. Reclaimed targets 5–8 are explicitly reported
+as contextless (no retrieval for their neighbourhood); they can still see the
+shared evidence set, but no second search round is purchased. Zero added context
+does not mean that a seeded target received useful grounding.
+
+Prometheus exports `omi_dream_retrieval_total{path,count}` and
+`omi_dream_dirty_read_total{count}` and `omi_dream_target_context_total{coverage}`
+with only these closed labels. These diagnostics
+and the dry-run result contain no refs, IDs, provider messages or user text.
+
+For the counts-only owner investigation, use the retrieval entrypoint inside a pod
+running this source, with `uid` and `records` already obtained by the authorized
+owner through visibility-aware readers:
+
+```python
+import asyncio
+import json
+from utils.dream_agent import dry_run_retrieval
+
+counts = asyncio.run(dry_run_retrieval(uid, records))
+print(json.dumps(counts, sort_keys=True))
+```
+
+This runs the pass's linked, lexical, semantic and temporal retrieval with the
+same budget and hydration checks, and returns only `role_counts`, `triage_fits`,
+`retrieval_counts`, `target_context_counts` and zero-initialized `dirty_counts`. It does not acquire a
+lease, admit a pass, call the planning model, settle dirty versions, mutate
+product records or persist a report. It reads vocabulary unless explicitly
+supplied; semantic retrieval can make ordinary embedding-provider calls with
+their normal infrastructure usage accounting. `targets=[...]` can mark a subset
+of supplied records editable. The existing `dry_run` below still plans supplied
+evidence without retrieval. The implementing agent uses synthetic fixtures only.
 
 The owner's agent can call `await utils.dream_agent.dry_run(uid, records,
 targets=[...], vocabulary=[...])` inside a pod with authorized, decrypted,
@@ -107,13 +179,13 @@ reads and deletes. Coalescing reduces pass reads and retained documents for
 repeated writes; it does not claim fewer billed writes for multi-reference batches.
 
 Drain considers the highest weighted score first, at most 100 users per
-invocation. A pass reads distinct queued references newest first, at most 400
+invocation. A pass reads distinct queued references newest first, at most 32
 before enrichment, stopping when their conservatively encoded triage excerpts
 would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
-versions actually selected; failed passes retain the queue. Missing or invisible
-records are acknowledged without purchasing inference. A pass with no visible
+versions actually selected; failed passes retain the queue. Permanent unavailable versions are acknowledged separately; 402/locked versions
+remain queued until their third attempt expires. A pass with no visible
 records returns `not_admitted` and refunds its provisional admission/reservation.
 
 The dirty set is authoritative. The timestamp `watermark` is a diagnostic
@@ -133,7 +205,7 @@ gate. Triage gets `min(12000, Caps.tokens // 2)`; reasoning gets the pass budget
 observed triage tokens. Per-record character allowances use the space left after
 schema, framing, refs and completion reserve, then halve until the encoded request
 fits. Triage retains an allowance of at least 600 characters per record; reasoning
-retains at least 1,500. Additional records that cannot fit at the triage floor stay
+retains at least 1,500. Additional records beyond the eight-target reasoning limit or that cannot fit at the triage floor stay
 queued for a later pass. A single triage record may shrink below its floor with
 head/tail retention if needed to fit the transport gate, preventing oversized
 records from blocking the queue. Short source text is never padded. Conversation summary fields retain space before transcript text
