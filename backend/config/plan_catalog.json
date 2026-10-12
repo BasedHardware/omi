@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 5,
+  "catalog_revision": 6,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -322,7 +322,7 @@
     },
     {
       "id": "operator",
-      "display_name": "Operator",
+      "display_name": "Pro",
       "wire_aliases": [],
       "wire_fallback_plan": null,
       "lifecycle": "current",
