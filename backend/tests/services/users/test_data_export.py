@@ -130,7 +130,7 @@ def test_iter_user_data_export_includes_review_and_correction_history(monkeypatc
         data_export,
         "_iter_user_subcollection",
         lambda _uid, name: (
-            iter([{"id": f"{name}-1", "candidate": {"content": "portable"}}])
+            iter([{"id": f"{name}-1", "status": "expired", "candidate": {"content": "portable"}}])
             if name in data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS
             else iter([])
         ),
@@ -140,6 +140,7 @@ def test_iter_user_data_export_includes_review_and_correction_history(monkeypatc
 
     assert set(payload["memory_review_data"]) == set(data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS)
     assert payload["memory_review_data"]["memory_review_queue"][0]["candidate"]["content"] == "portable"
+    assert payload["memory_review_data"]["memory_review_queue"][0]["status"] == "expired"
 
 
 def test_iter_user_data_export_includes_retained_ledger_history(monkeypatch):
