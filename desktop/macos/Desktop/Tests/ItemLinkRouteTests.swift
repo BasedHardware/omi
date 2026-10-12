@@ -258,6 +258,109 @@ final class ItemLinkPresenterTests: XCTestCase {
     XCTAssertEqual(recorder.openedTasks, ["t2"])
   }
 
+  /// INV-MEM-1: archive is not a default surface. Dismissed memories are retired.
+  /// The row must not carry the memory text.
+  func testArchivedAndDismissedMemoriesAreUnavailable() async throws {
+    let recorder = Recorder()
+    let presenter = ItemLinkPresenter(
+      resolver: ItemLinkResolver(
+        conversation: { _ in nil },
+        task: { _ in nil },
+        memories: { ids in
+          ids.compactMap { id in
+            switch id {
+            case "archived":
+              return Self.memory(id: id, content: "Secret archive fact", tier: .archive)
+            case "dismissed":
+              return Self.memory(id: id, content: "Dismissed fact", isDismissed: true)
+            case "kept":
+              return Self.memory(id: id, content: "Visible fact")
+            default:
+              return nil
+            }
+          }
+        }
+      ),
+      navigator: ItemLinkNavigator(
+        openConversation: { recorder.openedConversations.append($0.id) },
+        openTask: { recorder.openedTasks.append($0) },
+        openMemory: { recorder.openedMemories.append($0) },
+        revealMainWindow: { recorder.reveals += 1 }
+      )
+    )
+    try presenter.receive(link("omi-computer://items?memory=archived&memory=dismissed&memory=kept"))
+    await presenter.consumePending()
+
+    let rows = try XCTUnwrap(presenter.sheet?.rows)
+    XCTAssertEqual(rows.map(\.isAvailable), [false, false, true])
+    XCTAssertEqual(ItemLinkRowPresentation(row: rows[0]).title, "No longer available")
+    XCTAssertEqual(ItemLinkRowPresentation(row: rows[1]).title, "No longer available")
+    XCTAssertEqual(ItemLinkRowPresentation(row: rows[2]).title, "Visible fact")
+    XCTAssertTrue(recorder.openedMemories.isEmpty)
+
+    presenter.open(rows[0])
+    XCTAssertNotNil(presenter.sheet, "an archived memory row is inert")
+    XCTAssertTrue(recorder.openedMemories.isEmpty)
+  }
+
+  func testOwnerChangeDropsResolvedRowsAndKeepsAQueuedLink() async throws {
+    let (presenter, recorder) = makePresenter(conversations: ["c1"], tasks: ["t1"])
+    let name = Notification.Name("item-link-owner-change-\(UUID().uuidString)")
+    presenter.observeOwnerChanges(name: name)
+
+    try presenter.receive(link("omi-computer://items?conversation=c1&task=t1"))
+    await presenter.consumePending()
+    XCTAssertEqual(presenter.sheet?.rows?.count, 2)
+
+    NotificationCenter.default.post(name: name, object: nil)
+    XCTAssertNil(presenter.sheet)
+    XCTAssertNil(presenter.lastOpened)
+
+    try presenter.receive(link("omi-computer://conversation/c1"))
+    NotificationCenter.default.post(name: name, object: nil)
+    XCTAssertNil(presenter.sheet)
+    await presenter.consumePending()
+    XCTAssertEqual(recorder.openedConversations, ["c1"], "a link not yet consumed survives the owner change")
+  }
+
+  func testOwnerChangeDropsAnInFlightOpen() async throws {
+    let gate = LookupGate()
+    let started = AsyncStream<Void>.makeStream()
+    let recorder = Recorder()
+    let resolver = ItemLinkResolver(
+      conversation: { id in
+        await gate.pause {
+          started.continuation.yield(())
+        }
+        return Self.conversation(id: id)
+      },
+      task: { _ in nil },
+      memories: { _ in [] }
+    )
+    let presenter = ItemLinkPresenter(
+      resolver: resolver,
+      navigator: ItemLinkNavigator(
+        openConversation: { recorder.openedConversations.append($0.id) },
+        openTask: { recorder.openedTasks.append($0) },
+        openMemory: { recorder.openedMemories.append($0) },
+        revealMainWindow: { recorder.reveals += 1 }
+      )
+    )
+    try presenter.receive(link("omi-computer://conversation/c1"))
+    async let consuming: Void = presenter.consumePending()
+    var iterator = started.stream.makeAsyncIterator()
+    await iterator.next()
+    started.continuation.finish()
+
+    presenter.discardResolvedSession()
+    await gate.release()
+    await consuming
+
+    XCTAssertNil(presenter.sheet)
+    XCTAssertTrue(recorder.openedConversations.isEmpty, "a lookup that finishes after an owner change must not open")
+    XCTAssertNil(presenter.lastOpened)
+  }
+
   // MARK: - Fixtures
 
   nonisolated private static func conversation(id: String) -> ServerConversation {
@@ -301,12 +404,17 @@ final class ItemLinkPresenterTests: XCTestCase {
       createdAt: Date(timeIntervalSince1970: 0))
   }
 
-  nonisolated private static func memory(id: String) -> ServerMemory {
+  nonisolated private static func memory(
+    id: String,
+    content: String = "Prefers morning meetings",
+    tier: MemoryLayer = .longTerm,
+    isDismissed: Bool = false
+  ) -> ServerMemory {
     ServerMemory(
       id: id,
-      content: "Prefers morning meetings",
+      content: content,
       category: .system,
-      tier: .longTerm,
+      tier: tier,
       tierIsExplicit: true,
       createdAt: Date(timeIntervalSince1970: 1),
       updatedAt: Date(timeIntervalSince1970: 1),
@@ -321,7 +429,7 @@ final class ItemLinkPresenterTests: XCTestCase {
       sourceApp: nil,
       contextSummary: nil,
       isRead: false,
-      isDismissed: false,
+      isDismissed: isDismissed,
       tags: [],
       reasoning: nil,
       currentActivity: nil,
@@ -329,5 +437,25 @@ final class ItemLinkPresenterTests: XCTestCase {
       windowTitle: nil,
       headline: nil
     )
+  }
+}
+
+/// Suspends a lookup until the test has dropped the in-flight session.
+private actor LookupGate {
+  private var continuations: [CheckedContinuation<Void, Never>] = []
+
+  func pause(afterRegistering signal: @Sendable () -> Void) async {
+    await withCheckedContinuation { continuation in
+      continuations.append(continuation)
+      signal()
+    }
+  }
+
+  func release() {
+    let pending = continuations
+    continuations.removeAll()
+    for continuation in pending {
+      continuation.resume()
+    }
   }
 }

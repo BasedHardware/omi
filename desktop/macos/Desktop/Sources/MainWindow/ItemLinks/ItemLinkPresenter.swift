@@ -37,7 +37,10 @@ struct ItemLinkResolver: Sendable {
   func resolve(_ references: [ItemLinkReference]) async -> [ItemLinkRow] {
     let memoryIDs = references.filter { $0.kind == .memory }.map(\.id)
     let foundMemories = memoryIDs.isEmpty ? [] : await memories(memoryIDs)
-    let memoryByID = Dictionary(lastWriteWins: foundMemories.map { ($0.id, $0) })
+    // INV-MEM-1: archive is not a default surface. Dismissed memories are retired.
+    // Both are "no longer available" rows, so a link cannot render their content.
+    let visibleMemories = foundMemories.filter(Self.isVisibleMemory)
+    let memoryByID = Dictionary(lastWriteWins: visibleMemories.map { ($0.id, $0) })
 
     // Conversations and tasks are independent single-record reads; run them
     // together so a 10-item link costs one round trip, not ten.
@@ -96,10 +99,19 @@ extension ItemLinkResolver {
       return task
     },
     memories: { ids in
-      let found = (try? await MemoryStorage.shared.getMemories(backendIds: ids)) ?? []
-      return found.filter { !$0.isDismissed }
+      // The backend has no single-memory read. This is the same local mirror
+      // the Memories page uses for citations, so a memory that exists on the
+      // server but has not synced to this Mac reads as unavailable.
+      (try? await MemoryStorage.shared.getMemories(backendIds: ids)) ?? []
     }
   )
+
+  /// Archive-tier and dismissed memories are not link targets. Visibility is
+  /// applied in `resolve`, not only on the live closure, so every caller
+  /// (including tests) sees the same rule.
+  static func isVisibleMemory(_ memory: ServerMemory) -> Bool {
+    !memory.isDismissed && memory.tier.isDefaultAccessible
+  }
 }
 
 /// Where an item row opens: the same detail surfaces chat links use.
@@ -134,7 +146,11 @@ struct ItemLinkNavigator {
 /// resolving against no session.
 @MainActor
 final class ItemLinkPresenter: ObservableObject {
-  static let shared = ItemLinkPresenter(resolver: .live, navigator: .live)
+  static let shared: ItemLinkPresenter = {
+    let presenter = ItemLinkPresenter(resolver: .live, navigator: .live)
+    presenter.observeOwnerChanges()
+    return presenter
+  }()
 
   /// Bumped on every received link; the shell observes it.
   @Published private(set) var pendingGeneration: UInt = 0
@@ -148,12 +164,44 @@ final class ItemLinkPresenter: ObservableObject {
 
   private var pendingRoute: ItemLinkRoute?
   private var activeGeneration: UInt = 0
+  /// NotificationCenter retains the token; deinit is nonisolated, so the
+  /// token is not MainActor-isolated. Same pattern as ChatFirstShellNavigation.
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
   private let resolver: ItemLinkResolver
   private let navigator: ItemLinkNavigator
 
   init(resolver: ItemLinkResolver, navigator: ItemLinkNavigator) {
     self.resolver = resolver
     self.navigator = navigator
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
+  }
+
+  /// An in-place account switch posts `.runtimeOwnerDidChange` and not
+  /// `.userDidSignOut`. Resolved rows hold the previous owner's titles, so
+  /// drop them. An unconsumed link is only ids and stays queued for the next
+  /// signed-in shell (cold launch, or a link that arrived while signed out).
+  func observeOwnerChanges(name: Notification.Name = .runtimeOwnerDidChange) {
+    guard ownerChangeObserver == nil else { return }
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: name, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.discardResolvedSession()
+      }
+    }
+  }
+
+  /// Drops titles already resolved and any lookup still in flight. Does not
+  /// clear a link that has not been consumed yet.
+  func discardResolvedSession() {
+    activeGeneration &+= 1
+    sheet = nil
+    lastOpened = nil
   }
 
   /// Handles an app-scheme URL if it is an item link. Returns false for every
