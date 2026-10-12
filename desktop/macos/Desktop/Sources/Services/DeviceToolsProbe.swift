@@ -61,6 +61,26 @@ enum DeviceToolsProbe {
       detail["sendValidation"] = "unexpected_error"
     }
 
+    // The send check against the same absent store, with a stand-in send that
+    // delivers nothing. An unreadable history must read as unconfirmed, never
+    // as failed, and the send must run exactly once.
+    let standInSends = ProbeSendCounter()
+    do {
+      let (_, confirmation) = try await MessageSendConfirmer.sendThenConfirm(
+        handle: "+10000000000",
+        text: "probe",
+        lookup: { handle, text, since in
+          try await MessagesReaderService.shared.outgoingMessageStates(
+            sentTo: handle, text: text, createdSince: since, storeOverride: URL(fileURLWithPath: storePath))
+        },
+        send: { standInSends.increment() })
+      detail["sendCheckStatus"] = confirmation.status.rawValue
+      detail["sendCheckReason"] = confirmation.unconfirmedReason?.rawValue ?? ""
+    } catch {
+      detail["sendCheckStatus"] = "unexpected_error"
+    }
+    detail["sendCheckSends"] = "\(standInSends.count)"
+
     do {
       let result = try AppleScriptRunner.run(
         script: "on run argv\nreturn item 1 of argv\nend run",
@@ -82,4 +102,14 @@ enum DeviceToolsProbe {
     detail["ok"] = "true"
     return detail
   }
+}
+
+/// Counts the probe's stand-in sends; the check may call it from any task.
+private final class ProbeSendCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var calls = 0
+
+  var count: Int { lock.withLock { calls } }
+
+  func increment() { lock.withLock { calls += 1 } }
 }
