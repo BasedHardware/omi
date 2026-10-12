@@ -37,6 +37,7 @@ EVIDENCE_CHARS = Counter('omi_dream_evidence_chars_total', 'Projected dream evid
 RETRIEVAL = Counter(
     'omi_dream_retrieval_total', 'Dream retrieval operations and candidate dispositions', ['path', 'count']
 )
+TARGET_CONTEXT = Counter('omi_dream_target_context_total', 'Dream target retrieval coverage', ['coverage'])
 DIRTY_READS = Counter('omi_dream_dirty_read_total', 'Dream queue selection dispositions', ['count'])
 
 ERROR_TYPES = {
@@ -79,9 +80,11 @@ def record_pass(report):
             RETRIEVAL.labels(path, key).inc(count)
     for key, count in diagnostics['dirty_counts'].items():
         DIRTY_READS.labels(key).inc(count)
+    for key, count in diagnostics['target_context_counts'].items():
+        TARGET_CONTEXT.labels(key).inc(count)
     logger.info(
         'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
-        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s dirty_counts=%s',
+        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s dirty_counts=%s target_context_counts=%s',
         status,
         triage,
         reasoning,
@@ -91,4 +94,5 @@ def record_pass(report):
         max(0, int(report.get('poisoned', 0))),
         json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
         json.dumps(diagnostics['dirty_counts'], sort_keys=True),
+        json.dumps(diagnostics['target_context_counts'], sort_keys=True),
     )

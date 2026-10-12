@@ -32,23 +32,37 @@ later tiers unattempted. Context added during retrieval may subsequently become
 a dirty target; final `role_counts` describes the model input.
 
 `dirty_counts` separates `fetched`, `attempted`, `found`, `admitted`, `unavailable`,
-`failed`, `newer` and `budget_deferred`. The last count includes the unread suffix
-deferred when the evidence budget fills. `dirty_read` now counts admitted versions
-only; previously it also counted unavailable versions that were acknowledged.
-Only versions present as editable targets are eligible for pass acknowledgement
-or failed-reasoning retry settlement. Unavailable/budget-deferred versions remain
-queued. Permanently absent or hidden records may therefore recur in diagnostics;
-the existing queue overflow/retention policy is unchanged. When every remaining
-queued version was inspected and unavailable, settlement pauses that account by
-clearing its scheduler score without deleting refs. This prevents repeated idle
-refunds from monopolizing the highest-score slots. A new product write atomically
-wakes the account; an authorized manual run can also retry while paused. There
-is no automatic timed retry. Concurrent refreshes, unread refs, newer versions,
-provider failures and budget-deferred refs prevent this pause. The pass report
-counts `unavailable_paused` as zero or one.
+`failed`, `newer`, `budget_deferred`, `permanent`, `transient`,
+`permanent_acknowledged` and `transient_expired`. A pass fetches and inspects at
+most 32 dirty refs, rather than the full 500-ref queue. Budget-deferred refs and
+refs outside this window remain queued without product reads. `dirty_read`
+counts only versions admitted as editable targets.
+
+Authoritative missing/404, deleted, discarded, soft-deleted, merged-away,
+wrong-generation and non-pending results are permanent for the observed version.
+Settlement acknowledges these separately from model targets, even on an idle
+refunded pass. HTTP 402 and locked (423) results are transient: the observed
+version remains queued for up to three attempts using `failed_passes`, then
+expires. Product writes re-mark the ref with a new version and reset that counter.
+Provider errors never classify a ref as permanent. Every acknowledgement and
+retry update rechecks the exact dirty version in the transaction; concurrent
+refreshes survive, and ambiguous retained leases do not settle unavailable refs.
+There is no unavailable-only account pause.
+
+Settlement rereads only inspected refs, plus at most `acknowledged + 1` oldest
+queue rows to maintain the diagnostic watermark, instead of rescanning all
+500 dirty documents. Counts-only reports and logs describe permanent settlement
+and transient expiry separately from model failure poisoning.
+
+`target_context_counts` contains `retrieval_seeded` and `contextless`. Retrieval
+runs for the initial four targets. Reclaimed targets 5–8 are explicitly reported
+as contextless (no retrieval for their neighbourhood); they can still see the
+shared evidence set, but no second search round is purchased. Zero added context
+does not mean that a seeded target received useful grounding.
 
 Prometheus exports `omi_dream_retrieval_total{path,count}` and
-`omi_dream_dirty_read_total{count}` with only these closed labels. These diagnostics
+`omi_dream_dirty_read_total{count}` and `omi_dream_target_context_total{coverage}`
+with only these closed labels. These diagnostics
 and the dry-run result contain no refs, IDs, provider messages or user text.
 
 For the counts-only owner investigation, use the retrieval entrypoint inside a pod
@@ -66,7 +80,7 @@ print(json.dumps(counts, sort_keys=True))
 
 This runs the pass's linked, lexical, semantic and temporal retrieval with the
 same budget and hydration checks, and returns only `role_counts`, `triage_fits`,
-`retrieval_counts` and zero-initialized `dirty_counts`. It does not acquire a
+`retrieval_counts`, `target_context_counts` and zero-initialized `dirty_counts`. It does not acquire a
 lease, admit a pass, call the planning model, settle dirty versions, mutate
 product records or persist a report. It reads vocabulary unless explicitly
 supplied; semantic retrieval can make ordinary embedding-provider calls with
@@ -165,13 +179,13 @@ reads and deletes. Coalescing reduces pass reads and retained documents for
 repeated writes; it does not claim fewer billed writes for multi-reference batches.
 
 Drain considers the highest weighted score first, at most 100 users per
-invocation. A pass reads distinct queued references newest first, at most 500 (the dirty queue cap)
+invocation. A pass reads distinct queued references newest first, at most 32
 before enrichment, stopping when their conservatively encoded triage excerpts
 would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
-versions actually selected; failed passes retain the queue. Missing or invisible
-records stay queued and are not acknowledged by the pass. A pass with no visible
+versions actually selected; failed passes retain the queue. Permanent unavailable versions are acknowledged separately; 402/locked versions
+remain queued until their third attempt expires. A pass with no visible
 records returns `not_admitted` and refunds its provisional admission/reservation.
 
 The dirty set is authoritative. The timestamp `watermark` is a diagnostic

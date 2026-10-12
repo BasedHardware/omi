@@ -173,6 +173,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
     }
     initialize(report)
     consumed = []
+    unavailable = []
     refund = False
     success = False
     release = True
@@ -181,7 +182,14 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
             # Retrieval coordinates storage and embedding providers; leave CRUD workers free.
             records, consumed = await run_blocking(
-                postprocess_executor, dream_reads.read_changes, uid, lease, caps, vocabulary, diagnostics=report
+                postprocess_executor,
+                dream_reads.read_changes,
+                uid,
+                lease,
+                caps,
+                vocabulary,
+                diagnostics=report,
+                unavailable=unavailable,
             )
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
@@ -344,6 +352,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         report,
         success=success,
         consumed=consumed,
+        unavailable=unavailable,
         release=release,
         refund=refund,
         count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),

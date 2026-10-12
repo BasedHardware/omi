@@ -88,7 +88,8 @@ def entries():
             },
             domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
             neutrals={
-                'consumed': ([], 'post-query acknowledgement versions'),
+                'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
+                'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
             },
             setup=finish_state,
@@ -96,7 +97,7 @@ def entries():
         DriverEntry(
             'database.dream_store.dirty_refs',
             base={'uid': UID},
-            domains={'limit': [1, 400, 500], 'newest': [True, False]},
+            domains={'limit': [1, 32, 33, 400, 500], 'newest': [True, False]},
             neutrals={'transaction': (None, 'transaction binding does not change query shape')},
         ),
         DriverEntry(

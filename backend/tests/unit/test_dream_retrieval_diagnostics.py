@@ -37,11 +37,11 @@ def test_unused_context_allocation_returns_to_targets_without_consuming_unread(m
     assert len(consumed) == len(rows.targets) < 35
     assert {f"{item['collection']}/{item['id']}" for item in consumed} == rows.targets
     assert report['dirty_counts']['admitted'] == len(consumed)
-    assert report['dirty_counts']['budget_deferred'] == 35 - len(consumed)
+    assert report['dirty_counts']['budget_deferred'] == 32 - len(consumed)
     assert len(calls) == len(set(calls))
 
 
-def test_35_reads_three_visible_targets_preserve_32_unavailable_versions(monkeypatch):
+def test_bounded_reads_distinguish_three_targets_and_permanent_misses(monkeypatch):
     dirty, now = snapshots(35)
     monkeypatch.setattr(dream_reads.dream_store, 'dirty_refs', lambda *a, **k: dirty)
     monkeypatch.setattr(
@@ -54,14 +54,18 @@ def test_35_reads_three_visible_targets_preserve_32_unavailable_versions(monkeyp
     rows, consumed = dream_reads.read_changes('synthetic', {'started_at': now}, Caps(), diagnostics=report)
     assert len(rows.targets) == len(consumed) == 3
     assert report['dirty_counts'] == {
-        'fetched': 35,
-        'attempted': 35,
+        'fetched': 32,
+        'attempted': 32,
         'found': 3,
         'admitted': 3,
-        'unavailable': 32,
+        'unavailable': 29,
         'failed': 0,
         'newer': 0,
         'budget_deferred': 0,
+        'permanent': 29,
+        'transient': 0,
+        'permanent_acknowledged': 0,
+        'transient_expired': 0,
     }
     assert {item['id'] for item in consumed} == {'0', '1', '2'}
 
@@ -224,7 +228,8 @@ def test_reclaimed_targets_stop_at_reasoning_limit_before_reading_overflow(monke
     report = {}
     rows, consumed = dream_reads.read_changes('synthetic', {'started_at': now}, Caps(tokens=100000), diagnostics=report)
     assert len(rows.targets) == len(consumed) == len(calls) == dream_context.REASONING_TARGET_LIMIT
-    assert report['dirty_counts']['budget_deferred'] == 27
+    assert report['dirty_counts']['budget_deferred'] == 24
+    assert report['target_context_counts'] == {'retrieval_seeded': 4, 'contextless': 4}
 
 
 def test_structured_query_terms_survive_long_transcript():
@@ -257,3 +262,66 @@ def test_later_path_retries_transient_hydration_failure():
     assert report['retrieval_counts']['lexical']['failed'] == 1
     assert report['retrieval_counts']['semantic']['added'] == 1
     assert report['retrieval_counts']['semantic']['duplicate'] == 0
+
+
+@pytest.mark.parametrize(
+    'row', [None, {'discarded': True}, {'deleted': True}, {'deleted': True, 'sync_merged_into': 'synthetic-successor'}]
+)
+def test_permanent_conversation_states_are_not_transient_locks(monkeypatch, row):
+    monkeypatch.setattr(
+        dream_reads.conversations, 'get_conversations_by_id_without_photos', lambda *a: [row] if row else []
+    )
+    assert dream_reads.read_record('synthetic', 'conversations/permanent') is None
+
+
+def test_locked_conversation_is_transient(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        dream_reads.conversations, 'get_conversations_by_id_without_photos', lambda *a: [{'is_locked': True}]
+    )
+    with pytest.raises(HTTPException) as raised:
+        dream_reads.read_record('synthetic', 'conversations/locked')
+    assert raised.value.status_code == 423
+
+
+@pytest.mark.parametrize('row', [None, {'deleted': True}, {'account_generation': 1}])
+def test_permanent_task_states_are_acknowledgeable(monkeypatch, row):
+    monkeypatch.setattr(dream_reads, 'get_task_workflow_control', lambda uid: SimpleNamespace(account_generation=2))
+    monkeypatch.setattr(dream_reads.action_items, 'get_action_item', lambda *a: row)
+    assert dream_reads.read_record('synthetic', 'action_items/permanent') is None
+
+
+@pytest.mark.parametrize('generation,status', [(1, 'pending'), (2, 'accepted'), (2, 'expired')])
+def test_wrong_generation_and_nonpending_candidates_are_permanent(monkeypatch, generation, status):
+    monkeypatch.setattr(dream_reads, 'get_task_workflow_control', lambda uid: SimpleNamespace(account_generation=2))
+    monkeypatch.setattr(
+        dream_reads.candidates,
+        'get_candidate',
+        lambda *a: SimpleNamespace(account_generation=generation, status=SimpleNamespace(value=status)),
+    )
+    assert dream_reads.read_record('synthetic', 'candidates/permanent') is None
+
+
+@pytest.mark.parametrize(
+    'change,status',
+    [
+        ({'is_locked': True}, 423),
+        ({'user_review': False}, None),
+        ({'invalid_at': 'synthetic-invalid'}, None),
+        ({'visibility': 'public'}, None),
+    ],
+)
+def test_memory_lock_is_transient_but_disposition_is_permanent(monkeypatch, change, status):
+    from fastapi import HTTPException
+
+    row = SimpleNamespace(is_locked=False, user_review=True, invalid_at=None, visibility='private')
+    row.__dict__.update(change)
+    monkeypatch.setattr(dream_reads, 'read_canonical_memory_item', lambda *a: None)
+    monkeypatch.setattr(dream_reads, 'MemoryService', lambda: SimpleNamespace(fetch=lambda *a: row))
+    if status:
+        with pytest.raises(HTTPException) as raised:
+            dream_reads.read_record('synthetic', 'memories/permanent')
+        assert raised.value.status_code == status
+    else:
+        assert dream_reads.read_record('synthetic', 'memories/permanent') is None

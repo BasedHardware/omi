@@ -37,6 +37,8 @@ def state_ref(database, uid):
 # Bound retries of a consumed product version after billable reasoning failures.
 # Refreshed versions reset their streak; ambiguous worker timeouts retain leases.
 POISON_FAILURE_LIMIT = 3
+DIRTY_INSPECTION_LIMIT = 32  # Bound dirty metadata and authoritative product reads per pass.
+UNAVAILABLE_FAILURE_LIMIT = 3
 DIRTY_LIMIT = 500
 WRITE_CHUNK = 400  # Leave room for state/report writes in Firestore's 500-write limit.
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -77,7 +79,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # Bump once in the final chunk: a concurrent pass must not clear the
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
-            batch.set(state, {'score': firestore.Increment(weight), 'unavailable_paused': False}, merge=True)
+            batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True
@@ -158,9 +160,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
         if trigger == 'manual':
             if data.get('lease'):
                 raise AdmissionDenied('dream_run_in_progress')
-            if (data.get('score', 0) <= 0 and not data.get('unavailable_paused')) or dirty_count(
-                uid, transaction=tx, firestore_client=database
-            ) == 0:
+            if data.get('score', 0) <= 0 or dirty_count(uid, transaction=tx, firestore_client=database) == 0:
                 return None
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
@@ -169,7 +169,7 @@ def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, fire
             or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
-            or (data.get('score', 0) <= 0 and not (trigger == 'manual' and data.get('unavailable_paused')))
+            or data.get('score', 0) <= 0
             or (trigger != 'manual' and passes >= caps.passes)
             or caps.tokens < 1024
             or caps.edits < 1
@@ -214,7 +214,17 @@ def assert_lease(uid, run_id, *, firestore_client=None):
 
 
 def finish(
-    uid, lease, report, *, success, consumed=(), release=True, refund=False, count_failure=False, firestore_client=None
+    uid,
+    lease,
+    report,
+    *,
+    success,
+    consumed=(),
+    unavailable=(),
+    release=True,
+    refund=False,
+    count_failure=False,
+    firestore_client=None,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -232,60 +242,75 @@ def finish(
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
-        queued = (
-            dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
-            if success or failure_eligible or (refund and report.get('dirty_counts', {}).get('unavailable', 0))
-            else []
-        )
+        # Re-read only inspected refs, fencing every observed version. Never
+        # scan all 500 queued documents again just to settle a bounded pass.
+        items = {dirty_id(item['collection'], item['id']): item for item in [*consumed, *unavailable]}
+        if len(items) > DIRTY_INSPECTION_LIMIT:
+            raise ValueError('dream_settlement_limit')
+        observed = []
+        for key, item in items.items():
+            snapshot = state.collection('dirty').document(key).get(transaction=tx)
+            if (snapshot.to_dict() or {}).get('version') == item['version']:
+                observed.append((snapshot, item))
         versions = {item['version'] for item in consumed}
-        touched = [s for s in queued if s.to_dict()['version'] in versions]
+        touched = [snapshot for snapshot, item in observed if item['version'] in versions]
         poisoned = [
-            s
-            for s in touched
-            if failure_eligible and int(s.to_dict().get('failed_passes', 0)) + 1 >= POISON_FAILURE_LIMIT
+            snapshot
+            for snapshot in touched
+            if failure_eligible and int(snapshot.to_dict().get('failed_passes', 0)) + 1 >= POISON_FAILURE_LIMIT
         ]
-        acknowledged = touched if success else poisoned
-        acknowledged_paths = {s.reference.path for s in acknowledged}
-        remaining = [s for s in queued if s.reference.path not in acknowledged_paths]
-        queued_after = queued_count - len(acknowledged)
-        counts = report.get('dirty_counts', {})
-        # A fully inspected unavailable-only remainder must not monopolize the
-        # highest-score scheduler slots. Retain every ref; a product write wakes
-        # it atomically, and an authorized manual run can retry without a write.
-        # Never pause unread, refreshed, budget-deferred or failed reads.
-        pause_unavailable = (
-            release
-            and (success or refund)
-            and queued_after > 0
-            and counts.get('unavailable') == queued_after
-            and counts.get('fetched') == queued_count == len(queued)
-            and not any(counts.get(key, 0) for key in ('newer', 'failed', 'budget_deferred'))
-            and data.get('score') == lease['score']
-            and all(s.to_dict()['last_changed_at'] <= lease['started_at'] for s in remaining)
+        unavailable_versions = {item['version'] for item in unavailable}
+        misses = [
+            (snapshot, item) for snapshot, item in observed if release and item['version'] in unavailable_versions
+        ]
+        permanent = [snapshot for snapshot, item in misses if not item['transient']]
+        transient = [snapshot for snapshot, item in misses if item['transient']]
+        expired = [
+            snapshot
+            for snapshot in transient
+            if int(snapshot.to_dict().get('failed_passes', 0)) + 1 >= UNAVAILABLE_FAILURE_LIMIT
+        ]
+        acknowledged = list(
+            {
+                snapshot.reference.path: snapshot
+                for snapshot in [*(touched if success else poisoned), *permanent, *expired]
+            }.values()
         )
-        settled = {
-            **report,
-            'records_queued_after': queued_after,
-            'poisoned': len(poisoned),
-            'unavailable_paused': int(pause_unavailable),
+        acknowledged_paths = {snapshot.reference.path for snapshot in acknowledged}
+        queued_after = queued_count - len(acknowledged)
+        counts = {
+            **report.get('dirty_counts', {}),
+            'permanent_acknowledged': len(permanent),
+            'transient_expired': len(expired),
         }
-        encoded = _review_store().encode_doc(uid, {'source': settled})
+        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned), 'dirty_counts': counts}
         watermark = lease['watermark']
         if acknowledged:
-            frontier = max(s.to_dict()['last_changed_at'] for s in acknowledged)
-            if remaining:
-                frontier = min(
-                    frontier, min(s.to_dict()['last_changed_at'] for s in remaining) - timedelta(microseconds=1)
+            frontier = max(snapshot.to_dict()['last_changed_at'] for snapshot in acknowledged)
+            if queued_after:
+                # At most k acknowledged rows can precede the oldest remaining
+                # row, so k+1 is enough to preserve the diagnostic frontier.
+                oldest = dirty_refs(
+                    uid, limit=len(acknowledged) + 1, newest=False, transaction=tx, firestore_client=database
                 )
+                remaining_times = [
+                    snapshot.to_dict()['last_changed_at']
+                    for snapshot in oldest
+                    if snapshot.reference.path not in acknowledged_paths
+                ]
+                if remaining_times:
+                    frontier = min(frontier, min(remaining_times) - timedelta(microseconds=1))
             watermark = max(watermark, frontier)
+        encoded = _review_store().encode_doc(uid, {'source': settled})
         for snapshot in acknowledged:
             tx.delete(snapshot.reference)
-        if failure_eligible:
-            for snapshot in remaining:
-                if snapshot.to_dict()['version'] in versions:
-                    tx.update(
-                        snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1}
-                    )
+        retrying = {
+            snapshot.reference.path: snapshot
+            for snapshot in [*(touched if failure_eligible else []), *transient]
+            if snapshot.reference.path not in acknowledged_paths
+        }
+        for snapshot in retrying.values():
+            tx.update(snapshot.reference, {'failed_passes': int(snapshot.to_dict().get('failed_passes', 0)) + 1})
         tx.set(
             run,
             {
@@ -308,14 +333,8 @@ def finish(
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': (
-                max(0, data['score'] - lease['score']) if (success or poisoned) and queued_after == 0 else data['score']
-            ),
+            'score': (max(0, data['score'] - lease['score']) if acknowledged and queued_after == 0 else data['score']),
         }
-        if data.get('unavailable_paused') and (queued_after == 0 or counts.get('admitted', 0) > 0):
-            patch.update(score=max(1, data['score']) if queued_after else 0, unavailable_paused=False)
-        if pause_unavailable:
-            patch.update(score=0, unavailable_paused=True)
         if refund:
             # A midnight completion must not decrement the new day's allowance.
             if data.get('day') == lease['day']:

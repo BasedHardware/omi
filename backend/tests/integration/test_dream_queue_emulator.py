@@ -49,11 +49,11 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     # A refreshed version survives the transaction's acknowledgement.
     assert dream_store.dirty_count(uid, firestore_client=database) == 500
     lease = dream_store.acquire(uid, Caps(), firestore_client=database)
-    consumed = [s.to_dict() for s in dream_store.dirty_refs(uid, limit=400, firestore_client=database)]
+    consumed = [s.to_dict() for s in dream_store.dirty_refs(uid, limit=32, firestore_client=database)]
     dream_store.finish(
         uid, lease, {'tokens': 0}, success=True, consumed=consumed, refund=True, firestore_client=database
     )
-    assert dream_store.dirty_count(uid, firestore_client=database) == 100
+    assert dream_store.dirty_count(uid, firestore_client=database) == 468
     assert state.get().to_dict()['passes'] == 1
     assert database.collection('dream_spend').document(lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
         0.24
@@ -142,3 +142,49 @@ def test_poison_settlement_is_atomic_and_preserves_refreshed_version(monkeypatch
     assert dream_store.dirty_count(uid, firestore_client=database) == 0
     state = dream_store.own_state(uid, firestore_client=database)
     assert state['poisoned'] == 1 and state['score'] == 0 and state['lease'] is None
+
+
+@pytest.mark.parametrize('transient', [False, True])
+def test_unavailable_settlement_fences_versions_and_expires_transients(monkeypatch, transient):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    database.collection('users').document(uid).set({})
+    dream_store.mark_dirty(uid, [('conversations', 'unavailable')], firestore_client=database)
+    lease = dream_store.acquire(uid, Caps(), firestore_client=database)
+    item = dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()
+    dream_store.mark_dirty(uid, [('conversations', 'unavailable')], firestore_client=database)
+    report = {}
+    dream_store.finish(
+        uid,
+        lease,
+        report,
+        success=False,
+        refund=True,
+        unavailable=[{**item, 'transient': transient}],
+        firestore_client=database,
+    )
+    assert report['dirty_counts']['permanent_acknowledged'] == report['dirty_counts']['transient_expired'] == 0
+    assert dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()['failed_passes'] == 0
+    for attempt in range(3 if transient else 1):
+        lease = dream_store.acquire(uid, Caps(), firestore_client=database)
+        item = dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()
+        dream_store.finish(
+            uid,
+            lease,
+            report,
+            success=False,
+            refund=True,
+            unavailable=[{**item, 'transient': transient}],
+            firestore_client=database,
+        )
+        assert report['dirty_counts']['permanent_acknowledged'] == int(not transient)
+        assert report['dirty_counts']['transient_expired'] == int(transient and attempt == 2)
+    assert dream_store.dirty_count(uid, firestore_client=database) == 0
+    assert dream_store.own_state(uid, firestore_client=database)['score'] == 0
+    dream_store.mark_dirty(uid, [('conversations', 'unavailable')], firestore_client=database)
+    assert dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()['version'] != item['version']

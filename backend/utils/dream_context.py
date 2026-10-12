@@ -228,7 +228,7 @@ def add_context(targets, candidates, caps, vocabulary=None, *, diagnostics=None)
         try:
             row = load() if callable(load) else load
         except (review_store.ReviewNotFound, HTTPException) as exc:
-            if isinstance(exc, review_store.ReviewNotFound) or exc.status_code in {402, 404}:
+            if isinstance(exc, review_store.ReviewNotFound) or exc.status_code in {402, 404, 423}:
                 path_count(diagnostics, path, 'unavailable')
                 continue
             seen.discard(ref)  # A later bounded path may recover a transient read failure.
