@@ -71,8 +71,8 @@ class SuperwallPilot {
   /// Placement for tapping a conversation or memory locked after the free minutes run out.
   static const lockedContentPlacement = 'locked_content';
 
-  /// Placement shown once a free user reaches "All set" in their first device tutorial. Superwall
-  /// only: there is no plans-sheet fallback, so nothing changes when the pilot is off.
+  /// Placement shown to anyone not subscribed when the device tutorial closes (finished, skipped or
+  /// replayed). Superwall only: no plans-sheet fallback, so nothing changes when the pilot is off.
   static const deviceSetupCompletePlacement = 'device_setup_complete';
 
   /// Returns false if the pilot could not register its test placement.

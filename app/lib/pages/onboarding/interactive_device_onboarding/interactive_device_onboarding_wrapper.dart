@@ -150,7 +150,13 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    final offerUpgrade = !widget.allowExit && _isFreeUser();
+    _closeAndOfferUpgrade();
+  }
+
+  /// Closes the tutorial and, for anyone not subscribed, offers the plan. Applies however the
+  /// tutorial ends: finished, skipped, or replayed from Settings.
+  void _closeAndOfferUpgrade() {
+    final offerUpgrade = _isFreeUser();
     Navigator.of(context).pop();
     if (offerUpgrade) unawaited(_showSetupCompletePaywall());
   }
@@ -160,7 +166,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     return usage.subscription?.subscription.plan == PlanType.basic && usage.showSubscriptionUI;
   }
 
-  /// First device setup finished: offer the plan through Superwall (local pilot only). Superwall
+  /// Device tutorial closed: offer the plan through Superwall (local pilot only). Superwall
   /// presents its own screen, so this runs after the tutorial route has closed.
   Future<void> _showSetupCompletePaywall() async {
     final shown =
@@ -174,7 +180,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   Future<void> _skipOnboarding() async {
     if (!await _saveCompletion() || !mounted) return;
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    Navigator.of(context).pop();
+    _closeAndOfferUpgrade();
   }
 
   @override
