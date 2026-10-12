@@ -48,6 +48,10 @@ on:
         description: 'Why the live capacity gate is unavailable (required with skip_live_capacity_gate)'
         required: false
         default: ''
+      expected_ancestor_sha:
+        description: 'Optional commit SHA to verify as an ancestor of the deployed release'
+        required: false
+        default: ''
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -844,7 +848,7 @@ jobs:
         if: always()
         env:
           RELEASE_SHA: ${{ env.CHECKED_OUT_SHA || github.sha }}
-          TRIGGER_SHA: ${{ env.CHECKED_OUT_SHA || github.sha }}
+          EXPECTED_ANCESTOR_SHA: ${{ github.event.inputs.expected_ancestor_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -855,6 +859,9 @@ jobs:
             echo "- **Service**: \`${{ env.SERVICE }}\`"
             echo "- **Environment**: \`${{ github.event.inputs.environment }}\`"
             echo "- **Run ID**: \`${{ github.run_id }}\`"
+            if [[ -n "${EXPECTED_ANCESTOR_SHA:-}" ]]; then
+              echo "- **Expected Ancestor SHA**: \`${EXPECTED_ANCESTOR_SHA}\`"
+            fi
             echo ""
             echo "To verify commit ancestry post-deploy:"
             echo "\`\`\`bash"
@@ -862,12 +869,12 @@ jobs:
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ -f backend/scripts/verify_deploy_ancestry.py ]]; then
+          if [[ -n "${EXPECTED_ANCESTOR_SHA:-}" && -f backend/scripts/verify_deploy_ancestry.py ]]; then
             python3 backend/scripts/verify_deploy_ancestry.py \
               --release "${RELEASE_SHA}" \
-              --contains "${TRIGGER_SHA}" \
+              --contains "${EXPECTED_ANCESTOR_SHA}" \
               --token "${GH_TOKEN}" || {
-                echo "::warning title=Deploy Ancestry Guard::Advisory check: trigger SHA ${TRIGGER_SHA} was not verified as an ancestor of deployed release ${RELEASE_SHA}."
+                echo "::warning title=Deploy Ancestry Guard::Advisory check: expected ancestor SHA ${EXPECTED_ANCESTOR_SHA} was not verified as an ancestor of deployed release ${RELEASE_SHA}."
               }
           fi
 
