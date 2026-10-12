@@ -1514,7 +1514,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest finalization job that has not reached a terminal state \u2014 a conversation the user is still waiting on. Aggregated with max(), not sum(): every backend-listen replica publishes the same global value. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
+      "description": "Oldest queued or leased finalization job: system-owned work only. Jobs waiting for user BYOK reconnect have a separate informational age gauge and do not page. Replicated per process; aggregate with max().",
       "fieldConfig": {
         "defaults": {
           "noValue": "not reporting",
@@ -1573,7 +1573,7 @@
           "refId": "A"
         }
       ],
-      "title": "Oldest unfinished job",
+      "title": "Oldest system-owned job",
       "type": "stat"
     },
     {
