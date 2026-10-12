@@ -886,7 +886,8 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
 
 def test_telegram_request_clock_uses_message_date_not_late_webhook_time():
     adapter, _, _ = setup_turn()
-    at = datetime(2026, 10, 11, 9, 19, 3, tzinfo=timezone.utc)
+    # Relative to now: parse() falls back to receipt time for dates older than OLDEST_REQUEST (1 day).
+    at = (datetime.now(timezone.utc) - timedelta(hours=2)).replace(microsecond=0)
     item = {
         'message_id': 1,
         'date': int(at.timestamp()),
