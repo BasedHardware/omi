@@ -53,7 +53,7 @@ extension ChatToolExecutor {
     return json
   }
 
-  static func deviceToolFailure(
+  nonisolated static func deviceToolFailure(
     reason: String,
     message: String,
     requiredPermission: String? = nil
@@ -318,23 +318,47 @@ extension ChatToolExecutor {
       let outcome: MessageSendOutcome
       switch attempt {
       case .completed(let completed): outcome = completed
-      case .timedOut:
-        let attached = filePath.flatMap { $0.isEmpty ? nil : $0 }
-        outcome = MessageSendOutcome(handle: to, service: service.rawValue, attachedFile: attached)
+      case .timedOut: outcome = timedOutSendOutcome(handle: to, confirmation: confirmation)
       }
       return sendMessageResult(
         outcome, confirmation: confirmation, sendTimedOut: attempt == .timedOut, charactersSent: text.count)
-    } catch let error as AppleScriptRunnerError {
+    } catch {
+      return sendMessageFailure(error)
+    }
+  }
+
+  /// What a timed-out send can honestly report: only what the history shows,
+  /// the service of the row that confirmed it (empty when nothing did). Whether
+  /// an attachment went too is unknown, so none is reported.
+  nonisolated static func timedOutSendOutcome(
+    handle: String, confirmation: MessageSendConfirmation
+  ) -> MessageSendOutcome {
+    MessageSendOutcome(handle: handle, service: confirmation.confirmedService ?? "", attachedFile: nil)
+  }
+
+  /// The `send_message` result when no send completed. A stop that arrived
+  /// before Messages was asked reads as `cancelled` with nothing sent, never as
+  /// a failed send or raw error text.
+  nonisolated static func sendMessageFailure(_ error: Error) -> String {
+    switch error {
+    case is CancellationError:
+      return deviceToolJSON([
+        "ok": false,
+        "status": "cancelled",
+        "reason": "cancelled",
+        "error": "The send was stopped before Messages was asked to send it. Nothing was sent.",
+      ])
+    case let error as AppleScriptRunnerError:
       return deviceToolFailure(
         reason: error.reasonCode,
         message: error.errorDescription ?? "Messages automation was refused.",
         requiredPermission: error.requiredPermission)
-    } catch let error as MessagesSenderError {
+    case let error as MessagesSenderError:
       return deviceToolFailure(
         reason: error.reasonCode,
         message: error.errorDescription ?? "Could not send the message.")
-    } catch {
-      return deviceToolFailure(reason: "send_failed", message: error.localizedDescription)
+    default:
+      return deviceToolFailure(reason: "send_failed", message: "Messages could not send the message.")
     }
   }
 
@@ -383,6 +407,7 @@ extension ChatToolExecutor {
       switch confirmation.unconfirmedReason {
       case .historyUnreadable: why = "Omi could not read the Messages history"
       case .ambiguous: why = "more than one identical message appeared at the same moment"
+      case .ambiguousRecipient: why = "the number matches more than one conversation in Messages"
       case .notYetSent: why = "Messages had not yet marked it as sent"
       case .checkStopped: why = "the check was stopped"
       case .noMatchingRow, nil: why = "the message did not appear in the Messages history in time"

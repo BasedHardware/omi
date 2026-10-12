@@ -34,8 +34,8 @@ final class SendMessageResultTests: XCTestCase {
 
   func testUnconfirmedIsAnUnknownOutcomeWithPlainWords() throws {
     for reason in [
-      MessageSendConfirmation.UnconfirmedReason.noMatchingRow, .notYetSent, .ambiguous, .historyUnreadable,
-      .checkStopped,
+      MessageSendConfirmation.UnconfirmedReason.noMatchingRow, .notYetSent, .ambiguous, .ambiguousRecipient,
+      .historyUnreadable, .checkStopped,
     ] {
       let unconfirmed = try result(.unconfirmed, reason)
       XCTAssertEqual(unconfirmed["ok"] as? Bool, true, "an unknown outcome is not a failure")
@@ -68,6 +68,46 @@ final class SendMessageResultTests: XCTestCase {
     let timedOut = try result(.delivered, timedOut: true)
     XCTAssertEqual(timedOut["send_timed_out"] as? Bool, true)
     XCTAssertEqual(timedOut["status"] as? String, "delivered")
+    XCTAssertEqual(timedOut["ok"] as? Bool, true, "a timed-out send that the history confirms is a success")
     XCTAssertTrue((timedOut["summary"] as? String ?? "").hasPrefix("Messages did not answer in time"))
+
+    let unknown = try result(.unconfirmed, .noMatchingRow, timedOut: true)
+    XCTAssertEqual(unknown["ok"] as? Bool, true)
+    XCTAssertEqual(unknown["outcome_unknown"] as? Bool, true)
+  }
+
+  func testATimedOutSendReportsOnlyTheServiceTheHistoryShows() {
+    let confirmed = MessageSendConfirmation(
+      status: .delivered, unconfirmedReason: nil, succeededAfterError: false, confirmedService: "SMS", checks: 3,
+      waitedMilliseconds: 1000)
+    let unknown = MessageSendConfirmation(
+      status: .unconfirmed, unconfirmedReason: .noMatchingRow, succeededAfterError: false, checks: 11,
+      waitedMilliseconds: 5000)
+
+    XCTAssertEqual(
+      ChatToolExecutor.timedOutSendOutcome(handle: "+14155550123", confirmation: confirmed),
+      MessageSendOutcome(handle: "+14155550123", service: "SMS", attachedFile: nil))
+    XCTAssertEqual(
+      ChatToolExecutor.timedOutSendOutcome(handle: "+14155550123", confirmation: unknown),
+      MessageSendOutcome(handle: "+14155550123", service: "", attachedFile: nil))
+  }
+
+  func testAStopBeforeTheSendSaysNothingWasSent() throws {
+    let json = ChatToolExecutor.sendMessageFailure(CancellationError())
+    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    XCTAssertEqual(payload["status"] as? String, "cancelled")
+    XCTAssertEqual(payload["reason"] as? String, "cancelled")
+    let message = payload["error"] as? String ?? ""
+    XCTAssertTrue(message.contains("Nothing was sent"))
+    XCTAssertFalse(message.contains("CancellationError"), "no raw error text")
+  }
+
+  func testOtherFailuresKeepTheirReasonsWithoutRawText() throws {
+    let refused = ChatToolExecutor.sendMessageFailure(MessagesSenderError.allServicesFailed(detail: "refused"))
+    XCTAssertTrue(refused.contains("send_failed"))
+    struct Opaque: Error {}
+    let opaque = ChatToolExecutor.sendMessageFailure(Opaque())
+    XCTAssertTrue(opaque.contains("Messages could not send the message."))
+    XCTAssertFalse(opaque.contains("Opaque"))
   }
 }

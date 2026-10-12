@@ -30,6 +30,13 @@ struct MessageRecord: Identifiable, Sendable {
   let attachmentCount: Int
 }
 
+/// One read of the send check: the matching rows, or the fact that the
+/// recipient matched two different stored numbers.
+struct OutgoingMessageRead: Sendable, Equatable {
+  let rows: [OutgoingMessageState]
+  let recipientIsAmbiguous: Bool
+}
+
 /// What Messages recorded for one outgoing row, without its text or handle.
 struct OutgoingMessageState: Sendable, Equatable {
   let rowID: Int64
@@ -306,7 +313,7 @@ actor MessagesReaderService {
 
   func readHistory(
     chatID: Int64?, handle: String?, limit: Int, storeOverride: URL? = nil,
-    callingCode: String? = MessagingHandle.currentCallingCode()
+    region: String? = MessagingHandle.currentRegion()
   ) async throws -> [MessageRecord] {
     let bounded = max(1, min(limit, 200))
     let dbQueue = try openReadOnlyStore(at: storeOverride)
@@ -327,7 +334,7 @@ actor MessagesReaderService {
           // One address can belong to a direct thread and any number of group
           // chats. Direct chats come first, then the most recently active, so
           // "read my thread with Sam" never returns an unrelated group.
-          guard let found = try Self.chatsForHandle(db, handle: handle, callingCode: callingCode).first
+          guard let found = try Self.chatsForHandle(db, handle: handle, region: region).first
           else { throw MessagesReaderError.chatNotFound(reference: handle) }
           resolvedChatID = found.chatID
         } else {
@@ -383,6 +390,8 @@ actor MessagesReaderService {
   struct HandleChat: Equatable, Sendable {
     let chatID: Int64
     let participantCount: Int
+    /// The stored addresses in this chat that matched the request.
+    let matchedHandles: [String]
   }
 
   /// Every chat that includes `handle`, matched with `MessagingHandle.isSame`:
@@ -391,20 +400,21 @@ actor MessagesReaderService {
   /// `read_message_history` takes the first. The `send_message` check takes
   /// every direct chat, since one person can have an iMessage and an SMS thread.
   /// The comparison runs inside SQLite, so only chat ids leave this query.
-  static func chatsForHandle(_ db: Database, handle: String, callingCode: String?) throws -> [HandleChat] {
+  static func chatsForHandle(_ db: Database, handle: String, region: String?) throws -> [HandleChat] {
     db.add(
       function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 2, pure: true) { values in
         guard let stored = String.fromDatabaseValue(values[0]),
           let requested = String.fromDatabaseValue(values[1])
         else { return false }
-        return MessagingHandle.isSame(stored, requested, callingCode: callingCode)
+        return MessagingHandle.isSame(stored, requested, region: region)
       })
     let rows = try Row.fetchAll(
       db,
       sql: """
         SELECT
           chat.ROWID AS chat_id,
-          (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chat.ROWID) AS participants
+          (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chat.ROWID) AS participants,
+          GROUP_CONCAT(h.id, char(31)) AS matched
         FROM chat
         JOIN chat_handle_join chj ON chj.chat_id = chat.ROWID
         JOIN handle h ON h.ROWID = chj.handle_id
@@ -421,7 +431,12 @@ actor MessagesReaderService {
           chat.ROWID ASC
         """,
       arguments: [handle])
-    return rows.map { HandleChat(chatID: $0["chat_id"], participantCount: Int($0["participants"] as Int64? ?? 0)) }
+    return rows.map { row in
+      HandleChat(
+        chatID: row["chat_id"],
+        participantCount: Int(row["participants"] as Int64? ?? 0),
+        matchedHandles: (row["matched"] as String? ?? "").split(separator: "\u{1F}").map(String.init))
+    }
   }
 
   /// The newest message row id, read before a send so the check after it
@@ -439,30 +454,40 @@ actor MessagesReaderService {
   }
 
   /// Outgoing rows Messages wrote after `afterRowID` in the direct chats with
-  /// `handle`, dated at or after `createdSince`, whose body equals `text` once
-  /// normalised.
+  /// `handle`, whose body equals `text` once normalised and which are dated
+  /// at or after `createdSince` or were already matched by an earlier read
+  /// (`trackedRowIDs`), so a row that matched once is not lost if its date
+  /// changes.
   ///
   /// This is the evidence `send_message` checks after a send. It reads only
   /// rows newer than the pre-send baseline in that one person's direct chats
   /// (one per service, such as iMessage and SMS), compares bodies here and
   /// returns delivery state alone, so no text or handle leaves the reader. A
   /// chat that does not exist yet reads as no rows: the first message to a new
-  /// address creates it.
+  /// address creates it. When the request matches two different stored
+  /// numbers, the read says so instead of choosing between them.
   func outgoingMessageStates(
-    sentTo handle: String, text: String, createdSince: Date, afterRowID: Int64,
-    callingCode: String? = MessagingHandle.currentCallingCode(), storeOverride: URL? = nil
-  ) async throws -> [OutgoingMessageState] {
+    sentTo handle: String, text: String, createdSince: Date, afterRowID: Int64, trackedRowIDs: Set<Int64> = [],
+    region: String? = MessagingHandle.currentRegion(), storeOverride: URL? = nil
+  ) async throws -> OutgoingMessageRead {
     let dbQueue = try openReadOnlyStore(at: storeOverride)
     let path = (storeOverride ?? Self.storeURL()).path
     let expectedBody = Self.normalizedMessageBody(text)
     let since = Self.appleTimestamp(from: createdSince)
+    let tracked = trackedRowIDs.filter { $0 > afterRowID }.sorted()
     do {
       return try await dbQueue.read { db in
-        let directChats = try Self.chatsForHandle(db, handle: handle, callingCode: callingCode)
+        let directChats = try Self.chatsForHandle(db, handle: handle, region: region)
           .filter { $0.participantCount == 1 }
-          .map(\.chatID)
-        guard !directChats.isEmpty else { return [] }
-        let placeholders = Array(repeating: "?", count: directChats.count).joined(separator: ", ")
+        let recipients = Set(
+          directChats.flatMap(\.matchedHandles).map { MessagingHandle.identityKey($0, region: region) ?? $0 })
+        guard recipients.count <= 1 else { return OutgoingMessageRead(rows: [], recipientIsAmbiguous: true) }
+        let chatIDs = directChats.map(\.chatID)
+        guard !chatIDs.isEmpty else { return OutgoingMessageRead(rows: [], recipientIsAmbiguous: false) }
+        let chatPlaceholders = Array(repeating: "?", count: chatIDs.count).joined(separator: ", ")
+        let trackedClause =
+          tracked.isEmpty
+          ? "" : " OR message.ROWID IN (\(Array(repeating: "?", count: tracked.count).joined(separator: ", ")))"
         let rows = try Row.fetchAll(
           db,
           sql: """
@@ -476,14 +501,14 @@ actor MessagesReaderService {
               message.error AS error
             FROM message
             JOIN chat_message_join cmj ON cmj.message_id = message.ROWID
-            WHERE cmj.chat_id IN (\(placeholders))
+            WHERE cmj.chat_id IN (\(chatPlaceholders))
               AND message.is_from_me = 1
               AND message.ROWID > ?
-              AND message.date >= ?
+              AND (message.date >= ?\(trackedClause))
             ORDER BY message.ROWID ASC
             """,
-          arguments: StatementArguments(directChats + [afterRowID, since]))
-        return rows.compactMap { row -> OutgoingMessageState? in
+          arguments: StatementArguments(chatIDs + [afterRowID, since] + tracked))
+        let states = rows.compactMap { row -> OutgoingMessageState? in
           let body = Self.body(text: row["text"] as String?, attributedBody: row["attributed_body"] as Data?)
           guard Self.normalizedMessageBody(body) == expectedBody else { return nil }
           return OutgoingMessageState(
@@ -493,6 +518,7 @@ actor MessagesReaderService {
             isDelivered: (row["is_delivered"] as Int64? ?? 0) == 1,
             errorCode: row["error"] as Int64? ?? 0)
         }
+        return OutgoingMessageRead(rows: states, recipientIsAmbiguous: false)
       }
     } catch {
       throw Self.classifyReadError(error, path: path)

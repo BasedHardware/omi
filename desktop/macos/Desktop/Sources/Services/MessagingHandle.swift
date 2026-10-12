@@ -3,60 +3,126 @@ import Foundation
 /// Compares Messages addresses the way people write them and the way Messages
 /// stores them.
 ///
-/// Contacts often spells a number "(555) 555-0123" or "07700 900123", while
-/// Messages stores "+15555550123" or "+447700900123". Two numbers name the same
-/// handle only when their digits are equal, or when one is international
-/// (`+` or `00`) and the other is the national form of that same number in
-/// the Mac's own region: the region's calling code followed by the national
-/// digits, with or without one leading trunk "0". Two different international
-/// numbers never match, however their digits overlap, so "+14155550123" and
-/// "+914155550123" stay two people.
+/// Contacts often spells a number "(415) 555-0123" or "07700 900123", while
+/// Messages stores "+14155550123" or "+447700900123". Two numbers name the same
+/// handle only when:
+/// - both are international (`+`, `00`, or `011` in North America) with equal
+///   digits, or both are national with equal digits; or
+/// - one is international and the other is the national form of that number in
+///   the Mac's own region: the region's calling code followed by the national
+///   digits, as written or without the region's trunk prefix ("0" in most
+///   places, "8" in Russia and some neighbours, "8 0" in Belarus, "06" in
+///   Hungary, "1" in North America).
+///
+/// Two different international numbers never match, however their digits
+/// overlap, so "+14155550123" and "+914155550123" stay two people. With no
+/// region set (or the "World" region), a national number never matches an
+/// international one. Extensions ("ext. 45", ";45") and a "(0)" written inside
+/// an international number ("+44 (0) 7700 900123") are ignored. Argentine
+/// mobiles written nationally with the "15" mobile prefix are not rewritten to
+/// the international "9" form, so they do not match.
 enum MessagingHandle {
-  /// The calling code for the region this Mac is set to, such as "1" or "44".
-  static func currentCallingCode() -> String? {
-    Locale.current.region.flatMap { callingCode(forRegion: $0.identifier) }
+  /// The region this Mac is set to, such as "US"; nil when unset.
+  static func currentRegion() -> String? {
+    Locale.current.region?.identifier
   }
 
-  static func isSame(_ stored: String, _ requested: String, callingCode: String?) -> Bool {
-    let left = stored.trimmingCharacters(in: .whitespacesAndNewlines)
-    let right = requested.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !left.isEmpty, !right.isEmpty else { return false }
-    if left.contains("@") || right.contains("@") {
-      return left.caseInsensitiveCompare(right) == .orderedSame
+  static func isSame(_ stored: String, _ requested: String, region: String?) -> Bool {
+    guard let left = Parsed(stored, region: region), let right = Parsed(requested, region: region) else {
+      return false
     }
-    let leftNumber = PhoneNumber(left)
-    let rightNumber = PhoneNumber(right)
-    guard !leftNumber.digits.isEmpty, !rightNumber.digits.isEmpty else { return false }
-    if leftNumber.digits == rightNumber.digits { return true }
-    guard leftNumber.isInternational != rightNumber.isInternational, let callingCode else { return false }
-    let international = leftNumber.isInternational ? leftNumber.digits : rightNumber.digits
-    let national = leftNumber.isInternational ? rightNumber.digits : leftNumber.digits
-    // Some regions keep the leading 0 inside the international form (Italian
-    // landlines), most drop it, so both spellings of the national number count.
-    let withoutTrunk = national.hasPrefix("0") ? String(national.dropFirst()) : national
-    return international == callingCode + withoutTrunk || international == callingCode + national
+    switch (left, right) {
+    case (.email(let a), .email(let b)):
+      return a == b
+    case (.phone(let a), .phone(let b)):
+      if a.isInternational == b.isInternational { return a.digits == b.digits }
+      let international = a.isInternational ? a : b
+      let national = a.isInternational ? b : a
+      return internationalForms(ofNational: national.digits, region: region).contains(international.digits)
+    default:
+      return false
+    }
   }
 
-  private struct PhoneNumber {
-    let digits: String
-    let isInternational: Bool
+  /// One key per distinct address, so callers can tell when a request matched
+  /// two different stored numbers (an Italian "06 1234 5678" against both
+  /// "+390612345678" and "+39612345678").
+  static func identityKey(_ handle: String, region: String?) -> String? {
+    switch Parsed(handle, region: region) {
+    case .email(let address): return "email:" + address
+    case .phone(let number):
+      if number.isInternational { return "intl:" + number.digits }
+      let forms = internationalForms(ofNational: number.digits, region: region).sorted()
+      return forms.count == 1 ? "intl:" + forms[0] : "national:" + number.digits
+    case nil: return nil
+    }
+  }
 
-    init(_ handle: String) {
-      let allDigits = String(handle.filter { $0.isASCII && $0.isNumber })
-      if handle.hasPrefix("+") {
-        digits = allDigits
-        isInternational = true
-      } else if allDigits.hasPrefix("00") {
-        digits = String(allDigits.dropFirst(2))
-        isInternational = true
-      } else {
-        digits = allDigits
-        isInternational = false
+  /// The international digit strings a national number can stand for in a region.
+  private static func internationalForms(ofNational national: String, region: String?) -> Set<String> {
+    guard let region, let callingCode = callingCode(forRegion: region) else { return [] }
+    var forms: Set<String> = [callingCode + national]
+    for trunk in trunkPrefixes(forRegion: region) where national.hasPrefix(trunk) {
+      forms.insert(callingCode + String(national.dropFirst(trunk.count)))
+    }
+    return forms
+  }
+
+  /// National trunk prefixes, dropped when a number is dialled from abroad.
+  static func trunkPrefixes(forRegion region: String) -> [String] {
+    switch region.uppercased() {
+    case "RU", "KZ", "TJ", "TM": return ["8"]
+    case "BY": return ["80", "8"]
+    case "LT": return ["8", "0"]
+    case "HU": return ["06"]
+    case _ where callingCode(forRegion: region) == "1": return ["1"]
+    default: return ["0"]
+    }
+  }
+
+  private enum Parsed {
+    case email(String)
+    case phone(Number)
+
+    struct Number {
+      let digits: String
+      let isInternational: Bool
+    }
+
+    init?(_ raw: String, region: String?) {
+      var handle = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !handle.isEmpty else { return nil }
+      if handle.contains("@") {
+        self = .email(handle.lowercased())
+        return
       }
+      if let ext = handle.range(of: #"(?i)\s*(?:;|,|#|ext\.?|extension|x)\s*\d+\s*$"#, options: .regularExpression) {
+        handle.removeSubrange(ext)
+      }
+      let northAmerican = region.flatMap(MessagingHandle.callingCode(forRegion:)) == "1"
+      func digits(of text: String) -> String { String(text.filter { $0.isASCII && $0.isNumber }) }
+      let written = digits(of: handle)
+      let isInternational =
+        handle.hasPrefix("+") || written.hasPrefix("00") || (northAmerican && written.hasPrefix("011"))
+      if isInternational {
+        // "+44 (0) 7700 900123": the bracketed 0 is the national trunk prefix.
+        handle = handle.replacingOccurrences(of: #"\(\s*0\s*\)"#, with: "", options: .regularExpression)
+      }
+      var number = digits(of: handle)
+      if !handle.hasPrefix("+") {
+        if number.hasPrefix("00") {
+          number.removeFirst(2)
+        } else if northAmerican, number.hasPrefix("011") {
+          number.removeFirst(3)
+        }
+      }
+      guard !number.isEmpty else { return nil }
+      self = .phone(Number(digits: number, isInternational: isInternational))
     }
   }
 
-  /// ITU-T E.164 country calling codes by ISO 3166 region.
+  /// ITU-T E.164 country calling codes by ISO 3166 region. Regions without one
+  /// (uninhabited territories, "001" for the World) return nil.
   static func callingCode(forRegion region: String) -> String? {
     switch region.uppercased() {
     case "US", "CA", "AG", "AI", "AS", "BB", "BM", "BS", "DM", "DO", "GD", "GU", "JM", "KN", "KY", "LC", "MP", "MS",
@@ -69,7 +135,7 @@ enum MessagingHandle {
     case "NL": return "31"
     case "BE": return "32"
     case "FR": return "33"
-    case "ES": return "34"
+    case "ES", "EA", "IC": return "34"
     case "HU": return "36"
     case "IT", "VA": return "39"
     case "RO": return "40"
@@ -93,7 +159,7 @@ enum MessagingHandle {
     case "AU", "CX", "CC": return "61"
     case "ID": return "62"
     case "PH": return "63"
-    case "NZ": return "64"
+    case "NZ", "PN": return "64"
     case "SG": return "65"
     case "TH": return "66"
     case "JP": return "81"
@@ -107,6 +173,7 @@ enum MessagingHandle {
     case "LK": return "94"
     case "MM": return "95"
     case "IR": return "98"
+    case "AC": return "247"
     case "SS": return "211"
     case "MA", "EH": return "212"
     case "DZ": return "213"
@@ -138,7 +205,7 @@ enum MessagingHandle {
     case "CD": return "243"
     case "AO": return "244"
     case "GW": return "245"
-    case "IO": return "246"
+    case "IO", "DG": return "246"
     case "SC": return "248"
     case "SD": return "249"
     case "RW": return "250"
@@ -152,7 +219,7 @@ enum MessagingHandle {
     case "MZ": return "258"
     case "ZM": return "260"
     case "MG": return "261"
-    case "RE", "YT": return "262"
+    case "RE", "YT", "TF": return "262"
     case "ZW": return "263"
     case "NA": return "264"
     case "MW": return "265"
@@ -160,7 +227,7 @@ enum MessagingHandle {
     case "BW": return "267"
     case "SZ": return "268"
     case "KM": return "269"
-    case "SH": return "290"
+    case "SH", "TA": return "290"
     case "ER": return "291"
     case "AW": return "297"
     case "FO": return "298"
@@ -195,7 +262,7 @@ enum MessagingHandle {
     case "CZ": return "420"
     case "SK": return "421"
     case "LI": return "423"
-    case "FK": return "500"
+    case "FK", "GS": return "500"
     case "BZ": return "501"
     case "GT": return "502"
     case "SV": return "503"
@@ -216,7 +283,7 @@ enum MessagingHandle {
     case "UY": return "598"
     case "CW", "BQ": return "599"
     case "TL": return "670"
-    case "NF": return "672"
+    case "NF", "AQ": return "672"
     case "BN": return "673"
     case "NR": return "674"
     case "PG": return "675"

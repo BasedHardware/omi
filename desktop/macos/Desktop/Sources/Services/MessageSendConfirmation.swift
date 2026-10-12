@@ -20,6 +20,9 @@ struct MessageSendConfirmation: Sendable, Equatable {
   /// Messages recorded an error on one attempt before another attempt (such
   /// as the text-message fallback) went through.
   let succeededAfterError: Bool
+  /// `message.service` of the row that confirmed the send ("iMessage", "SMS"),
+  /// or nil when nothing confirmed it.
+  var confirmedService: String?
   /// History reads made after the send.
   let checks: Int
   let waitedMilliseconds: Int
@@ -32,6 +35,9 @@ struct MessageSendConfirmation: Sendable, Equatable {
     /// More than one new matching row without an error, so Omi cannot tell
     /// which one is its own.
     case ambiguous
+    /// The recipient matched two different stored numbers, so Omi cannot tell
+    /// which conversation is the one it sent to.
+    case ambiguousRecipient = "ambiguous_recipient"
     /// The history could not be read (for example, no Full Disk Access).
     case historyUnreadable = "history_unreadable"
     /// The tool call was stopped while checking.
@@ -43,21 +49,22 @@ struct MessageSendConfirmation: Sendable, Equatable {
 struct MessageSendHistory: Sendable {
   /// The newest message row id before the send.
   let latestRowID: @Sendable () async throws -> Int64
-  /// Matching outgoing rows newer than the baseline row id.
+  /// Matching outgoing rows newer than the baseline row id, plus the rows
+  /// already matched by an earlier read, whatever their date.
   let outgoingStates:
-    @Sendable (_ handle: String, _ text: String, _ createdSince: Date, _ afterRowID: Int64) async throws ->
-      [OutgoingMessageState]
+    @Sendable (_ handle: String, _ text: String, _ createdSince: Date, _ afterRowID: Int64, _ tracked: Set<Int64>)
+      async throws -> OutgoingMessageRead
 
   /// The real Messages store, matching handles for this Mac's region.
   static var live: MessageSendHistory { store(nil) }
 
-  static func store(_ url: URL?, callingCode: String? = MessagingHandle.currentCallingCode()) -> MessageSendHistory {
+  static func store(_ url: URL?, region: String? = MessagingHandle.currentRegion()) -> MessageSendHistory {
     MessageSendHistory(
       latestRowID: { try await MessagesReaderService.shared.latestMessageRowID(storeOverride: url) },
-      outgoingStates: { handle, text, since, afterRowID in
+      outgoingStates: { handle, text, since, afterRowID, tracked in
         try await MessagesReaderService.shared.outgoingMessageStates(
-          sentTo: handle, text: text, createdSince: since, afterRowID: afterRowID, callingCode: callingCode,
-          storeOverride: url)
+          sentTo: handle, text: text, createdSince: since, afterRowID: afterRowID, trackedRowIDs: tracked,
+          region: region, storeOverride: url)
       })
   }
 }
@@ -74,15 +81,23 @@ struct MessageSendHistory: Sendable {
 /// `is_delivered` when the recipient's device acknowledges it, typically a
 /// second or two later when that device is online. A failed iMessage attempt
 /// can be followed by a text-message attempt, and a second identical row would
-/// make the match ambiguous, so the check reads for the whole window and
-/// decides over every new row at the end.
+/// make the match ambiguous, so the check decides over every new row at the
+/// end of the window. The one exception: when the reads have shown the same
+/// single delivered row, and no error row, for at least `settledDelivery`,
+/// nothing that can still arrive would change a clean delivery except a
+/// coincidence, so the check stops there.
 enum MessageSendConfirmer {
-  /// Rows dated more than this before the send started never count. The row id
-  /// baseline already excludes every row that existed; this only keeps an old
-  /// message that syncs in from another device during the window from counting.
-  /// Messages dates the row from this Mac's clock after the send starts, so a
-  /// second covers rounding and small clock adjustments.
+  /// Rows first seen dated more than this before the send started never
+  /// count. The row id baseline already excludes every row that existed before
+  /// the send; this only keeps an old message that syncs in from another device
+  /// during the window from counting. A row that matched once is tracked by row
+  /// id from then on, so a later change to its date cannot drop it. The
+  /// residual: an identical message sent to the same person from another of
+  /// the person's devices within this second of the send can confirm it.
   static let clockTolerance: TimeInterval = 1
+  /// How long a single clean delivered row must stay that way before the
+  /// check stops early. Two reads that far apart agree.
+  static let settledDelivery: TimeInterval = 1
   /// How long to keep reading after the send returns.
   static let window: TimeInterval = 5
   static let pollInterval: TimeInterval = 0.5
@@ -116,25 +131,38 @@ enum MessageSendConfirmer {
         sent,
         MessageSendConfirmation(
           status: outcome.status, unconfirmedReason: outcome.reason, succeededAfterError: outcome.afterError,
-          checks: checks, waitedMilliseconds: Int((waited * 1000).rounded()))
+          confirmedService: outcome.service, checks: checks, waitedMilliseconds: Int((waited * 1000).rounded()))
       )
     }
 
     guard let baseline else { return finish(nil) }
     let deadline = checkStarted.addingTimeInterval(window)
     var latest: Verdict?
+    var tracked: Set<Int64> = []
+    var cleanDelivery: (rowID: Int64, since: Date)?
 
     while true {
       if Task.isCancelled { return finish(latest, stopped: true) }
       checks += 1
       do {
-        latest = Verdict(try await history.outgoingStates(handle, text, createdSince, baseline))
+        let read = try await history.outgoingStates(handle, text, createdSince, baseline, tracked)
+        tracked.formUnion(read.rows.map(\.rowID))
+        latest = Verdict(read)
+        if case .delivered(afterError: false, _) = latest, read.rows.count == 1 {
+          let rowID = read.rows[0].rowID
+          if cleanDelivery?.rowID != rowID { cleanDelivery = (rowID, now()) }
+        } else {
+          cleanDelivery = nil
+        }
       } catch is CancellationError {
         return finish(latest, stopped: true)
       } catch {
         // One failed read (a locked store, a checkpoint) is retried on the next
         // tick; the outcome is unreadable only if no read after the send works.
+        // It also breaks a run of agreeing reads.
+        cleanDelivery = nil
       }
+      if let cleanDelivery, now().timeIntervalSince(cleanDelivery.since) >= settledDelivery { break }
       if now() >= deadline { break }
       do {
         try await sleep(pollInterval)
@@ -153,11 +181,16 @@ enum MessageSendConfirmer {
   /// without an error mean an identical message went to the same person in
   /// the same moment, and Omi cannot tell which one is its own.
   enum Verdict: Equatable {
-    case noRow, notYetSent, ambiguous, notDelivered
-    case sent(afterError: Bool)
-    case delivered(afterError: Bool)
+    case noRow, notYetSent, ambiguous, ambiguousRecipient, notDelivered
+    case sent(afterError: Bool, service: String)
+    case delivered(afterError: Bool, service: String)
 
-    init(_ rows: [OutgoingMessageState]) {
+    init(_ read: OutgoingMessageRead) {
+      if read.recipientIsAmbiguous {
+        self = .ambiguousRecipient
+        return
+      }
+      let rows = read.rows
       let failed = rows.filter { $0.errorCode != 0 }
       let succeeded = rows.filter { $0.errorCode == 0 }
       if rows.isEmpty {
@@ -166,9 +199,9 @@ enum MessageSendConfirmer {
         self = .ambiguous
       } else if let row = succeeded.first {
         if row.isDelivered {
-          self = .delivered(afterError: !failed.isEmpty)
+          self = .delivered(afterError: !failed.isEmpty, service: row.service)
         } else if row.isSent {
-          self = .sent(afterError: !failed.isEmpty)
+          self = .sent(afterError: !failed.isEmpty, service: row.service)
         } else {
           self = .notYetSent
         }
@@ -182,6 +215,7 @@ enum MessageSendConfirmer {
     let status: MessageSendOutcomeStatus
     let reason: MessageSendConfirmation.UnconfirmedReason?
     var afterError = false
+    var service: String?
 
     init(_ status: MessageSendOutcomeStatus, _ reason: MessageSendConfirmation.UnconfirmedReason?) {
       self.status = status
@@ -191,15 +225,18 @@ enum MessageSendConfirmer {
     /// No successful read after the send leaves no verdict: the history was unreadable.
     init(_ verdict: Verdict?) {
       switch verdict {
-      case .delivered(let afterError):
+      case .delivered(let afterError, let service):
         self.init(.delivered, nil)
         self.afterError = afterError
-      case .sent(let afterError):
+        self.service = service
+      case .sent(let afterError, let service):
         self.init(.sent, nil)
         self.afterError = afterError
+        self.service = service
       case .notDelivered: self.init(.notDelivered, nil)
       case .notYetSent: self.init(.unconfirmed, .notYetSent)
       case .ambiguous: self.init(.unconfirmed, .ambiguous)
+      case .ambiguousRecipient: self.init(.unconfirmed, .ambiguousRecipient)
       case .noRow: self.init(.unconfirmed, .noMatchingRow)
       case nil: self.init(.unconfirmed, .historyUnreadable)
       }
