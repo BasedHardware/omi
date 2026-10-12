@@ -318,13 +318,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       _showPendantListening(context);
       return;
     }
-    try {
-      await _startPhoneRecording(context);
-    } catch (_) {
-      if (context.mounted) {
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      }
-    }
+    await _startPhoneRecording(context);
   }
 
   Future<void> _startPhoneRecording(BuildContext context) async {
