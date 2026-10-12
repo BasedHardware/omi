@@ -233,9 +233,9 @@ void main() {
       if (scenario.cap > 0) {
         final text = lookupAppLocalizations(const Locale('en')).minsUsedThisMonth('20', 1500);
         expect(find.text(text), findsOneWidget);
-        expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
-      } else {
         expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      } else {
+        expect(find.byType(LinearProgressIndicator), findsNothing);
       }
       expect(provider.subscription!.subscription.plan, PlanType.unlimited);
       expect(provider.subscription!.subscription.plan.hasUnlimitedTranscription, isTrue);

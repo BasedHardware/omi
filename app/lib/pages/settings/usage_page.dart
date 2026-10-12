@@ -731,14 +731,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                       after: ' ${l10n.alwaysAvailable}')
                   : null));
     }
-    if (subscription.wordsTranscribedLimit > 0) {
+    if (subscription.subscription.plan == PlanType.basic && subscription.wordsTranscribedLimit > 0) {
       rows.add(_UsageMeter(
           text: l10n.wordsUsedThisMonth(
               format.format(subscription.wordsTranscribedUsed), format.format(subscription.wordsTranscribedLimit)),
           percentage: (subscription.wordsTranscribedUsed / subscription.wordsTranscribedLimit).clamp(0.0, 1.0),
           color: Colors.green.shade300));
     }
-    if (subscription.insightsGainedLimit > 0) {
+    if (subscription.subscription.plan == PlanType.basic && subscription.insightsGainedLimit > 0) {
       rows.add(_UsageMeter(
           text: l10n.insightsUsedThisMonth(
               format.format(subscription.insightsGainedUsed), format.format(subscription.insightsGainedLimit)),
