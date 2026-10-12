@@ -12,6 +12,26 @@ from utils.observability.speaker_embedding_budget import REJECTOR_DEMOTIONS
 MAX_QUEUED_SEGMENTS = 100
 
 
+def pending_audio_ranges(
+    segment: dict[str, Any], pending: list[tuple[float, float]], buffer_start: float, buffer_end: float
+) -> list[tuple[float, float]]:
+    """Clamp and union queued timing metadata without pooling ordinary updates."""
+    incoming = segment.get(
+        '_speaker_audio_ranges',
+        [(segment['abs_start'], min(segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])))],
+    )
+    fresh: list[tuple[float, float]] = []
+    for start, end in sorted(pending + incoming):
+        start, end = max(start, buffer_start), min(end, buffer_end)
+        if end <= start:
+            continue
+        if fresh and start <= fresh[-1][1]:
+            fresh[-1] = (fresh[-1][0], max(fresh[-1][1], end))
+        else:
+            fresh.append((start, end))
+    return fresh
+
+
 def subtract_audio_ranges(
     ranges: list[tuple[float, float]], used: list[tuple[float, float]]
 ) -> list[tuple[float, float]]:

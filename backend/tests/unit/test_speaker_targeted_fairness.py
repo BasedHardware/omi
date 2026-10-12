@@ -76,8 +76,8 @@ async def prove(matcher, host, monkeypatch):
     for start in (0, 5, 10):
         matcher.queue.put_nowait(work(start=start))
     await serve(matcher, host, monkeypatch, 3)
-    assert matcher._rejector_comparisons[2] == 3
-    assert matcher._is_proven_rejector(2)
+    assert matcher._rejectors.comparisons[2] == 3
+    assert matcher._rejectors.proven(2)
     assert matcher._embedding_attempts[2] == 3
 
 
@@ -133,10 +133,10 @@ async def test_runner_demotes_already_queued_updates_when_third_rejection_comple
     for index in range(80):
         matcher.queue.put_nowait(work(start=15 + index * 0.5, seconds=2, segment=f'queued-{index}'))
     matcher.queue.put_nowait(work(1, 50, 7, segment='late-owner'))
-    assert matcher.queue.qsize() == 84 and not matcher._rejector_comparisons
+    assert matcher.queue.qsize() == 84 and not matcher._rejectors.comparisons
     order = await serve(matcher, host, monkeypatch, None)
     assert matcher.speaker_to_person[1] == ('user', 'User')
-    assert matcher._is_proven_rejector(2)
+    assert matcher._rejectors.proven(2)
     assert matcher._embedding_attempts[2] <= 12 and len(calls) <= 15
     assert matcher._embedding_attempts[1] == 1
     assert (2, 'queued-79') in order and order.index((1, 'late-owner')) < order.index((2, 'queued-79'))
@@ -150,7 +150,7 @@ async def test_tried_owner_needing_final_evidence_keeps_fifo_against_untried_non
     matcher, host, _ = live(monkeypatch, [OWNER, OWNER if owner_first else FAR])
     matcher.queue.put_nowait(work(1, seconds=2))
     await serve(matcher, host, monkeypatch, 1)
-    assert not matcher._is_proven_rejector(1) and 1 not in matcher._voice_decisions
+    assert not matcher._rejectors.proven(1) and 1 not in matcher._voice_decisions
     matcher._socket_embedding_tokens = 1
     updates = [work(1, 3, 3, segment='final-evidence'), work(3, 10, segment='untried')]
     if not owner_first:
@@ -188,7 +188,7 @@ async def test_protected_voices_keep_separate_fifo_updates(monkeypatch, kind):
     for start in (0, 5, 10):
         matcher.queue.put_nowait(work(start=start, seconds=2 if kind == 'pending' else 5))
     await serve(matcher, host, monkeypatch, 3)
-    assert not matcher._is_proven_rejector(2)
+    assert not matcher._rejectors.proven(2)
     for start in (20, 25):
         matcher.queue.put_nowait(work(start=start))
     matcher.queue.put_nowait(work(3, 30))
@@ -206,7 +206,7 @@ async def test_only_completed_fresh_comparisons_count_and_nonreject_history_is_s
         matcher.queue.put_nowait(work(start=start))
         await serve(matcher, host, monkeypatch, 1)
     assert snapshot(matcher)['owner_comparisons'] == 6
-    assert matcher._rejector_comparisons[2] == -1 and not matcher._is_proven_rejector(2)
+    assert matcher._rejectors.comparisons[2] == -1 and not matcher._rejectors.proven(2)
     attempts = matcher._embedding_attempts[2]
     for index in range(5):
         matcher.queue.put_nowait(work(start=25, segment=f'duplicate-{index}'))
@@ -228,8 +228,8 @@ async def test_uncarried_rollover_resets_proof_but_preserves_socket_spend_and_st
 
     monkeypatch.setattr(matcher, '_load_profiles', AsyncMock(side_effect=load))
     await matcher.refresh_for_conversation('next')
-    assert matcher._generation == 1 and not matcher._rejector_comparisons
-    assert not matcher._is_proven_rejector(2) and matcher._socket_embedding_tokens == 13
+    assert matcher._generation == 1 and not matcher._rejectors.comparisons
+    assert not matcher._rejectors.proven(2) and matcher._socket_embedding_tokens == 13
     for start in (30, 35):
         matcher.queue.put_nowait(work(start=start, conversation='next'))
     assert matcher.queue.qsize() == 3
@@ -286,7 +286,7 @@ async def test_failed_queries_still_spend_and_never_exceed_voice_socket_or_task_
     assert sum(matcher._embedding_attempts.values()) == state.calls
     assert max(matcher._embedding_attempts.values()) <= 12
     assert matcher._socket_embedding_tokens == 16 - state.calls
-    assert not matcher._rejector_comparisons and not matcher._covered_audio.get(2)
+    assert not matcher._rejectors.comparisons and not matcher._covered_audio.get(2)
 
 
 def test_targeted_metric_labels_have_closed_cardinality():
