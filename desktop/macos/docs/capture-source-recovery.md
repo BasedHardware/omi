@@ -75,7 +75,7 @@ outside the watchdog lock; physical teardown still runs on the device queue.
 - [x] Permission and no-live-source terminal behavior remain covered
 - [x] Watchdog route classification uses bound metadata rather than querying
   HAL while holding its lock; start and reconfiguration both bind the route
-- [ ] Named-bundle native microphone/system-audio path exercised, separately
+- [x] Named-bundle native microphone/system-audio path exercised, separately
   from synthetic owner/driver tests
 
 Focused regressions: `SharedCaptureSourceRecoveryTests`,
@@ -83,6 +83,40 @@ Focused regressions: `SharedCaptureSourceRecoveryTests`,
 `SharedCaptureSilentMicRecoveryPolicyTests`. Native QA steps live in
 `e2e/flows/audio-recording.yaml`; the existing synthetic capture-lifecycle flow
 does not prove microphone or system-tap negotiation.
+
+### Recorded verification (October 12, 2026)
+
+Clean code revision `0521db0a1963579cdb74a62a44dd91bdfe3d3342` ran in the
+isolated `omi-silent-mic-recovery` bundle, using synthetic Alice on the offline
+local profile and user-approved microphone/system-audio permissions. Real
+CoreAudio drivers remained active while three injected producer-watchdog trips
+exercised the production recovery path:
+
+| Event | Recovery attempts | Same session and system tap | System PCM live | Missing-mic warning |
+| --- | --- | --- | --- | --- |
+| First trip | 1 | Yes | Yes | No |
+| Second trip | 2 | Yes | Yes | No |
+| Exhaustion | 3 | Yes | Yes | Yes |
+| Real microphone PCM returns | 3 | No recording restart | Yes | Cleared |
+
+The app remained responsive. This is native **local STT** evidence, not a
+hardware diagnosis or customer confirmation. There was no cloud mixer in that
+native session; preservation of pending cloud mixer bytes is verified by the
+behavioral regression instead. No production app or customer data was changed.
+
+The final focused matrix passed 115 Swift tests, with three additional runs of
+22 recovery/watchdog/source-activity tests. The timing-runner large-output fixture
+passed, and PR preflight passed 35 checks. The synthetic capture lifecycle passed
+all 13 steps after its notification category was enabled: capture, rotation,
+finalization, canonical read-back and the meeting notice.
+
+The broad T2 run was **not green**: 35 of 46 flow/overlay entries passed. Its
+initial capture-lifecycle failure was notification-category setup (confirmed by
+the suppression log and successful prepared rerun). Other failures included
+untyped/unsupported flow assertions, production-endpoint expectations on a
+localhost profile, paused memory writes and unrelated screen-evidence/UI checks.
+Those fixtures and their production owners are unchanged by this PR. They are
+reported separately, not weakened or counted as successful recording tests.
 
 Customer diagnostic exports can contain transcript text despite their redacted
 header. Never commit the export, its transcript text, or account/session IDs.
