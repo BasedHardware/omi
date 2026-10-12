@@ -10,7 +10,7 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from typing import Any, Dict, List, Optional, cast
 import database.chat as chat_db
 from models.chat import ChatSession
-from utils.other.chat_file import FileChatTool
+from utils.other.chat_file import FileChatTool, ProviderRejectedChatFileError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,17 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
 
         return answer
 
+    except ProviderRejectedChatFileError as error:
+        # Provider 4xx on the user's file (chat_file.py:_reraise_provider_file_error).
+        # That is unreadable input, not a server fault. Logging the traceback at
+        # ERROR makes Cloud Error Reporting group the raise site as an outage.
+        cause = error.__cause__
+        logger.warning(
+            "search_files_tool provider rejected the file cause_type=%s status=%s",
+            type(cause).__name__ if cause is not None else "none",
+            getattr(cause, "status_code", None),
+        )
+        return "The file could not be processed."
     except ValueError as e:
         logger.error("search_files_tool session error (%s)", type(e).__name__)
         return "Session error: Invalid session parameters."
