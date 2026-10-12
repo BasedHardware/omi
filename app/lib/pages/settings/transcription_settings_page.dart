@@ -33,6 +33,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/services/superwall_pilot.dart';
 
 /// Top-level transcription source the user picks from the single dropdown.
 enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
@@ -878,7 +879,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       description = Semantics(
         link: true,
         child: InkWell(
-          onTap: () => routeToPage(context, const UsagePage(showUpgradeDialog: true)),
+          onTap: () => routeToPage(
+            context,
+            const UsagePage(
+              showUpgradeDialog: true,
+              upgradePlacement: SuperwallPilot.transcriptionSettingsPlacement,
+              upgradeSource: 'Transcription Settings',
+            ),
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Align(

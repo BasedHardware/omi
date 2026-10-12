@@ -115,7 +115,7 @@ class _AppShellState extends State<AppShell> {
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
         PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
-        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+        routeToPage(context, const UsagePage(showUpgradeDialog: true, upgradeSource: 'Deep Link'));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback

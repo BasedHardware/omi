@@ -65,6 +65,20 @@ class SuperwallPilot {
     return _identityQueue;
   }
 
+  /// Upgrade on the Plan & Usage page, and that page's automatic offer when opened from Transcription
+  /// Settings → View usage.
+  static const usageUpgradePlacement = 'usage_upgrade';
+  static const transcriptionSettingsPlacement = 'transcription_settings_usage';
+
+  /// Free chat limit reached (the sheet opens automatically over chat).
+  static const chatQuotaPlacement = 'chat_quota';
+
+  /// Chat Apps Pro gate (Telegram / iMessage rows and the Pro card).
+  static const chatAppsPlacement = 'chat_apps';
+
+  /// Plus transcription meter crossing its threshold (queued until recording stops).
+  static const plusMeterPlacement = 'plus_meter';
+
   /// Placement for the Upgrade button on the Settings plan card.
   static const settingsUpgradePlacement = 'settings_upgrade';
 
@@ -74,9 +88,6 @@ class SuperwallPilot {
   /// Placement shown to anyone not subscribed when the device tutorial closes (finished, skipped or
   /// replayed). Superwall only: no plans-sheet fallback, so nothing changes when the pilot is off.
   static const deviceSetupCompletePlacement = 'device_setup_complete';
-
-  /// Returns false if the pilot could not register its test placement.
-  Future<bool> showUsageUpgrade(String uid) => showPlacement('omi_usage_upgrade_test', uid);
 
   /// [showPlacement] for the signed-in, non-anonymous Firebase user.
   Future<bool> showPlacementForCurrentUser(String placement) async {

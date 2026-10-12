@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/settings/widgets/standalone_plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/ui/ui.dart';
 
 /// Prompt id of the plans sheet offered when the Plus meter runs low.
@@ -50,10 +51,11 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) => showOmiSheet<void>(
-        context: promptContext,
-        padding: EdgeInsets.zero,
-        builder: (_) => const StandalonePlansSheet(),
+      show: (promptContext) => openUpgradePaywall(
+        promptContext,
+        placement: SuperwallPilot.plusMeterPlacement,
+        source: 'Plus Meter',
+        freeUser: false,
       ),
     );
   }

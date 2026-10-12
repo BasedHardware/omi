@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
@@ -22,12 +21,12 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
 import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -35,6 +34,11 @@ import 'package:omi/utils/other/temp.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
+
+  /// Superwall placement and `Paywall Opened` source for the offer [showUpgradeDialog] opens on
+  /// arrival. The page's own Upgrade button always uses `usage_upgrade` / `Usage Page`.
+  final String upgradePlacement;
+  final String upgradeSource;
   @visibleForTesting
   final bool debugSkipFetch;
   @visibleForTesting
@@ -42,7 +46,13 @@ class UsagePage extends StatefulWidget {
   @visibleForTesting
   final int? debugTooltipIndex;
   const UsagePage(
-      {super.key, this.showUpgradeDialog = false, this.debugSkipFetch = false, this.debugNow, this.debugTooltipIndex});
+      {super.key,
+      this.showUpgradeDialog = false,
+      this.upgradePlacement = SuperwallPilot.usageUpgradePlacement,
+      this.upgradeSource = 'Usage Page',
+      this.debugSkipFetch = false,
+      this.debugNow,
+      this.debugTooltipIndex});
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -53,10 +63,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
   UsageMetric _selectedMetric = UsageMetric.words;
-  late AnimationController _waveController;
-  late AnimationController _notesController;
-  late AnimationController _arrowController;
-  late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
   Map<String, dynamic>? _fairUseStatus;
 
@@ -301,17 +307,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
-    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
-    _notesController = AnimationController(duration: const Duration(milliseconds: 36000), vsync: this)..repeat();
-
-    _arrowController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)
-      ..repeat(reverse: true);
-
-    _arrowAnimation = Tween<double>(
-      begin: 0,
-      end: 4,
-    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.debugSkipFetch) return;
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
@@ -319,7 +314,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       _loadAvailablePlans();
       _loadFairUseStatus();
       if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
-        _showPlansSheet();
+        _showPlansSheet(placement: widget.upgradePlacement, source: widget.upgradeSource);
       }
     });
   }
@@ -329,9 +324,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
-    _waveController.dispose();
-    _notesController.dispose();
-    _arrowController.dispose();
     super.dispose();
   }
 
@@ -502,7 +494,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 Semantics(
                   button: true,
                   child: InkWell(
-                    onTap: _showPlansSheet,
+                    onTap: () => _showPlansSheet(),
                     borderRadius: OmiRadius.smAll,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: 44),
@@ -528,7 +520,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
               label: context.l10n.upgrade,
               labelStyle: OmiType.callout.copyWith(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
               expand: true,
-              onPressed: _showPlansSheet,
+              onPressed: () => _showPlansSheet(),
             ),
           ],
         ],
@@ -536,34 +528,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet() {
-    if (!context.read<UsageProvider>().showSubscriptionUI) {
-      return;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    final plan = context.read<UsageProvider>().subscription?.subscription.plan;
-    if (SuperwallPilot.instance.isEnabled && user != null && !user.isAnonymous && plan?.isPaid == false) {
-      unawaited(_showSuperwallUsageUpgrade(user.uid));
-      return;
-    }
-    _showExistingPlansSheet();
-  }
-
-  Future<void> _showSuperwallUsageUpgrade(String uid) async {
-    final registered = await SuperwallPilot.instance.showUsageUpgrade(uid);
-    if (!registered && mounted) _showExistingPlansSheet();
-  }
-
-  void _showExistingPlansSheet() {
-    showOmiSheet(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (context) => PlansSheet(
-        waveController: _waveController,
-        notesController: _notesController,
-        arrowController: _arrowController,
-        arrowAnimation: _arrowAnimation,
-      ),
+  void _showPlansSheet({String placement = SuperwallPilot.usageUpgradePlacement, String source = 'Usage Page'}) {
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return;
+    openUpgradePaywall(
+      context,
+      placement: placement,
+      source: source,
+      freeUser: usage.subscription?.subscription.plan.isPaid == false,
     );
   }
 
