@@ -567,9 +567,12 @@ def test_real_transport_drops_invalid_items_before_effect_boundary(queue, monkey
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
+    monkeypatch.setattr(
+        dream_store, 'vocabulary', lambda *args: [{'spelling': 'Synthetic', 'authorship': 'user_authored'}]
+    )
     applied = []
     monkeypatch.setattr(
-        dream_agent.dream_tools, 'apply_edit', lambda uid, edit, records: applied.append(edit) or 'applied'
+        dream_agent.dream_tools, 'apply_grounded_edit', lambda uid, edit, records: applied.append(edit) or 'applied'
     )
     report = asyncio.run(dream_agent.run_pass(UID))
     assert report['status'] == 'complete' and report['tokens'] == 34

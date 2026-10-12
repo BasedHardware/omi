@@ -5,7 +5,10 @@ synthetic demo project. No cloud credentials or customer data are accepted.
 """
 
 import os
+import asyncio
+import json
 from datetime import datetime, timezone
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -14,9 +17,105 @@ from google.cloud import firestore
 
 from config.dream_agent import Caps
 from database import _client, conversations, dream_store
-from utils import dream_reads
+from utils import dream_reads, dream_agent
+from utils.dream_diagnostics import path_count
+from utils.llm.shaped_agent import Turn
+from models.dream_agent import Triage, Cluster, Plan, Edit
 
 pytestmark = pytest.mark.integration
+
+
+def test_retrieved_sections_ground_spelling_and_settle_unavailable_refs(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_AUTO_APPLY_KINDS', 'title,overview,spelling')
+    database.collection('users').document(uid).set({})
+    source = database.collection('users').document(uid).collection('conversations')
+    source.document('film').set({'transcript_segments': [{'text': 'The invented film is called Zuvra.'}]})
+    neighbours = [f'conversations/neighbour-{i}' for i in range(6)]
+    for ref in neighbours:
+        row = conversations.encode_conversation_for_write(
+            uid,
+            {
+                'transcript_segments': [],
+                'structured': {
+                    'sections': [{'heading': 'Invented reference', 'body_markdown': 'The spelling is Zuvrah.'}]
+                },
+            },
+            'enhanced',
+        )
+        source.document(ref.split('/')[1]).set({**row, 'data_protection_level': 'enhanced'})
+    dream_store.mark_dirty(
+        uid,
+        [('conversations', 'film')] + [('conversations', f'missing-{i}') for i in range(31)],
+        firestore_client=database,
+    )
+
+    def candidates(uid, records, vocabulary, *, read_record, diagnostics, **kwargs):
+        path_count(diagnostics, 'semantic', 'attempted')
+        path_count(diagnostics, 'semantic', 'found', len(neighbours))
+        for ref in neighbours:
+            yield ref, partial(read_record, uid, ref), 'semantic'
+
+    monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
+    caps = Caps()
+    lease = dream_store.acquire(uid, caps, firestore_client=database)
+    report, unavailable = {}, []
+    evidence, consumed = dream_reads.read_changes(uid, lease, caps, diagnostics=report, unavailable=unavailable)
+    assert evidence.targets == {'conversations/film'} and neighbours[0] in evidence
+    assert len(unavailable) == report['dirty_counts']['permanent'] == 31
+
+    async def turn(uid, lane, mount, messages):
+        if mount.schema is Triage:
+            value = Triage(clusters=[Cluster(refs=['conversations/film'], problem='spelling')])
+        else:
+            payload = json.loads(messages[-1]['content'])
+            assert payload['roles'][neighbours[0]] == 'context'
+            assert 'Zuvrah' in payload['records'][neighbours[0]]
+            value = Plan(
+                edits=[
+                    Edit(
+                        kind='spelling',
+                        target='conversations/film',
+                        before='Zuvra',
+                        after='Zuvrah',
+                        reason='Invented independent reference',
+                        evidence=['conversations/film', neighbours[0]],
+                    ),
+                    Edit(
+                        kind='spelling',
+                        target=neighbours[0],
+                        before='Zuvrah',
+                        after='Zuvra',
+                        reason='Invented invalid context edit',
+                        evidence=[neighbours[0]],
+                    ),
+                ]
+            )
+        return Turn(value=value, tokens=10)
+
+    result = asyncio.run(dream_agent.dry_run(uid, evidence, caps=caps, turn=turn, vocabulary=[]))
+    assert len(result['plan']['edits']) == 1 and result['plan']['edits'][0]['policy'] == 'auto'
+    assert result['role_counts']['target'] == 1 and result['role_counts']['context'] >= 1
+    assert not result['plan']['questions']
+    dream_store.finish(
+        uid,
+        lease,
+        report,
+        success=True,
+        refund=True,
+        consumed=consumed,
+        unavailable=unavailable,
+        firestore_client=database,
+    )
+    assert report['dirty_counts']['permanent_acknowledged'] == 31
+    assert dream_store.dirty_count(uid, firestore_client=database) == 0
 
 
 def test_unverifiable_speech_retries_without_blocking_and_fences_refresh(monkeypatch):

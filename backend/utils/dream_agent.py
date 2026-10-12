@@ -13,6 +13,7 @@ from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
 from utils import dream_reads, dream_tools, dream_transport, dream_guards
 from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
+from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
@@ -137,13 +138,22 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     evidence = EvidenceRecords(records, targets=target_refs(records) if targets is None else targets)
     if not evidence.targets <= set(evidence):
         raise ValueError('dream_unknown_target')
-    sink = {'tokens': 0}
+    sink: dict[str, Any] = {'tokens': 0}
     plan, tokens = await plan_pass(
         uid, evidence, caps or Caps.from_env(), turn=turn, vocabulary=vocabulary, usage_sink=sink
     )
     plan = dream_guards.filter_plan(plan, evidence, targets=evidence.targets, usage_sink=sink)
+    proposed = plan.model_dump(mode='python')
+    for edit, row in zip(plan.edits, proposed['edits']):
+        reason = spelling_grounding_rejection(edit, evidence, vocabulary or [])
+        row['policy'] = 'suggest' if reason else apply_policy(edit.kind, auto_apply_kinds())
+        if reason == 'ungrounded_spelling':
+            sink.setdefault('rejected', {}).setdefault(reason, 0)
+            sink['rejected'][reason] += 1
+            if len(proposed['questions']) < 3:
+                proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
     return {
-        'plan': plan.model_dump(mode='python'),
+        'plan': proposed,
         'guard_decisions': sink.get('rejected', {}),
         'role_counts': {'target': len(evidence.targets), 'context': len(evidence) - len(evidence.targets)},
         'tokens': tokens,
@@ -173,6 +183,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
     }
     initialize(report)
     consumed = []
+    deferred = set()
     unavailable = []
     refund = False
     success = False
@@ -239,10 +250,20 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             report['proposed']['feedback'] = [f.model_dump() for f in accepted]
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds() - demoted
+            grounding = {
+                dream_tools.edit_key(edit, records): spelling_grounding_rejection(edit, records, vocabulary)
+                for edit in plan.edits
+            }
+            ungrounded = sum(reason == 'ungrounded_spelling' for reason in grounding.values())
+            if ungrounded:
+                counts = Counter(report.get('rejected', {}))
+                counts['ungrounded_spelling'] += ungrounded
+                report['rejected'] = dict(counts)
             edit_policies = {
                 dream_tools.edit_key(edit, records): (
                     'suggest'
                     if dream_tools.edit_key(edit, records).split(':')[1] in demoted
+                    or grounding[dream_tools.edit_key(edit, records)]
                     else apply_policy(edit.kind, automatic)
                 )
                 for edit in plan.edits
@@ -280,9 +301,26 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                         status = 'edit_cap'
                     else:
                         remaining -= 1
-                        tool = dream_tools.apply_edit if edit_policies[key] == 'auto' else dream_tools.suggest_edit
+                        is_question = grounding[key] == 'ungrounded_spelling'
+                        tool = (
+                            (dream_tools.apply_grounded_edit if edit.kind == 'spelling' else dream_tools.apply_edit)
+                            if edit_policies[key] == 'auto'
+                            else dream_tools.suggest_spelling if is_question else dream_tools.suggest_edit
+                        )
                         try:
-                            status = await effect(tool, edit, records)
+                            if is_question:
+                                report['proposed']['questions'].append(
+                                    spelling_question(edit).model_dump(mode='python')
+                                )
+                            status = (
+                                await effect(tool, edit, records, lease['run_id'])
+                                if is_question
+                                else await effect(tool, edit, records)
+                            )
+                            if is_question and status in {'suggestion_cap', 'already_suggested', 'suppressed'}:
+                                remaining += 1
+                            if is_question and status == 'suggestion_cap':
+                                deferred.add(edit.target)
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
@@ -351,7 +389,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         lease,
         report,
         success=success,
-        consumed=consumed,
+        consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
+        deferred=deferred,
         unavailable=unavailable,
         release=release,
         refund=refund,

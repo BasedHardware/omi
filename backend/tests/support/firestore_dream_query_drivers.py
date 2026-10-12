@@ -87,8 +87,14 @@ def entries():
                 },
                 'report': {'status': 'complete'},
             },
-            domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
+            domains={
+                'success': [True, False],
+                'refund': [True, False],
+                'count_failure': [True, False],
+                'deferred': [[], ['conversations/one']],
+            },
             neutrals={
+                'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),

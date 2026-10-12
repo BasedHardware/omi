@@ -220,10 +220,12 @@ def finish(
     *,
     success,
     consumed=(),
+    deferred=(),
     unavailable=(),
     release=True,
     refund=False,
     count_failure=False,
+    now=None,
     firestore_client=None,
 ):
     database = client(firestore_client)
@@ -232,6 +234,9 @@ def finish(
     spend = database.collection('dream_spend').document(lease['day'])
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    deferred_until = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    deferred_ids = {dirty_id(*ref.split('/', 1)) for ref in deferred}
 
     @firestore.transactional
     def complete(tx):
@@ -245,15 +250,25 @@ def finish(
         # Re-read only inspected refs, fencing every observed version. Never
         # scan all 500 queued documents again just to settle a bounded pass.
         items = {dirty_id(item['collection'], item['id']): item for item in [*consumed, *unavailable]}
-        if len(items) > DIRTY_INSPECTION_LIMIT:
+        keys = set(items) | deferred_ids
+        if len(keys) > DIRTY_INSPECTION_LIMIT:
             raise ValueError('dream_settlement_limit')
         observed = []
-        for key, item in items.items():
+        waiting = []
+        for key in keys:
             snapshot = state.collection('dirty').document(key).get(transaction=tx)
-            if (snapshot.to_dict() or {}).get('version') == item['version']:
+            row = snapshot.to_dict() or {}
+            if row and key in deferred_ids and release:
+                waiting.append(snapshot)
+            item = items.get(key)
+            if item and row.get('version') == item['version']:
                 observed.append((snapshot, item))
         versions = {item['version'] for item in consumed}
-        touched = [snapshot for snapshot, item in observed if item['version'] in versions]
+        touched = [
+            snapshot
+            for snapshot, item in observed
+            if item['version'] in versions and dirty_id(item['collection'], item['id']) not in deferred_ids
+        ]
         poisoned = [
             snapshot
             for snapshot in touched
@@ -304,6 +319,11 @@ def finish(
         encoded = _review_store().encode_doc(uid, {'source': settled})
         for snapshot in acknowledged:
             tx.delete(snapshot.reference)
+        for snapshot in waiting:
+            if snapshot.reference.path not in acknowledged_paths:
+                # Attention belongs to the UTC day, so a refreshed version also
+                # waits. Only this bounded set of affected refs is read/updated.
+                tx.update(snapshot.reference, {'deferred_until': deferred_until})
         retrying = {
             snapshot.reference.path: snapshot
             for snapshot in [*(touched if failure_eligible else []), *transient]

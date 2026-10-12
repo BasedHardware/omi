@@ -23,6 +23,7 @@ from models.dream_agent import Triage
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.dream_context import fits_pass, REASONING_TARGET_LIMIT, CONTEXT_TARGET_LIMIT, query_content
 from utils.dream_diagnostics import initialize
+from utils.dream_guards import timestamp
 from utils.observability.fallback import record_fallback
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -244,11 +245,16 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
     records = EvidenceRecords()
     consumed = []
     assessed = {}
+    paused = set()
     counts['fetched'] = len(dirty)
 
     def admit(snapshot, *, reserve_context=False):
         nonlocal records
         item = snapshot.to_dict()
+        deferred_until = timestamp(item.get('deferred_until'))
+        if deferred_until and lease['started_at'] < deferred_until:
+            paused.add(f"{item['collection']}/{item['id']}")
+            return 'deferred'
         # An update after admission belongs to a later pass, even if observed now.
         if item['last_changed_at'] > lease['started_at']:
             counts['newer'] += 1
@@ -310,7 +316,7 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         f"{item['collection']}/{item['id']}"
         for snapshot in dirty[position:]
         if (item := snapshot.to_dict())['last_changed_at'] <= lease['started_at']
-    }
+    } | paused
     records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics, pending_refs=pending)
     initial_consumed = len(consumed)
     consumed = [item for item in consumed if f"{item['collection']}/{item['id']}" in records.targets]

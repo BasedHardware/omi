@@ -17,6 +17,15 @@ Retrieval tier tests exercise owner-scoped linked, lexical, semantic and tempora
 providers with synthetic responses. `utils.dream_agent.dry_run` is the owner
 entrypoint documented in the Dream runbook.
 
+Spelling regressions run through `test_dream_grounding.py` and the real two-stage
+dry-run function. An invented, explicitly confirmed film name used to accept an
+unsupported correction automatically: **ungrounded auto-applies 1 → 0**;
+**Review spelling questions 0 → 1**. Cited independent spelling and persisted
+vocabulary still permit automatic correction. Derived facts and substring or
+accent-insensitive matches cannot authorize it. These are deterministic scripted
+model-response comparisons, not measured live-model accuracy.
+
+Vocabulary laundering and case-only changes have synthetic regressions. Only user-authored or accepted vocabulary with independent evidence may support automatic spelling; all new vocabulary is Review-only.
 `test_dream_retrieval_diagnostics.py` reproduces the initial four-target cap,
 a fabricated context-probe rejection, and 35 reads with only three visible
 targets. It checks unused-budget recovery, no unavailable/unread acknowledgement,

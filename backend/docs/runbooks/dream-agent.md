@@ -2,6 +2,20 @@
 
 ## Target neighbourhoods and read-only planning
 
+Spelling auto-apply additionally requires the corrected form in a cited
+independent record or existing persisted vocabulary. The target itself, aliases
+of the same record, and facts derived from the target conversation cannot supply
+independent support. Matching preserves accents and whole-word boundaries.
+Proposed vocabulary from the same model response does not count.
+Unsupported corrections become spelling questions with a custom-answer option,
+sharing the three-suggestion daily budget. Capped questions remain visible as
+suggestions in the run report, with an explicit cap outcome. The guard reports
+`ungrounded_spelling` counts. Automatic spelling revalidates evidence and fences
+its records and vocabulary snapshot in the existing Review journal transaction.
+
+Once this change is deployed and owner dry runs pass, spelling can return to the
+production AUTO allowlist. This series does not change production configuration.
+
 Dirty reads and the supplied-record retrieval dry run reserve 30% of the triage
 ceiling for context before admitting at most four editable targets. Initial
 target admission must fit the remaining 70%, including instructions/schema and
@@ -609,7 +623,7 @@ folder's README for the verified dev tunnel procedure.
 
 ## Tiered apply policy
 
-When mode is `on`, only `title`, `overview`, `spelling` and vocabulary additions
+When mode is `on`, only `title`, `overview` and grounded `spelling` edits
 apply automatically, after existing quality/evidence guards. `close_task`,
 `retire_task`, `merge_people`, `merge_memories`, `memory` and `entity_summary`
 become `agent_proposal` items in the existing Review queue, exposed through
@@ -631,6 +645,9 @@ Accept revalidates all evidence and the current task generation, then the existi
 writer fences storage in its transaction; stale accepts return 409. New
 suggestions share Dream question attention accounting, capped at three per pass
 and UTC day, and also respect the per-pass edit cap and remaining answer headroom.
+Attention-capped spelling targets stay queued with `deferred_until` set to the
+next UTC midnight. Later passes skip them before hydration and model reasoning;
+product updates preserve the deferral, and the next UTC day permits retry.
 Retries of unchanged proposals use no new slot. Shadow mode continues to record
 proposals without enqueueing or applying anything; each edit and vocabulary term
 in its report is labeled `auto` or `suggest`.
@@ -639,3 +656,6 @@ The OpenAPI schema and Review/Dream Dart DTOs are regenerated from source. Mobil
 rendering of `agent_proposal` is separate owner work, detailed in
 `backend/docs/review_surface.mdx`. This source change does not enable flags,
 change cohorts/schedules, or deploy anything.
+
+
+Vocabulary additions always require Review acceptance, including when an older environment override lists vocabulary. Accepted entries persist authorship and evidence refs. Legacy/unattributed and Dream-generated vocabulary cannot ground automatic spelling; user-authored/accepted entries are rejected as support when their evidence chain returns to the edited target. Case-only corrections require exact-case support. Capped spelling questions retain dirty refs and receive no cleanup review stamp.
