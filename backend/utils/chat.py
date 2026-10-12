@@ -17,7 +17,6 @@ from utils.apps import get_available_app_by_id
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat_citations import resolve_conversation_citations
-from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async

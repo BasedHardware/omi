@@ -98,8 +98,17 @@ def test_app_sse_bytes_preserve_the_pre_channel_citation_contract(environment, m
 
 
 @pytest.mark.parametrize('platform', ['ios', 'android', 'macos'])
-@pytest.mark.parametrize('markers', ['[8][7][6]', '[5][4]', '[1][2][4][6][7]'])
-def test_app_done_frame_replaces_streamed_markers_with_conversation_cards(environment, platform, markers):
+@pytest.mark.parametrize(
+    ('markers', 'expected'),
+    [
+        ('[8][7][6]', [8, 7, 6]),
+        ('[5][4]', [5, 4]),
+        ('[1][2][4][6][7]', [1, 2, 4, 6, 7]),
+        # Six mentions: keep the first five cited, not the five lowest indices.
+        ('[6][5][4][3][2][1]', [6, 5, 4, 3, 2]),
+    ],
+)
+def test_app_done_frame_replaces_streamed_markers_with_conversation_cards(environment, platform, markers, expected):
     client, _chat, chat_db, service = environment
 
     async def stream(*args, **kwargs):
@@ -111,15 +120,15 @@ def test_app_done_frame_replaces_streamed_markers_with_conversation_cards(enviro
     response = client.post('/v2/messages', json={'text': 'Recall the discussion'}, headers={'X-App-Platform': platform})
     payload = _decode_done_frame(response.text)
     assert payload['text'] == 'The answer.'
-    expected = {f'conversation-{index}' for index in range(1, 9) if f'[{index}]' in markers}
-    assert {memory['id'] for memory in payload['memories']} == expected
+    ids = [f'conversation-{index}' for index in expected]
+    assert [memory['id'] for memory in payload['memories']] == ids
     ai = [call.args[1] for call in chat_db.add_message.call_args_list if call.args[1]['sender'] == 'ai'][0]
     assert ai['text'] == payload['text']
-    assert set(ai['memories_id']) == expected
+    assert ai['memories_id'] == ids
 
 
 def test_voice_done_frame_uses_the_same_citation_contract(environment):
-    _client, chat, chat_db, service = environment
+    _client, chat, chat_db, _service = environment
 
     async def stream(*args, **kwargs):
         kwargs['callback_data'].update(answer='The answer.[8][7][6]', memories_found=_conversations())
@@ -127,9 +136,33 @@ def test_voice_done_frame_uses_the_same_citation_contract(environment):
         yield None
 
     chat.execute_graph_chat_stream = stream
-    payload = _decode_done_frame(''.join(_collect_voice_frames(chat)))
+    frames = ''.join(_collect_voice_frames(chat))
+    assert 'data: The answer.[8][7][6]' in frames
+    payload = _decode_done_frame(frames)
     assert payload['text'] == 'The answer.'
-    assert {memory['id'] for memory in payload['memories']} == {'conversation-6', 'conversation-7', 'conversation-8'}
+    assert '[8]' not in payload['text']
+    ids = ['conversation-8', 'conversation-7', 'conversation-6']
+    assert [memory['id'] for memory in payload['memories']] == ids
+    ai = [call.args[1] for call in chat_db.add_message.call_args_list if call.args[1]['sender'] == 'ai'][0]
+    assert ai['text'] == payload['text']
+    assert ai['memories_id'] == ids
+
+
+def test_voice_answer_without_markers_keeps_text_and_stores_no_cards(environment):
+    _client, chat, chat_db, _service = environment
+
+    async def stream(*args, **kwargs):
+        kwargs['callback_data'].update(answer='Just an answer.', memories_found=_conversations())
+        yield 'data: Just an answer.'
+        yield None
+
+    chat.execute_graph_chat_stream = stream
+    payload = _decode_done_frame(''.join(_collect_voice_frames(chat)))
+    assert payload['text'] == 'Just an answer.'
+    assert payload['memories'] == []
+    ai = [call.args[1] for call in chat_db.add_message.call_args_list if call.args[1]['sender'] == 'ai'][0]
+    assert ai['text'] == 'Just an answer.'
+    assert ai['memories_id'] == []
 
 
 @pytest.mark.parametrize('surface', ['telegram', 'imessage'])
@@ -190,6 +223,14 @@ def test_marker_variants_map_to_owned_sources(environment, marker):
     text, sources = resolve_conversation_citations('Answer' + marker, _conversations())
     assert text == 'Answer'
     assert sources[0]['id'] == 'conversation-2'
+
+
+def test_answers_without_markers_keep_their_text_and_drop_uncited_cards(environment):
+    from utils.chat_citations import resolve_conversation_citations
+
+    text, sources = resolve_conversation_citations('Just an answer.', _conversations())
+    assert text == 'Just an answer.'
+    assert sources == []
 
 
 def test_unknown_indices_do_not_invent_sources_and_markdown_links_remain_links(environment):
