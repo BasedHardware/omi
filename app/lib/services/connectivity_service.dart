@@ -14,18 +14,10 @@ class ConnectivityService {
   final InternetConnection _internetConnection = InternetConnection.createInstance(
     useDefaultOptions: false,
     checkInterval: const Duration(seconds: 10),
-    customCheckOptions: PhysicalQualification.enabled
-        ? [InternetCheckOption(uri: Uri.parse('${Env.apiBaseUrl}v1/health'), timeout: const Duration(seconds: 3))]
-        : [
-            InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
-            InternetCheckOption(
-              uri: Uri.parse('https://api.omi.me/v1/health'),
-              timeout: const Duration(seconds: 3),
-              responseStatusFn: (response) {
-                return response.statusCode < 500;
-              },
-            ),
-          ],
+    customCheckOptions: connectivityProbeOptions(
+      physicalQualification: PhysicalQualification.enabled,
+      apiBaseUrl: PhysicalQualification.enabled ? Env.apiBaseUrl : null,
+    ),
   );
   InternetConnection get internetConnection => _internetConnection;
   final Connectivity _connectivity = Connectivity();
@@ -86,3 +78,17 @@ class ConnectivityService {
     }
   }
 }
+
+/// Connectivity consumers need internet access, not backend readiness. Never
+/// spend the unauthenticated Omi edge budget on a fleet-wide periodic probe.
+/// Capture-only physical qualification deliberately probes its local fixture.
+List<InternetCheckOption> connectivityProbeOptions({
+  required bool physicalQualification,
+  String? apiBaseUrl,
+}) =>
+    [
+      InternetCheckOption(
+        uri: Uri.parse(physicalQualification ? '${apiBaseUrl}v1/health' : 'https://one.one.one.one'),
+        timeout: const Duration(seconds: 3),
+      ),
+    ];

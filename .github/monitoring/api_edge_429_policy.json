@@ -1,0 +1,40 @@
+{
+  "displayName": "Prod API edge throttling storm",
+  "documentation": {
+    "content": "One prod API, sync or listen backend has more than 1000 HTTP 429/min (5-minute aligned rate) for 30 minutes. Inspect backend_target_name, Cloud Armor denied_by_security_policy vs backend 429s, path/method cohorts, app-build adoption and Retry-After. Compare job polls, duplicate upload share, pending age and completion together; use the measure.sh approach in the runbook. The LB metric counts all 429s, not only Cloud Armor denials. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/request-storm-alerts.md.",
+    "mimeType": "text/markdown"
+  },
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [],
+  "conditions": [
+    {
+      "displayName": "One backend exceeds 1000 HTTP 429/min for 30 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"loadbalancing.googleapis.com/https/request_count\" AND resource.type=\"https_lb_rule\" AND resource.labels.project_id=\"based-hardware\" AND (resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-49a4-be\" OR resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-sync-49a4-be\" OR resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\") AND metric.labels.response_code=\"429\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 16.666666666666668,
+        "duration": "1800s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.backend_target_name"
+            ]
+          }
+        ],
+        "trigger": {
+          "count": 1
+        },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationPrompts": [
+      "OPENED"
+    ]
+  }
+}

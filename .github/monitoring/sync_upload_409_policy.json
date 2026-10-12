@@ -1,0 +1,51 @@
+{
+  "displayName": "Prod sync duplicate upload share",
+  "documentation": {
+    "content": "The sync backend 409/request_count ratio (rolling one-hour totals, all response codes in denominator) stays above 10% for one hour. This backend-wide metric is a duplicate-upload proxy, not a route-specific sync_content_in_progress count. Inspect upload 409 reason, owner/job hints, old app builds, job polling and pending/completion ages. Use the read-only Monitoring REST and measure.sh approach in the runbook. No traffic or missing data does not page. Follow https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/request-storm-alerts.md.",
+    "mimeType": "text/markdown"
+  },
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [],
+  "conditions": [
+    {
+      "displayName": "Sync backend 409 share exceeds 10% for one hour",
+      "conditionThreshold": {
+        "filter": "metric.type=\"loadbalancing.googleapis.com/https/request_count\" AND resource.type=\"https_lb_rule\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-sync-49a4-be\" AND metric.labels.response_code=\"409\"",
+        "denominatorFilter": "metric.type=\"loadbalancing.googleapis.com/https/request_count\" AND resource.type=\"https_lb_rule\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.backend_target_name=\"custom-domains-api-omi-me-backend-sync-49a4-be\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.1,
+        "duration": "3600s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "3600s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.backend_target_name"
+            ]
+          }
+        ],
+        "denominatorAggregations": [
+          {
+            "alignmentPeriod": "3600s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.backend_target_name"
+            ]
+          }
+        ],
+        "trigger": {
+          "count": 1
+        },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationPrompts": [
+      "OPENED"
+    ]
+  }
+}

@@ -10,6 +10,8 @@ duplicate if a prior create succeeded but its response was lost.
 from __future__ import annotations
 
 import argparse
+import copy
+import json
 import subprocess
 import sys
 import time
@@ -107,6 +109,88 @@ def ensure_policy(
         sleep(retry_interval_seconds)
 
     raise RuntimeError("unreachable policy creation state")
+
+
+
+def ensure_json_policy(
+    *,
+    project: str,
+    body: dict,
+    runner: Runner = subprocess.run,
+) -> str:
+    """Reconcile a JSON policy, including ratio conditions, without resetting dwell.
+
+    Built-in metrics need no log-metric propagation retry. Read-before-write and
+    preserve the sole condition resource name on updates. Ignore output-only and
+    default fields returned by Monitoring, but verify every declared field.
+    """
+    desired = copy.deepcopy(body)
+    display_name = desired["displayName"]
+    if len(desired.get("conditions", [])) != 1:
+        raise ValueError("JSON policy must have exactly one condition")
+
+    def run(args):
+        result = _run_gcloud(runner, ["monitoring", "policies", *args, f"--project={project}"])
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or "Monitoring policy operation failed")
+        return result.stdout
+
+    def managed(actual, expected):
+        if isinstance(expected, dict):
+            return isinstance(actual, dict) and all(managed(actual.get(k), v) for k, v in expected.items())
+        if isinstance(expected, list):
+            return isinstance(actual, list) and len(actual) == len(expected) and all(
+                managed(a, e) for a, e in zip(actual, expected)
+            )
+        return actual == expected
+
+    def matches(actual):
+        candidate = copy.deepcopy(actual)
+        candidate["notificationChannels"] = sorted(candidate.get("notificationChannels", []))
+        conditions = candidate.get("conditions", [])
+        if len(conditions) != 1:
+            return False
+        threshold = conditions[0].get("conditionThreshold")
+        expected_threshold = desired["conditions"][0].get("conditionThreshold")
+        if not isinstance(threshold, dict) or not isinstance(expected_threshold, dict):
+            return False
+        # A stale denominator or forecast changes semantics even when the
+        # numerator matches. Ignore only absent/default optional API fields.
+        for key in ("denominatorFilter", "denominatorAggregations", "forecastOptions", "disableMetricValidation"):
+            if key not in expected_threshold and threshold.get(key) in (None, "", [], {}, False):
+                threshold.pop(key, None)
+        if threshold != expected_threshold:
+            return False
+        return managed(candidate, desired)
+
+    desired["notificationChannels"] = sorted(desired["notificationChannels"])
+    names = run(["list", f'--filter=displayName="{display_name}"', "--format=value(name)"]).split()
+    if len(names) > 1:
+        raise RuntimeError(f"Duplicate {display_name} alert policies; reconcile manually")
+    condition_name = None
+    if names:
+        name = names[0]
+        existing = json.loads(run(["describe", name, "--format=json"]))
+        if matches(existing):
+            return name
+        conditions = existing.get("conditions", [])
+        if len(conditions) != 1 or not conditions[0].get("name"):
+            raise RuntimeError("Existing JSON policy must have one named condition")
+        condition_name = conditions[0]["name"]
+        desired["conditions"][0]["name"] = condition_name
+        run(["update", name, "--quiet", f"--policy={json.dumps(desired)}"])
+    else:
+        # A lost create response fails this run; the next deploy re-lists before
+        # attempting creation rather than issuing a blind retry.
+        name = run(["create", f"--policy={json.dumps(desired)}", "--format=value(name)"]).strip()
+        if not name:
+            raise RuntimeError("Monitoring policy create returned no name")
+    verified = json.loads(run(["describe", name, "--format=json"]))
+    if not matches(verified):
+        raise RuntimeError(f"Monitoring policy drift after reconciliation: {display_name}")
+    if condition_name and verified["conditions"][0].get("name") != condition_name:
+        raise RuntimeError("Monitoring condition name changed across update")
+    return name
 
 
 def main() -> int:
