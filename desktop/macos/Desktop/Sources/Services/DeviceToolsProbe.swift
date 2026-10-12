@@ -64,10 +64,12 @@ enum DeviceToolsProbe {
 
     // The propose path refuses a bare name and an empty draft before any
     // compose window could open, so these checks never show the person a window.
+    // The body check uses a fictional 555-01xx number: the recipient has to be
+    // valid so that the empty draft, not the address, is what gets refused.
     detail["proposeNameValidation"] = proposeRejection(
       .email, ["to": ["Maya"], "text": "Running late"])
     detail["proposeBodyValidation"] = proposeRejection(
-      .message, ["to": ["+10000000000"], "text": "   "])
+      .message, ["to": ["+15555550100"], "text": "   "])
     // An address the person never gave (here, one "read from a page") is sent
     // back for confirmation instead of opening a draft.
     detail["proposeGrounding"] = await MainActor.run {
