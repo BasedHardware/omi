@@ -270,10 +270,10 @@ class MemoryGraphPage extends StatefulWidget {
   });
 
   @override
-  State<MemoryGraphPage> createState() => _MemoryGraphPageState();
+  State<MemoryGraphPage> createState() => MemoryGraphPageState();
 }
 
-class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late ForceDirectedSimulation3D simulation;
   late Ticker _ticker;
 
@@ -287,6 +287,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   double _panY = 0.0;
   double _zoom = 1.0;
   double _baseZoom = 1.0;
+
+  @visibleForTesting
+  double get zoom => _zoom;
+
+  @visibleForTesting
+  bool get hasFittedBounds => _hasFittedBounds;
 
   Offset? _lastPanStart;
 
