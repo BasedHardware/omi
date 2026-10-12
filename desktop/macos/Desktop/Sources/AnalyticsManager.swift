@@ -1687,7 +1687,7 @@ enum SubscriptionFunnelWire {
     case "pro":
       return "architect"
     case "basic", "plus", "unlimited", "unlimited_v2", "operator", "architect", "unknown":
-      return raw!.trimmingCharacters(in: .whitespacesAndNewlines)
+      return (raw ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
     default:
       return "unknown"
     }
