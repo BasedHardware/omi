@@ -88,20 +88,22 @@ enum DeviceToolsProbe {
 
   /// The send check run against the absent store with a stand-in send that
   /// delivers nothing. The store is pinned to `absentStorePath` whatever the
-  /// caller names, so the probe never reads a real history, and the clock and
-  /// sleep are fixed so it never waits. An unreadable history must read as
+  /// caller names, so the probe never reads a real history, and its clock
+  /// moves only when the check sleeps, so it never waits. An unreadable history must read as
   /// unconfirmed, never as failed, and the stand-in send must run exactly once.
   static func sendCheckDetail() async -> [String: String] {
     let standInSends = LockedCounter()
-    let fixedNow = Date()
+    // A clock that moves only when the check sleeps, so the probe never waits.
+    let start = Date()
+    let sleeps = LockedCounter()
     var detail: [String: String] = [:]
     do {
       let (_, confirmation) = try await MessageSendConfirmer.sendThenConfirm(
         handle: "+10000000000",
         text: "probe",
         history: .store(URL(fileURLWithPath: absentStorePath)),
-        now: { fixedNow },
-        sleep: { _ in },
+        now: { start.addingTimeInterval(Double(sleeps.count) * MessageSendConfirmer.pollInterval) },
+        sleep: { _ in sleeps.increment() },
         send: { standInSends.increment() })
       detail["sendCheckStatus"] = confirmation.status.rawValue
       detail["sendCheckReason"] = confirmation.unconfirmedReason?.rawValue ?? ""
