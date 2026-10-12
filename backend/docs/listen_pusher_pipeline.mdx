@@ -3190,30 +3190,33 @@ UIDs occur only in this log; there is no transcript, PCM, or embedding payload.
 The old per-update `speaker_id_exit reason=embedding_budget` log is suppressed;
 its legacy metric continues to increment alongside the exclusive counter.
 
-The existing metadata queue holds at most 100 pending scoped voices, coalescing
-updates by matcher generation, conversation, provider scope, and numeric speaker.
-It retains at most 128 distinct timing intervals per slot, never fills silence
-gaps, and keeps the latest segment ID. A voice already running waits in its one
-pending slot until completion, rather than occupying task slots behind its lock.
-Active suppression follows the numeric matcher lock across provider scopes and
-generations, while pending keys remain distinct. After successful extraction,
-unselected intervals beyond a query's ten seconds remain in the same queue for
-normal scheduling after completion, with a new age for the served work quantum.
-Already-pending updates retain their age and latest ID. If the queue is full,
-those intervals remain in matcher metadata for the next ordinary update.
-Failures and denials introduce no retry, and every subsequent query reserves
-through the unchanged caps.
-Before five seconds of queue age, untried voices precede previously attempted
-voices, followed by existing acoustic near-owner preference and longer pooled
-clips. Once aged, ready work wins oldest-first, so at most 99 older pending slots
-can precede it and continued updates cannot renew its age. This is a selection
-bound, not a five-second execution deadline: task capacity and active voice locks
-can still delay work. All queries retain the 10-second audio bound, 12-attempt
-voice cap, shared 16-token burst/refill of 240 per hour, and 16-task ceiling.
-Scheduling introduces no retry timer or reserved/exempt quota. Better utilization
-can change actual call counts within the same ceiling, but cannot enlarge that
-ceiling. Acceptance thresholds, margins, manual veto, contention, and generation
-publication fences are unchanged.
+The live matcher queue holds at most 100 pending provider updates in FIFO arrival
+order. Same-voice updates remain separate; there is no untried, near-owner,
+duration, or age-based priority. Queued work carries timing/identity metadata
+and the enqueue-time matcher generation, never PCM or transcript text. The
+existing per-voice lock serializes tasks, and at most 16 matcher tasks run.
+
+Each dequeued update contributes its own audio interval to the existing pending
+minimum-evidence accumulation. Successful queries subtract already-embedded
+ranges, select at most ten seconds using the existing centered/chronological
+policy, and clear pending metadata. Unselected leftovers do not create another
+queue entry: only an ordinary provider update can drive another query. Duplicate
+or overlapping updates cannot double-count successful evidence. Failures and
+budget denials retain pending metadata, but introduce no autonomous retry.
+
+This restores the scheduling/query cadence preceding #21181 while preserving
+its budget telemetry and all authority/stale-generation guards. The telemetry
+names, labels, first-block semantics, and exclusive-cap/legacy-count equality
+above remain compatible with owner-recognition diagnostics. The 12-attempt
+voice cap, shared 16-token burst/refill of 240 per hour, acceptance thresholds,
+margins, manual veto, and contention remain unchanged. Actual calls and latency
+can differ from the coalescing scheduler inside the same request ceiling.
+
+Owner diagnostics keep their query/comparison, budget, progress/refusal and
+stop hooks with this FIFO scheduler. Stop/checkpoint `pending_queue` samples
+`queue.qsize()`: it counts pending provider updates, including separate entries
+for the same voice. Closed generation summaries stay frozen when stale queued
+work is examined after a rollover.
 
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
 `window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
