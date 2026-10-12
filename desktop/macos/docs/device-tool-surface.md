@@ -73,22 +73,31 @@ the policy re-requires dispatch when the handle differs.
 
 After `send_message` runs, the executor confirms the send from the Messages
 history through `MessagesReaderService`, the same reader behind
-`read_message_history`. It looks for an outgoing row in the direct chat with the
-recipient, created at or after the send started (less a 3-second clock
-tolerance), whose text equals what was sent once line endings and whitespace
-are normalised. Matching rows that existed before the send never count. It
-polls every half second for up to 5 seconds and reports one status:
+`read_message_history`. Before sending it records the newest message row id;
+afterwards it reads only outgoing rows past that id, in the recipient's direct
+chats (one per service), dated no more than a second before the send started,
+whose text equals what was sent once line endings and whitespace are
+normalised. Both tools find a person's chats with one rule
+(`MessagesReaderService.chatsForHandle`): two phone numbers match only when
+their digits are equal, or when one is the international form of the other's
+national number in this Mac's region.
+
+The check reads every half second for 5 seconds and then decides over every new
+row, so a failed iMessage attempt followed by the text-message fallback reads as
+sent:
 
 | Status | Meaning |
 |---|---|
-| `delivered` | The row is marked delivered. |
-| `sent` | The row is marked sent, not yet delivered, when the check ends. |
-| `not_delivered` | Messages recorded an error on the row (`ok: false`). |
-| `unconfirmed` | No matching row, an ambiguous match, or the history could not be read. |
+| `delivered` | The one new row without an error is marked delivered. |
+| `sent` | That row is marked sent, not yet delivered. |
+| `not_delivered` | Every new row carries an error (`ok: false`). |
+| `unconfirmed` | No new row, a row not yet sent, two identical new rows, or an unreadable history. |
 
-`unconfirmed` is an unknown outcome, not a failure. The send is never retried,
-and the result asks the model to have the person check Messages before anything
-is sent again. Only the status and timing are logged.
+`unconfirmed` is an unknown outcome, not a failure: the result carries
+`outcome_unknown: true` and the kernel ledger records the invocation as
+`outcome_unknown`. A send that times out is checked the same way. The send is
+never retried, and the result asks the model to have the person check Messages
+before anything is sent again. Only the status and timing are logged.
 
 ### AppleScript injection
 

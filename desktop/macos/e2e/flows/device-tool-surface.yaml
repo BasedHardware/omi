@@ -9,6 +9,8 @@ covers:
   - desktop/macos/Desktop/Sources/Services/FullDiskAccessProbe.swift
   - desktop/macos/Desktop/Sources/Services/MessagesSenderService.swift
   - desktop/macos/Desktop/Sources/Services/MessageSendConfirmation.swift
+  - desktop/macos/Desktop/Sources/Services/MessagingHandle.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/LockedCounter.swift
   - desktop/macos/Desktop/Sources/Services/AppleScriptRunner.swift
   - desktop/macos/Desktop/Sources/Services/ContactsReaderService.swift
   - desktop/macos/Desktop/Sources/Services/DeviceToolsProbe.swift

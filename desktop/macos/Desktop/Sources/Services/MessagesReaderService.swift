@@ -33,6 +33,8 @@ struct MessageRecord: Identifiable, Sendable {
 /// What Messages recorded for one outgoing row, without its text or handle.
 struct OutgoingMessageState: Sendable, Equatable {
   let rowID: Int64
+  /// `message.service`, such as "iMessage" or "SMS".
+  let service: String
   let isSent: Bool
   let isDelivered: Bool
   /// `message.error`; zero means Messages recorded no failure.
@@ -110,35 +112,6 @@ actor MessagesReaderService {
   /// The nanosecond Apple timestamp current stores write for `date`.
   static func appleTimestamp(from date: Date) -> Int64 {
     Int64(((date.timeIntervalSince1970 - appleEpochOffset) * nanosecondsPerSecond).rounded(.down))
-  }
-
-  /// Whether two handles name the same Messages address.
-  ///
-  /// The handle a send is given is often how Contacts spells it, such as
-  /// "(555) 123-4567", while Messages stores "+15551234567". Email addresses
-  /// compare without case. Phone numbers compare by digits: equal, or one side
-  /// adds a one-to-three-digit country code to a national number of seven or
-  /// more digits, after dropping a national trunk "0".
-  static func isSameMessagingHandle(_ stored: String, _ requested: String) -> Bool {
-    let left = stored.trimmingCharacters(in: .whitespacesAndNewlines)
-    let right = requested.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !left.isEmpty, !right.isEmpty else { return false }
-    if left.contains("@") || right.contains("@") {
-      return left.caseInsensitiveCompare(right) == .orderedSame
-    }
-    let leftDigits = phoneDigits(left)
-    let rightDigits = phoneDigits(right)
-    guard !leftDigits.isEmpty, !rightDigits.isEmpty else { return false }
-    if leftDigits == rightDigits { return true }
-    let (shorter, longer) =
-      leftDigits.count < rightDigits.count ? (leftDigits, rightDigits) : (rightDigits, leftDigits)
-    let national = shorter.hasPrefix("0") ? String(shorter.dropFirst()) : shorter
-    let countryCodeLength = longer.count - national.count
-    return national.count >= 7 && (1...3).contains(countryCodeLength) && longer.hasSuffix(national)
-  }
-
-  private static func phoneDigits(_ handle: String) -> String {
-    String(handle.filter { $0.isASCII && $0.isNumber })
   }
 
   /// A message body compared for equality: line endings unified, runs of
@@ -252,6 +225,9 @@ actor MessagesReaderService {
     }
     var configuration = Configuration()
     configuration.readonly = true
+    // Messages writes this store continuously. A brief lock (WAL recovery, a
+    // checkpoint) should wait a moment rather than fail the read outright.
+    configuration.busyMode = .timeout(0.25)
     do {
       return try DatabaseQueue(path: url.path, configuration: configuration)
     } catch {
@@ -329,7 +305,8 @@ actor MessagesReaderService {
   }
 
   func readHistory(
-    chatID: Int64?, handle: String?, limit: Int, storeOverride: URL? = nil
+    chatID: Int64?, handle: String?, limit: Int, storeOverride: URL? = nil,
+    callingCode: String? = MessagingHandle.currentCallingCode()
   ) async throws -> [MessageRecord] {
     let bounded = max(1, min(limit, 200))
     let dbQueue = try openReadOnlyStore(at: storeOverride)
@@ -348,36 +325,11 @@ actor MessagesReaderService {
           resolvedChatID = chatID
         } else if let handle, !handle.isEmpty {
           // One address can belong to a direct thread and any number of group
-          // chats. LIMIT 1 with no ordering picked among them arbitrarily, so
-          // "read my thread with Sam" could return an unrelated group — the
-          // wrong people's messages, and the wrong context to reply from.
-          //
-          // Direct chats come first (one participant), then the most recently
-          // active, so the choice is both right and repeatable.
-          guard
-            let found = try Int64.fetchOne(
-              db,
-              sql: """
-                SELECT chat.ROWID
-                FROM chat
-                JOIN chat_handle_join chj ON chj.chat_id = chat.ROWID
-                JOIN handle h ON h.ROWID = chj.handle_id
-                WHERE h.id = ?
-                GROUP BY chat.ROWID
-                ORDER BY
-                  (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chat.ROWID) ASC,
-                  (
-                    SELECT MAX(m.date)
-                    FROM message m
-                    JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-                    WHERE cmj.chat_id = chat.ROWID
-                  ) DESC,
-                  chat.ROWID ASC
-                LIMIT 1
-                """,
-              arguments: [handle])
+          // chats. Direct chats come first, then the most recently active, so
+          // "read my thread with Sam" never returns an unrelated group.
+          guard let found = try Self.chatsForHandle(db, handle: handle, callingCode: callingCode).first
           else { throw MessagesReaderError.chatNotFound(reference: handle) }
-          resolvedChatID = found
+          resolvedChatID = found.chatID
         } else {
           throw MessagesReaderError.chatNotFound(reference: "no chat_id or handle")
         }
@@ -427,17 +379,78 @@ actor MessagesReaderService {
     }
   }
 
-  /// Outgoing rows in the direct chat with `handle` that were created at or
-  /// after `createdSince` and whose body equals `text` once normalised.
+  /// A chat that includes a handle, and how many people are in it.
+  struct HandleChat: Equatable, Sendable {
+    let chatID: Int64
+    let participantCount: Int
+  }
+
+  /// Every chat that includes `handle`, matched with `MessagingHandle.isSame`:
+  /// direct chats first, then the most recently active, then the oldest chat.
+  ///
+  /// `read_message_history` takes the first. The `send_message` check takes
+  /// every direct chat, since one person can have an iMessage and an SMS thread.
+  /// The comparison runs inside SQLite, so only chat ids leave this query.
+  static func chatsForHandle(_ db: Database, handle: String, callingCode: String?) throws -> [HandleChat] {
+    db.add(
+      function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 2, pure: true) { values in
+        guard let stored = String.fromDatabaseValue(values[0]),
+          let requested = String.fromDatabaseValue(values[1])
+        else { return false }
+        return MessagingHandle.isSame(stored, requested, callingCode: callingCode)
+      })
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT
+          chat.ROWID AS chat_id,
+          (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chat.ROWID) AS participants
+        FROM chat
+        JOIN chat_handle_join chj ON chj.chat_id = chat.ROWID
+        JOIN handle h ON h.ROWID = chj.handle_id
+        WHERE omi_same_messaging_handle(h.id, ?)
+        GROUP BY chat.ROWID
+        ORDER BY
+          participants ASC,
+          (
+            SELECT MAX(m.date)
+            FROM message m
+            JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+            WHERE cmj.chat_id = chat.ROWID
+          ) DESC,
+          chat.ROWID ASC
+        """,
+      arguments: [handle])
+    return rows.map { HandleChat(chatID: $0["chat_id"], participantCount: Int($0["participants"] as Int64? ?? 0)) }
+  }
+
+  /// The newest message row id, read before a send so the check after it
+  /// can tell rows Messages wrote for the send from every row that existed.
+  func latestMessageRowID(storeOverride: URL? = nil) async throws -> Int64 {
+    let dbQueue = try openReadOnlyStore(at: storeOverride)
+    let path = (storeOverride ?? Self.storeURL()).path
+    do {
+      return try await dbQueue.read { db in
+        try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(ROWID), 0) FROM message") ?? 0
+      }
+    } catch {
+      throw Self.classifyReadError(error, path: path)
+    }
+  }
+
+  /// Outgoing rows Messages wrote after `afterRowID` in the direct chats with
+  /// `handle`, dated at or after `createdSince`, whose body equals `text` once
+  /// normalised.
   ///
   /// This is the evidence `send_message` checks after a send. It reads only
-  /// rows from that one person's direct chat (one per service, such as
-  /// iMessage and SMS) created inside the check window, compares bodies here
-  /// and returns delivery state alone, so no text or handle leaves the reader.
-  /// A chat that does not exist yet reads as no rows: the first message to a
-  /// new address creates it.
+  /// rows newer than the pre-send baseline in that one person's direct chats
+  /// (one per service, such as iMessage and SMS), compares bodies here and
+  /// returns delivery state alone, so no text or handle leaves the reader. A
+  /// chat that does not exist yet reads as no rows: the first message to a new
+  /// address creates it.
   func outgoingMessageStates(
-    sentTo handle: String, text: String, createdSince: Date, storeOverride: URL? = nil
+    sentTo handle: String, text: String, createdSince: Date, afterRowID: Int64,
+    callingCode: String? = MessagingHandle.currentCallingCode(), storeOverride: URL? = nil
   ) async throws -> [OutgoingMessageState] {
     let dbQueue = try openReadOnlyStore(at: storeOverride)
     let path = (storeOverride ?? Self.storeURL()).path
@@ -445,16 +458,11 @@ actor MessagesReaderService {
     let since = Self.appleTimestamp(from: createdSince)
     do {
       return try await dbQueue.read { db in
-        // The stored handle and the requested one can be spelled differently,
-        // so the comparison runs inside SQLite and only the matching chat's
-        // rows come back.
-        db.add(
-          function: DatabaseFunction("omi_same_messaging_handle", argumentCount: 2, pure: true) { values in
-            guard let stored = String.fromDatabaseValue(values[0]),
-              let requested = String.fromDatabaseValue(values[1])
-            else { return false }
-            return Self.isSameMessagingHandle(stored, requested)
-          })
+        let directChats = try Self.chatsForHandle(db, handle: handle, callingCode: callingCode)
+          .filter { $0.participantCount == 1 }
+          .map(\.chatID)
+        guard !directChats.isEmpty else { return [] }
+        let placeholders = Array(repeating: "?", count: directChats.count).joined(separator: ", ")
         let rows = try Row.fetchAll(
           db,
           sql: """
@@ -462,28 +470,25 @@ actor MessagesReaderService {
               message.ROWID AS message_id,
               message.text AS text,
               message.attributedBody AS attributed_body,
+              COALESCE(message.service, '') AS service,
               message.is_sent AS is_sent,
               message.is_delivered AS is_delivered,
               message.error AS error
             FROM message
             JOIN chat_message_join cmj ON cmj.message_id = message.ROWID
-            WHERE cmj.chat_id IN (
-                SELECT chj.chat_id
-                FROM chat_handle_join chj
-                JOIN handle h ON h.ROWID = chj.handle_id
-                WHERE omi_same_messaging_handle(h.id, ?)
-                  AND (SELECT COUNT(*) FROM chat_handle_join c2 WHERE c2.chat_id = chj.chat_id) = 1
-              )
+            WHERE cmj.chat_id IN (\(placeholders))
               AND message.is_from_me = 1
+              AND message.ROWID > ?
               AND message.date >= ?
             ORDER BY message.ROWID ASC
             """,
-          arguments: [handle, since])
+          arguments: StatementArguments(directChats + [afterRowID, since]))
         return rows.compactMap { row -> OutgoingMessageState? in
           let body = Self.body(text: row["text"] as String?, attributedBody: row["attributed_body"] as Data?)
           guard Self.normalizedMessageBody(body) == expectedBody else { return nil }
           return OutgoingMessageState(
             rowID: row["message_id"],
+            service: row["service"] as String? ?? "",
             isSent: (row["is_sent"] as Int64? ?? 0) == 1,
             isDelivered: (row["is_delivered"] as Int64? ?? 0) == 1,
             errorCode: row["error"] as Int64? ?? 0)
