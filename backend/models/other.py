@@ -15,6 +15,16 @@ class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
 
+    @field_validator("time_zone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("time_zone must be a non-empty IANA timezone")
+        if not is_schedulable_time_zone(stripped):
+            raise ValueError("time_zone must be a schedulable IANA timezone")
+        return stripped
+
 
 class SyncUserTimeZoneRequest(BaseModel):
     time_zone: str
@@ -25,10 +35,8 @@ class SyncUserTimeZoneRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("time_zone must be a non-empty IANA timezone")
-        try:
-            ZoneInfo(stripped)
-        except Exception as exc:
-            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        if not is_schedulable_time_zone(stripped):
+            raise ValueError("time_zone must be a schedulable IANA timezone")
         return stripped
 
 
