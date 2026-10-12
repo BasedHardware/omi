@@ -29,6 +29,7 @@ from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits,
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
 from utils.plan_wire_capabilities import understands_plan_identity
+from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 
@@ -1652,7 +1653,6 @@ def _usage_seconds(usage: Any) -> Optional[int]:
 
 
 from utils.marketplace_reviewers import is_marketplace_reviewer
-from utils.transcription_allowance import TranscriptionAllowance
 
 
 def resolve_transcription_allowance(
