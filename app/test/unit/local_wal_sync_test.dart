@@ -477,9 +477,10 @@ void main() {
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
     });
 
-    test('pendant custody 10s WALs upload in jobs of 300s of audio, not 50s', () {
-      // Discord #21177: pendant ring custody drains audio into ~10s WALs, and a
-      // five-file batch made every sync job and conversation 50s long.
+    test('pendant custody 10s WALs upload in jobs of 200s of audio, not 50s', () {
+      // #21177: pendant ring custody drains audio into ~10s WALs, and a five-file
+      // batch made every sync job 50s long. The manifest's 20-file limit binds
+      // before the 300s audio budget does for WALs this short.
       const now = 2000000000;
       final custodyTail = List.generate(
         40,
@@ -488,9 +489,12 @@ void main() {
 
       final batch = nextSyncUploadBatch(custodyTail.reversed.toList(), now);
 
-      expect(batch, hasLength(30));
-      expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 300);
-      expect(batch.map((wal) => wal.timerStart), custodyTail.take(30).map((wal) => wal.timerStart));
+      expect(batch, hasLength(syncUploadBatchMaxFiles));
+      expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 200);
+      expect(
+        batch.map((wal) => wal.timerStart),
+        custodyTail.take(syncUploadBatchMaxFiles).map((wal) => wal.timerStart),
+      );
     });
 
     test('a batch is bounded by audio seconds, not by file count', () {

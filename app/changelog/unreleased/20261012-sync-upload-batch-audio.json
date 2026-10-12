@@ -1,3 +1,3 @@
 {
-  "change": "Pendant recordings waiting in Offline Sync upload in batches of up to five minutes of audio again instead of 50 seconds, so a large backlog clears faster."
+  "change": "Pendant recordings waiting in Offline Sync upload four times as much audio per request, so a large backlog clears faster."
 }

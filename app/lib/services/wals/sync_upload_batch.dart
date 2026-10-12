@@ -8,16 +8,21 @@ import 'package:omi/services/wals/wal.dart';
 /// backend's 600s stale guard (backend/database/sync_jobs.py). The job's cost
 /// follows its audio, so the batch is bounded by audio seconds: the 300s that
 /// five 60s chunks always carried. Pendant ring custody drains audio into
-/// ~10s WALs, and a five-file limit then shrank every job to 50s — six times
-/// the jobs and conversations for the same audio, and too little context per
-/// conversation to separate speakers. The file ceiling bounds the backend's
-/// per-file VAD fan-out at one job's worth of those 10s WALs.
+/// ~10s WALs, and a five-file limit then shrank every job to 50s, so the same
+/// audio needed six times the jobs against the same rate limiter.
 const _syncUploadBatchAudioSeconds = 5 * chunkSizeInSeconds;
-const _syncUploadBatchMaxFiles = 30;
+
+/// A batch that claims a live-capture manifest sends every file in it to
+/// `/v2/sync-capture-manifest`, whose request accepts at most 20 files
+/// (`SyncCaptureManifestRequest.files`, published as `maxItems` in
+/// docs/api-reference/app-client-openapi.json). A larger batch would pass the
+/// whole-conversation claim check and then be refused by the server. With
+/// this ceiling, a conversation too large for one batch never claims at all.
+const syncUploadBatchMaxFiles = 20;
 
 bool _batchHasRoom(int batchFiles, int batchSeconds, Wal next) =>
     batchFiles == 0 ||
-    (batchFiles < _syncUploadBatchMaxFiles && batchSeconds + next.seconds <= _syncUploadBatchAudioSeconds);
+    (batchFiles < syncUploadBatchMaxFiles && batchSeconds + next.seconds <= _syncUploadBatchAudioSeconds);
 
 List<Wal> _takeWithinBudget(Iterable<Wal> wals) {
   final batch = <Wal>[];
