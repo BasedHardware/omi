@@ -14,6 +14,8 @@ final class MessagingHandleTests: XCTestCase {
     XCTAssertFalse(same("+614155550123", "+14155550123", region: "US"), "+1 vs +61")
     XCTAssertFalse(same("+244207946000", "+44207946000", region: "GB"), "+44 vs +244")
     XCTAssertFalse(same("+914155550123", "+14155550123", region: "IN"))
+    XCTAssertFalse(
+      same("+14155550123", "+4155550123", region: "US"), "two international forms never go through the region")
   }
 
   func testShortNationalNumberDoesNotMatchAForeignNumberEndingTheSameWay() {
