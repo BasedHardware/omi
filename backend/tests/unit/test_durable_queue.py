@@ -157,6 +157,7 @@ def test_store_wide_age_is_min_created_at_across_the_bounded_page():
                 _Snap(
                     {
                         'created_at': NOW - timedelta(hours=4),
+                        'queued_at': (NOW - timedelta(hours=4)).isoformat(),
                         'status': 'pending',
                         'delivery_state': 'ready',
                         'event_type': 'vector_repair_purge',
@@ -165,6 +166,7 @@ def test_store_wide_age_is_min_created_at_across_the_bounded_page():
                 _Snap(
                     {
                         'created_at': NOW - timedelta(hours=1),
+                        'queued_at': (NOW - timedelta(hours=1)).isoformat(),
                         'status': 'pending',
                         'delivery_state': 'ready',
                         'event_type': 'vector_repair_purge',
@@ -240,3 +242,168 @@ def test_age_sampler_excludes_future_retries_and_live_leases_but_keeps_abandoned
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    'payload,ready',
+    [
+        ({'available_at': (NOW + timedelta(seconds=1)).replace(tzinfo=None)}, False),
+        ({'available_at': NOW.replace(tzinfo=None)}, True),
+        ({'status': 'processing', 'claimed_at': (NOW - timedelta(seconds=299)).replace(tzinfo=None)}, False),
+        ({'status': 'processing', 'claimed_at': (NOW - timedelta(seconds=300)).replace(tzinfo=None)}, True),
+        ({'status': 'processing', 'lease_expires_at': NOW + timedelta(seconds=1)}, False),
+        ({'status': 'processing', 'lease_expires_at': NOW}, True),
+        ({'status': 'in_progress', 'lease_expires_at': (NOW + timedelta(seconds=1)).isoformat()}, False),
+        ({'status': 'in_progress', 'lease_expires_at': NOW.isoformat()}, True),
+        ({'available_at': (NOW + timedelta(seconds=1)).isoformat()}, False),
+        ({'available_at': NOW.isoformat().replace('+00:00', 'Z')}, True),
+    ],
+)
+def test_queue_timestamp_normalization_and_lease_expiry(payload, ready):
+    from database.durable_queue_age import _created_ats_from_page
+
+    created = NOW - timedelta(hours=2)
+    result = _created_ats_from_page([{'created_at': created, **payload}], created_at_field='created_at', now=NOW)
+    assert result == ([created] if ready else [])
+
+
+def test_bad_document_does_not_drop_healthy_age():
+    from database.durable_queue_age import _created_ats_from_page
+
+    class BrokenSnapshot:
+        def to_dict(self):
+            raise ValueError('bad metadata')
+
+    failures = []
+    created = NOW - timedelta(hours=2)
+    result = _created_ats_from_page(
+        [BrokenSnapshot(), {'available_at': 'invalid'}, {'created_at': created}],
+        created_at_field='created_at',
+        now=NOW,
+        failures=failures,
+    )
+    assert result == [created]
+    assert len(failures) == 2
+
+
+class _PagedAgeClient:
+    """Model implicit document-name ordering, status equality and field masks."""
+
+    def __init__(self, records):
+        self.records = records
+        self.reads = 0
+        self.statuses = []
+        self.masks = []
+
+    def collection_group(self, collection):
+        client = self
+
+        class Query:
+            def __init__(self):
+                self.rows = list(enumerate(client.records))
+                self.fields = []
+                self.cap = 0
+
+            def where(self, *, filter):
+                client.statuses.append(filter.value)
+                self.rows = [(i, row) for i, row in self.rows if row.get(filter.field_path) == filter.value]
+                return self
+
+            def select(self, fields):
+                self.fields = fields
+                client.masks.append(fields)
+                return self
+
+            def limit(self, cap):
+                self.cap = cap
+                return self
+
+            def start_after(self, snapshot):
+                self.rows = [(i, row) for i, row in self.rows if i > snapshot.position]
+                return self
+
+            def stream(self):
+                from types import SimpleNamespace
+
+                rows = self.rows[: self.cap]
+                client.reads += len(rows)
+                return [
+                    SimpleNamespace(position=i, to_dict=lambda row=row: {k: row[k] for k in self.fields if k in row})
+                    for i, row in rows
+                ]
+
+        return Query()
+
+
+@pytest.mark.parametrize('blocked', ['future_retry', 'live_lease', 'other_event'])
+def test_sampler_refills_filtered_page(blocked):
+    from database.durable_queue_age import _sample_status_page
+
+    spec = QUEUE_AGE_SAMPLERS['vector_repair_outbox' if blocked == 'other_event' else 'candidate_integration_outbox']
+    status = 'processing' if blocked == 'live_lease' else 'pending'
+    ready = {
+        'status': status,
+        'created_at': NOW - timedelta(days=60),
+        'queued_at': (NOW - timedelta(days=60)).isoformat(),
+        'event_type': 'vector_repair_purge',
+    }
+    filtered = (
+        {**ready, 'available_at': (NOW + timedelta(hours=1)).isoformat()}
+        if blocked == 'future_retry'
+        else ({**ready, 'claimed_at': NOW} if blocked == 'live_lease' else {**ready, 'event_type': 'other'})
+    )
+    client = _PagedAgeClient([filtered] * 200 + [ready])
+    assert _sample_status_page(client, spec, now=NOW) == [NOW - timedelta(days=60)]
+    assert client.reads == 201
+    assert all('payload' not in fields and 'lease_expires_at' in fields for fields in client.masks)
+
+
+def test_capped_filtered_sample_is_unknown_and_bounded(monkeypatch):
+    from database import durable_queue_age
+
+    spec = QUEUE_AGE_SAMPLERS['candidate_integration_outbox']
+    monkeypatch.setattr(durable_queue_age, 'QUEUE_AGE_SAMPLERS', {'candidate_integration_outbox': spec})
+    filtered = {'status': 'failed', 'created_at': NOW, 'available_at': NOW + timedelta(hours=1)}
+    client = _PagedAgeClient([filtered] * 1000 + [{'status': 'failed', 'created_at': NOW - timedelta(days=60)}])
+    assert durable_queue_age.sample_store_wide_oldest_ready_ages(now=NOW, firestore_client=client) == {}
+    assert client.reads == 1000
+
+
+def test_exhausted_filtered_sample_proves_empty():
+    from database.durable_queue_age import _sample_status_page
+
+    client = _PagedAgeClient([{'status': 'failed', 'available_at': NOW + timedelta(hours=1)}] * 200)
+    assert _sample_status_page(client, QUEUE_AGE_SAMPLERS['candidate_integration_outbox'], now=NOW) == []
+    assert client.reads == 200
+
+
+def test_malformed_empty_sample_is_unknown():
+    from database.durable_queue_age import _sample_status_page
+
+    client = _PagedAgeClient([{'status': 'pending', 'available_at': 'bad'}])
+    assert _sample_status_page(client, QUEUE_AGE_SAMPLERS['memory_outbox'], now=NOW) is None
+
+
+@pytest.mark.parametrize(
+    'queue,status,timestamp_field',
+    [
+        ('memory_outbox', 'processing', 'created_at'),
+        ('vector_repair_outbox', 'in_progress', 'queued_at'),
+    ],
+)
+def test_sampler_queries_expired_lease_status(queue, status, timestamp_field):
+    from database.durable_queue_age import _sample_status_page
+
+    created = NOW - timedelta(days=60)
+    client = _PagedAgeClient(
+        [
+            {
+                'status': status,
+                timestamp_field: created.isoformat(),
+                'event_type': 'vector_repair_purge',
+                'lease_expires_at': NOW.isoformat(),
+            }
+        ]
+    )
+    assert _sample_status_page(client, QUEUE_AGE_SAMPLERS[queue], now=NOW) == [created]
+    assert status in client.statuses

@@ -2,9 +2,9 @@
 
 Oldest-ready age is store-wide per queue and is published from one periodic tick
 per service, never from a request path or from the items a drain happened to
-lease this tick. ``None`` from a successful sample means the bounded page was
-empty and is published as 0 so ``absent()`` still means the publisher did not
-run. A sampler failure omits that queue so the series stays absent.
+lease this tick. ``None`` from a successful sample proves all status queries
+were exhausted with no ready work and is published as 0. An unknown sample
+omits that queue, leaving any previous observation unchanged.
 """
 
 from __future__ import annotations
