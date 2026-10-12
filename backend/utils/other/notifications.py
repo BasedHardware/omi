@@ -858,7 +858,14 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     if retry_attempt and declined == _DECLINE_LOCKED:
         # A timed-out worker may still own the day. Keep its recipient pending
         # until that worker finishes, rather than treating contention as delivery.
-        raise RuntimeError('daily summary retry still locked')
+        # A worker that finished *after* its timeout keeps the lock for the full
+        # TTL by design, so the durable record is the only proof it is done; without
+        # this read the recipient stayed "locked" for 2h and pinned the whole saved
+        # cohort, starving every current cohort behind it (2026-10-12).
+        summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+        if not summary_data:
+            raise RuntimeError('daily summary retry still locked')
+        declined = None
     if summary_data and summary_data.get('notification_delivery_completed'):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
