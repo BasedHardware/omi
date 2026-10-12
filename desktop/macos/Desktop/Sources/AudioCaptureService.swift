@@ -70,6 +70,11 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Properties
 
   private var deviceID: AudioDeviceID = kAudioObjectUnknown
+  // Resolved on audioQueue before AudioDeviceStart, never through HAL while
+  // holding the watchdog lock or running an IOProc. A HAL/watchdog lock inversion
+  // can otherwise freeze both the main thread and the microphone callback.
+  private var captureDeviceIsBuiltIn = false
+  private var captureDeviceIsBluetooth = false
   private var ioProcID: AudioDeviceIOProcID?
   private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
   private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
@@ -125,8 +130,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// Human-readable description of the capture device currently in use — for
   /// diagnostics (which mic a turn was recorded from).
   var currentDeviceDescription: String {
-    let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
-    return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    captureDeviceIsBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
   }
   /// Whether the active capture device is on a Bluetooth transport (A2DP/HFP),
   /// the known profile-conflict case that feeds zeros. Exposed so the PTT
@@ -134,7 +138,15 @@ class AudioCaptureService: @unchecked Sendable {
   /// device name. Derives from CoreAudio transport type, not the redacted
   /// `currentDeviceDescription` string.
   var isCurrentDeviceBluetoothTransport: Bool {
-    Self.isBluetoothTransport(deviceID: deviceID)
+    captureDeviceIsBluetooth
+  }
+
+  /// Bind metadata while the old IOProc is quiescent and before the new one
+  /// starts. Quiet-window classification is then a pure snapshot read.
+  func bindCaptureRoute(deviceID: AudioDeviceID, isBuiltIn: Bool, isBluetooth: Bool) {
+    self.deviceID = deviceID
+    captureDeviceIsBuiltIn = isBuiltIn
+    captureDeviceIsBluetooth = isBluetooth
   }
 
   // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
@@ -358,7 +370,10 @@ class AudioCaptureService: @unchecked Sendable {
     // 1. Resolve input device: explicit override wins while available, otherwise
     // fall back to the system default instead of pinning capture to a stale device.
     let inputDeviceID = try resolveInputDeviceID()
-    self.deviceID = inputDeviceID
+    bindCaptureRoute(
+      deviceID: inputDeviceID,
+      isBuiltIn: inputDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: inputDeviceID))
     registerActiveCapture(deviceID: inputDeviceID)
 
     // 2. Get device stream format
@@ -876,7 +891,7 @@ class AudioCaptureService: @unchecked Sendable {
     // one-shot latch) so the watchdog observes recovery and can re-arm for a second
     // episode — see `evaluateSilentMicWindow`.
     let nowAbs = CFAbsoluteTimeGetCurrent()
-    let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
+    let isBluetooth = captureDeviceIsBluetooth
     silentMicWatchdogLock.lock()
     watchdogFrameCount += processedFrameLength
     if watchdogFirstFrameAt == nil { watchdogFirstFrameAt = nowAbs }
@@ -1139,7 +1154,10 @@ class AudioCaptureService: @unchecked Sendable {
       return
     }
 
-    self.deviceID = newDeviceID
+    bindCaptureRoute(
+      deviceID: newDeviceID,
+      isBuiltIn: newDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: newDeviceID))
     registerActiveCapture(deviceID: newDeviceID)
 
     // Get new format

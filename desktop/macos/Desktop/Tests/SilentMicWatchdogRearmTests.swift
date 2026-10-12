@@ -8,6 +8,21 @@ import XCTest
 /// `AudioCaptureService.evaluateSilentMicWindow` (the per-window decision extracted from the
 /// audio callback) so the fire-more-than-once contract is verified without real CoreAudio buffers.
 final class SilentMicWatchdogRearmTests: XCTestCase {
+  func testWatchdogUsesBoundRouteFactsRatherThanReenteringHAL() {
+    let svc = makeWatchdog()
+    // No physical device at this ID: resolving through HAL would lose these
+    // bound facts. This is the production route-binding/classification API.
+    svc.bindCaptureRoute(deviceID: 0, isBuiltIn: true, isBluetooth: true)
+    XCTAssertEqual(svc.currentDeviceDescription, "built-in id=0")
+    XCTAssertTrue(svc.isCurrentDeviceBluetoothTransport)
+    XCTAssertNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: true, now: 0))
+    let detection = svc.evaluateSilentMicWindow(peak: 0, isBluetooth: true, now: 1)
+    XCTAssertEqual(detection?.deviceDescription, "built-in id=0")
+    XCTAssertEqual(detection?.deviceID, 0)
+    svc.bindCaptureRoute(deviceID: 7, isBuiltIn: false, isBluetooth: false)
+    XCTAssertEqual(svc.currentDeviceDescription, "id=7")
+    XCTAssertFalse(svc.isCurrentDeviceBluetoothTransport)
+  }
   private final class RecoveryCount: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0

@@ -49,6 +49,19 @@ silent episode and current-driver fenced. Live microphone PCM clears the
 warning; starting or stopping a session also clears it. Generic stack rebuilds
 and PTT policy are not replaced by this continuation rule.
 
+## HAL and watchdog lock ordering
+
+Native fault injection exposed a separate lock inversion: the main thread held
+`silentMicWatchdogLock` while resolving the device description through HAL, while
+the HAL microphone IO thread waited for that watchdog lock. System PCM continued,
+but both microphone recovery and the UI were frozen. This was verified by a
+native thread sample, not inferred from the customer's diagnostic export.
+
+Resolve built-in/Bluetooth route facts on `audioQueue` before starting an IOProc,
+including route reconfiguration. Watchdog classification and the microphone
+callback read the bound facts without calling HAL. Recovery callbacks remain
+outside the watchdog lock; physical teardown still runs on the device queue.
+
 ## Verification checklist
 
 - [x] Microphone-only recovery preserves pending cloud mixer bytes, tap and
@@ -60,6 +73,8 @@ and PTT policy are not replaced by this continuation rule.
   the warning on live PCM without restarting
 - [x] Never-started, stopped or stale tap cannot authorize continuation
 - [x] Permission and no-live-source terminal behavior remain covered
+- [x] Watchdog route classification uses bound metadata rather than querying
+  HAL while holding its lock; start and reconfiguration both bind the route
 - [ ] Named-bundle native microphone/system-audio path exercised, separately
   from synthetic owner/driver tests
 
