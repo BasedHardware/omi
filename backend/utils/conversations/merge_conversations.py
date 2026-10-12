@@ -444,13 +444,26 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     allocator = ConversationSpeakerIdAllocator()
     # Full source-receipt migration is outside this change. Never move a
     # manual voice's numeric authority while its receipt remains at the source.
-    reallocate = not any(
-        conv.get('manual_speaker_assignments')
-        or any(s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or []))
-        for conv in conversations
-    )
+    # Decide per source: a source with manual/carried labels (or a manual
+    # receipt) keeps its numbers and has them reserved in the allocator; every
+    # other source is renumbered past the reserved ids so provider-local ids
+    # from different conversations cannot collide.
+    def _source_keeps_ids(conv):
+        if conv.get('manual_speaker_assignments'):
+            return True
+        return any(
+            s.get('speaker_label_source') in ('manual', 'carried')
+            for s in (conv.get('transcript_segments') or [])
+        )
 
-    def copy_segment(segment, source):
+    keeps_ids = [_source_keeps_ids(conv) for conv in conversations]
+    for conv, keeps in zip(conversations, keeps_ids):
+        if not keeps:
+            continue
+        allocator.hydrate(conv.get('transcript_segments') or [])
+        allocator.hydrate_receipt(conv.get('manual_speaker_assignments'))
+
+    def copy_segment(segment, source, keeps):
         copied = copy.deepcopy(segment)
         speaker_id = copied.get('speaker_id')
         if (
@@ -462,12 +475,13 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 # Unidentified legacy inputs cannot establish a new voice scope.
                 if source.get('id'):
                     copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
-            if reallocate and copied.get('speaker_id_scope'):
+            if not keeps and copied.get('speaker_id_scope'):
                 copied['speaker_id'] = int(speaker_id)
                 allocator.assign(copied)
         return copied
 
     for i, conv in enumerate(conversations):
+        keeps = keeps_ids[i]
         # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
         # A doc persisted with an explicit `transcript_segments: None` (or a
         # segment with an explicit `start`/`end: None`) still returns None here,
@@ -476,7 +490,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
         if i == 0:
             # First conversation - use segments as-is
-            merged.extend([copy_segment(s, conv) for s in segments])
+            merged.extend([copy_segment(s, conv, keeps) for s in segments])
             if segments:
                 cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
@@ -497,7 +511,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
-                seg_copy = copy_segment(seg, conv)
+                seg_copy = copy_segment(seg, conv, keeps)
                 seg_copy["start"] = (seg.get("start") or 0) + offset
                 seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)
