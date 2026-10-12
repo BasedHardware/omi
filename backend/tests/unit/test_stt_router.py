@@ -498,7 +498,7 @@ def test_probe_native_timeout_is_503(monkeypatch):
     monkeypatch.undo()
 
     def timeout(*args, **kwargs):
-        raise stt_router.AVTimeoutError(110, 'sensitive decoder details')
+        raise stt_router.FFmpegError(stt_router.errno.ETIMEDOUT, 'sensitive decoder details')
 
     monkeypatch.setattr(stt_router.av, 'open', timeout)
     with pytest.raises(HTTPException) as exc:

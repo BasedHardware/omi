@@ -11,6 +11,7 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 """
 
 import asyncio
+import errno
 import logging
 import math
 import os
@@ -18,7 +19,7 @@ import re
 from typing import BinaryIO
 
 import av
-from av.error import FFmpegError, TimeoutError as AVTimeoutError
+from av.error import FFmpegError
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -59,7 +60,7 @@ def _audio_seconds(audio_file: BinaryIO) -> int:
     """
     try:
         seconds = 0.0
-        with av.open(audio_file, mode='r', timeout=_PROBE_TIMEOUT_SECS) as audio:
+        with av.open(audio_file, mode='r') as audio:
             if not audio.streams.audio:
                 raise ValueError('missing audio stream')
             stream = audio.streams.audio[0]
@@ -72,9 +73,11 @@ def _audio_seconds(audio_file: BinaryIO) -> int:
         if not math.isfinite(seconds) or seconds <= 0:
             raise ValueError('invalid duration')
         return math.ceil(seconds)
-    except AVTimeoutError:
-        raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
-    except (ValueError, TypeError, FFmpegError):
+    except FFmpegError as error:
+        if error.errno == errno.ETIMEDOUT:
+            raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
+        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
 
 
@@ -145,7 +148,7 @@ async def stt_transcribe(
         seconds = await asyncio.wait_for(
             run_blocking(storage_executor, _audio_seconds, file.file), timeout=_PROBE_TIMEOUT_SECS
         )
-    except (asyncio.TimeoutError, AVTimeoutError):
+    except asyncio.TimeoutError:
         raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
     await file.seek(0)
     source = request.headers.get('x-app-platform')
