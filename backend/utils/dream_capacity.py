@@ -68,6 +68,10 @@ def _decision(model, reason, *, waiting=False, source='evidence'):
     return None if waiting else model
 
 
+def log_wait(model, *, source):
+    _decision(model, 'saturated', waiting=True, source=source)
+
+
 @lru_cache(maxsize=1)
 def _vertex_tokens():
     return VertexAccessTokenSupplier()
@@ -145,7 +149,7 @@ async def mark_saturated(model):
                 reason='connection_lost',
                 outcome='degraded',
             )
-        _decision(model, 'saturated', waiting=True, source='capacity_response')
+        logger.warning('dream_capacity_cooldown reason=saturated model=%s', model)
 
 
 def _release_local(token):

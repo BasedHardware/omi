@@ -90,7 +90,7 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
         (429, None, dream_transport.TRIAGE_LANE, False),
     ],
 )
-async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, status, failure, lane, cools):
+async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, caplog, status, failure, lane, cools):
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     state = ReservationState(redis)
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_PROJECT', 'based-hardware')
@@ -123,6 +123,11 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
         else:
             assert await redis.get(key) is None
         assert available.await_count == (1 if lane == dream_transport.MAIN_LANE else 0)
+        decisions = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+        assert len(decisions) == int(cools)
+        if cools:
+            assert decisions[0]['decision'] == 'waiting'
+            assert decisions[0]['reason'] == 'saturated' and decisions[0]['source'] == 'gateway_response'
     finally:
         await redis.aclose()
 

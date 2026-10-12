@@ -125,6 +125,24 @@ async def test_probe_exception_is_visible_and_does_not_stop_admission(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_probe_capacity_observation_is_not_itself_a_waiting_decision(monkeypatch, caplog):
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: object())
+    monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=AsyncMock()))
+    monkeypatch.setattr(dream_capacity, 'probe_reservation', AsyncMock(return_value='capacity_error'))
+    try:
+        assert await dream_capacity._probe(PT_MODEL_CURRENT, 'us') == 'capacity_error'
+        assert not decisions(caplog)
+        assert await dream_capacity.available_model() is None
+        assert len(decisions(caplog)) == 1 and decisions(caplog)[0]['reason'] == 'saturated'
+    finally:
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('shared', [False, True])
 async def test_429_cooldown_blocks_during_outage_and_expires(monkeypatch, caplog, shared):
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
