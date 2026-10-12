@@ -88,16 +88,19 @@ def test_context_metadata_probe_admits_short_real_neighbour():
         },
         targets=targets.targets,
     )
-    fitting = [
-        Caps(tokens=t)
-        for t in range(16000, 25000, 1000)
-        if not dream_context.fits_pass(probe, Caps(tokens=t))
-        and dream_context.fits_pass(
-            dream_context.EvidenceRecords({**targets, 'conversations/context': {}}, targets=targets.targets),
-            Caps(tokens=t),
-        )
-    ]
-    assert fitting
+    fitting = next(
+        (
+            Caps(tokens=t)
+            for t in range(16000, 25000, 1000)
+            if not dream_context.fits_pass(probe, Caps(tokens=t))
+            and dream_context.fits_pass(
+                dream_context.EvidenceRecords({**targets, 'conversations/context': {}}, targets=targets.targets),
+                Caps(tokens=t),
+            )
+        ),
+        None,
+    )
+    assert fitting is not None
     calls = []
     rows = dream_context.add_context(
         targets,
@@ -108,7 +111,7 @@ def test_context_metadata_probe_admits_short_real_neighbour():
                 'lexical',
             )
         ],
-        fitting[0],
+        fitting,
     )
     assert calls == ['read'] and 'conversations/context' in rows
     assert rows.targets == targets.targets
