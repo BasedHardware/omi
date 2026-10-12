@@ -2052,14 +2052,17 @@ import XCTest
     XCTAssertTrue(windowSource.contains("if !presentsSurface { state.answersQuietly = true }"))
 
     // The one-shot latch: armed by the wake word, consumed by the visible path.
-    XCTAssertTrue(windowSource.contains("private static var suppressNextVisibleSurface = false"))
-    XCTAssertTrue(windowSource.contains("Self.suppressNextVisibleSurface = true"))
-    XCTAssertTrue(windowSource.contains("let presentsSurface = !Self.suppressNextVisibleSurface"))
+    // Request-scoped (`QuietSurfaceLatch`): a request rejected before presenting
+    // releases only its own arm, and an older request can never consume a newer one's.
+    XCTAssertTrue(windowSource.contains("private static var quietSurface = QuietSurfaceLatch()"))
+    XCTAssertTrue(windowSource.contains("Self.quietSurface.arm(request.id)"))
+    XCTAssertTrue(windowSource.contains("let presentsSurface = Self.quietSurface.presentsSurface(for: request?.id)"))
 
-    // Every exit that abandons the query has to clear the latch, or an abandoned wake-word
-    // command quiets the next typed question instead. This includes both submission APIs,
-    // their synchronous guard exits, the asynchronous owner recheck, and `.voiceOnly`.
-    XCTAssertEqual(windowSource.components(separatedBy: "Self.suppressNextVisibleSurface = false").count - 1, 7)
+    // Every exit that abandons the query has to release its own request's arm, or an
+    // abandoned wake-word command quiets the next typed question instead. This includes
+    // both submission APIs, their synchronous guard exits, the asynchronous owner
+    // recheck, and `.voiceOnly`.
+    XCTAssertEqual(windowSource.components(separatedBy: "Self.quietSurface.release(request?.id)").count - 1, 8)
 
     // A typed question is never quiet, whatever a preceding wake-word answer left behind.
     // Both onSendQuery wirings must reset it — the default one installed at setup and the
