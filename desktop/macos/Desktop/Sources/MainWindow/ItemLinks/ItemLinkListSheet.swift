@@ -129,7 +129,7 @@ struct ItemLinkRowView: View {
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm + 2)
     .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(isHovering && row.isAvailable ? Ink.rowFillHover : Ink.rowFill)
     )
     .contentShape(Rectangle())
