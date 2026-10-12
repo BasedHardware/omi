@@ -216,9 +216,18 @@ enum MeetingMemoryBriefComposer {
     negations.contains(word) || word.hasSuffix("n't") || word.hasSuffix("n\u{2019}t")
   }
 
+  /// "not"/"never" directly between a settled verb and its "to" ("agreed not to"), or
+  /// directly after that "to" ("agreed to not"): the outcome is settled, its action negative.
+  private static func negatesSettledAction(_ tokens: [String], at index: Int) -> Bool {
+    guard ["not", "never"].contains(tokens[index]) else { return false }
+    let settled = Set(settledOutcomeIndices(tokens))
+    if settled.contains(index - 1), index + 1 < tokens.count, tokens[index + 1] == "to" { return true }
+    return index >= 2 && tokens[index - 1] == "to" && settled.contains(index - 2)
+  }
+
   /// "We have not yet decided on pricing" and "No decision on hosting" are open questions:
-  /// a negation before the outcome word. "They agreed not to ship" is neither, so it is
-  /// never shown under the wrong label.
+  /// a negation before the outcome word. "They agreed not to ship" negates the action, not
+  /// the agreement, so it is a decision (`isUnsettled`), never an open question.
   static func statesOpenQuestion(_ line: String) -> Bool {
     if openQuestionPhrases.contains(where: line.lowercased().contains) { return true }
     let tokens = words(line)
@@ -230,9 +239,13 @@ enum MeetingMemoryBriefComposer {
 
   /// The shared veto for both the heading path and the text fallback: any negation, dispute,
   /// discussion, proposal, question, or open-question wording. Ambiguous lines are omitted.
+  /// The one negation that does not veto is the agreed action's own: "agreed not to ask",
+  /// "decided never to ship", "chose to not renew" settle what will not happen.
   static func isUnsettled(_ line: String) -> Bool {
     let lower = line.lowercased()
-    return words(line).contains(where: isNegation) || disputeMarkers.contains(where: lower.contains)
+    let tokens = words(line)
+    return tokens.indices.contains { isNegation(tokens[$0]) && !negatesSettledAction(tokens, at: $0) }
+      || disputeMarkers.contains(where: lower.contains)
       || uncertaintyMarkers.contains(where: lower.contains) || statesOpenQuestion(line)
       || reportsUnrealizedOutcome(line)
   }

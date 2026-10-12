@@ -111,9 +111,9 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
       XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(unsettled), unsettled)
       XCTAssertTrue(MeetingMemoryBriefComposer.statesOpenQuestion(unsettled), unsettled)
     }
-    // A decision phrased with a later negation is shown under neither label, never the wrong one.
-    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("They agreed not to ship the beta."))
-    XCTAssertFalse(MeetingMemoryBriefComposer.statesOpenQuestion("They agreed not to ship the beta."))
+    // A negation anywhere else in the line still vetoes, so it is shown under neither label.
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision("They agreed that we will not ship the beta."))
+    XCTAssertFalse(MeetingMemoryBriefComposer.statesOpenQuestion("They agreed that we will not ship the beta."))
 
     let facts = MeetingMemoryBriefComposer.facts(
       from: conversation(sections: [
@@ -332,7 +332,6 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
           heading: "Decisions",
           bodyMarkdown: """
             - Sara disagreed with the rollout date.
-            - They agreed not to ship the beta.
             - We haven\u{2019}t agreed on scope.
             """,
           sourceSegmentIDs: ["s1"])
@@ -350,6 +349,38 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
           sourceSegmentIDs: ["s1"])
       ]))
     XCTAssertEqual(imperative.first { $0.kind == .decision }?.text, "Ship the smaller pilot first.")
+  }
+
+  func testANegativeDecisionIsStillADecision() {
+    // Production summary of a live pilot meeting (PR #20824 evidence 003).
+    let live =
+      "The team agreed not to ask for calendar access at first launch. The prompt will appear only when "
+      + "someone enables meeting briefs in settings, with a brief explanation of why access is needed."
+    for decided in [
+      live, "They agreed not to ship the beta.", "We decided never to store raw audio.",
+      "The team chose to not renew the contract.",
+    ] {
+      XCTAssertTrue(MeetingMemoryBriefComposer.statesDecision(decided), decided)
+      XCTAssertFalse(MeetingMemoryBriefComposer.statesOpenQuestion(decided), decided)
+    }
+    for unsettled in [
+      "We have not agreed not to ship.", "Nobody agreed not to ship.", "They agreed nothing.",
+      "They agreed not on the date.", "We will have agreed not to ship by Friday.",
+    ] {
+      XCTAssertFalse(MeetingMemoryBriefComposer.statesDecision(unsettled), unsettled)
+    }
+
+    let facts = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(heading: "Calendar permission", bodyMarkdown: "- " + live, sourceSegmentIDs: ["s1"])
+      ]))
+    XCTAssertEqual(facts.first { $0.kind == .decision }?.sourceSegmentIDs, ["s1"])
+    let fromHeading = MeetingMemoryBriefComposer.facts(
+      from: conversation(sections: [
+        SummarySection(
+          heading: "Decisions", bodyMarkdown: "- They agreed not to ship the beta.", sourceSegmentIDs: ["s2"])
+      ]))
+    XCTAssertEqual(fromHeading.first { $0.kind == .decision }?.text, "They agreed not to ship the beta.")
   }
 
   func testALateNegationInALongLineStillVetoesTheDecision() {
