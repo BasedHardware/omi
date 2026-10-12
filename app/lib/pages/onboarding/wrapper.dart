@@ -265,6 +265,39 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return kProgressSteps[position - 1];
   }
 
+  @visibleForTesting
+  static bool isResumableStepForTesting(int index) => index >= kNamePage && index <= kCompletePage;
+
+  @visibleForTesting
+  static int? previousStepForTesting({
+    required int currentIndex,
+    required bool setupPageEnabled,
+    required bool knowledgeGraphStepEnabled,
+  }) {
+    if (currentIndex == kCompletePage) {
+      return setupPageEnabled
+          ? kSetupPage
+          : (knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
+    }
+    if (currentIndex == kSetupPage) {
+      return knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage;
+    }
+    if (currentIndex == kKnowledgeGraphPage) {
+      return kSpeechProfilePage;
+    }
+    final steps = [
+      kNamePage,
+      kPrimaryLanguagePage,
+      kFoundOmiPage,
+      kPermissionsPage,
+      kSpeechProfilePage,
+      if (knowledgeGraphStepEnabled) kKnowledgeGraphPage,
+    ];
+    final position = steps.indexOf(currentIndex);
+    if (position <= 0) return null;
+    return steps[position - 1];
+  }
+
   bool _speechStepBusy = false;
 
   /// Back — the on-screen control, Android system back and the iOS swipe all land here.
@@ -279,6 +312,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
+    _voiceController?.dispose();
+    _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
     final rootContext = globalNavigatorKey.currentContext;
     if (rootContext != null && rootContext.mounted) clearAllUserState(rootContext);
