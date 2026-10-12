@@ -267,8 +267,7 @@ class SpeakerMatcher:
             if carried is not None:
                 carried = {voice for voice in carried if old_origins.get(voice) == 'manual'}
             count_rollover = self._profile_conversation_id is not None and carried is not None
-            # Carry quota and its decision fence across profile/donor awaits;
-            # uncarried ids reset both after validation.
+            # Retain quota + decision fence across awaits; uncarried ids reset both after validation.
             retained_attempts = {
                 voice: attempts
                 for voice, attempts in self._embedding_attempts.items()
