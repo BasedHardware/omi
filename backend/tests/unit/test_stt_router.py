@@ -28,13 +28,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import routers.stt as stt_router
+from utils.stt import duration_probe
 from utils.other import endpoints as auth
 from utils.rate_limit_config import RATE_POLICIES
 from utils.subscription import TranscriptionAllowance, TRANSCRIPTION_MODE_MANAGED, TRANSCRIPTION_MODE_ON_DEVICE
 
 _PARAKEET_URL = 'http://parakeet.internal:8000'
 _UID = 'test-uid'
-_REAL_AUDIO_SECONDS = stt_router._audio_seconds
+_REAL_PROBE_AUDIO_SECONDS = stt_router._probe_audio_seconds
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +44,11 @@ def metering(monkeypatch):
     # data or the production usage ledger. Media probing has its own WAV test.
     allowance = Mock(return_value=TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, 100, 'plan_within_allowance'))
     record = Mock()
-    monkeypatch.setattr(stt_router, '_audio_seconds', lambda data: 10)
+
+    async def probe(data):
+        return 10
+
+    monkeypatch.setattr(stt_router, '_probe_audio_seconds', probe)
     monkeypatch.setattr(stt_router, 'resolve_transcription_allowance', allowance)
     monkeypatch.setattr(stt_router, 'record_usage', record)
     return allowance, record
@@ -99,14 +104,14 @@ def test_duration_probe_uses_media_frames_and_rounds_up(monkeypatch):
         wav.setsampwidth(2)
         wav.setframerate(8000)
         wav.writeframes(b'\x00\x00' * 10000)
-    assert stt_router._audio_seconds(io.BytesIO(data.getvalue())) == 2
+    assert duration_probe.audio_seconds(io.BytesIO(data.getvalue())) == 2
 
 
 def test_duration_probe_rejects_unreadable_media(monkeypatch):
     monkeypatch.undo()
     monkeypatch.setenv('PATH', '')
     with pytest.raises(HTTPException) as exc:
-        stt_router._audio_seconds(io.BytesIO(b'not audio'))
+        duration_probe.audio_seconds(io.BytesIO(b'not audio'))
     assert exc.value.status_code == 400
 
 
@@ -465,7 +470,7 @@ async def test_probe_deadline_is_503_before_provider_slot(monkeypatch, metering)
     async def blocked(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(stt_router, 'run_blocking', blocked)
+    monkeypatch.setattr(stt_router, '_probe_audio_seconds', blocked)
     from starlette.datastructures import UploadFile
 
     upload = UploadFile(io.BytesIO(b'audio'), size=5, filename='audio.wav')
@@ -485,30 +490,30 @@ def test_probe_metadata_rounding_and_validation_at_seam(monkeypatch, duration, e
     monkeypatch.undo()
     stream = SimpleNamespace(duration=10, time_base=0.125)
     audio = SimpleNamespace(duration=duration, streams=SimpleNamespace(audio=[stream]))
-    monkeypatch.setattr(stt_router.av, 'open', lambda *args, **kwargs: nullcontext(audio))
+    monkeypatch.setattr(duration_probe.av, 'open', lambda *args, **kwargs: nullcontext(audio))
     if expected == 400:
         with pytest.raises(HTTPException) as exc:
-            stt_router._audio_seconds(io.BytesIO(b'fake'))
+            duration_probe.audio_seconds(io.BytesIO(b'fake'))
         assert exc.value.status_code == 400
     else:
-        assert stt_router._audio_seconds(io.BytesIO(b'fake')) == expected
+        assert duration_probe.audio_seconds(io.BytesIO(b'fake')) == expected
 
 
 def test_probe_native_timeout_is_503(monkeypatch):
     monkeypatch.undo()
 
     def timeout(*args, **kwargs):
-        raise stt_router.FFmpegError(stt_router.errno.ETIMEDOUT, 'sensitive decoder details')
+        raise duration_probe.FFmpegError(duration_probe.errno.ETIMEDOUT, 'sensitive decoder details')
 
-    monkeypatch.setattr(stt_router.av, 'open', timeout)
+    monkeypatch.setattr(duration_probe.av, 'open', timeout)
     with pytest.raises(HTTPException) as exc:
-        stt_router._audio_seconds(io.BytesIO(b'fake'))
+        duration_probe.audio_seconds(io.BytesIO(b'fake'))
     assert exc.value.status_code == 503
     assert 'sensitive' not in exc.value.detail
 
 
 def test_real_probe_rewinds_upload_for_provider(monkeypatch, metering):
-    monkeypatch.setattr(stt_router, '_audio_seconds', _REAL_AUDIO_SECONDS)
+    monkeypatch.setattr(stt_router, '_probe_audio_seconds', _REAL_PROBE_AUDIO_SECONDS)
     monkeypatch.setenv('PATH', '')
     data = io.BytesIO()
     with wave.open(data, 'wb') as wav:
@@ -521,3 +526,187 @@ def test_real_probe_rewinds_upload_for_provider(monkeypatch, metering):
     assert _upload(_make_client(monkeypatch, fake), content=body).status_code == 200
     assert fake.calls[0]['files']['file'][1] == body
     metering[1].assert_called_once_with(_UID, transcription_seconds=2)
+
+
+async def test_child_probe_suppresses_native_playlist_logs_without_changing_parent():
+    import sys
+    import tempfile
+    import av.logging as av_logging
+
+    payload = b"ffconcat version 1.0\nfile '/private/tmp/probe-private-canary.wav'\n"
+    level = av_logging.get_level()
+    with tempfile.TemporaryFile() as spool:
+        spool.write(payload)
+        spool.seek(0)
+        # Control proves this media exercises libav's native stderr callback.
+        control = await asyncio.create_subprocess_exec(
+            sys.executable,
+            '-c',
+            "import av,sys; av.logging.restore_default_callback();\n"
+            "try: av.open(sys.stdin.buffer, mode='r')\n"
+            "except av.error.FFmpegError: pass",
+            stdin=spool,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, control_error = await control.communicate()
+        assert b'probe-private-canary' in control_error
+        spool.seek(0)
+        probe = await asyncio.create_subprocess_exec(
+            sys.executable,
+            '-m',
+            duration_probe.__name__,
+            stdin=spool,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        output, error = await probe.communicate()
+    assert probe.returncode == 2, error.decode()
+    assert output == error == b''
+    assert av_logging.get_level() == level
+
+
+async def test_timed_out_native_probe_is_killed_and_reaped_before_response(monkeypatch, metering):
+    import sys
+    import tempfile
+    from starlette.datastructures import UploadFile
+
+    real_spawn = asyncio.create_subprocess_exec
+    processes = []
+
+    async def spawn(*args, **kwargs):
+        process = await real_spawn(sys.executable, '-c', 'import time; time.sleep(60)', **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(stt_router.asyncio, 'create_subprocess_exec', spawn)
+    monkeypatch.setattr(stt_router, '_probe_audio_seconds', _REAL_PROBE_AUDIO_SECONDS)
+    monkeypatch.setattr(stt_router, '_PROBE_TIMEOUT_SECS', 0.05)
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(stt_router, 'get_stt_probe_semaphore', lambda: semaphore)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', _PARAKEET_URL)
+    with tempfile.TemporaryFile() as spool:
+        spool.write(b'audio')
+        spool.seek(0)
+        upload = UploadFile(spool, size=5, filename='audio.wav')
+        with pytest.raises(HTTPException) as exc:
+            await stt_router.stt_transcribe(request=_BareRequest(), file=upload, uid=_UID)
+        assert exc.value.status_code == 503
+        assert processes and processes[0].returncode is not None
+        assert not spool.closed  # caller can now safely close its upload
+        assert not semaphore.locked()
+    metering[0].assert_not_called()
+
+
+async def test_repeated_request_cancellation_waits_for_probe_reaping(monkeypatch):
+    from types import SimpleNamespace
+
+    started = asyncio.Event()
+    reaping = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Process:
+        returncode = None
+
+        async def communicate(self):
+            started.set()
+            await asyncio.Event().wait()
+
+        def kill(self):
+            self.returncode = -9
+
+        async def wait(self):
+            reaping.set()
+            await finish.wait()
+            return self.returncode
+
+    process = Process()
+
+    async def spawn(*args, **kwargs):
+        return process
+
+    monkeypatch.setattr(stt_router.asyncio, 'create_subprocess_exec', spawn)
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(stt_router, 'get_stt_probe_semaphore', lambda: semaphore)
+    task = asyncio.create_task(_REAL_PROBE_AUDIO_SECONDS(SimpleNamespace(fileno=lambda: 0)))
+    await started.wait()
+    task.cancel()
+    await reaping.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    assert semaphore.locked()
+    finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert process.returncode == -9
+    assert not semaphore.locked()
+
+
+async def test_cancellation_during_spawn_keeps_child_owned_until_reaped(monkeypatch):
+    from types import SimpleNamespace
+
+    spawning = asyncio.Event()
+    finish_spawn = asyncio.Event()
+
+    class Process:
+        returncode = None
+
+        def kill(self):
+            self.returncode = -9
+
+        async def wait(self):
+            return self.returncode
+
+    process = Process()
+
+    async def spawn(*args, **kwargs):
+        spawning.set()
+        await finish_spawn.wait()
+        return process
+
+    monkeypatch.setattr(stt_router.asyncio, 'create_subprocess_exec', spawn)
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(stt_router, 'get_stt_probe_semaphore', lambda: semaphore)
+    task = asyncio.create_task(_REAL_PROBE_AUDIO_SECONDS(SimpleNamespace(fileno=lambda: 0)))
+    await spawning.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    assert semaphore.locked()
+    finish_spawn.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert process.returncode == -9
+    assert not semaphore.locked()
+
+
+async def test_first_cancellation_during_success_cleanup_is_not_swallowed(monkeypatch):
+    from types import SimpleNamespace
+
+    reaping = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Process:
+        returncode = 0
+
+        async def communicate(self):
+            return b'2\n', b''
+
+        async def wait(self):
+            reaping.set()
+            await finish.wait()
+            return 0
+
+    async def spawn(*args, **kwargs):
+        return Process()
+
+    monkeypatch.setattr(stt_router.asyncio, 'create_subprocess_exec', spawn)
+    task = asyncio.create_task(_REAL_PROBE_AUDIO_SECONDS(SimpleNamespace(fileno=lambda: 0)))
+    await reaping.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task

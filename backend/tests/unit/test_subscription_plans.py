@@ -466,3 +466,15 @@ def test_windows_import_time_floor_does_not_inherit_macos(monkeypatch, desktop_f
     assert module.understands_plan_identity('macos', '0.12.197', None, compare)
     if windows_floor:
         assert module.understands_plan_identity('windows', '2.0.0', None, compare)
+
+
+@pytest.mark.parametrize('interval', ['Monthly', 'Annual'])
+def test_operator_wire_title_preserves_released_macos_price_ownership(subscription_module, interval):
+    # Released normalizedPlanId routes titles containing "pro" to Architect.
+    # Payments appends these intervals to the definition title; the old merger
+    # then unions those prices into that inferred plan, even when IDs are sent.
+    definition = next(d for d in subscription_module.get_paid_plan_definitions() if d['plan_id'] == 'operator')
+    title = f"{definition['title']} {interval}".lower()
+    assert definition['title'] == 'Operator'
+    assert 'operator' in title and 'pro' not in title
+    assert subscription_module.PLAN_DISPLAY_NAMES[PlanType.operator] == 'Pro'

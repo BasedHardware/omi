@@ -11,25 +11,25 @@ The response mirrors parakeet `/v2/transcribe` verbatim:
 """
 
 import asyncio
-import errno
 import logging
-import math
 import os
 import re
+import sys
+from pathlib import Path
 from typing import BinaryIO
 
-import av
-from av.error import FFmpegError
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
-from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore
+from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore, get_stt_probe_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.analytics import record_usage
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 from utils.observability.fallback import record_fallback
+from utils.async_tasks import create_named_task
+from utils.stt import duration_probe
 
 logger = logging.getLogger(__name__)
 
@@ -50,35 +50,57 @@ _MAX_FILENAME_LEN = 64
 _MAX_EXTENSION_LEN = 8
 
 
-def _audio_seconds(audio_file: BinaryIO) -> int:
-    """Probe the uploaded media, rather than billing transcript timestamp gaps.
+async def _probe_audio_seconds(audio_file: BinaryIO) -> int:
+    # A separate bound keeps admission probes out of the provider slots and
+    # out of storage_executor. Only the quick spool rollover borrows a thread.
+    async with get_stt_probe_semaphore():
+        descriptor = await run_blocking(storage_executor, audio_file.fileno)
+        spawn = create_named_task(
+            asyncio.create_subprocess_exec(
+                sys.executable,
+                '-m',
+                duration_probe.__name__,
+                cwd=str(Path(duration_probe.__file__).parents[2]),
+                stdin=descriptor,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            ),
+            name='stt-duration-probe-spawn',
+        )
+        try:
+            process = await asyncio.shield(spawn)
+            output, _ = await process.communicate()
+        finally:
+            # Shield spawn so cancellation cannot lose ownership of a child.
+            # Finish reaping even if the request receives another cancellation.
+            cleanup = create_named_task(_reap_probe(spawn), name='stt-duration-probe-reap')
+            cancelled = False
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    cancelled = True
+            cleanup.result()
+            if cancelled:
+                raise asyncio.CancelledError
+        if process.returncode == 2:
+            raise HTTPException(status_code=400, detail='Cannot determine audio duration')
+        if process.returncode != 0:
+            raise HTTPException(status_code=503, detail='Audio duration probe unavailable')
+        try:
+            return int(output)
+        except ValueError:
+            raise HTTPException(status_code=503, detail='Audio duration probe unavailable') from None
 
-    PyAV is the existing FFmpeg binding used by voice-duration accounting.
-    The existing seekable upload spool supports containers whose metadata is
-    at the end, without an external ffprobe binary or a resident body copy
-    while waiting for a provider slot. Decoder errors never enter logs or the response.
-    """
-    try:
-        seconds = 0.0
-        with av.open(audio_file, mode='r') as audio:
-            if not audio.streams.audio:
-                raise ValueError('missing audio stream')
-            stream = audio.streams.audio[0]
-            if audio.duration is not None:
-                seconds = float(audio.duration) / 1_000_000
-            elif stream.duration is not None and stream.time_base is not None:
-                seconds = float(stream.duration * stream.time_base)
-            else:
-                raise ValueError('missing duration')
-        if not math.isfinite(seconds) or seconds <= 0:
-            raise ValueError('invalid duration')
-        return math.ceil(seconds)
-    except FFmpegError as error:
-        if error.errno == errno.ETIMEDOUT:
-            raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
-        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail='Cannot determine audio duration') from None
+
+async def _reap_probe(spawn: asyncio.Task[asyncio.subprocess.Process]) -> None:
+    process = await spawn
+    if process.returncode is None:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    await process.wait()
 
 
 async def _admit(uid: str, source: str | None, seconds: int) -> None:
@@ -145,11 +167,11 @@ async def stt_transcribe(
         await file.seek(0)
 
     try:
-        seconds = await asyncio.wait_for(
-            run_blocking(storage_executor, _audio_seconds, file.file), timeout=_PROBE_TIMEOUT_SECS
-        )
+        seconds = await asyncio.wait_for(_probe_audio_seconds(file.file), timeout=_PROBE_TIMEOUT_SECS)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=503, detail='Audio duration probe timed out — try again shortly') from None
+    except OSError:
+        raise HTTPException(status_code=503, detail='Audio duration probe unavailable') from None
     await file.seek(0)
     source = request.headers.get('x-app-platform')
     await _admit(uid, source, seconds)
