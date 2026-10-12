@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
+import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 
 from routers import conversations
 
@@ -52,3 +56,38 @@ def test_app_client_spec_declares_204_not_200_for_conversation_delete():
     assert '204' in responses
     # The released mobile client treats a 200 body as a failed DELETE.
     assert '200' not in responses
+
+
+def _delete_client(monkeypatch) -> TestClient:
+    """The real route and FastAPI serialization; only storage side effects are stubbed."""
+    for name in (
+        'delete_owner_prompt_embedding_cache',
+        'delete_conversation_screen_frames',
+        'delete_conversation_and_frame_evidence',
+        'delete_conversation_audio_files',
+        'delete_vector',
+        'delete_transcript_chunk_vectors',
+        'delete_action_item_vectors_batch',
+        'record_product_event',
+        'MemoryService',
+    ):
+        monkeypatch.setattr(conversations, name, MagicMock())
+    monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
+    monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
+    monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
+    monkeypatch.setattr(conversations.action_items_db, 'delete_action_items_for_conversation', MagicMock())
+    app = FastAPI()
+    app.include_router(conversations.router)
+    app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: 'uid-delete-contract'
+    return TestClient(app)
+
+
+@pytest.mark.parametrize('cascade', ['false', 'true'])
+def test_conversation_delete_answers_204_with_an_empty_body_over_http(monkeypatch, cascade):
+    # The released mobile client reads anything but exactly 204 as a failed delete
+    # and lets the conversation reappear on the next refresh.
+    with _delete_client(monkeypatch) as client:
+        response = client.delete(f'/v1/conversations/conversation-1?cascade={cascade}')
+
+    assert response.status_code == 204
+    assert response.content == b''
