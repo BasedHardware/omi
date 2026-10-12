@@ -67,12 +67,17 @@ def load_subscription():
     multi-file pytest run.
     """
 
-    @contextmanager
-    def _loader():
-        with stub_modules(_circular_import_fakes()):
+    with stub_modules(_circular_import_fakes()):
+        # Warm imports in fixture setup. Keep the fakes for the whole module so
+        # repeated loads neither re-register protobuf descriptors nor re-import
+        # the heavy dependency graph during each test's call phase.
+        load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
+
+        @contextmanager
+        def _loader():
             yield load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
 
-    return _loader
+        yield _loader
 
 
 def test_operator_chat_cap_independent_from_unlimited(monkeypatch, load_subscription):
