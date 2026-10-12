@@ -41,6 +41,7 @@ def entries():
                 'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
             },
             domains={'collection': ['conversations', 'screen_activity']},
+            neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
         ),
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
@@ -94,7 +95,8 @@ def entries():
             },
             neutrals={
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
-                'consumed': ([], 'post-query acknowledgement versions'),
+                'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
+                'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
             },
             setup=finish_state,
@@ -102,7 +104,7 @@ def entries():
         DriverEntry(
             'database.dream_store.dirty_refs',
             base={'uid': UID},
-            domains={'limit': [1, 400, 500], 'newest': [True, False]},
+            domains={'limit': [1, 32, 33, 400, 500], 'newest': [True, False]},
             neutrals={'transaction': (None, 'transaction binding does not change query shape')},
         ),
         DriverEntry(

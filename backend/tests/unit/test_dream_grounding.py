@@ -199,7 +199,7 @@ def test_capped_spelling_preserves_capacity_for_next_edit(monkeypatch):
     finished = []
     monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: finished.append(k))
     dirty = [{'collection': 'conversations', 'id': 'film'}]
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (rows, dirty))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (rows, dirty))
     summary = Edit(
         kind='title',
         target='conversations/empty',
@@ -315,7 +315,7 @@ def test_real_pass_routes_ungrounded_to_spelling_question_with_shared_cap(monkey
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a: None)
     monkeypatch.setattr(dream_store, 'reserve_questions', lambda *a: budget)
     monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (rows, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (rows, []))
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(Plan(edits=[correction()]), 100)))
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)

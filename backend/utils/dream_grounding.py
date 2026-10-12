@@ -6,6 +6,7 @@ import unicodedata
 from datetime import datetime, timezone
 
 from models.review import ReviewItem, SpellingItem
+from utils.conversations.summary_selection import render_sections_markdown
 
 
 def source_conversations(ref, row):
@@ -23,8 +24,11 @@ def source_conversations(ref, row):
 
 
 def record_text(row):
-    values = [row.get(key) for key in ('name', 'label', 'content', 'description', 'summary', 'title')]
+    values = [
+        row.get(key) for key in ('name', 'label', 'content', 'description', 'summary', 'title', 'ocrText', 'ocr_text')
+    ]
     values.extend((row.get('structured') or {}).get(key) for key in ('title', 'overview'))
+    values.append(render_sections_markdown((row.get('structured') or {}).get('sections') or []))
     values.extend(segment.get('text') for segment in row.get('transcript_segments') or [])
     values.extend(row.get('aliases') or [])
     return '\n'.join(value for value in values if isinstance(value, str))

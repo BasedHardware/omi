@@ -26,3 +26,10 @@ accent-insensitive matches cannot authorize it. These are deterministic scripted
 model-response comparisons, not measured live-model accuracy.
 
 Vocabulary laundering and case-only changes have synthetic regressions. Only user-authored or accepted vocabulary with independent evidence may support automatic spelling; all new vocabulary is Review-only.
+`test_dream_retrieval_diagnostics.py` reproduces the initial four-target cap,
+a fabricated context-probe rejection, and 35 reads with only three visible
+targets. It checks unused-budget recovery, no unavailable/unread acknowledgement,
+all four retrieval paths (including failures and duplicates), closed metric labels,
+and the counts-only `utils.dream_agent.dry_run_retrieval` with admission, settlement
+and inference forbidden. The runbook gives the owner pod invocation. These are
+synthetic contract checks; they do not attribute a production empty-result path.
