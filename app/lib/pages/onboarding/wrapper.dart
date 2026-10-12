@@ -258,6 +258,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// The step before the current one, or null when there is nothing to go back to (Auth, consent,
   /// Name, completion).
   int? get _previousStep {
+    // Connect Omi is the threshold into the experience: no way back into the setup questions
+    // (language and permissions can be changed later in Settings).
+    if (_controller!.index == kConnectOmiPage) return null;
     final position = kProgressSteps.indexOf(_controller!.index);
     if (position <= 0) return null;
     return kProgressSteps[position - 1];
@@ -496,7 +499,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return PopScope(
       // System back and the iOS swipe step back one step, like the on-screen back button. On the
       // first step (and Auth / consent) back leaves onboarding as usual.
-      canPop: previous == null,
+      canPop: previous == null && index != kConnectOmiPage,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goBack();
       },
@@ -513,7 +516,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 progress: kProgressSteps.contains(index)
                     ? OnboardingProgressLine(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
-                child: _StepTransition(index: index, forward: _forward, child: pages[index]),
+                child: _StepTransition(
+                  index: index,
+                  forward: _forward,
+                  // Arriving at Connect Omi is a moment, not another form: a plain cross-fade lets the
+                  // step's own entrance carry it.
+                  fadeOnly: index == kConnectOmiPage,
+                  child: pages[index],
+                ),
               ),
             ],
           ),
@@ -526,10 +536,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 /// Moves between steps: the new step slides in from the side the reader is heading and fades up,
 /// the old one drifts the other way and fades out. Instant under Reduce Motion.
 class _StepTransition extends StatelessWidget {
-  const _StepTransition({required this.index, required this.forward, required this.child});
+  const _StepTransition({required this.index, required this.forward, required this.child, this.fadeOnly = false});
 
   final int index;
   final bool forward;
+  final bool fadeOnly;
   final Widget child;
 
   static const double _shift = 0.08;
@@ -549,7 +560,7 @@ class _StepTransition extends StatelessWidget {
       transitionBuilder: (child, animation) {
         final incoming = child.key == ValueKey(index);
         // An outgoing child runs its animation backwards, ending at its begin offset.
-        final from = (incoming == forward) ? _shift : -_shift;
+        final from = fadeOnly ? 0.0 : ((incoming == forward) ? _shift : -_shift);
         return IgnorePointer(
           ignoring: !incoming,
           child: FadeTransition(

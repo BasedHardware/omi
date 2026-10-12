@@ -1586,7 +1586,7 @@
     "@enableBluetooth": {
         "description": "Title for dialog prompting user to enable Bluetooth"
     },
-    "bluetoothNeeded": "Ang Omi ay kailangan ng Bluetooth upang kumonekta sa iyong wearable. Mangyaring paganahin ang Bluetooth at subukan muli.",
+    "bluetoothNeeded": "I-on ang Bluetooth para ikonekta ang Omi.",
     "@bluetoothNeeded": {
         "description": "Explanation text for why Bluetooth is required"
     },

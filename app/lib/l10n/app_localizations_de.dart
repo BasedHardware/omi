@@ -1700,8 +1700,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth aktivieren';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi benötigt Bluetooth, um sich mit Ihrem Wearable zu verbinden. Bitte aktivieren Sie Bluetooth und versuchen Sie es erneut.';
+  String get bluetoothNeeded => 'Schalte Bluetooth ein, um dein Omi zu verbinden.';
 
   @override
   String get contactSupport => 'Support kontaktieren?';

@@ -153,6 +153,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> with WidgetsBindi
     final permissions = _permissions ?? const <OnboardingPermission>[];
     return OnboardingPlainStep(
       title: context.l10n.grantPermissions,
+      centered: true,
       body: Column(
         children: [
           for (final permission in permissions) ...[

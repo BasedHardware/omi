@@ -3312,7 +3312,7 @@ abstract class AppLocalizations {
   /// Explanation text for why Bluetooth is required
   ///
   /// In en, this message translates to:
-  /// **'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.'**
+  /// **'Turn on Bluetooth to connect your Omi.'**
   String get bluetoothNeeded;
 
   /// Link text to contact support

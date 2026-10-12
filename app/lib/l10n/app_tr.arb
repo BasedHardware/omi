@@ -520,7 +520,7 @@
     "dontShowAgain": "Tekrar gösterme",
     "iUnderstand": "Anlıyorum",
     "enableBluetooth": "Bluetooth'u Etkinleştir",
-    "bluetoothNeeded": "Omi'nin giyilebilir cihazınıza bağlanması için Bluetooth gereklidir. Lütfen Bluetooth'u etkinleştirin ve tekrar deneyin.",
+    "bluetoothNeeded": "Omi'yi bağlamak için Bluetooth'u açın.",
     "contactSupport": "Desteğe Başvur?",
     "connectLater": "Sonra Bağlan",
     "grantPermissions": "İzinleri ver",

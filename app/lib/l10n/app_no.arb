@@ -520,7 +520,7 @@
     "dontShowAgain": "Ikke vis igjen",
     "iUnderstand": "Jeg forstår",
     "enableBluetooth": "Aktiver Bluetooth",
-    "bluetoothNeeded": "Omi trenger Bluetooth for å koble til den bærbare enheten din. Aktiver Bluetooth og prøv igjen.",
+    "bluetoothNeeded": "Slå på Bluetooth for å koble til Omi.",
     "contactSupport": "Kontakte support?",
     "connectLater": "Koble til senere",
     "grantPermissions": "Gi tillatelser",

@@ -520,7 +520,7 @@
     "dontShowAgain": "今後表示しない",
     "iUnderstand": "理解しました",
     "enableBluetooth": "Bluetoothを有効にする",
-    "bluetoothNeeded": "Omiはウェアラブルに接続するためにBluetoothが必要です。Bluetoothを有効にして再試行してください。",
+    "bluetoothNeeded": "Omiを接続するにはBluetoothをオンにしてください。",
     "contactSupport": "サポートに連絡しますか？",
     "connectLater": "後で接続",
     "grantPermissions": "権限を付与",

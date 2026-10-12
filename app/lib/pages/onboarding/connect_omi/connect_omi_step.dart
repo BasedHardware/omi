@@ -41,19 +41,75 @@ class ConnectOmiStep extends StatefulWidget {
   State<ConnectOmiStep> createState() => _ConnectOmiStepState();
 }
 
-class _ConnectOmiStepState extends State<ConnectOmiStep> {
+class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProviderStateMixin {
   OnboardingProvider? _provider;
   bool _done = false;
+
+  /// The arrival: the device rises and grows in, then the title, the line under it and the links
+  /// fade up one after another. A light tap marks the moment the device lands.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+  late final Animation<double> _device = CurvedAnimation(
+    parent: _entrance,
+    curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack),
+  );
+  late final Animation<double> _title = CurvedAnimation(
+    parent: _entrance,
+    curve: const Interval(0.35, 0.7, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _line = CurvedAnimation(
+    parent: _entrance,
+    curve: const Interval(0.45, 0.8, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _links = CurvedAnimation(
+    parent: _entrance,
+    curve: const Interval(0.7, 1.0, curve: Curves.easeOut),
+  );
+  Timer? _landingTap;
 
   @override
   void initState() {
     super.initState();
     _provider = context.read<OnboardingProvider>();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scan());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (OmiMotion.of(context).emphasized == Duration.zero) {
+        _entrance.value = 1;
+        _scan();
+      } else {
+        // Let the arrival play before any Bluetooth guidance can cover it. A search started after
+        // sign-in keeps finding devices in the meantime.
+        _entrance.forward().whenComplete(() {
+          if (mounted) _scan();
+        });
+        _landingTap = Timer(const Duration(milliseconds: 620), () {
+          if (mounted) OmiHaptics.selection();
+        });
+      }
+    });
+  }
+
+  /// Fades [child] up from slightly below as [animation] runs.
+  Widget _rise(Animation<double> animation, Widget child, {double distance = 12}) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final t = animation.value.clamp(0.0, 1.0);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, (1 - t) * distance), child: child),
+        );
+      },
+    );
   }
 
   @override
   void dispose() {
+    _landingTap?.cancel();
+    _entrance.dispose();
     _provider?.cancelActiveScan();
     _provider = null;
     super.dispose();
@@ -148,21 +204,41 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(height: stage, child: Center(child: visual)),
+                          AnimatedBuilder(
+                            animation: _device,
+                            child: SizedBox(height: stage, child: Center(child: visual)),
+                            builder: (context, child) {
+                              final t = _device.value;
+                              return Opacity(
+                                opacity: t.clamp(0.0, 1.0),
+                                child: Transform.translate(
+                                  offset: Offset(0, (1 - t) * 24),
+                                  child: Transform.scale(scale: 0.7 + 0.3 * t, child: child),
+                                ),
+                              );
+                            },
+                          ),
                           const SizedBox(height: OmiSpacing.xxl),
-                          Semantics(
-                            header: true,
-                            child: Text(l10n.onboardingConnectOmi, style: OmiType.title1, textAlign: TextAlign.center),
+                          _rise(
+                            _title,
+                            Semantics(
+                              header: true,
+                              child:
+                                  Text(l10n.onboardingConnectOmi, style: OmiType.title1, textAlign: TextAlign.center),
+                            ),
                           ),
                           const SizedBox(height: OmiSpacing.xs),
                           // A narrow measure so the instruction wraps evenly instead of leaving one word behind.
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 280),
-                            child: Text(
-                              subtitle,
-                              key: const Key('connect_omi_status'),
-                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                              textAlign: TextAlign.center,
+                          _rise(
+                            _line,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 280),
+                              child: Text(
+                                subtitle,
+                                key: const Key('connect_omi_status'),
+                                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ),
                           const SizedBox(height: OmiSpacing.lg),
@@ -191,36 +267,40 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> {
                     ),
                   ),
                 ),
-                if (!provider.isConnected) ...[
-                  Text(
-                    l10n.onboardingNoOmiYet,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    textAlign: TextAlign.center,
-                  ),
-                  // Quiet links, not buttons: they must not compete with the device above.
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: OmiButton.tertiary(
-                          key: const Key('connect_omi_ordered'),
-                          label: l10n.onboardingOmiOrdered,
-                          size: OmiButtonSize.compact,
-                          onPressed: () => _finish(OnboardingDeviceChoice.ordered),
+                if (!provider.isConnected)
+                  _rise(
+                      _links,
+                      Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(
+                          l10n.onboardingNoOmiYet,
+                          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                      Container(width: 1, height: 14, color: OmiColors.border),
-                      Flexible(
-                        child: OmiButton.tertiary(
-                          key: const Key('connect_omi_not_ordered'),
-                          label: l10n.onboardingOmiNotOrdered,
-                          size: OmiButtonSize.compact,
-                          onPressed: () => _finish(OnboardingDeviceChoice.notOrdered),
+                        // Quiet links, not buttons: they must not compete with the device above.
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: OmiButton.tertiary(
+                                key: const Key('connect_omi_ordered'),
+                                label: l10n.onboardingOmiOrdered,
+                                size: OmiButtonSize.compact,
+                                onPressed: () => _finish(OnboardingDeviceChoice.ordered),
+                              ),
+                            ),
+                            Container(width: 1, height: 14, color: OmiColors.border),
+                            Flexible(
+                              child: OmiButton.tertiary(
+                                key: const Key('connect_omi_not_ordered'),
+                                label: l10n.onboardingOmiNotOrdered,
+                                size: OmiButtonSize.compact,
+                                onPressed: () => _finish(OnboardingDeviceChoice.notOrdered),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ]),
+                      distance: 8),
               ],
             ),
           ),

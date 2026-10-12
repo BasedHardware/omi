@@ -1689,8 +1689,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get enableBluetooth => 'Aktifkan Bluetooth';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi membutuhkan Bluetooth untuk terhubung ke perangkat yang dapat dipakai Anda. Silakan aktifkan Bluetooth dan coba lagi.';
+  String get bluetoothNeeded => 'Nyalakan Bluetooth untuk menghubungkan Omi.';
 
   @override
   String get contactSupport => 'Hubungi Dukungan?';

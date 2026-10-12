@@ -1662,7 +1662,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enableBluetooth => '블루투스 활성화';
 
   @override
-  String get bluetoothNeeded => 'Omi가 웨어러블에 연결하려면 블루투스가 필요합니다. 블루투스를 활성화하고 다시 시도해 주세요.';
+  String get bluetoothNeeded => 'Omi를 연결하려면 Bluetooth를 켜세요.';
 
   @override
   String get contactSupport => '지원팀에 문의하시겠습니까?';

@@ -1662,7 +1662,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enableBluetooth => 'Bluetoothを有効にする';
 
   @override
-  String get bluetoothNeeded => 'Omiはウェアラブルに接続するためにBluetoothが必要です。Bluetoothを有効にして再試行してください。';
+  String get bluetoothNeeded => 'Omiを接続するにはBluetoothをオンにしてください。';
 
   @override
   String get contactSupport => 'サポートに連絡しますか？';

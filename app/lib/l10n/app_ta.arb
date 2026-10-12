@@ -1586,7 +1586,7 @@
     "@enableBluetooth": {
         "description": "Title for dialog prompting user to enable Bluetooth"
     },
-    "bluetoothNeeded": "Omi உங்கள் உணர்வுமான சாதனத்துடன் இணைக்க Bluetooth தேவை. Bluetooth ஐ இயக்கவும் மற்றும் மீண்டும் முயற்சி செய்யவும்.",
+    "bluetoothNeeded": "Omi-ஐ இணைக்க Bluetooth-ஐ இயக்கவும்.",
     "@bluetoothNeeded": {
         "description": "Explanation text for why Bluetooth is required"
     },

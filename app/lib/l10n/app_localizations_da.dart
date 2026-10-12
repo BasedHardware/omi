@@ -1681,7 +1681,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get enableBluetooth => 'Aktivér Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Bluetooth påkrævet';
+  String get bluetoothNeeded => 'Slå Bluetooth til for at forbinde din Omi.';
 
   @override
   String get contactSupport => 'Kontakt support';

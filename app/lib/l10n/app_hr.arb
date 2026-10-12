@@ -1586,7 +1586,7 @@
     "@enableBluetooth": {
         "description": "Title for dialog prompting user to enable Bluetooth"
     },
-    "bluetoothNeeded": "Omi trebaju Bluetooth da bi se spojio na tvoj prijenosni uređaj. Molimo omogući Bluetooth i pokušaj ponovno.",
+    "bluetoothNeeded": "Uključite Bluetooth da biste povezali Omi.",
     "@bluetoothNeeded": {
         "description": "Explanation text for why Bluetooth is required"
     },

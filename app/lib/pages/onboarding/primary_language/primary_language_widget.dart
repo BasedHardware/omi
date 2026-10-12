@@ -229,7 +229,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   Widget build(BuildContext context) {
     final hasSelection = selectedLanguageName != null;
     return OnboardingPlainStep(
-      title: context.l10n.whatsYourPrimaryLanguage,
+      title: context.l10n.chooseYourLanguage,
+      centered: true,
       body: Semantics(
         button: true,
         label: context.l10n.selectPrimaryLanguage,

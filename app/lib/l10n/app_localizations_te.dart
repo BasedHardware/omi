@@ -1692,8 +1692,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get enableBluetooth => 'బ్లూటూత్ ప్రారంభించండి';
 
   @override
-  String get bluetoothNeeded =>
-      'మీ ధరించదగిన పరికరానికి కనెక్ట్ చేయడానికి Omi కు బ్లూటూత్ అవసరం. దయచేసి బ్లూటూత్‌ను ప్రారంభించి మళ్లీ ప్రయత్నించండి.';
+  String get bluetoothNeeded => 'Omiని కనెక్ట్ చేయడానికి Bluetooth ఆన్ చేయండి.';
 
   @override
   String get contactSupport => 'సపోర్టుకు సంబంధం?';

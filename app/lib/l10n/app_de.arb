@@ -520,7 +520,7 @@
     "dontShowAgain": "Nicht erneut anzeigen",
     "iUnderstand": "Ich verstehe",
     "enableBluetooth": "Bluetooth aktivieren",
-    "bluetoothNeeded": "Omi benötigt Bluetooth, um sich mit Ihrem Wearable zu verbinden. Bitte aktivieren Sie Bluetooth und versuchen Sie es erneut.",
+    "bluetoothNeeded": "Schalte Bluetooth ein, um dein Omi zu verbinden.",
     "contactSupport": "Support kontaktieren?",
     "connectLater": "Später verbinden",
     "grantPermissions": "Berechtigungen erteilen",

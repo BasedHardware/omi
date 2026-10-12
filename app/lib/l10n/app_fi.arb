@@ -520,7 +520,7 @@
     "dontShowAgain": "Älä näytä uudelleen",
     "iUnderstand": "Ymmärrän",
     "enableBluetooth": "Ota Bluetooth käyttöön",
-    "bluetoothNeeded": "Omi tarvitsee Bluetoothin yhdistääkseen puettavaan laitteeseesi. Ota Bluetooth käyttöön ja yritä uudelleen.",
+    "bluetoothNeeded": "Yhdistä Omi laittamalla Bluetooth päälle.",
     "contactSupport": "Ota yhteyttä tukeen?",
     "connectLater": "Yhdistä myöhemmin",
     "grantPermissions": "Myönnä luvat",

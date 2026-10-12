@@ -520,7 +520,7 @@
     "dontShowAgain": "Не показвай отново",
     "iUnderstand": "Разбирам",
     "enableBluetooth": "Активирай Bluetooth",
-    "bluetoothNeeded": "Omi се нуждае от Bluetooth, за да се свърже с вашето носимо устройство. Моля, активирайте Bluetooth и опитайте отново.",
+    "bluetoothNeeded": "Включете Bluetooth, за да свържете Omi.",
     "contactSupport": "Свържете се с поддръжката?",
     "connectLater": "Свържи по-късно",
     "grantPermissions": "Предоставяне на разрешения",

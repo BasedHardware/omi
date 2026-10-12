@@ -520,7 +520,7 @@
     "dontShowAgain": "Ne jelenjen meg újra",
     "iUnderstand": "Megértettem",
     "enableBluetooth": "Bluetooth engedélyezése",
-    "bluetoothNeeded": "Az Omi-nak Bluetoothra van szüksége a viselhető eszközhöz való csatlakozáshoz. Kérlek, engedélyezd a Bluetooth-t, és próbáld újra.",
+    "bluetoothNeeded": "Kapcsold be a Bluetooth-t az Omi csatlakoztatásához.",
     "contactSupport": "Ügyfélszolgálat elérése?",
     "connectLater": "Csatlakozás később",
     "grantPermissions": "Engedélyek megadása",

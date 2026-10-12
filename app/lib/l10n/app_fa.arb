@@ -1586,7 +1586,7 @@
     "@enableBluetooth": {
         "description": "Title for dialog prompting user to enable Bluetooth"
     },
-    "bluetoothNeeded": "Omi نیاز به Bluetooth برای اتصال به دستگاه پوشیدنی دارد. لطفاً Bluetooth را فعال کنید و دوباره تلاش کنید.",
+    "bluetoothNeeded": "برای اتصال Omi، بلوتوث را روشن کنید.",
     "@bluetoothNeeded": {
         "description": "Explanation text for why Bluetooth is required"
     },

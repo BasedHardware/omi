@@ -520,7 +520,7 @@
     "dontShowAgain": "عدم الإظهار مجدداً",
     "iUnderstand": "أفهم",
     "enableBluetooth": "تمكين البلوتوث",
-    "bluetoothNeeded": "يحتاج Omi إلى البلوتوث للاتصال بجهازك القابل للارتداء. يرجى تمكين البلوتوث والمحاولة مرة أخرى.",
+    "bluetoothNeeded": "شغّل البلوتوث لتوصيل Omi.",
     "contactSupport": "الاتصال بالدعم؟",
     "connectLater": "الاتصال لاحقاً",
     "grantPermissions": "منح الأذونات",

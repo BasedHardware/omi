@@ -515,7 +515,7 @@
     "dontShowAgain": "दोबारा न दिखाएं",
     "iUnderstand": "मैं समझता हूं",
     "enableBluetooth": "ब्लूटूथ सक्षम करें",
-    "bluetoothNeeded": "आपके वियरेबल से कनेक्ट करने के लिए Omi को ब्लूटूथ की आवश्यकता है।",
+    "bluetoothNeeded": "Omi कनेक्ट करने के लिए Bluetooth चालू करें।",
     "contactSupport": "संपर्क करें?",
     "connectLater": "बाद में कनेक्ट करें",
     "grantPermissions": "अनुमतियां दें",

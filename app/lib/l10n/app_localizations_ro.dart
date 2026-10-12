@@ -1694,8 +1694,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get enableBluetooth => 'Activare Bluetooth';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi are nevoie de Bluetooth pentru a se conecta la dispozitivul dvs. Activați Bluetooth și încercați din nou.';
+  String get bluetoothNeeded => 'Activează Bluetooth pentru a conecta Omi.';
 
   @override
   String get contactSupport => 'Contactează suportul?';

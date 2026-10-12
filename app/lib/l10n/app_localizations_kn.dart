@@ -1689,8 +1689,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth ಸಕ್ರಿಯಗೊಳಿಸಿ';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi ನಿಮ್ಮ ವಿಯರೇಬಲ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಮಾಡಲು Bluetooth ಅಗತ್ಯವಿದೆ. ದಯವಿಟ್ಟು Bluetooth ಸಕ್ರಿಯಗೊಳಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  String get bluetoothNeeded => 'Omi ಸಂಪರ್ಕಿಸಲು Bluetooth ಆನ್ ಮಾಡಿ.';
 
   @override
   String get contactSupport => 'ಸಹಾಯಕ ಸಂಪರ್ಕ ಮಾಡಿ?';

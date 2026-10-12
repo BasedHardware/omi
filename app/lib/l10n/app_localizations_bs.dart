@@ -1685,8 +1685,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get enableBluetooth => 'Omogući Bluetooth';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi koristi Bluetooth da bi se povezao sa vašim nosivim uređajem. Molimo omogućite Bluetooth i pokušajte ponovo.';
+  String get bluetoothNeeded => 'Uključite Bluetooth da povežete Omi.';
 
   @override
   String get contactSupport => 'Kontaktiraj podršku?';

@@ -515,7 +515,7 @@
     "dontShowAgain": "不再显示",
     "iUnderstand": "我理解",
     "enableBluetooth": "启用蓝牙",
-    "bluetoothNeeded": "Omi 需要蓝牙来连接您的穿戴设备。",
+    "bluetoothNeeded": "打开蓝牙以连接 Omi。",
     "contactSupport": "联系支持？",
     "connectLater": "稍后连接",
     "grantPermissions": "授予权限",

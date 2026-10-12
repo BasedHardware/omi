@@ -1690,8 +1690,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get enableBluetooth => 'Bluetooth\'u Etkinleştir';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi\'nin giyilebilir cihazınıza bağlanması için Bluetooth gereklidir. Lütfen Bluetooth\'u etkinleştirin ve tekrar deneyin.';
+  String get bluetoothNeeded => 'Omi\'yi bağlamak için Bluetooth\'u açın.';
 
   @override
   String get contactSupport => 'Desteğe Başvur?';

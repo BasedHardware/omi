@@ -1685,8 +1685,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get enableBluetooth => 'فعال‌سازی Bluetooth';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi نیاز به Bluetooth برای اتصال به دستگاه پوشیدنی دارد. لطفاً Bluetooth را فعال کنید و دوباره تلاش کنید.';
+  String get bluetoothNeeded => 'برای اتصال Omi، بلوتوث را روشن کنید.';
 
   @override
   String get contactSupport => 'تماس با پشتیبانی؟';
