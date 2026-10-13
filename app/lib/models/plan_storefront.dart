@@ -42,7 +42,9 @@ class PlanStorefront {
     if (json['schema_version'] != 2) throw const FormatException('Unsupported storefront schema');
     final revision = json['catalog_revision'];
     if (revision is! int || revision < 0) throw const FormatException('Invalid storefront catalog revision');
-    final tiers = (json['tiers'] as List).map((row) => StorefrontTier.fromJson(_object(row))).toList();
+    final rawTiers = json['tiers'];
+    if (rawTiers != null && rawTiers is! List) throw const FormatException('Invalid storefront tiers');
+    final tiers = ((rawTiers as List?) ?? const []).map((row) => StorefrontTier.fromJson(_object(row))).toList();
     if (tiers.map((tier) => tier.tierId).toSet().length != tiers.length) {
       throw const FormatException('Duplicate storefront tier');
     }
@@ -128,9 +130,19 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
       (_isNonLadderLegacyPlan(PlanType.fromWire(current.planId)) || PlanType.fromWire(current.planId).isUnknown)) {
     return StorefrontCheckoutDecision.refuse;
   }
-  if (tier.action != 'checkout' || !tier.prices.contains(price)) {
+  // `none` is not purchasable. `current` is the held tier: only a price the
+  // backend marked with cta_label (for example yearly switch) can proceed, and
+  // the rank, interval, legacy, and cancellation checks below still apply.
+  if (tier.action == 'none' || !tier.prices.contains(price)) {
     return StorefrontCheckoutDecision.refuse;
   }
+  if (tier.action == 'current' && price.ctaLabel == null) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (tier.action != 'checkout' && tier.action != 'current') {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (price.id == null) return StorefrontCheckoutDecision.refuse;
   final held = _priceOnTier(tier, current?.priceId);
   final sameTierAnnualToMonthly = price.interval == 'month' &&
       current != null &&
@@ -156,84 +168,15 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   return StorefrontCheckoutDecision.checkout;
 }
 
-/// Copy-deck label for the current tier's yearly price.
-/// Saving is 12× the monthly amount minus the annual amount, from [tier]'s prices.
-/// The currency symbol and separators come from the monthly headline so a non-USD
-/// price still produces a label and the switch button stays visible.
-String? storefrontYearlySwitchLabel(StorefrontTier tier) {
-  final month = tier.priceFor('month');
-  final year = tier.priceFor('year');
-  if (month == null || year == null || month.currency != year.currency) return null;
-  final saving = month.amountMinor * 12 - year.amountMinor;
-  if (saving <= 0) return null;
-  return 'Switch to yearly · save ${_formatMinor(saving, month.currency, month.headline)}';
-}
-
-/// Button text for one selected price. The current tier never says "Get {Plan}".
+/// Button text for one selected price. The backend owns the words: a per-price
+/// [StorefrontPrice.ctaLabel] replaces the tier label. A refused decision draws nothing.
 String? storefrontActionLabel({
-  required StorefrontCurrentPlan? current,
   required StorefrontTier tier,
   required StorefrontPrice price,
   required StorefrontCheckoutDecision decision,
 }) {
   if (decision == StorefrontCheckoutDecision.refuse) return null;
-  if (decision == StorefrontCheckoutDecision.resubscribe) return tier.ctaLabel;
-  final ownTier = current != null && (tier.isCurrent || current.planId == tier.planId);
-  if (!ownTier) return tier.ctaLabel;
-  if (current.interval == 'month' && price.interval == 'year') return storefrontYearlySwitchLabel(tier);
-  return null;
-}
-
-/// Stripe zero-decimal currencies: the minor unit is already the major unit.
-const _zeroDecimalCurrencies = {
-  'bif',
-  'clp',
-  'djf',
-  'gnf',
-  'jpy',
-  'kmf',
-  'krw',
-  'mga',
-  'pyg',
-  'rwf',
-  'ugx',
-  'vnd',
-  'vuv',
-  'xaf',
-  'xof',
-  'xpf',
-};
-
-String _formatMinor(int minor, String currency, String headline) {
-  final zeroDecimal = _zeroDecimalCurrencies.contains(currency.toLowerCase());
-  final affix = _currencyAffix(headline);
-  final whole = zeroDecimal ? minor : minor ~/ 100;
-  final fraction = zeroDecimal ? 0 : minor.abs() % 100;
-  final thousandsSep = affix.decimalSep == ',' ? '.' : ',';
-  final digits = whole.abs().toString();
-  final grouped = StringBuffer();
-  if (whole < 0) grouped.write('-');
-  for (var i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(thousandsSep);
-    grouped.write(digits[i]);
-  }
-  final amount = !zeroDecimal && fraction != 0
-      ? '$grouped${affix.decimalSep}${fraction.toString().padLeft(2, '0')}'
-      : grouped.toString();
-  if (affix.prefix.isEmpty && affix.suffix.trim().isEmpty) return '${currency.toUpperCase()} $amount';
-  return '${affix.prefix}$amount${affix.suffix}';
-}
-
-({String prefix, String suffix, String decimalSep}) _currencyAffix(String headline) {
-  final price = headline.split('/').first.trim();
-  final match = RegExp(r'^(\D*)(\d[\d.,]*\d|\d)(\D*)$').firstMatch(price);
-  if (match == null) return (prefix: '', suffix: '', decimalSep: '.');
-  final number = match.group(2)!;
-  final comma = number.lastIndexOf(',');
-  final dot = number.lastIndexOf('.');
-  var decimalSep = '.';
-  if (comma > dot && number.length - comma - 1 == 2) decimalSep = ',';
-  return (prefix: match.group(1) ?? '', suffix: match.group(3) ?? '', decimalSep: decimalSep);
+  return price.ctaLabel ?? tier.ctaLabel;
 }
 
 class StorefrontTier {
@@ -247,6 +190,8 @@ class StorefrontTier {
   final List<StorefrontPrice> prices;
   final String action;
   final String? ctaLabel;
+  final String? blockedLine;
+  final bool compact;
 
   const StorefrontTier({
     required this.tierId,
@@ -259,6 +204,8 @@ class StorefrontTier {
     required this.prices,
     required this.action,
     this.ctaLabel,
+    this.blockedLine,
+    this.compact = false,
   });
 
   factory StorefrontTier.fromJson(Map<String, dynamic> json) {
@@ -266,21 +213,19 @@ class StorefrontTier {
     if (!['none', 'checkout', 'current'].contains(action)) {
       throw const FormatException('Unsupported storefront action');
     }
-    final cta = json['cta_label'];
-    if (action == 'checkout') {
-      if (cta is! String || cta.trim().isEmpty) throw const FormatException('Missing storefront cta_label');
-    } else if (cta != null && (cta is! String || cta.trim().isEmpty)) {
-      throw const FormatException('Invalid storefront cta_label');
-    }
+    final cta = _optionalText(json, 'cta_label');
+    if (action == 'checkout' && cta == null) throw const FormatException('Missing storefront cta_label');
     final prices = (json['prices'] as List).map((row) => StorefrontPrice.fromJson(_object(row))).toList();
     if (prices.map((price) => price.interval).toSet().length != prices.length) {
       throw const FormatException('Duplicate storefront price interval');
     }
+    final hours = json['hours_line'];
+    if (hours is! String) throw const FormatException('Missing storefront hours_line');
     return StorefrontTier(
       tierId: _text(json, 'tier_id'),
       planId: _text(json, 'plan_id'),
       name: _text(json, 'name'),
-      hoursLine: _text(json, 'hours_line'),
+      hoursLine: hours,
       bullets: List.unmodifiable((json['bullets'] as List).map((value) {
         if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid bullet');
         return value;
@@ -289,7 +234,9 @@ class StorefrontTier {
       isCurrent: _boolean(json, 'is_current'),
       prices: List.unmodifiable(prices),
       action: action,
-      ctaLabel: cta as String?,
+      ctaLabel: cta,
+      blockedLine: _optionalText(json, 'blocked_line'),
+      compact: json.containsKey('compact') ? _boolean(json, 'compact') : false,
     );
   }
 
@@ -303,14 +250,16 @@ class StorefrontTier {
 
 class StorefrontPrice {
   /// Exact existing checkout price id. Never reconstructed from tier or interval.
-  final String id;
+  /// Null when the backend has no purchasable price for this row (for example Free).
+  final String? id;
   final String interval;
   final int amountMinor;
   final String currency;
   final String headline;
   final String? subline;
-  final String renewalLine;
+  final String? renewalLine;
   final int? monthsFree;
+  final String? ctaLabel;
 
   const StorefrontPrice({
     required this.id,
@@ -319,8 +268,9 @@ class StorefrontPrice {
     required this.currency,
     required this.headline,
     this.subline,
-    required this.renewalLine,
+    this.renewalLine,
     this.monthsFree,
+    this.ctaLabel,
   });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
@@ -329,23 +279,20 @@ class StorefrontPrice {
     if (!['month', 'year'].contains(interval) || amount is! int || amount < 0) {
       throw const FormatException('Invalid storefront price');
     }
-    final subline = json['subline'];
-    if (subline != null && (subline is! String || subline.trim().isEmpty)) {
-      throw const FormatException('Invalid storefront subline');
-    }
     final months = json['months_free'];
     if (months != null && (months is! int || months < 0)) {
       throw const FormatException('Invalid storefront months free');
     }
     return StorefrontPrice(
-      id: _text(json, 'price_id'),
+      id: _optionalText(json, 'price_id'),
       interval: interval,
       amountMinor: amount,
       currency: _text(json, 'currency'),
       headline: _text(json, 'headline'),
-      subline: subline as String?,
-      renewalLine: _text(json, 'renewal_line'),
+      subline: _optionalText(json, 'subline'),
+      renewalLine: _optionalText(json, 'renewal_line'),
       monthsFree: months as int?,
+      ctaLabel: _optionalText(json, 'cta_label'),
     );
   }
 }

@@ -36,15 +36,30 @@ class StorefrontPlansContent extends StatefulWidget {
 }
 
 class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
-  // Monthly is the default. Yearly is an explicit choice.
+  // Monthly is the default. Yearly is an explicit choice, except when the
+  // current tier only publishes a yearly price — otherwise that card has no price.
   String _interval = 'month';
+  bool _appliedInitialInterval = false;
   bool _allPlansExpanded = false;
+
+  void _applyInitialInterval(PlanStorefront data) {
+    if (_appliedInitialInterval) return;
+    _appliedInitialInterval = true;
+    if (data.current?.interval != 'year') return;
+    for (final tier in data.tiers) {
+      if (tier.isCurrent && tier.priceFor('month') == null && tier.priceFor('year') != null) {
+        _interval = 'year';
+        return;
+      }
+    }
+  }
 
   bool _cancelScheduled(PlanStorefront? data) => widget.cancelScheduled || data?.current?.cancelAtPeriodEnd == true;
 
   @override
   Widget build(BuildContext context) {
     final data = widget.storefront;
+    if (data != null) _applyInitialInterval(data);
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
     final legacy = data?.current?.legacy == true;
     return SizedBox(
@@ -162,11 +177,8 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             cancelScheduled: cancelScheduled,
             showSubscriptionUi: storefront.showSubscriptionUi,
           );
-    final cta = price == null
-        ? null
-        : storefrontActionLabel(current: storefront.current, tier: tier, price: price, decision: decision);
-    final showHold = cancelScheduled && decision != StorefrontCheckoutDecision.resubscribe;
-    final compact = tier.isCurrent;
+    final cta = price == null ? null : storefrontActionLabel(tier: tier, price: price, decision: decision);
+    final blocked = tier.blockedLine;
     final highlight = tier.recommended && !cancelScheduled;
     return Container(
       key: Key('storefront_tier_${tier.planId}'),
@@ -195,9 +207,11 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
                   style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ),
         ],
-        const SizedBox(height: OmiSpacing.sm),
-        Text(tier.hoursLine, style: OmiType.subhead),
-        if (!compact) ...[
+        if (tier.hoursLine.isNotEmpty) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          Text(tier.hoursLine, style: OmiType.subhead),
+        ],
+        if (!tier.compact && tier.bullets.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.xs),
           for (final bullet in tier.bullets)
             Padding(
@@ -205,28 +219,31 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
               child: Text('• $bullet', style: OmiType.subhead),
             ),
         ],
-        if (price != null && cta != null) ...[
-          SizedBox(height: compact ? OmiSpacing.sm : OmiSpacing.xs),
+        if (blocked != null) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          Text(
+            blocked,
+            key: Key('storefront_blocked_${tier.planId}'),
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+          ),
+        ] else if (price != null && cta != null) ...[
+          const SizedBox(height: OmiSpacing.sm),
           OmiButton(
             key: Key('storefront_buy_${tier.planId}'),
             label: cta,
             expand: true,
+            maxLines: 2,
             isLoading: widget.busy,
             onPressed: widget.busy ? null : () => widget.onSelect(tier, price),
           ),
-          const SizedBox(height: OmiSpacing.xxs),
-          Text(
-            price.renewalLine,
-            key: Key('storefront_renewal_${tier.planId}'),
-            style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
-          ),
-        ] else if (showHold) ...[
-          SizedBox(height: compact ? OmiSpacing.sm : OmiSpacing.xs),
-          Text(
-            context.l10n.paywallResubscribeFirst,
-            key: Key('storefront_hold_${tier.planId}'),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
+          if (price.renewalLine != null) ...[
+            const SizedBox(height: OmiSpacing.xxs),
+            Text(
+              price.renewalLine!,
+              key: Key('storefront_renewal_${tier.planId}'),
+              style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+            ),
+          ],
         ],
       ]),
     );

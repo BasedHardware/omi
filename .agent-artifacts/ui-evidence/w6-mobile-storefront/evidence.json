@@ -2,107 +2,107 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-settings.png",
+      "file": "001-mobile-ios-architect-settings.png",
       "platform": "mobile-ios",
-      "description": "Settings sheet: Choose your plan, compact Plus card (name, price, hours, no bullets or button), Pro recommended",
+      "description": "Architect yearly price with the backend switch label, compact off so bullets stay, See all plans below",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-budget-80.png",
+      "file": "002-mobile-ios-cancel-scheduled-plus.png",
       "platform": "mobile-ios",
-      "description": "80% usage header with the same Plus current line and recommended Pro card",
+      "description": "Cancel scheduled: Resubscribe on Plus, blocked_line in place of the CTA on Free",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-budget-100.png",
+      "file": "003-mobile-ios-free-budget-80.png",
       "platform": "mobile-ios",
-      "description": "100% usage header, no nudge, recommended Pro card",
+      "description": "Free 80% header, compact Free card, Get Plus on the recommended card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "004-mobile-ios-pro-gate-proactive.png",
+      "file": "004-mobile-ios-free-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "Reminders and follow-ups header, reminder bullet first on Pro",
+      "description": "MCP cap header, MCP bullet first on Plus, compact Free card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "005-mobile-ios-pro-gate-screen.png",
+      "file": "005-mobile-ios-free-pro-gate-proactive.png",
       "platform": "mobile-ios",
-      "description": "Screen help header, screen bullet first on Pro",
+      "description": "Reminders header, reminder bullet first on Pro, compact Free card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "006-mobile-ios-mcp-cap.png",
+      "file": "006-mobile-ios-free-pro-gate-screen.png",
       "platform": "mobile-ios",
-      "description": "MCP cap header, Free current, Plus recommended with MCP bullet first",
+      "description": "Screen help header, screen bullet first on Pro, compact Free card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "007-mobile-ios-legacy.png",
+      "file": "007-mobile-ios-free-settings.png",
       "platform": "mobile-ios",
-      "description": "Legacy Unlimited at $29.99/mo, legacy note, and Manage billing, with no plan cards or Refresh",
+      "description": "Free settings: Get Plus, compact Free card at $0.00 with hours and no bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "008-mobile-ios-free.png",
+      "file": "008-mobile-ios-legacy-unlimited.png",
       "platform": "mobile-ios",
-      "description": "Free current line, Plus recommended with Get Plus",
+      "description": "Legacy Neo line, the legacy note, and Manage billing. Ladder cards stay hidden",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "009-mobile-ios-cancel-scheduled.png",
+      "file": "009-mobile-ios-plus-annual-current.png",
       "platform": "mobile-ios",
-      "description": "Cancel scheduled: only Resubscribe on the current Plus price; other tiers say Resubscribe first to change plans",
+      "description": "Annual Plus opens on yearly: compact current card with price and hours, no button, Upgrade to Pro",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "010-mobile-ios-architect.png",
+      "file": "010-mobile-ios-plus-budget-80.png",
       "platform": "mobile-ios",
-      "description": "Architect subscriber sees a compact current card: name, Your plan, price, and hours, with no bullets or button",
+      "description": "Plus 80% header, recommended Pro, current Plus keeps bullets because compact is false",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "011-mobile-ios-banner.png",
+      "file": "011-mobile-ios-plus-monthly-yearly-toggle.png",
+      "platform": "mobile-ios",
+      "description": "Yearly toggle renders Switch to yearly · save $39.98 from the price cta_label",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-pro-settings.png",
+      "platform": "mobile-ios",
+      "description": "Pro yearly price renders Switch to yearly · save $99.98, with See all plans below",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-banner.png",
       "platform": "mobile-ios",
       "description": "Usage banner is one nudge line plus See plans and Not now",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "012-mobile-ios-meter.png",
+      "file": "014-mobile-ios-meter.png",
       "platform": "mobile-ios",
-      "description": "Usage meter hugs the backend line and progress bar, with no title row or empty area under the bar",
+      "description": "Usage meter hugs the backend line and progress bar, with no title row",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "013-mobile-ios-small-phone-light.png",
+      "file": "015-mobile-ios-small-phone-light.png",
       "platform": "mobile-ios",
-      "description": "Small light phone keeps Get Plus on screen for the recommended Plus card",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "014-mobile-ios-yearly.png",
-      "platform": "mobile-ios",
-      "description": "Yearly toggle: monthly-equivalent prices, and Switch to yearly · save $39.98 on the current Plus card",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "015-mobile-ios-see-all-plans.png",
-      "platform": "mobile-ios",
-      "description": "See all plans expanded to Free and Architect under the compact current Plus card",
+      "description": "Small light phone keeps Get Plus on screen; the renewal line wraps instead of truncating",
       "captured_by": "agent",
       "source": "visual-audit"
     },

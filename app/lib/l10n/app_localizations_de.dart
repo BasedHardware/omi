@@ -13180,7 +13180,4 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get paywallPlans => 'Plans';
-
-  @override
-  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

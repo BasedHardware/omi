@@ -5,16 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/models/subscription.dart';
 
-/// Hand-authored from the coordinator copy deck because origin/lane/sub-w5-presentation-v2
-/// did not yet contain backend/tests/fixtures/storefront_v2. When that directory exists,
-/// the bytes must match.
-Map<String, dynamic> fixture([String name = 'settings']) =>
+/// Copies of origin/lane/sub-w5-presentation-v2 backend/tests/fixtures/storefront_v2.
+/// When that directory exists in this checkout, the bytes must match.
+Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
     jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
 
 void main() {
   test('schema version 2 parses deck fields and rejects every other version', () {
     final data = PlanStorefront.fromJson(fixture());
-    expect(data.catalogRevision, 1);
+    expect(data.catalogRevision, 7);
     expect(data.header, 'Choose your plan');
     expect(data.current!.line, r"You're on Plus · $19.99/mo · renews Nov 1");
     expect(data.current!.legacyNote, isNull);
@@ -25,7 +24,7 @@ void main() {
     expect(pro.hoursLine, 'About 280 hours of recording a month, enough to wear it all day');
     expect(pro.ctaLabel, 'Upgrade to Pro');
     expect(pro.priceFor('month')!.subline, isNull);
-    expect(pro.priceFor('year')!.id, 'fixture_operator_year');
+    expect(pro.priceFor('year')!.id, 'price_operator_year');
     expect(pro.priceFor('year')!.subline, r'$499.90 billed yearly · 2 months free');
     expect(pro.priceFor('year')!.monthsFree, 2);
     expect(pro.priceFor('year')!.renewalLine, 'Renews yearly until you cancel. Cancel anytime in settings.');
@@ -52,19 +51,19 @@ void main() {
   });
 
   for (final entry in {
-    'free': 'plus',
-    'mcp_cap': 'plus',
-    'pro_gate_proactive': 'operator',
-    'budget_80': 'operator',
+    'free_settings': 'plus',
+    'free_mcp_cap': 'plus',
+    'free_pro_gate_proactive': 'operator',
+    'plus_budget80': 'operator',
   }.entries) {
     test('preserves server recommendation for ${entry.key}', () {
       final data = PlanStorefront.fromJson(fixture(entry.key));
       expect(data.tiers.singleWhere((tier) => tier.recommended).planId, entry.value);
-      if (entry.key == 'mcp_cap') {
+      if (entry.key == 'free_mcp_cap') {
         expect(data.header, "You've used today's 100 MCP requests");
         expect(data.tiers.every((tier) => tier.bullets.first.contains('MCP')), isTrue);
       }
-      if (entry.key == 'pro_gate_proactive') {
+      if (entry.key == 'free_pro_gate_proactive') {
         expect(data.tiers.singleWhere((tier) => tier.planId == 'operator').bullets.first,
             "Omi reminds you of things you said you'd do");
       }
@@ -73,17 +72,17 @@ void main() {
 
   test('screen gate leads the Pro card with the screen bullet', () {
     final pro =
-        PlanStorefront.fromJson(fixture('pro_gate_screen')).tiers.singleWhere((tier) => tier.planId == 'operator');
+        PlanStorefront.fromJson(fixture('free_pro_gate_screen')).tiers.singleWhere((tier) => tier.planId == 'operator');
     expect(pro.bullets.first, "On your Mac, Omi can see what you're working on and help with it");
   });
 
   test('legacy note is required only for a legacy plan', () {
-    final legacy = PlanStorefront.fromJson(fixture('legacy'));
+    final legacy = PlanStorefront.fromJson(fixture('legacy_unlimited'));
     expect(legacy.current!.legacy, isTrue);
     expect(legacy.current!.legacyNote, 'We don\'t sell this plan anymore, but yours stays exactly as it is.');
     expect(legacy.shouldGate('proactive_agent'), isFalse);
     expect(legacy.showBudgetNudge, isFalse);
-    final missing = fixture('legacy');
+    final missing = fixture('legacy_unlimited');
     missing['current']['legacy_note'] = null;
     expect(() => PlanStorefront.fromJson(missing), throwsFormatException);
     final unexpected = fixture();
@@ -136,7 +135,7 @@ void main() {
   });
 
   test('a live Pro or Architect plan is not gated by stale pro gates', () {
-    final architect = PlanStorefront.fromJson(fixture('architect'));
+    final architect = PlanStorefront.fromJson(fixture('architect_settings'));
     expect(architect.usage!.proGates, containsAll(['proactive_agent', 'screen_context']));
     expect(architect.current!.planId, 'architect');
     expect(architect.shouldGate('proactive_agent'), isFalse);
@@ -179,15 +178,17 @@ void main() {
   });
 
   test('budget nudge is the 80 percent band and 100 percent belongs to W4', () {
-    expect(PlanStorefront.fromJson(fixture('budget_80')).showBudgetNudge, isTrue);
-    expect(PlanStorefront.fromJson(fixture('budget_80')).usage!.nudgeLine, contains('80%'));
-    expect(PlanStorefront.fromJson(fixture('budget_100')).showBudgetNudge, isFalse);
+    expect(PlanStorefront.fromJson(fixture('plus_budget80')).showBudgetNudge, isTrue);
+    expect(PlanStorefront.fromJson(fixture('plus_budget80')).usage!.nudgeLine, contains('80%'));
+    final full = fixture('plus_budget80');
+    full['usage']['percent'] = 100;
+    expect(PlanStorefront.fromJson(full).showBudgetNudge, isFalse);
     for (final percent in [0, 79, 100, 120]) {
-      final json = fixture('budget_80');
+      final json = fixture('plus_budget80');
       json['usage']['percent'] = percent;
       expect(PlanStorefront.fromJson(json).usage!.showBudgetNudge, isFalse);
     }
-    final cleared = fixture('budget_80');
+    final cleared = fixture('plus_budget80');
     cleared['current'] = null;
     expect(PlanStorefront.fromJson(cleared).showBudgetNudge, isFalse);
   });
@@ -493,7 +494,8 @@ void main() {
       ),
     ];
 
-    expect(PlanStorefront.fromJson(fixture('legacy')).current!.line, r"You're on Unlimited · $29.99/mo · renews Nov 1");
+    expect(PlanStorefront.fromJson(fixture('legacy_unlimited')).current!.line,
+        r"You're on Neo · $29.99/mo · renews Nov 1");
 
     for (final entry in cases) {
       final (name, expected, held, live, selectedTier, selectedPrice, usageLegacy, cancelScheduled) = entry;
@@ -506,14 +508,18 @@ void main() {
     }
   });
 
-  test('same-tier yearly CTA is the live-price saving and never Get on the current tier', () {
+  test('price cta_label is rendered verbatim and a refused decision draws no button', () {
     final settings = PlanStorefront.fromJson(fixture());
     final plus = settings.tiers.singleWhere((tier) => tier.planId == 'plus');
-    expect(storefrontYearlySwitchLabel(plus), r'Switch to yearly · save $39.98');
-    expect(plus.ctaLabel, storefrontYearlySwitchLabel(plus));
+    expect(plus.ctaLabel, isNull);
+    expect(plus.compact, isFalse);
+    expect(plus.priceFor('year')!.ctaLabel, r'Switch to yearly · save $39.98');
+    expect(
+      storefrontCheckoutDecision(settings.current, PlanType.plus, plus, plus.priceFor('year')!),
+      StorefrontCheckoutDecision.checkout,
+    );
     expect(
       storefrontActionLabel(
-        current: settings.current,
         tier: plus,
         price: plus.priceFor('year')!,
         decision: StorefrontCheckoutDecision.checkout,
@@ -522,7 +528,6 @@ void main() {
     );
     expect(
       storefrontActionLabel(
-        current: settings.current,
         tier: plus,
         price: plus.priceFor('month')!,
         decision: StorefrontCheckoutDecision.refuse,
@@ -530,44 +535,34 @@ void main() {
       isNull,
     );
     final architect =
-        PlanStorefront.fromJson(fixture('architect')).tiers.singleWhere((tier) => tier.planId == 'architect');
-    expect(architect.ctaLabel, r'Switch to yearly · save $398');
-    const eur = StorefrontTier(
-      tierId: 'plus:ladder_v1',
-      planId: 'plus',
-      name: 'Plus',
-      hoursLine: 'About 100 hours of recording a month',
-      bullets: ['Included'],
-      recommended: false,
-      isCurrent: true,
-      prices: [
-        StorefrontPrice(
-          id: 'eur_month',
-          interval: 'month',
-          amountMinor: 1999,
-          currency: 'eur',
-          headline: '€19.99/month',
-          renewalLine: 'Renews monthly until you cancel. Cancel anytime in settings.',
-        ),
-        StorefrontPrice(
-          id: 'eur_year',
-          interval: 'year',
-          amountMinor: 19990,
-          currency: 'eur',
-          headline: '€16.66/month',
-          renewalLine: 'Renews yearly until you cancel. Cancel anytime in settings.',
-        ),
-      ],
-      action: 'checkout',
-      ctaLabel: 'Get Plus',
+        PlanStorefront.fromJson(fixture('architect_settings')).tiers.singleWhere((tier) => tier.planId == 'architect');
+    expect(architect.priceFor('year')!.ctaLabel, r'Switch to yearly · save $398.00');
+    expect(architect.ctaLabel, isNull);
+    final free = PlanStorefront.fromJson(fixture('free_settings'));
+    final basic = free.tiers.singleWhere((tier) => tier.planId == 'basic');
+    expect(basic.compact, isTrue);
+    expect(basic.priceFor('month')!.id, isNull);
+    expect(basic.priceFor('month')!.renewalLine, isNull);
+    expect(
+      storefrontCheckoutDecision(free.current, PlanType.basic, basic, basic.priceFor('month')!),
+      StorefrontCheckoutDecision.refuse,
     );
-    expect(storefrontYearlySwitchLabel(eur), 'Switch to yearly · save €39.98');
-    final cancelled = PlanStorefront.fromJson(fixture('cancel_scheduled'));
+    final neo =
+        PlanStorefront.fromJson(fixture('legacy_unlimited')).tiers.singleWhere((tier) => tier.planId == 'unlimited');
+    expect(neo.hoursLine, isEmpty);
+    expect(neo.compact, isTrue);
+    final cleared = fixture();
+    cleared['tiers'] = null;
+    expect(PlanStorefront.fromJson(cleared).tiers, isEmpty);
+    final cancelled = PlanStorefront.fromJson(fixture('cancel_scheduled_plus'));
     final currentTier = cancelled.tiers.singleWhere((tier) => tier.isCurrent);
     final pro = cancelled.tiers.singleWhere((tier) => tier.planId == 'operator');
     expect(cancelled.tiers.first.planId, 'plus');
     expect(cancelled.tiers.where((tier) => tier.recommended), isEmpty);
     expect(pro.action, 'none');
+    expect(pro.blockedLine, 'Resubscribe first to change plans');
+    expect(currentTier.blockedLine, isNull);
+    expect(currentTier.compact, isFalse);
     expect(cancelled.header, 'Your Plus plan ends Nov 1');
     expect(cancelled.current!.line, r"You're on Plus · $19.99/mo");
     expect(
@@ -581,7 +576,6 @@ void main() {
     );
     expect(
       storefrontActionLabel(
-        current: cancelled.current,
         tier: currentTier,
         price: currentTier.priceFor('month')!,
         decision: StorefrontCheckoutDecision.resubscribe,
@@ -590,7 +584,6 @@ void main() {
     );
     expect(
       storefrontActionLabel(
-        current: cancelled.current,
         tier: pro,
         price: pro.priceFor('month')!,
         decision: StorefrontCheckoutDecision.refuse,
@@ -599,7 +592,6 @@ void main() {
     );
     expect(
       storefrontActionLabel(
-        current: cancelled.current,
         tier: currentTier,
         price: currentTier.priceFor('year')!,
         decision: StorefrontCheckoutDecision.refuse,

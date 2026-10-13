@@ -68,8 +68,8 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
         analyticsSource: 'budget_80',
         storefrontApi: PlanStorefrontApi(
             baseUrl: 'http://127.0.0.1:1/',
-            send: (_) async =>
-                http.Response(File('test/fixtures/storefront_v2/settings.json').readAsStringSync(), 200)),
+            send: (_) async => http.Response(
+                File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200)),
       ));
 }
 
@@ -87,8 +87,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json =
-          jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+          as Map<String, dynamic>;
       json['current']['plan_id'] = current == 'legacy' ? 'unlimited_v2' : current;
       json['current']['legacy'] = current == 'legacy';
       json['current']['legacy_note'] =
@@ -145,8 +145,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
     json['current']['plan_id'] = 'architect';
     json['current']['legacy'] = false;
     json['current']['price_id'] = 'fixture_architect_month';
@@ -163,7 +163,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -204,8 +204,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
     json['current']['price_id'] = 'fixture_plus_year';
     json['current']['legacy'] = false;
     final data = PlanStorefront.fromJson(json);
@@ -221,7 +221,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -263,7 +263,7 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled.json').readAsStringSync()));
+        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()));
     final price = _plan(data, 'plus').priceFor('month')!;
     final pro = _plan(data, 'operator').priceFor('month')!;
     usage.debugSetSubscription(UserSubscriptionResponse(
@@ -277,10 +277,10 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
         ]),
         SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: pro.id, title: 'Monthly', priceString: pro.headline),
+          PricingOption(id: pro.id!, title: 'Monthly', priceString: pro.headline),
         ]),
       ],
     ));
@@ -358,7 +358,7 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled.json').readAsStringSync()));
+        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()));
     final price = _plan(data, 'plus').priceFor('month')!;
     expect(data.current!.cancelAtPeriodEnd, isTrue);
     usage.debugSetSubscription(UserSubscriptionResponse(
@@ -372,7 +372,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
         ]),
       ],
     ));
@@ -415,8 +415,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
     json['usage']['kind'] = 'transcription';
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'operator').priceFor('month')!;
@@ -431,7 +431,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -486,8 +486,8 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
-    final data =
-        PlanStorefront.fromJson(jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()));
+    final data = PlanStorefront.fromJson(
+        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription: Subscription(
           plan: PlanType.unlimitedV2, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
@@ -549,8 +549,8 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
-    final data =
-        PlanStorefront.fromJson(jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()));
+    final data = PlanStorefront.fromJson(
+        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
     await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
@@ -572,16 +572,17 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json =
-          jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+          as Map<String, dynamic>;
       json['current'] = null;
       final plusTier =
           (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus');
       plusTier['is_current'] = false;
+      plusTier['action'] = 'checkout';
       plusTier['cta_label'] = 'Get Plus';
       final data = PlanStorefront.fromJson(json);
       final price = _plan(data, 'plus').priceFor('month')!;
-      final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id;
+      final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id!;
       usage.debugSetSubscription(UserSubscriptionResponse(
         subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
         transcriptionSecondsUsed: 0,

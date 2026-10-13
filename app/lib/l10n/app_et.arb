@@ -4016,6 +4016,5 @@
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
     "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
-    "paywallPlans": "Plans",
-    "paywallResubscribeFirst": "Resubscribe first to change plans"
+    "paywallPlans": "Plans"
 }

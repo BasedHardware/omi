@@ -23288,12 +23288,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Plans'**
   String get paywallPlans;
-
-  /// Shown in place of a plan button while a cancellation is scheduled.
-  ///
-  /// In en, this message translates to:
-  /// **'Resubscribe first to change plans'**
-  String get paywallResubscribeFirst;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

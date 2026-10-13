@@ -14,7 +14,8 @@ void main() {
           expect(uri.path, '/v2/payments/plans');
           expect(uri.queryParameters, {'source': 'proactive_agent_gate', 'trigger': 'proactive_agent', 'locale': 'vi'});
           expect(request.method, 'GET');
-          return http.Response(File('test/fixtures/storefront_v2/settings.json').readAsStringSync(), 200);
+          return http.Response(
+              File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200);
         });
     final result = await api.load(source: 'proactive_agent_gate', trigger: 'proactive_agent', locale: 'vi');
     expect(
@@ -24,7 +25,7 @@ void main() {
             .firstWhere((tier) => tier.planId == 'operator')
             .priceFor('year')!
             .id,
-        'fixture_operator_year');
+        'price_operator_year');
   });
   test('unavailable or incompatible backend has no synthetic fallback', () async {
     for (final response in [http.Response('{}', 404), http.Response('{"schema_version":1}', 200)]) {

@@ -15812,9 +15812,5 @@
     "paywallPlans": "Plans",
     "@paywallPlans": {
         "description": "Title of the new plans sheet. The previous sheet keeps Plans & Billing."
-    },
-    "paywallResubscribeFirst": "Resubscribe first to change plans",
-    "@paywallResubscribeFirst": {
-        "description": "Shown in place of a plan button while a cancellation is scheduled."
     }
 }

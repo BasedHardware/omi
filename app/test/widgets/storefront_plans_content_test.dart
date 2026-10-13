@@ -15,7 +15,7 @@ import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Map<String, dynamic> fixture([String name = 'settings']) =>
+Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
     jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
 
 const evidence = String.fromEnvironment('OMI_STOREFRONT_UI_EVIDENCE_DIR');
@@ -177,17 +177,16 @@ void main() {
     expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
     expect(find.byKey(const Key('storefront_restore')), findsNothing);
     expect(find.text('Refresh'), findsNothing);
-    await capture(tester, '001-mobile-ios-settings.png');
     await tester.tap(find.byKey(const Key('storefront_year')));
     await tester.pumpAndSettle();
     expect(find.text(r'$41.66/month'), findsOneWidget);
     expect(find.text(r'$499.90 billed yearly · 2 months free'), findsOneWidget);
     expect(find.text('Renews yearly until you cancel. Cancel anytime in settings.'), findsWidgets);
-    await capture(tester, '014-mobile-ios-yearly.png');
+    expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
     await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
     await tester.pumpAndSettle();
-    expect(selectedId, 'fixture_operator_year');
+    expect(selectedId, 'price_operator_year');
     expect(tester.takeException(), isNull);
   });
 
@@ -221,7 +220,6 @@ void main() {
     final plusTop = tester.getTopLeft(find.byKey(const Key('storefront_tier_plus'))).dy;
     position.jumpTo((position.pixels + plusTop - viewTop).clamp(0.0, position.maxScrollExtent));
     await tester.pumpAndSettle();
-    await capture(tester, '015-mobile-ios-see-all-plans.png');
     expect(tester.takeException(), isNull);
   });
 
@@ -253,9 +251,9 @@ void main() {
   });
 
   testWidgets('legacy view is the current line, the note, and manage billing', (tester) async {
-    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('legacy')));
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('legacy_unlimited')));
     expect(find.text('Your plan'), findsWidgets);
-    expect(find.text(r"You're on Unlimited · $29.99/mo · renews Nov 1"), findsOneWidget);
+    expect(find.text(r"You're on Neo · $29.99/mo · renews Nov 1"), findsOneWidget);
     expect(find.text("We don't sell this plan anymore, but yours stays exactly as it is."), findsOneWidget);
     expect(find.text('Manage billing'), findsOneWidget);
     expect(find.byKey(const Key('storefront_restore')), findsNothing);
@@ -264,27 +262,31 @@ void main() {
         find.byWidgetPredicate((widget) =>
             widget.key is ValueKey<String> && (widget.key as ValueKey<String>).value.startsWith('storefront_buy_')),
         findsNothing);
-    await capture(tester, '007-mobile-ios-legacy.png');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('each remaining golden scenario renders its header without a subtext paragraph', (tester) async {
+  testWidgets('each golden renders its header and backend strings', (tester) async {
     const shots = {
-      'budget_80': '002-mobile-ios-budget-80.png',
-      'budget_100': '003-mobile-ios-budget-100.png',
-      'pro_gate_proactive': '004-mobile-ios-pro-gate-proactive.png',
-      'pro_gate_screen': '005-mobile-ios-pro-gate-screen.png',
-      'mcp_cap': '006-mobile-ios-mcp-cap.png',
-      'free': '008-mobile-ios-free.png',
-      'cancel_scheduled': '009-mobile-ios-cancel-scheduled.png',
-      'architect': '010-mobile-ios-architect.png',
+      'architect_settings': '001-mobile-ios-architect-settings.png',
+      'cancel_scheduled_plus': '002-mobile-ios-cancel-scheduled-plus.png',
+      'free_budget80': '003-mobile-ios-free-budget-80.png',
+      'free_mcp_cap': '004-mobile-ios-free-mcp-cap.png',
+      'free_pro_gate_proactive': '005-mobile-ios-free-pro-gate-proactive.png',
+      'free_pro_gate_screen': '006-mobile-ios-free-pro-gate-screen.png',
+      'free_settings': '007-mobile-ios-free-settings.png',
+      'legacy_unlimited': '008-mobile-ios-legacy-unlimited.png',
+      'plus_annual_current': '009-mobile-ios-plus-annual-current.png',
+      'plus_budget80': '010-mobile-ios-plus-budget-80.png',
+      'plus_monthly_yearly_toggle': '011-mobile-ios-plus-monthly-yearly-toggle.png',
+      'pro_settings': '012-mobile-ios-pro-settings.png',
     };
+    const showYearlyCta = {'architect_settings', 'plus_monthly_yearly_toggle', 'pro_settings'};
     for (final entry in shots.entries) {
       final data = PlanStorefront.fromJson(fixture(entry.key));
       await pumpSheet(tester, data: data);
       expect(find.text(data.header), findsOneWidget);
       expect(find.text(data.current!.line), findsOneWidget);
-      if (entry.key == 'mcp_cap') {
+      if (entry.key == 'free_mcp_cap') {
         final card = find.byKey(const Key('storefront_tier_plus'));
         final texts = find
             .descendant(of: card, matching: find.byType(Text))
@@ -296,10 +298,9 @@ void main() {
         expect(hours, greaterThanOrEqualTo(0));
         expect(mcp, greaterThan(hours));
       }
-      if (entry.key == 'cancel_scheduled') {
-        expect(find.text('Your Plus plan ends Nov 1'), findsOneWidget);
+      if (entry.key == 'cancel_scheduled_plus') {
         expect(find.text('Upgrade to Pro'), findsNothing);
-        expect(find.text('Switch to yearly · save \$39.98'), findsNothing);
+        expect(find.text(r'Switch to yearly · save $39.98'), findsNothing);
         expect(find.text('Recommended'), findsNothing);
         expect(find.text('Resubscribe'), findsOneWidget);
         expect(find.text('Resubscribe first to change plans'), findsWidgets);
@@ -311,16 +312,18 @@ void main() {
           lessThan(tester.getTopLeft(find.byKey(const Key('storefront_tier_operator'))).dy),
         );
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.textContaining('•')),
+            findsWidgets);
+      }
+      if (entry.key == 'free_settings') {
+        expect(find.text('Get Plus'), findsOneWidget);
+        expect(find.text(r'$0.00/month'), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
             findsNothing);
       }
-      if (entry.key == 'architect') {
-        expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
-        expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
-        expect(find.text('Your plan'), findsOneWidget);
-      }
-      if (entry.key == 'free') {
-        expect(find.text('Get Plus'), findsOneWidget);
-        expect(find.text("You're on Free"), findsOneWidget);
+      if (showYearlyCta.contains(entry.key)) {
+        await tester.tap(find.byKey(const Key('storefront_year')));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Switch to yearly · save'), findsOneWidget);
       }
       await capture(tester, entry.value);
       expect(tester.takeException(), isNull);
@@ -329,7 +332,7 @@ void main() {
 
   testWidgets('banner is one nudge line with See plans and Not now', (tester) async {
     var opened = false;
-    final data = PlanStorefront.fromJson(fixture('budget_80'));
+    final data = PlanStorefront.fromJson(fixture('plus_budget80'));
     await pumpSheet(tester,
         title: null,
         size: const Size(390, 132),
@@ -339,7 +342,7 @@ void main() {
     expect(find.text('See plans'), findsOneWidget);
     expect(find.text('Not now'), findsOneWidget);
     expect(find.text('Usage'), findsNothing);
-    await capture(tester, '011-mobile-ios-banner.png');
+    await capture(tester, '013-mobile-ios-banner.png');
     await tester.tap(find.byKey(const Key('budget_nudge_compare')));
     await tester.pumpAndSettle();
     expect(opened, isTrue);
@@ -348,20 +351,21 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('budget_80')), findsNothing);
     for (final percent in [79, 100, 120]) {
-      final json = fixture('budget_80');
+      final json = fixture('plus_budget80');
       json['usage']['percent'] = percent;
       await pumpSheet(tester,
           title: null, content: BudgetUpsellCard(data: PlanStorefront.fromJson(json), onOpen: () async {}));
       expect(find.byKey(const Key('budget_80')), findsNothing);
     }
     await pumpSheet(tester,
-        title: null, content: BudgetUpsellCard(data: PlanStorefront.fromJson(fixture('legacy')), onOpen: () async {}));
+        title: null,
+        content: BudgetUpsellCard(data: PlanStorefront.fromJson(fixture('legacy_unlimited')), onOpen: () async {}));
     expect(find.byKey(const Key('budget_80')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('usage meter is the backend line without a title row', (tester) async {
-    final usage = PlanStorefront.fromJson(fixture('budget_80')).usage!;
+    final usage = PlanStorefront.fromJson(fixture('plus_budget80')).usage!;
     await pumpSheet(tester, title: null, size: const Size(390, 90), content: StorefrontUsageMeter(usage: usage));
     expect(find.text('80% used · about 20 hours of recording left · resets Nov 1'), findsOneWidget);
     expect(find.text('Usage'), findsNothing);
@@ -369,17 +373,17 @@ void main() {
     final cardBottom = tester.getBottomLeft(find.byKey(const Key('storefront_usage_meter'))).dy;
     final barBottom = tester.getBottomLeft(find.byKey(const Key('storefront_usage_meter_bar'))).dy;
     expect(cardBottom - barBottom, lessThanOrEqualTo(OmiSpacing.md + 1));
-    await capture(tester, '012-mobile-ios-meter.png');
+    await capture(tester, '014-mobile-ios-meter.png');
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('a new period restores a dismissed nudge', (tester) async {
-    final data = PlanStorefront.fromJson(fixture('budget_80'));
+    final data = PlanStorefront.fromJson(fixture('plus_budget80'));
     await pumpSheet(tester, title: null, content: BudgetUpsellCard(data: data, onOpen: () async {}));
     await tester.tap(find.byKey(const Key('budget_nudge_dismiss')));
     await tester.pump();
     expect(find.byKey(const Key('budget_80')), findsNothing);
-    final json = fixture('budget_80');
+    final json = fixture('plus_budget80');
     json['usage']['period_id'] = '2026-11';
     await pumpSheet(tester,
         title: null, content: BudgetUpsellCard(data: PlanStorefront.fromJson(json), onOpen: () async {}));
@@ -387,15 +391,16 @@ void main() {
   });
 
   testWidgets('small light phone keeps the recommended action on screen', (tester) async {
-    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('free')), dark: false, size: const Size(320, 568));
+    await pumpSheet(tester,
+        data: PlanStorefront.fromJson(fixture('free_settings')), dark: false, size: const Size(320, 568));
     final action = find.byKey(const Key('storefront_buy_plus'));
     expect(action.hitTestable(), findsOneWidget);
     expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(568));
     expect(tester.getSize(action).height, greaterThanOrEqualTo(44));
     expect(find.byType(OmiCloseButton).hitTestable(), findsOneWidget);
-    await capture(tester, '013-mobile-ios-small-phone-light.png');
+    await capture(tester, '015-mobile-ios-small-phone-light.png');
     await pumpSheet(tester,
-        data: PlanStorefront.fromJson(fixture('free')), dark: false, size: const Size(320, 568), scale: 1.6);
+        data: PlanStorefront.fromJson(fixture('free_settings')), dark: false, size: const Size(320, 568), scale: 1.6);
     await tester.drag(find.byKey(const Key('storefront_scroll')), const Offset(0, -400));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -439,11 +444,7 @@ void main() {
   }
 
   testWidgets('annual current price has no monthly buy button', (tester) async {
-    final json = fixture();
-    json['current']['price_id'] = 'fixture_plus_year';
-    json['current']['interval'] = 'year';
-    json['current']['line'] = r"You're on Plus · $199.90/yr · renews Nov 1";
-    await pumpSheet(tester, data: PlanStorefront.fromJson(json), livePlan: PlanType.plus);
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('plus_annual_current')), livePlan: PlanType.plus);
     expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
     expect(find.byKey(const Key('storefront_buy_operator')), findsOneWidget);
     await tester.tap(find.byKey(const Key('storefront_year')));
@@ -471,7 +472,7 @@ void main() {
   });
 
   testWidgets('cancel scheduled offers only Resubscribe and tells other tiers to resubscribe first', (tester) async {
-    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('cancel_scheduled')));
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('cancel_scheduled_plus')));
     expect(find.text('Your Plus plan ends Nov 1'), findsOneWidget);
     expect(find.text(r"You're on Plus · $19.99/mo"), findsOneWidget);
     expect(find.text('Upgrade to Pro'), findsNothing);
@@ -481,10 +482,10 @@ void main() {
     expect(find.text('Resubscribe'), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
-    expect(find.byKey(const Key('storefront_hold_operator')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_blocked_operator')), findsOneWidget);
     expect(find.text('Resubscribe first to change plans'), findsWidgets);
     final current = find.byKey(const Key('storefront_tier_plus'));
-    expect(find.descendant(of: current, matching: find.textContaining('•')), findsNothing);
+    expect(find.descendant(of: current, matching: find.textContaining('•')), findsWidgets);
     expect(
       find.descendant(
         of: current,
@@ -496,7 +497,7 @@ void main() {
         findsWidgets);
     final scrollable =
         find.descendant(of: find.byKey(const Key('storefront_scroll')), matching: find.byType(Scrollable));
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_hold_architect')), 80, scrollable: scrollable);
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_blocked_architect')), 80, scrollable: scrollable);
     expect(find.byKey(const Key('storefront_buy_architect')), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -511,7 +512,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('same-tier monthly to yearly CTA uses the live-price saving', (tester) async {
+  testWidgets('same-tier yearly CTA is the backend price label, not a computed saving', (tester) async {
     final json = fixture();
     (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus')['cta_label'] =
         'Get Plus';
@@ -524,26 +525,23 @@ void main() {
     expect(find.text('Get Plus'), findsNothing);
     expect(find.text('Your plan'), findsOneWidget);
     final current = find.byKey(const Key('storefront_tier_plus'));
-    expect(find.descendant(of: current, matching: find.textContaining('•')), findsNothing);
+    expect(find.descendant(of: current, matching: find.textContaining('•')), findsWidgets);
     expect(find.byKey(const Key('storefront_renewal_plus')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('compact current card has no bullets or button when it has no action', (tester) async {
+  testWidgets('compact drops bullets and a non-compact current card keeps them', (tester) async {
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('free_settings')));
+    final free = find.byKey(const Key('storefront_tier_basic'));
+    expect(find.descendant(of: free, matching: find.text(r'$0.00/month')), findsOneWidget);
+    expect(find.descendant(of: free, matching: find.textContaining('•')), findsNothing);
+    expect(find.descendant(of: free, matching: find.byType(OmiButton)), findsNothing);
+
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
-    final card = find.byKey(const Key('storefront_tier_plus'));
-    expect(find.descendant(of: card, matching: find.text('Plus')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('Your plan')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text(r'$19.99/month')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: card,
-        matching: find.text('About 100 hours of recording a month, around 3 hours a day'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.descendant(of: card, matching: find.textContaining('•')), findsNothing);
-    expect(find.descendant(of: card, matching: find.byType(OmiButton)), findsNothing);
+    final plus = find.byKey(const Key('storefront_tier_plus'));
+    expect(find.descendant(of: plus, matching: find.text('Your plan')), findsOneWidget);
+    expect(find.descendant(of: plus, matching: find.text(r'$19.99/month')), findsOneWidget);
+    expect(find.descendant(of: plus, matching: find.textContaining('•')), findsWidgets);
     expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
     expect(tester.takeException(), isNull);
   });

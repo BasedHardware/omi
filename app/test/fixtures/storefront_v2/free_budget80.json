@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "catalog_revision": 1,
+  "catalog_revision": 7,
   "show_subscription_ui": true,
-  "header": "You've used today's 100 MCP requests",
+  "header": "You've used 80% of this month's usage",
   "current": {
     "plan_id": "basic",
     "name": "Free",
@@ -14,13 +14,16 @@
     "legacy_note": null
   },
   "usage": {
-    "kind": "unavailable",
-    "percent": null,
-    "period_id": null,
-    "reset_label": null,
-    "meter_line": null,
-    "nudge_line": null,
-    "pro_gates": []
+    "kind": "usage_budget",
+    "percent": 80,
+    "period_id": "2026-10",
+    "reset_label": "resets Nov 1",
+    "meter_line": "80% used · about 3 hours of recording left · resets Nov 1",
+    "nudge_line": "You've used 80% of this month's usage · resets Nov 1",
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
   },
   "tiers": [
     {
@@ -31,14 +34,17 @@
       "is_current": false,
       "hours_line": "About 100 hours of recording a month, around 3 hours a day",
       "bullets": [
-        "500 MCP requests a day",
         "Everything in Free, with much more room",
-        "Use Omi on your Mac as well as your phone"
+        "Use Omi on your Mac as well as your phone",
+        "500 MCP requests a day"
       ],
       "action": "checkout",
+      "cta_label": "Get Plus",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
-          "price_id": "fixture_plus_month",
+          "price_id": "price_plus_month",
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
@@ -47,7 +53,7 @@
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
         {
-          "price_id": "fixture_plus_year",
+          "price_id": "price_plus_year",
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
@@ -56,8 +62,7 @@
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
-      ],
-      "cta_label": "Get Plus"
+      ]
     },
     {
       "tier_id": "basic:ladder_v1",
@@ -67,12 +72,25 @@
       "is_current": true,
       "hours_line": "About 15 hours of recording a month",
       "bullets": [
-        "100 MCP requests a day",
         "Transcripts, summaries and memories of your conversations",
-        "Ask Omi anything about your day"
+        "Ask Omi anything about your day",
+        "100 MCP requests a day"
       ],
-      "action": "none",
-      "prices": []
+      "action": "current",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0.00/month",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
     },
     {
       "tier_id": "operator:ladder_v1",
@@ -82,14 +100,17 @@
       "is_current": false,
       "hours_line": "About 280 hours of recording a month, enough to wear it all day",
       "bullets": [
-        "5,000 MCP requests a day",
         "Omi reminds you of things you said you'd do",
-        "On your Mac, Omi can see what you're working on and help with it"
+        "On your Mac, Omi can see what you're working on and help with it",
+        "5,000 MCP requests a day"
       ],
       "action": "checkout",
+      "cta_label": "Get Pro",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
-          "price_id": "fixture_operator_month",
+          "price_id": "price_operator_month",
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
@@ -98,7 +119,7 @@
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
         {
-          "price_id": "fixture_operator_year",
+          "price_id": "price_operator_year",
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
@@ -107,8 +128,7 @@
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
-      ],
-      "cta_label": "Get Pro"
+      ]
     },
     {
       "tier_id": "architect:ladder_v1",
@@ -118,32 +138,34 @@
       "is_current": false,
       "hours_line": "About 1,200 hours of recording a month, for all-day use on more than one device",
       "bullets": [
-        "At least 5,000 MCP requests a day",
-        "Everything in Pro, with over 4 times the usage"
+        "Everything in Pro, with over 4 times the usage",
+        "At least 5,000 MCP requests a day"
       ],
       "action": "checkout",
+      "cta_label": "Get Architect",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
-          "price_id": "fixture_architect_month",
+          "price_id": "price_architect_month",
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/month",
+          "headline": "$199.00/month",
           "subline": null,
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
         {
-          "price_id": "fixture_architect_year",
+          "price_id": "price_architect_year",
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
           "headline": "$165.83/month",
-          "subline": "$1,990 billed yearly · 2 months free",
+          "subline": "$1990.00 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
-      ],
-      "cta_label": "Get Architect"
+      ]
     }
   ],
   "yearly_toggle_label": "Yearly · 2 months free"

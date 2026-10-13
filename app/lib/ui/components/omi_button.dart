@@ -75,6 +75,7 @@ class OmiButton extends StatefulWidget {
     this.width,
     this.height,
     this.labelStyle,
+    this.maxLines = 1,
   });
 
   const OmiButton.secondary({
@@ -90,7 +91,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.destructive({
     super.key,
@@ -105,7 +107,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.tertiary({
     super.key,
@@ -120,7 +123,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -136,7 +140,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   final String label;
 
@@ -171,6 +176,9 @@ class OmiButton extends StatefulWidget {
 
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
+
+  /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
+  final int maxLines;
 
   @override
   State<OmiButton> createState() => _OmiButtonState();
@@ -239,7 +247,13 @@ class _OmiButtonState extends State<OmiButton> {
       color: colors.foreground,
     );
 
-    Widget label = Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    Widget label = Text(
+      widget.label,
+      style: textStyle,
+      maxLines: widget.maxLines,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+    );
     if (widget.leading != null || widget.icon != null) {
       final iconSize = compact ? 16.0 : 18.0;
       label = Row(
