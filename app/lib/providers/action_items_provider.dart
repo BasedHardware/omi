@@ -113,6 +113,41 @@ class ActionItemsProvider extends ChangeNotifier {
   // delete may still be in flight. Guarded against re-insertion by fetch/load.
   final Set<String> _pendingDeletionIds = {};
 
+  // Optimistic creates waiting on the server, and creates that settled while a
+  // wholesale list fetch was still in flight. Such a fetch's response predates
+  // the create and cannot contain it; the settled row stays shadowed until
+  // every fetch that was in flight at settle time has applied its replacement.
+  final Map<String, ActionItemWithMetadata> _pendingCreates = {};
+  final Map<String, (ActionItemWithMetadata, Set<int>)> _fetchShadowedCreates = {};
+  int _wholesaleListFetchOrdinal = 0;
+  final Set<int> _wholesaleFetchesInFlight = {};
+
+  /// Merges optimistic creates into [fetched] so a wholesale list replacement
+  /// cannot drop a create the response predates. [fetchOrdinal] identifies the
+  /// replacing fetch: a shadowed row survives exactly the replacements of the
+  /// fetches that were in flight when it settled. Later fetches see the row
+  /// server-side and their replacements are authoritative without it.
+  List<ActionItemWithMetadata> _withPendingCreates(
+    List<ActionItemWithMetadata> fetched, {
+    required int fetchOrdinal,
+  }) {
+    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
+    final fetchedIds = fetched.map((item) => item.id).toSet();
+    final preserved = <ActionItemWithMetadata>[
+      for (final entry in _fetchShadowedCreates.entries)
+        if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key)) entry.value.$1,
+      for (final entry in _pendingCreates.entries)
+        if (!fetchedIds.contains(entry.key)) entry.value,
+    ];
+    // This replacement has applied, and any shadowed ordinal that is no longer
+    // in flight either applied or aborted without replacing the list; neither
+    // can drop the row anymore. Fetches still in flight remain threats.
+    final stillThreatening = {..._wholesaleFetchesInFlight}..remove(fetchOrdinal);
+    _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
+    _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    return [...preserved, ...fetched];
+  }
+
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
   // from every list, not yet deleted on the server.
   final Map<String, ({ActionItemWithMetadata item, int index, int homeIndex})> _stagedDeletes = {};
@@ -270,17 +305,31 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> _fetchHomeWidgetPreview(int generation) async {
+    // Register before the await: same wholesale-replacement semantics as
+    // fetchActionItems for optimistic creates that settle mid-flight.
+    final fetchOrdinal = ++_wholesaleListFetchOrdinal;
+    _wholesaleFetchesInFlight.add(fetchOrdinal);
     try {
       final response = await _fetchActionItemsPage(limit: 100, offset: 0);
       // Navigation wins if Tasks was visited while this optional read was pending.
       if (generation != _sessionGeneration || _initialLoad != null || _initialLoadCompleted) return;
       if (response == null) return;
-      _actionItems = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).take(100).toList();
+      _actionItems = _withPendingCreates(
+        response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).take(100).toList(),
+        fetchOrdinal: fetchOrdinal,
+      );
       _homeWidgetRefreshedAt = DateTime.now();
-      SiriIntegration.current.queueUpsertTasks(_actionItems);
+      // Home widgets mirror only confirmed rows; optimistic temp rows have no
+      // stable server identity yet.
+      final indexableRows = _pendingCreates.isEmpty
+          ? _actionItems
+          : _actionItems.where((item) => !_pendingCreates.containsKey(item.id)).toList();
+      SiriIntegration.current.queueUpsertTasks(indexableRows);
       notifyListeners();
     } catch (e) {
       Logger.debug('Error fetching home widget task preview: $e');
+    } finally {
+      _wholesaleFetchesInFlight.remove(fetchOrdinal);
     }
   }
 
@@ -401,6 +450,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     final generation = _sessionGeneration;
+    // Register before any await: optimistic creates that settle while this
+    // wholesale fetch is in flight must survive its list replacement.
+    final fetchOrdinal = ++_wholesaleListFetchOrdinal;
+    _wholesaleFetchesInFlight.add(fetchOrdinal);
     var decodedPageIsComplete = true;
     var loaded = false;
     if (showShimmer) {
@@ -417,6 +470,9 @@ class ActionItemsProvider extends ChangeNotifier {
         startDate: _startDate,
         endDate: _endDate,
         onTyped: (result) {
+          // A fetch started before sign-out must not project its outcome onto
+          // the next account's screen state.
+          if (generation != _sessionGeneration) return;
           _projectTypedList(result);
           if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
             decodedPageIsComplete = rejectedRows == 0 && !truncated;
@@ -425,7 +481,8 @@ class ActionItemsProvider extends ChangeNotifier {
       );
       if (response != null && generation == _sessionGeneration) {
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
+        await _applyFetchedActionItems(response,
+            decodedPageIsComplete: decodedPageIsComplete, fetchOrdinal: fetchOrdinal);
         if (generation != _sessionGeneration) return false;
         await _migrateCategoryOrderFromPrefs();
         if (generation != _sessionGeneration) return false;
@@ -435,14 +492,19 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {
-      if (showShimmer) {
-        setLoading(false);
-      } else {
-        setFetching(false);
+      _wholesaleFetchesInFlight.remove(fetchOrdinal);
+      // Only the owning generation may retire the loading flags; a stale
+      // completion would hide the successor account's shimmer/fetch state.
+      if (generation == _sessionGeneration) {
+        if (showShimmer) {
+          setLoading(false);
+        } else {
+          setFetching(false);
+        }
       }
     }
 
-    notifyListeners();
+    if (generation == _sessionGeneration) notifyListeners();
     return loaded;
   }
 
@@ -458,7 +520,11 @@ class ActionItemsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _applyFetchedActionItems(ActionItemsResponse response, {required bool decodedPageIsComplete}) async {
+  Future<void> _applyFetchedActionItems(
+    ActionItemsResponse response, {
+    required bool decodedPageIsComplete,
+    required int fetchOrdinal,
+  }) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -466,9 +532,12 @@ class ActionItemsProvider extends ChangeNotifier {
     // in-place: the response list may be unmodifiable, and aliasing it
     // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
     // and retire tombstones prematurely.
-    _actionItems = _pendingDeletionIds.isEmpty
-        ? List.of(response.actionItems)
-        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+    _actionItems = _withPendingCreates(
+      _pendingDeletionIds.isEmpty
+          ? List.of(response.actionItems)
+          : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList(),
+      fetchOrdinal: fetchOrdinal,
+    );
     // Lazily retire tombstones once the server confirms the item is gone:
     // any ID still tracked as pending-deletion that did not appear in the
     // fresh server response can be cleared, because subsequent refreshes
@@ -482,12 +551,18 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.removeWhere((id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id));
     }
     _hasMore = response.hasMore;
+    // The Siri/Spotlight mirror never sees optimistic temp rows: their final
+    // server identity is still unknown, and reconcile/upsert with a temp id
+    // would leak an undeletable Spotlight entry until the next refresh.
+    final indexableRows = _pendingCreates.isEmpty
+        ? _actionItems
+        : _actionItems.where((item) => !_pendingCreates.containsKey(item.id)).toList();
     // A rejected wire row or a staged delete is still present on the server.
     // Neither can be interpreted as an authoritative absence in Spotlight.
     if (!_hasMore && !hasActiveFilter && _loadedPageSetComplete && !response.truncated && _pendingDeletionIds.isEmpty) {
-      SiriIntegration.current.queueReconcileTasks(_actionItems, includeCompleted: _includeCompleted);
+      SiriIntegration.current.queueReconcileTasks(indexableRows, includeCompleted: _includeCompleted);
     } else {
-      SiriIntegration.current.queueUpsertTasks(_actionItems);
+      SiriIntegration.current.queueUpsertTasks(indexableRows);
     }
 
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
@@ -896,6 +971,9 @@ class ActionItemsProvider extends ChangeNotifier {
       conversationId: conversationId,
     );
 
+    // Track the optimistic row so a concurrent list fetch (demand load, Home
+    // preview) that started before this create cannot drop it from the UI.
+    _pendingCreates[optimisticItem.id] = optimisticItem;
     _actionItems.insert(0, optimisticItem);
     notifyListeners();
 
@@ -906,31 +984,56 @@ class ActionItemsProvider extends ChangeNotifier {
         conversationId: conversationId,
         completed: completed,
       );
-      if (generation != _sessionGeneration) return null;
+      if (generation != _sessionGeneration) {
+        _settlePendingCreate(optimisticItem.id, null);
+        return null;
+      }
 
       if (newItem != null) {
+        _settlePendingCreate(optimisticItem.id, newItem);
+        // The server row replaces the temp row wherever it sits; if an
+        // interleaved list response already dropped the temp row, re-insert
+        // the confirmed row so the create is never lost from the UI.
         final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
         if (index != -1) {
           _actionItems[index] = newItem;
-          notifyListeners();
+        } else {
+          _actionItems.insert(0, newItem);
         }
+        notifyListeners();
         // Direct sync to Apple Reminders — no FCM roundtrip needed
         _syncToAppleRemindersIfNeeded(newItem);
         SiriIntegration.current.queueUpsertTasks([newItem]);
         return newItem;
       } else {
+        _settlePendingCreate(optimisticItem.id, null);
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         notifyListeners();
         Logger.debug('Failed to create action item on server');
         return null;
       }
     } catch (e) {
+      _settlePendingCreate(optimisticItem.id, null);
       if (generation != _sessionGeneration) return null;
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
       notifyListeners();
       Logger.debug('Error creating action item: $e');
       return null;
     }
+  }
+
+  /// Settles an optimistic create. [settledRow] is the confirmed server row,
+  /// or null when the create failed and the temp row was removed. If wholesale
+  /// fetches were in flight, their responses predate the create; the row stays
+  /// shadowed until each of those fetches has applied its replacement.
+  void _settlePendingCreate(String tempId, ActionItemWithMetadata? settledRow) {
+    _pendingCreates.remove(tempId);
+    if (settledRow == null || _wholesaleFetchesInFlight.isEmpty) return;
+    // If the row was already removed (e.g. the user deleted the temp entry),
+    // do not resurrect it via a later fetch's preservation.
+    final present = _actionItems.any((item) => item.id == settledRow.id || item.id == tempId);
+    if (!present) return;
+    _fetchShadowedCreates[settledRow.id] = (settledRow, {..._wholesaleFetchesInFlight});
   }
 
   /// Directly create an Apple Reminder without waiting for FCM roundtrip.
@@ -1199,8 +1302,15 @@ class ActionItemsProvider extends ChangeNotifier {
     _homeDayItems = [];
     _homeDayLoaded = false;
     _homeTodayLoad = null;
+    // A fetch from the signed-out generation no longer clears these on
+    // completion; reset them here so the next account starts clean.
+    _isLoading = false;
+    _isFetching = false;
+    _listViewState = const ApiViewState(phase: ApiViewPhase.data);
     _selectedItems = {};
     _stagedDeletes.clear();
+    _pendingCreates.clear();
+    _fetchShadowedCreates.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
     notifyListeners();

@@ -72,6 +72,7 @@ class UsageProvider with ChangeNotifier {
   bool _isSubscriptionLoading = false;
   bool _isPaymentLoading = false;
   bool get isLoading => _isUsageLoading || _isSubscriptionLoading || _isPaymentLoading;
+  Future<void>? _subscriptionFetchInFlight;
 
   String? _error;
   String? get error => _error;
@@ -190,6 +191,7 @@ class UsageProvider with ChangeNotifier {
     _usageTimeZoneGeneration++;
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
+    _subscriptionFetchInFlight = null;
     _availablePlans = null;
     _forceOutOfCredits = false;
     _error = null;
@@ -209,14 +211,27 @@ class UsageProvider with ChangeNotifier {
     await fetchSubscription(); // Sync with backend
   }
 
-  Future<void> fetchSubscription() async {
-    if (_isSubscriptionLoading) return;
+  Future<void> fetchSubscription() {
+    // Single-flight: return the real in-flight request instead of a no-op, so
+    // callers awaiting readiness (e.g. the `unlimited` deep link) can't pass
+    // while the fetch that onboarding started is still unresolved.
+    final pending = _subscriptionFetchInFlight;
+    if (pending != null) return pending;
 
     final generation = _sessionGeneration;
     _isSubscriptionLoading = true;
     _error = null;
     notifyListeners();
 
+    late final Future<void> fetch;
+    fetch = _fetchSubscription(generation).whenComplete(() {
+      if (identical(_subscriptionFetchInFlight, fetch)) _subscriptionFetchInFlight = null;
+    });
+    _subscriptionFetchInFlight = fetch;
+    return fetch;
+  }
+
+  Future<void> _fetchSubscription(int generation) async {
     try {
       final subscription = await _subscriptionRequest();
       if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
