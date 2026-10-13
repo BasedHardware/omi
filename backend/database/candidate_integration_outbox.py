@@ -259,8 +259,23 @@ def claim_candidate_integration_dispatch(
                 return _ClaimApply(exported_task_id=task_id if isinstance(task_id, str) else None)
             write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
             return _ClaimApply()
-        if payload.get('provider_attempt_outcome') == PROVIDER_ATTEMPT_IN_DOUBT:
+        # Every dispatch path (accept, drain, sweep) claims here, so retry policy lives here.
+        # Only a pristine row or a recorded pre-accept failure may reach the provider again;
+        # a legacy row with no outcome may already have created the task.
+        attempts = int(payload.get('attempt_count', 0) or 0)
+        pristine = attempts == 0 and payload.get('status') == 'pending'
+        if not pristine and payload.get('provider_attempt_outcome') not in PROVIDER_ATTEMPT_RETRY_SAFE:
             write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
+            return _ClaimApply()
+        if attempts >= CANDIDATE_INTEGRATION_POLICY.max_attempts:
+            patch = _in_doubt_dead_letter_patch(claim_time)
+            patch.update(
+                {
+                    'dead_letter_reason': 'attempt_budget_exhausted',
+                    'provider_attempt_outcome': payload.get('provider_attempt_outcome'),
+                }
+            )
+            write_transaction.update(outbox_ref, patch)
             return _ClaimApply()
         lease_token = uuid4().hex
         write_transaction.update(

@@ -1412,6 +1412,43 @@ def test_claim_dead_letters_in_doubt_without_another_attempt(fake_db):
     assert fake_db.rows[path]['attempt_count'] == 2
 
 
+def test_claim_dead_letters_a_legacy_failure_with_no_recorded_outcome(fake_db):
+    # Pre-migration failed rows never recorded whether the provider accepted the create.
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path].pop('provider_attempt_outcome', None)
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
+
+
+def test_claim_dead_letters_a_row_past_the_attempt_budget(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'not_sent'
+    fake_db.rows[path]['attempt_count'] = integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'attempt_budget_exhausted'
+    assert fake_db.rows[path]['attempt_count'] == integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+
 def test_claim_leaves_a_live_in_doubt_lease_alone(fake_db):
     record = create_record(fake_db)
     candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
