@@ -2,6 +2,13 @@
   "version": 1,
   "images": [
     {
+      "file": "001-mobile-ios-onboarding-sign-in.png",
+      "platform": "mobile-ios",
+      "description": "Sign-in opens straight away, no Get Started screen (local test build shows one local sign-in button where store builds show Apple/Google)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
       "file": "002-mobile-ios-onboarding-data-privacy.png",
       "platform": "mobile-ios",
       "description": "Data & Privacy: the Omi pendant, centred headline, Continue at the standard height",
@@ -117,6 +124,13 @@
       "file": "018-mobile-ios-home-live-pill.png",
       "platform": "mobile-ios",
       "description": "Bottom-bar live pill while the phone records (local server has no transcription, so the Reconnecting card also shows)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "019-mobile-ios-activation-control-ending.png",
+      "platform": "mobile-ios",
+      "description": "Control arm: today's guided voice introduction, unchanged",
       "captured_by": "agent",
       "source": "screencapture"
     }
