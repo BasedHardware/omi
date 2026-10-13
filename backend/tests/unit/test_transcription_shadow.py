@@ -364,3 +364,37 @@ def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
     monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy')
     explicit = run()
     assert absent.encode() == explicit.encode()
+
+
+def test_v2_audio_collection_and_duplicate_trim_stay_on_pcm16_sample_boundaries(monkeypatch):
+    base = 100.123
+    chunks = [(base, b'\x01\x00' * 160000), (base + 9.001, b'\x01\x00' * 160000)]
+    assert int((base + 10 - chunks[1][0]) * 32000) % 2 == 1  # Legacy float truncation can split a sample.
+    monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_a: iter(chunks))
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_a, **_kw: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+
+    def transcribe(part, **_kw):
+        assert len(part) % 2 == 0
+        return [{'timestamp': [0, 1], 'text': 'synthetic', 'speaker': 'SPEAKER_00'}]
+
+    monkeypatch.setattr(shadow, 'parakeet_prerecorded_from_bytes', transcribe)
+    captured = []
+
+    def final(pcm, *_a, **_kw):
+        captured.append(pcm)
+        return None, {'outcome': 'skipped_single'}
+
+    monkeypatch.setattr(shadow, 'run_final_pass', final)
+    conversation = SimpleNamespace(
+        id='fixture',
+        language='en',
+        audio_files=[SimpleNamespace(chunk_timestamps=[t for t, _ in chunks])],
+        started_at=None,
+        finished_at=None,
+        transcript_segments=[],
+    )
+    shadow._make_pass('fixture', conversation, deadline=float('inf'), reserved_seconds=20, final_result={})
+    assert len(captured) == 1 and len(captured[0]) % 2 == 0
+    assert captured[0][1::2] == b'\x00' * (len(captured[0]) // 2)

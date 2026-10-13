@@ -279,7 +279,10 @@ def _make_pass(
         # playback MP3's dense clock is never used as a transcript clock.
         overlap = max(0.0, (last_end or chunk_start) - chunk_start)
         if overlap:
-            pcm = pcm[min(len(pcm), int(overlap * 32000)) :]
+            # The v2 PCM contract trims complete 16-bit samples. Float wall
+            # clocks can otherwise truncate an even frame offset to an odd byte.
+            trim_bytes = round(overlap * 16000) * 2 if final_result is not None else int(overlap * 32000)
+            pcm = pcm[min(len(pcm), trim_bytes) :]
             chunk_start += overlap
         if not pcm:
             continue
@@ -289,7 +292,7 @@ def _make_pass(
                 raise _BudgetExceeded('decoded audio exceeds daily budget')
             reserved_seconds += extra
         if final_pcm is not None:
-            position = round((chunk_start - audio_origin) * 32000)
+            position = round((chunk_start - audio_origin) * 16000) * 2
             if position + len(pcm) > 7200 * 32000:
                 assert final_result is not None
                 final_result['metadata'] = {'outcome': 'failed:too_long'}
