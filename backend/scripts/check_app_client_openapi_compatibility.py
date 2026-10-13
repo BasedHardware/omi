@@ -46,6 +46,27 @@ DELIBERATELY_REMOVED_ENDPOINTS: frozenset[str] = frozenset(
     }
 )
 
+# Released-client status restorations. The merge-base spec is normally the
+# released-clients truth, but a spec-only wire-contract regression can ship to
+# main without clients being rebuilt: e22938ac78 (2026-07-04) flipped
+# DELETE /v1/conversations/{conversation_id} from the released 204 No Content
+# to 200 + StatusResponse, while every released mobile client still gates
+# delete success on exactly 204
+# (app/lib/backend/http/api/conversations.dart::deleteConversationServer,
+# #10446 recurrence). An entry here records (route, method, status) whose
+# released-client contract is the pre-regression status, so restoring that
+# status is not flagged as a brand-new success status. Each entry must cite
+# the restoring change and the released-client evidence; never add
+# speculatively.
+RELEASED_STATUS_RESTORES: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        # Restored by "fix(backend): restore the released 204 delete contract
+        # for conversation deletion" (this branch). Evidence: the released
+        # client decoder returns `response.statusCode == 204` for this call.
+        ('/v1/conversations/{conversation_id}', 'delete', '204'),
+    }
+)
+
 
 class OpenAPICompatibilityError(RuntimeError):
     """The contracts cannot be compared safely."""
@@ -263,6 +284,13 @@ class CompatibilityChecker:
             response_path = f'{path}.responses.{status}'
             old_match = _matching_response_key(old_responses, str(status), include_default=True)
             if old_match is None:
+                # A recorded restoration means the released clients were built
+                # against this exact status and a later spec-only regression
+                # removed it from the merge-base baseline; restoring it is not
+                # a new client-visible surface (see RELEASED_STATUS_RESTORES).
+                route, _, method = path.rpartition('.')
+                if (route.removeprefix('paths.'), method, str(status)) in RELEASED_STATUS_RESTORES:
+                    continue
                 self._issue(response_path, 'new success response status is not modeled by the released client')
                 continue
             self._compare_response_content(
