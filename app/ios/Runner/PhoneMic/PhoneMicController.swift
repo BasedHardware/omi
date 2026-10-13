@@ -22,7 +22,13 @@ final class PhoneMicController {
     private static let bringUpRetryDelay: TimeInterval = 0.35
     private static let maxStartRetries = 2
     private static let resumeTickInterval: TimeInterval = 3.0
-    private static let progressTickInterval: TimeInterval = 1.0
+    /// Fault cadence for the batch liveness heartbeat. Interruptions, rebuilds,
+    /// and the first beat after foreground use this so a gap is still visible
+    /// inside the Dart 10s batch deadline.
+    private static let fastProgressTickInterval: TimeInterval = 1.0
+    /// Healthy `.running` cadence. 5s keeps a missed beat under the 10s Dart
+    /// stall threshold (one skipped tick is not itself a stall).
+    private static let healthyProgressTickInterval: TimeInterval = 5.0
 
     private let controlQueue = DispatchQueue(label: "com.omi.phonemic.control", qos: .userInitiated)
     private let audioQueue = DispatchQueue(label: "com.omi.phonemic.audio", qos: .userInitiated)
@@ -53,6 +59,9 @@ final class PhoneMicController {
     private var batchWriter: PhoneMicBatchWriting?
     private var batchMarker = "omibatchphone"
     private var progressTimer: DispatchSourceTimer?
+    /// Repeating interval currently armed, so a tick can retarget after a
+    /// state change that did not reschedule itself.
+    private var progressIntervalArmed: TimeInterval = 0
 
     init(environment: PhoneMicControllerEnvironment) {
         self.environment = environment
@@ -228,11 +237,12 @@ final class PhoneMicController {
         state = .running
         NSLog("[PhoneMic] running, route %@", environment.describeRoute())
         emitter.emitState(.running, sessionId: currentSessionId)
-        // Batch progress ticker: armed once on first reach of running, kept alive
+        // Batch progress ticker: armed on first reach of running, kept alive
         // across interruptions/rebuilds (its arrival is the Dart liveness signal),
-        // cancelled only on stop/idle.
-        if mode == .batch, progressTimer == nil {
-            armProgressTimer()
+        // cancelled only on stop/idle. Healthy running uses the slow cadence;
+        // this call retargets after a fast anomaly window.
+        if mode == .batch {
+            applyProgressCadence()
         }
         resolvePendingStarts(.success(()))
         if pendingStop {
@@ -343,6 +353,10 @@ final class PhoneMicController {
                 if engine?.isRunning != true {
                     NSLog("[PhoneMic] app active with dead engine, rebuilding")
                     beginRebuild()
+                } else if mode == .batch {
+                    // One fast liveness beat, then the healthy cadence. Pulls a
+                    // far-off 5s deadline forward without leaving the 1s poll on.
+                    syncProgressTimer(first: Self.fastProgressTickInterval, repeating: Self.healthyProgressTickInterval)
                 }
             default:
                 break
@@ -382,6 +396,7 @@ final class PhoneMicController {
         state = .interrupted
         emitter.emitState(.interrupted, sessionId: currentSessionId)
         armResumeTicker()
+        applyProgressCadence()
     }
 
     /// Probe a resume from .interrupted. Failure is silent by design — during
@@ -398,6 +413,7 @@ final class PhoneMicController {
     private func beginRebuild() {
         state = .rebuilding
         emitter.emitState(.rebuilding, sessionId: currentSessionId)
+        applyProgressCadence()
         if attemptBringUp() == nil {
             enterRunning()
             return
@@ -465,11 +481,22 @@ final class PhoneMicController {
             let encoder = batchEncoder
             let writer = batchWriter
             let marker = batchMarker
-            return { data, _ in
+            // The audio bytes stay on this closure. The weak hop is only the
+            // storage-full fault edge, so the healthy 5s heartbeat cannot delay it.
+            return { [weak self] data, _ in
                 guard let encoder, let writer else { return }
                 let packets = encoder.encode(data)
                 if !packets.isEmpty {
                     writer.append(opusPackets: packets, marker: marker)
+                }
+                if writer.consumeStorageFullTransitionLocked() {
+                    self?.controlQueue.async { [weak self] in
+                        guard let self, self.state != .idle else { return }
+                        self.emitter.emitError(
+                            code: "batch_storage_full",
+                            message: "storage is low; batch capture paused until space frees up",
+                            sessionId: self.currentSessionId)
+                    }
                 }
             }
         }
@@ -519,26 +546,55 @@ final class PhoneMicController {
         resumeTicker = nil
     }
 
-    private func armProgressTimer() {
-        cancelProgressTimer()
+    private func desiredProgressInterval() -> TimeInterval {
+        state == .running ? Self.healthyProgressTickInterval : Self.fastProgressTickInterval
+    }
+
+    /// Arm, or retarget, the batch heartbeat. `repeating` is what subsequent
+    /// ticks use; `first` can be shorter so an anomaly gets one fast beat
+    /// before returning to the healthy cadence.
+    private func syncProgressTimer(first: TimeInterval, repeating: TimeInterval) {
+        guard mode == .batch, state != .idle, batchWriter != nil else { return }
+        let leeway: DispatchTimeInterval = repeating >= Self.healthyProgressTickInterval
+            ? .milliseconds(500)
+            : .milliseconds(50)
+        if let timer = progressTimer {
+            timer.schedule(deadline: .now() + first, repeating: repeating, leeway: leeway)
+            progressIntervalArmed = repeating
+            return
+        }
         let timer = DispatchSource.makeTimerSource(queue: controlQueue)
-        timer.schedule(deadline: .now() + Self.progressTickInterval, repeating: Self.progressTickInterval)
+        timer.schedule(deadline: .now() + first, repeating: repeating, leeway: leeway)
         timer.setEventHandler { [weak self] in
-            self?.emitBatchProgressTick()
+            guard let self else { return }
+            self.emitBatchProgressTick()
+            let desired = self.desiredProgressInterval()
+            if self.state != .idle, self.progressIntervalArmed != desired {
+                self.syncProgressTimer(first: desired, repeating: desired)
+            }
         }
         timer.resume()
         progressTimer = timer
+        progressIntervalArmed = repeating
+    }
+
+    private func applyProgressCadence() {
+        let interval = desiredProgressInterval()
+        syncProgressTimer(first: interval, repeating: interval)
     }
 
     private func cancelProgressTimer() {
         progressTimer?.cancel()
         progressTimer = nil
+        progressIntervalArmed = 0
     }
 
-    /// 1Hz on controlQueue. Reads the writer's committed frame count and drains any
-    /// storage-full edge on its own (audio) queue, then emits progress. Emitted every
+    /// Heartbeat on controlQueue. Reads the writer's committed frame count and drains
+    /// any storage-full edge the write path did not already report, then emits
+    /// progress. Healthy running is 5s; interrupted/rebuilding is 1s. Emitted every
     /// tick even while interrupted/muted — the value freezes (frames-written derived),
-    /// but its arrival is the Dart watchdog's liveness signal.
+    /// but its arrival is the Dart watchdog's liveness signal. The Dart batch stall
+    /// threshold stays 10s, so the slower healthy beat is not itself a gap.
     private func emitBatchProgressTick() {
         guard state != .idle, let writer = batchWriter else { return }
         let (frames, storageFullEdge): (Int64, Bool) = audioQueue.sync {

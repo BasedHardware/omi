@@ -120,6 +120,32 @@ final class FakeMonitor: PhoneMicInterruptionSource {
     func bindEngine(_ engine: AVAudioEngine?) {}
 }
 
+final class FakeBatchEncoder: PhoneMicBatchEncoding {
+    func encode(_ pcm: Data) -> [Data] { [Data([0x01])] }
+    func discardPartial() {}
+}
+
+final class FakeBatchWriter: PhoneMicBatchWriting {
+    var sessionFramesWritten: Int64 = 0
+    var storageFull = false
+
+    func append(opusPackets: [Data], marker: String) {
+        sessionFramesWritten += Int64(opusPackets.count)
+    }
+
+    func closeNowLocked(_ reason: String) {}
+
+    func consumeStorageFullTransitionLocked() -> Bool {
+        if !storageFull { return false }
+        storageFull = false
+        return true
+    }
+}
+
+final class WriterBox {
+    var writer: FakeBatchWriter?
+}
+
 final class FakePermission: PhoneMicPermissionChecking {
     var status: PhoneMicPermissionStatus
     var requestResult: Bool
@@ -187,6 +213,36 @@ final class ReplayWorld {
             batchAutoMarker: { false },
             makeEncoder: { nil },
             makeWriter: { _, _ in fatalError("stream-mode vectors never build a batch writer") }
+        ))
+    }
+
+    func makeBatchController(writers: WriterBox) -> PhoneMicController {
+        let sink = self.sink
+        let monitorBox = self.monitorBox
+        let engineBox = self.engineBox
+        return PhoneMicController(environment: PhoneMicControllerEnvironment(
+            sink: sink,
+            permission: FakePermission(status: .granted),
+            configureSession: {},
+            describeRoute: { "harness-route" },
+            makeMonitor: { controlQueue, onSignal in
+                let monitor = FakeMonitor(queue: controlQueue, handler: onSignal)
+                monitorBox.monitor = monitor
+                return monitor
+            },
+            makeEngine: { _, onConvertedData, _ in
+                let engine = FakeEngine(onConvertedData: onConvertedData)
+                engineBox.engines.append(engine)
+                return engine
+            },
+            batchDirectory: { "/tmp/omi-phonemic-replay" },
+            batchAutoMarker: { false },
+            makeEncoder: { FakeBatchEncoder() },
+            makeWriter: { _, _ in
+                let writer = FakeBatchWriter()
+                writers.writer = writer
+                return writer
+            }
         ))
     }
 }
@@ -274,6 +330,18 @@ func assertNoFrameAfterIdle(_ delivered: [RecordedDelivery], label: String) {
         precondition(!delivered[(idleAt + 1)...].contains { $0.kind == .frame },
             "\(label): a frame was delivered after the terminal idle event")
     }
+}
+
+func progressCount(_ sink: RecordingSink) -> Int {
+    sink.deliveries.filter { $0.kind == .progress }.count
+}
+
+func startBatch(_ controller: PhoneMicController, _ sessionId: Int64) -> Result<Void, Error> {
+    let box = ResultBox()
+    controller.start(mode: .batch, sessionId: sessionId) { box.result = $0 }
+    waitUntil({ box.result != nil }, "batch start completion (sid \(sessionId))")
+    drainMain(seconds: 0.05)
+    return box.result!
 }
 
 func start(_ controller: PhoneMicController, _ sessionId: Int64) -> Result<Void, Error> {
@@ -592,6 +660,52 @@ struct Harness {
             engine.emitConverted(Data(repeating: 0, count: 320), epoch: engine.installedEpoch)
             drainMain(seconds: 0.05)
             precondition(world.sink.deliveries.count == before, "restored session leaked after stop")
+        }
+
+        // Batch heartbeat pacing: healthy running stays quiet well past the old
+        // 1s tick; interruption and foreground snap a beat back inside 1s.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 7) else {
+                preconditionFailure("batch pacing: start failed")
+            }
+            let started = progressCount(world.sink)
+            drainMain(seconds: 1.5)
+            precondition(progressCount(world.sink) == started,
+                "healthy batch heartbeat must stay on the 5s cadence (ticked within 1.5s)")
+
+            writers.writer?.storageFull = true
+            let engine = world.engineBox.engines[0]
+            engine.emitConverted(Data([1, 2, 3, 4]), epoch: engine.installedEpoch)
+            drainMain(seconds: 1.0)
+            precondition(
+                world.sink.deliveries.contains { $0.kind == .error && $0.code == "batch_storage_full" },
+                "storage-full must be reported from the write, not the slow heartbeat")
+
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            let beforeInterrupt = progressCount(world.sink)
+            drainMain(seconds: 3.0)
+            precondition(progressCount(world.sink) > beforeInterrupt,
+                "interruption must snap the heartbeat back to 1s")
+
+            let resumedAt = world.sink.deliveries.count
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.dropFirst(resumedAt).contains { $0.kind == .state && $0.state == "running" }
+            }, "batch pacing resumed")
+            drainMain(seconds: 0.05)
+            let afterResume = progressCount(world.sink)
+            drainMain(seconds: 1.5)
+            precondition(progressCount(world.sink) == afterResume,
+                "resumed healthy capture must return to the 5s cadence")
+
+            world.monitorBox.monitor!.fire(.appBecameActive)
+            drainMain(seconds: 3.0)
+            precondition(progressCount(world.sink) > afterResume,
+                "foreground must schedule one fast heartbeat")
+            stop(controller)
         }
 
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")
