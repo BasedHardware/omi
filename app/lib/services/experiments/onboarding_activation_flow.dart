@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// How first-run onboarding ends, after "Connect your Omi".
@@ -50,12 +52,14 @@ abstract final class OnboardingActivationExperiment {
   /// Variants of a multivariate flag that mean treatment.
   static const treatmentVariants = {'test', 'treatment', 'activation'};
 
-  /// Local override for debug builds only: `--dart-define=OMI_ONBOARDING_ENDING=activation` or
-  /// `=control`. A dart-define cannot be flipped on a built artifact and `kDebugMode` excludes
-  /// every store build, so this never reaches a user.
+  /// Local override: `--dart-define=OMI_ONBOARDING_ENDING=activation` or `=control`, honoured in debug
+  /// builds and in release builds of the local_dev profile (phone tests against a local server). A
+  /// dart-define cannot be flipped on a built artifact, and store builds are neither debug nor
+  /// local_dev, so this never reaches a user.
   static const _debugOverride = String.fromEnvironment('OMI_ONBOARDING_ENDING');
 
-  static OnboardingEnding? get debugOverride => kDebugMode ? OnboardingEnding.fromWire(_debugOverride) : null;
+  static OnboardingEnding? get debugOverride =>
+      kDebugMode || Env.profile == AppEnvironmentProfile.localDev ? OnboardingEnding.fromWire(_debugOverride) : null;
 
   static const Duration _variantTimeout = Duration(seconds: 2);
 
