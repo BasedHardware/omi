@@ -1299,7 +1299,7 @@ def get_developer_daily_summaries(
                 continue
             try:
                 valid_summaries.append(DailySummaryResponse.model_validate(s))
-            except Exception as e:
+            except ValidationError as e:
                 logger.warning('Skipping invalid daily summary %s in Developer API list: %s', s.get('id'), e)
                 continue
         returned_count = len(valid_summaries)
@@ -1339,7 +1339,7 @@ def get_developer_daily_summary(
         # A malformed/legacy doc in Firestore must read as not-found, not 500.
         try:
             validated = DailySummaryResponse.model_validate(summary)
-        except Exception as e:
+        except ValidationError as e:
             logger.warning('Daily summary %s failed response validation: %s', summary_id, e)
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
