@@ -3,8 +3,9 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 /// Client presentation gates only. Backend visibility and entitlement decisions win.
 /// Lifecycle: rollout; owner: dazheng; review-by: 2026-11-12; default off.
 abstract final class PlanStorefrontGate {
-  static const sheetFlag = 'mobile-plan-storefront';
-  static const upsellFlag = 'mobile-contextual-upsells';
+  static const enabledFlag = 'mobile-plan-storefront';
+  static const sheetFlag = enabledFlag;
+  static const upsellFlag = _ContextualUpsellsGate.enabledFlag;
 
   static Future<bool> sheetEnabled({Future<bool> Function(String)? readFlag}) => _read(sheetFlag, readFlag);
   static Future<bool> upsellsEnabled({Future<bool> Function(String)? readFlag}) => _read(upsellFlag, readFlag);
@@ -16,4 +17,9 @@ abstract final class PlanStorefrontGate {
       return false;
     }
   }
+}
+
+/// Independent rollout key, using the shared mobile registry's enabledFlag convention.
+abstract final class _ContextualUpsellsGate {
+  static const enabledFlag = 'mobile-contextual-upsells';
 }
