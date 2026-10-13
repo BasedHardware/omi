@@ -15,6 +15,10 @@ DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.js
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'budget_choice': {
+        'output': DEFAULT_OUTPUT_DIR / 'budget_choice_wire.g.dart',
+        'schemas': ('BudgetChoiceRequest', 'BudgetChoiceRecord', 'BudgetChoiceResponse', 'BudgetChoiceWriteResponse'),
+    },
     'messaging': {
         'output': DEFAULT_OUTPUT_DIR / 'messaging_wire.g.dart',
         'schemas': (

@@ -5022,6 +5022,34 @@
         "title": "Body_upload_profile_v3_upload_audio_post",
         "type": "object"
       },
+      "BudgetChoiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRecord",
+        "type": "object"
+      },
       "BudgetChoiceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5048,6 +5076,69 @@
           "choice"
         ],
         "title": "BudgetChoiceRequest",
+        "type": "object"
+      },
+      "BudgetChoiceResponse": {
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetChoiceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "unavailable",
+              "on_device",
+              "held_pending_choice"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "state",
+          "choice",
+          "ask"
+        ],
+        "title": "BudgetChoiceResponse",
+        "type": "object"
+      },
+      "BudgetChoiceWriteResponse": {
+        "properties": {
+          "ask": {
+            "const": false,
+            "default": false,
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/BudgetChoiceRecord"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceWriteResponse",
         "type": "object"
       },
       "BulkAssignSegmentsRequest": {
@@ -68006,6 +68097,15 @@
         "parameters": [
           {
             "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Omi-Held-Content",
             "required": false,
             "schema": {
@@ -68026,15 +68126,6 @@
             "required": false,
             "schema": {
               "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
               "type": "string"
             }
           },
@@ -68061,7 +68152,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -68092,6 +68185,15 @@
         "parameters": [
           {
             "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Omi-Held-Content",
             "required": false,
             "schema": {
@@ -68112,15 +68214,6 @@
             "required": false,
             "schema": {
               "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
               "type": "string"
             }
           },
@@ -68157,7 +68250,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceWriteResponse"
+                }
               }
             },
             "description": "Successful Response"

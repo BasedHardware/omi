@@ -4327,7 +4327,8 @@ reads. Mixed image versions are safe; older images simply emit no new samples.
 
 `HELD_CONTENT_ENABLED` defaults to `false`; `X-Omi-Held-Content: 1` is also
 required for `GET` and `PUT /v1/users/budget-choice`. Missing/unknown capabilities
-receive 404 before any choice or allowance read. This foundation does not change
+receive 404 before route auth and any choice or allowance read for a valid body.
+Malformed PUT JSON can return 422 before dependencies; it performs no Firestore reads. This foundation does not change
 sync/listen admission or existing `is_locked` rows.
 
 The API uses the existing UTC calendar-month usage bucket (including annual
@@ -4338,7 +4339,13 @@ same period return 409. A new period logically expires the old choice and
 replaces the same document, avoiding unbounded history. Delayed older-period
 writes cannot overwrite a newer choice. `upgrade` records intent only; managed
 processing still requires a positive answer from the existing allowance resolver.
-A lookup failure is `unavailable`, never a cap hit. The API adds no entitlement,
+A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
+`X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
+invalid keys before this route; it cannot grant managed access. GET and PUT share
+a boost-exempt six-per-minute UID limit, failing closed before monthly usage
+reads when Redis is unavailable. The plans API alone owns storefront visibility;
+this response makes no upgrade-availability claim. Responses are typed OpenAPI
+models with generated wire DTOs, not manual client JSON adapters. The API adds no entitlement,
 quota, provider, subscription, or captured-content mutation.
 
 Do not enable this flag before capable clients, capture custody, recovery and
