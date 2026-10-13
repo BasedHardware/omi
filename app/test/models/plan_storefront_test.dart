@@ -592,8 +592,8 @@ void main() {
     );
     final architect =
         PlanStorefront.fromJson(fixture('architect_settings')).tiers.singleWhere((tier) => tier.planId == 'architect');
-    expect(architect.priceFor('year')!.headline, r'$199.00/month');
-    expect(architect.priceFor('year')!.ctaLabel, r'Switch to yearly · save $398.00');
+    expect(architect.priceFor('year')!.headline, r'$199/month');
+    expect(architect.priceFor('year')!.ctaLabel, r'Switch to yearly · save $398');
     expect(architect.ctaLabel, isNull);
     final free = PlanStorefront.fromJson(fixture('free_settings'));
     final basic = free.tiers.singleWhere((tier) => tier.planId == 'basic');

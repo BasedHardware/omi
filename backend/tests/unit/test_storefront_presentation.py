@@ -22,7 +22,9 @@ from utils.storefront import (
 )
 from utils.storefront_copy import (
     cta_label,
+    current_line,
     floor_to_nice,
+    format_money,
     hours_line,
     money,
     months_free,
@@ -166,7 +168,7 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
         currency='usd',
         monthly_minor=1000,
     )
-    assert rendered['subline'] == '$110.00 billed yearly · 1 month free'
+    assert rendered['subline'] == '$110 billed yearly · 1 month free'
     assert rendered['months_free'] == 1
     assert yearly_toggle_label(1) == 'Yearly · 1 month free'
     assert yearly_toggle_label(2) == 'Yearly · 2 months free'
@@ -176,6 +178,45 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
     assert yearly_switch_label(monthly_minor=1999, annual_minor=1999 * 12, currency='usd') is None
     euro = yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='eur')
     assert euro == 'Switch to yearly · save 39.98 EUR'
+
+
+def test_format_money_groups_whole_dollars_and_respects_zero_decimal_currencies():
+    assert format_money(19900, 'usd') == '$199'
+    assert format_money(39800, 'usd') == '$398'
+    assert format_money(1999, 'usd') == '$19.99'
+    assert format_money(1666, 'usd') == '$16.66'
+    assert format_money(3998, 'usd') == '$39.98'
+    assert format_money(49990, 'usd') == '$499.90'
+    assert format_money(199050, 'usd') == '$1,990.50'
+    assert format_money(199000, 'usd') == '$1,990'
+    assert format_money(0, 'usd') == '$0'
+    assert money(199000) == '$1,990'
+    # JPY unit_amount is whole yen. 4800 is ¥4,800, not $48 and not 48.00 JPY.
+    assert format_money(4800, 'jpy') == '4,800 JPY'
+    assert format_money(199000, 'jpy') == '199,000 JPY'
+    assert format_money(39800, 'eur') == '398 EUR'
+    assert format_money(5120, 'kwd') == '5.120 KWD'
+    rendered = render_price(
+        price_id='price_jpy_year',
+        interval='year',
+        amount_minor=199000,
+        currency='jpy',
+        monthly_minor=19900,
+    )
+    assert rendered['headline'] == '16,583 JPY/month'
+    assert rendered['subline'] == '199,000 JPY billed yearly · 2 months free'
+    line, note = current_line(
+        plan_id='architect',
+        plan_name_text='Architect',
+        amount_minor=19900,
+        interval='month',
+        period_end=PERIOD_END,
+        cancel=False,
+        legacy=False,
+        currency='jpy',
+    )
+    assert note is None
+    assert line == "You're on Architect · 19,900 JPY/mo · renews Nov 1"
 
 
 def expected_action(current, tier, legacy, cancel):
@@ -544,7 +585,7 @@ def test_golden_storefront_scenarios():
     assert plus_month.prices[0].cta_label == 'Switch to yearly · save $39.98'
     assert all(tier.plan_id != 'basic' for tier in switched.tiers)
     assert rendered['pro_settings'].current.line == "You're on Pro · $49.99/mo · renews Nov 1"
-    assert rendered['architect_settings'].current.line == "You're on Architect · $199.00/mo · renews Nov 1"
+    assert rendered['architect_settings'].current.line == "You're on Architect · $199/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
     assert legacy.header == 'Your plan'
     assert legacy.current.plan_id == 'unlimited_v2'
@@ -597,5 +638,7 @@ def test_golden_storefront_scenarios():
         if os.environ.get('UPDATE_STOREFRONT_GOLDENS') == '1':
             path.write_text(payload, encoding='utf-8')
         assert path.read_text(encoding='utf-8') == payload
+    for name in SCENARIOS:
+        path = GOLDEN_DIR / f'{name}.json'
         app_path = APP_FIXTURE_DIR / f'{name}.json'
         assert app_path.read_bytes() == path.read_bytes()
