@@ -23,6 +23,22 @@ logger = logging.getLogger(__name__)
 # and flat gateway bodies are honored, mirroring is_gateway_model_not_found.
 _REQUEST_FIELD_400_MARKERS = ('model', 'messages', 'max_completion_tokens', 'stream')
 _REQUEST_SHAPE_400_CODES = frozenset({'model_not_found'})
+# Gateway-normalized provider rejections (llm_gateway/gateway/schemas.py) that
+# name a field the request itself constructs. The gateway allowlists these
+# params, so this stays a closed set (no upstream body strings).
+_REQUEST_SHAPE_PROVIDER_REJECTIONS = frozenset(
+    {
+        'model_not_found',
+        'invalid_model',
+        'invalid_messages',
+        'invalid_output_limit',
+        'invalid_stream',
+        'unsupported_model',
+        'unsupported_messages',
+        'unsupported_output_limit',
+        'unsupported_stream',
+    }
+)
 # Param paths ending in an attachment reference are about the user's file
 # (stale file_id, unreadable image), even though they live under ``messages``.
 _ATTACHMENT_PARAM_SUFFIXES = (
@@ -34,9 +50,11 @@ _ATTACHMENT_PARAM_SUFFIXES = (
 )
 
 
-def _names_request_field(param: object, code: object) -> bool:
-    """Whether one (param, code) pair from a provider 400 names our request shape."""
+def _names_request_field(param: object, code: object, provider_rejection: object = None) -> bool:
+    """Whether one (param, code, provider_rejection) triple from a provider 400 names our request shape."""
     if code in _REQUEST_SHAPE_400_CODES:
+        return True
+    if provider_rejection in _REQUEST_SHAPE_PROVIDER_REJECTIONS:
         return True
     if not isinstance(param, str) or not param:
         return False
@@ -52,14 +70,14 @@ def _provider_400_names_request_field(cause: object) -> bool:
     """Whether a ProviderRejectedChatFileError's cause 400 is about our request shape."""
     if cause is None:
         return False
-    pairs: list[tuple[object, object]] = [(getattr(cause, 'param', None), getattr(cause, 'code', None))]
+    pairs: list[tuple[object, object, object]] = [(getattr(cause, 'param', None), getattr(cause, 'code', None), None)]
     body = getattr(cause, 'body', None)
     if isinstance(body, Mapping):
         nested = body.get('error')
         if isinstance(nested, Mapping):
-            pairs.append((nested.get('param'), nested.get('code')))
-        pairs.append((body.get('param'), body.get('code')))
-    return any(_names_request_field(param, code) for param, code in pairs)
+            pairs.append((nested.get('param'), nested.get('code'), nested.get('provider_rejection')))
+        pairs.append((body.get('param'), body.get('code'), body.get('provider_rejection')))
+    return any(_names_request_field(param, code, rejection) for param, code, rejection in pairs)
 
 
 # Import agent_config_context for fallback config access

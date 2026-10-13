@@ -40,6 +40,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayInvalidRequestError,
 )
+from llm_gateway.gateway.schemas import ProviderRejection
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
@@ -288,6 +289,11 @@ def _error_response(exc: GatewayError) -> JSONResponse:
         # Backend composition boundaries need it to preserve intentional
         # credential policy without conflating distinct throttling failures.
         error['failure_class'] = exc.failure_class.value
+    if exc.provider_rejection is not ProviderRejection.NONE:
+        # Bounded gateway-owned classifier over an allowlisted param set, never
+        # an upstream body. Downstream composition boundaries (file chat) need
+        # it to tell request-shape 400s from unreadable user attachments.
+        error['provider_rejection'] = exc.provider_rejection.value
     content: dict[str, object] = {'error': error}
     return JSONResponse(
         status_code=_status_code_for_error(exc),

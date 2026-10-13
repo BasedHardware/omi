@@ -294,3 +294,49 @@ def test_search_files_tool_attachment_shaped_400_stays_soft(monkeypatch, caplog)
         record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
         for record in caplog.records
     )
+
+
+def test_search_files_tool_gateway_request_shape_400_stays_a_server_error(monkeypatch, caplog):
+    # Gateway-normalized 400: the gateway collapses every provider rejection to
+    # param='provider' code='provider_request_rejected' but now serializes its
+    # bounded provider_rejection classifier. A request-shape member must stay
+    # error-level; the attachment-shaped members must not match it.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'invalid_model',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'gateway request-shape 400 must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'
+
+
+def test_search_files_tool_gateway_attachment_rejection_stays_soft(monkeypatch, caplog):
+    # Gateway-normalized 400 whose bounded classifier is not request-shaped
+    # (e.g. context_length_exceeded from a huge attachment) stays soft.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'context_length_exceeded',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
