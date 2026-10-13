@@ -172,6 +172,8 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off\|shadow\|merge) | backend | env | open | — | — | — | — | graduate | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` | Limit smart merge to listed UIDs; empty admits every user | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` | Opt-in smart-merge gap policy for proven same-recording live pairs: off keeps the legacy speech-gap gate (code default), shadow logs/meters the corrected wall-clock verdict without acting on it, on rescues legacy-skipped pairs by created_at/finished_at wall clock (unset/blank/unknown = off) | backend | env | open | {value: 'off', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | 2026-11-05 | dazheng |
+| `DREAM_AGENT_CONTEXT_MODE` | Dream context mode bounded (default) or full; full requires the separate UID allowlist | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `DREAM_AGENT_FULL_CONTEXT_UIDS` | Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
 | `DREAM_AGENT_MODE` | Dream-agent mode; unset, off, or unknown keeps the feature disabled | backend | env | closed | — | — | on (backend-listen (chart), pusher (chart)); {value: 'on', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_ENABLED` | Enable the bounded TestFlight dream-agent cohort; default false | backend | env | closed | — | — | — | — | pending | 2026-11-08 | dazheng |
 | `DREAM_SELF_REPORT_MODE` | Owner dream reports and manual runs; off default, on enables cohort only | backend | env | closed | — | — | {value: 'on', category: rollout} | — | pending | 2026-11-08 | dazheng |
@@ -329,6 +331,8 @@ and an explicit empty literal renders as `''`.
 | `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FULL_COMPLETION_TOKENS` | Full Dream completion ceiling; default 16000; maximum 16000 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FULL_CONTEXT_TOKENS` | Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -403,6 +407,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
 - `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
+- `DREAM_AGENT_CONTEXT_MODE` — Dream context mode bounded (default) or full; full requires the separate UID allowlist (fail: closed)
+- `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream completion ceiling; default 16000; maximum 16000 (fail: closed)
+- `DREAM_AGENT_FULL_CONTEXT_TOKENS` — Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative (fail: closed)
+- `DREAM_AGENT_FULL_CONTEXT_UIDS` — Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies (fail: closed)
 - `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort (fail: closed)
