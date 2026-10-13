@@ -10,7 +10,15 @@ Locked purchase-catalog rules. Tests in
 filter because a paid user "might want to resubscribe" or because the
 phone sheet looks empty.
 
-## Storefronts
+## Versioned ladder-v1 sheet
+
+`GET /v2/payments/plans` retires the platform partition for adopting clients,
+behind `STOREFRONT_LADDER_V1_ENABLED` (default off). The old endpoints keep the
+installed-client rules below unchanged. Missing W3 ladder prices hide Plus/Pro;
+Architect remains contact-only and legacy subscribers keep a current row.
+See `backend/docs/storefront-contract.md` for schema, price admission and usage.
+
+## Storefronts (installed-client APIs)
 
 | Surface | Sells | Does not sell |
 |---|---|---|

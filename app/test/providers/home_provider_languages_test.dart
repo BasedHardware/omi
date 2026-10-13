@@ -1,8 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The picker list moved to the backend. What matters is which source wins.
@@ -157,6 +161,45 @@ void main() {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
       expect(provider.getLanguageName('zz'), 'zz');
+    });
+  });
+
+  group('required picker at startup', () {
+    Future<HomeProvider> start(WidgetTester tester) async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+      await tester.pumpWidget(ChangeNotifierProvider<HomeProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          navigatorKey: globalNavigatorKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SizedBox.shrink()),
+        ),
+      ));
+      // The server has no primary language for this account.
+      await provider.setupUserPrimaryLanguage(fetchPrimaryLanguage: () async => null);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 500));
+      return provider;
+    }
+
+    testWidgets('does not open over unfinished onboarding (#20788)', (tester) async {
+      // A relaunch mid-onboarding: onboarding resumes on its own step and has its own language step.
+      SharedPreferencesUtil().onboardingCompleted = false;
+
+      final provider = await start(tester);
+
+      expect(find.text('Tell us your primary language'), findsNothing);
+      expect(provider.hasSetPrimaryLanguage, isFalse);
+    });
+
+    testWidgets('still opens once onboarding is done', (tester) async {
+      SharedPreferencesUtil().onboardingCompleted = true;
+
+      await start(tester);
+
+      expect(find.text('Tell us your primary language'), findsOneWidget);
     });
   });
 }

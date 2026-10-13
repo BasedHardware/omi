@@ -1444,7 +1444,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
 
 
 @_account_write_gated
-def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
     """
@@ -1452,29 +1452,19 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
 
-    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
-        batch = database.batch()
-        count = 0
-        total = 0
-        for doc in docs:
-            batch.update(doc.reference, update)
-            count += 1
-            total += 1
-            if count >= 499:  # Firestore batch limit is 500
-                batch.commit()
-                batch = database.batch()
-                count = 0
-        if count > 0:
-            batch.commit()
-        return total
+    from database.locked_content import unlock_query_rows
 
-    legacy_count = commit_updates(
-        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+    legacy_count = unlock_query_rows(
+        database,
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)),
         {'is_locked': False},
+        limit=limit,
     )
-    canonical_count = commit_updates(
-        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+    canonical_count = unlock_query_rows(
+        database,
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)),
         {'promotion.is_locked': False},
+        limit=limit,
     )
     logger.info(
         "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",
@@ -1482,6 +1472,7 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         legacy_count,
         canonical_count,
     )
+    return legacy_count + canonical_count
 
 
 # **************************************

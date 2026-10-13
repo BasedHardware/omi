@@ -18,6 +18,15 @@ from database import (
 )
 from database.redis_db import set_credits_invalidation_signal
 from config.plan_catalog import plan_uses_overage
+from utils.subscription_state_machine import (
+    project_subscription,
+    preserves_current_paid_subscription,
+    ResolvedStripeEvent,
+    transition,
+    schedule_transition,
+)
+from utils.billing_flags import webhook_ledger_enabled
+from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -220,20 +229,9 @@ class AvailablePlansResponse(BaseModel):
 
 def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | None:
     """Builds a Subscription object from a Stripe Subscription object."""
-    stripe_status = stripe_sub['status']
-
-    # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
-    # regardless of price ID — ensures deleted/canceled users don't keep paid access
-    if stripe_status not in ('active', 'trialing'):
-        return Subscription(
-            plan=PlanType.basic,
-            status=SubscriptionStatus.active,
-            current_period_end=stripe_sub.get('current_period_end'),
-            current_period_start=stripe_sub.get('current_period_start'),
-            stripe_subscription_id=stripe_sub['id'],
-            cancel_at_period_end=False,
-            limits=get_basic_plan_limits(),
-        )
+    # Inactive snapshots always project Basic, regardless of the price binding.
+    if stripe_sub['status'] not in ('active', 'trialing'):
+        return project_subscription(stripe_sub, None, get_basic_plan_limits())
 
     # Active subscriptions: resolve plan from price ID
     price_id = stripe_sub['items']['data'][0]['price']['id'] if stripe_sub['items']['data'] else None
@@ -244,12 +242,8 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     try:
         plan = get_plan_type_from_price_id(price_id)
     except ValueError as e:
-        # A price Stripe is actively billing that we cannot resolve. Before the
-        # catalog, a retained/configured disagreement could not arise here: the
-        # env mapping simply won. It can now raise, and this early return means
-        # the subscriber's stored row silently stops tracking Stripe. That is
-        # the Apr 17-20 failure shape, so it must be observable rather than a
-        # bare log line. See .github/agent-docs/plan-source-of-truth.md.
+        # Preserve observable unknown-price skips (the prior multi-week billing
+        # drop shape); see .github/agent-docs/plan-source-of-truth.md.
         record_fallback(
             component='other',
             from_mode='stripe_price_resolution',
@@ -267,41 +261,10 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
         )
         return None
 
-    return Subscription(
-        plan=plan,
-        status=SubscriptionStatus.active,
-        current_period_end=stripe_sub.get('current_period_end'),
-        current_period_start=stripe_sub.get('current_period_start'),
-        stripe_subscription_id=stripe_sub['id'],
-        cancel_at_period_end=stripe_sub.get('cancel_at_period_end', False),
-        limits=get_plan_limits(plan),
-    )
+    return project_subscription(stripe_sub, plan, get_plan_limits(plan))
 
 
-def _has_current_paid_subscription_for_different_stripe_sub(
-    current_subscription: Subscription | None, event_subscription_id: str | None, now: int | None = None
-) -> bool:
-    """True when a stale inactive event should not overwrite stored paid access."""
-    if not current_subscription or not event_subscription_id:
-        return False
-    if current_subscription.stripe_subscription_id == event_subscription_id:
-        return False
-    if current_subscription.status != SubscriptionStatus.active or not is_paid_plan(current_subscription.plan):
-        return False
-    # Require a valid, unexpired period end before preserving paid access.
-    # A missing or zero current_period_end means the stored paid row is not
-    # provably valid, so we do NOT let it shield a downgrade from a stale
-    # inactive event. This mirrors reconcile_basic_plan_with_stripe, which
-    # only treats a paid subscription as usable when current_period_end is
-    # present and still in the future.
-    if not current_subscription.current_period_end:
-        return False
-    if current_subscription.current_period_end < (now or int(time.time())):
-        return False
-    return True
-
-
-def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
+def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
 
@@ -313,13 +276,16 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             stripe_sub = stripe.Subscription.retrieve(subscription_id)
             if stripe_sub:
                 new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
-                if new_subscription:
-                    users_db.update_user_subscription(uid, new_subscription.model_dump())
-                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+                if new_subscription is None:
+                    return False
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
+                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
             f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
         )
+
+    return True
 
 
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
@@ -921,6 +887,13 @@ async def stripe_webhook(
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
+    async def run_db(function, *args, **kwargs):
+        return await run_blocking(db_executor, function, *args, **kwargs)
+
+    return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+
+
+async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         client_reference_id = session.get('client_reference_id')
@@ -972,23 +945,18 @@ async def stripe_webhook(
                 )
                 return {"status": "success"}
 
-            # Check if user already has an active *paid* subscription to prevent duplicates.
-            # Stripe sends customer.subscription.created while Checkout subscriptions are still
-            # incomplete; our subscription event handler represents those as Basic with a Stripe
-            # subscription id. Do not treat that transient Basic record as a duplicate checkout,
-            # otherwise checkout.session.completed returns before persisting the real paid
-            # subscription/customer id and later stale incomplete_expired events can clobber access.
+            # An incomplete Basic row is not a completed paid checkout;
+            # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
-            if (
-                existing_subscription
-                and existing_subscription.stripe_subscription_id
-                and is_paid_plan(existing_subscription.plan)
-            ):
-                # If user already has a Stripe subscription, verify it's not the same one
-                if existing_subscription.stripe_subscription_id == session.get('subscription'):
+            checkout_decision = transition(
+                existing_subscription,
+                ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
+            )
+            if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
+                if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
-                else:
+                elif 'cancel_old_subscription' in checkout_decision.effects:
                     # Cancel the old subscription to prevent double-charging
                     old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
@@ -1002,7 +970,9 @@ async def stripe_webhook(
                             f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
                         )
 
-            await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
+            persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
+            if persisted is False and webhook_ledger_enabled():
+                return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
@@ -1101,17 +1071,15 @@ async def stripe_webhook(
                         event.get('type'),
                         exc_info=True,
                     )
-                # Guard against a stale/old subscription's cancellation clobbering an
-                # active plan. If this event downgrades the user to a non-paid plan
-                # (e.g. an old sub got canceled) but they still have a *different*
-                # active paid subscription — they canceled one sub and started
-                # another near-simultaneously, possibly on a new Stripe customer —
-                # don't overwrite their plan with basic. Adopt the active paid sub.
-                adopted_active_paid = False
+                # Preserve the existing stale-downgrade guard before looking up
+                # an alternative Stripe subscription. Decisions are pure;
+                # all customer/storage IO remains in this adapter.
+                current_subscription = None
+                active_paid = None
                 if not is_paid_plan(new_subscription.plan):
                     event_sub_id = subscription_obj.get('id')
                     current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
-                    if _has_current_paid_subscription_for_different_stripe_sub(current_subscription, event_sub_id):
+                    if preserves_current_paid_subscription(current_subscription, event_sub_id, int(time.time())):
                         logger.info(
                             f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
                             f"stored paid sub {current_subscription.stripe_subscription_id} is still valid."
@@ -1123,20 +1091,26 @@ async def stripe_webhook(
                             f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
                             f"a different active paid sub {active_paid.stripe_subscription_id} exists."
                         )
-                        new_subscription = active_paid
-                        adopted_active_paid = True
+                decision = transition(
+                    None,
+                    ResolvedStripeEvent(
+                        event['type'],
+                        subscription_obj.get('id'),
+                        new_subscription,
+                        int(time.time()),
+                        active_paid,
+                        billing_owner_confirmed,
+                    ),
+                )
+                if decision.next_state is None:
+                    raise ValueError('Subscription transition requires a projected state')
+                new_subscription = decision.next_state
+                adopted_active_paid = decision.adopted_active_paid
                 try:
-                    if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                        # Only persist the customer id from the incoming event when we
-                        # did NOT adopt a different active paid subscription. When the
-                        # stale-downgrade guard adopted active_paid, the event's
-                        # subscription_obj['customer'] belongs to the canceled/stale
-                        # subscription (possibly a different Stripe customer), so
-                        # writing it would clobber the correct customer id that
-                        # find_active_paid_subscription_for_user used to locate
-                        # active_paid — a later reconciliation could then query the
-                        # wrong customer and miss the paid sub.
-                        if not adopted_active_paid:
+                    if 'unlock_conversations' in decision.effects:
+                        # An adopted replacement keeps its own customer identity;
+                        # the incoming event belongs to the stale subscription.
+                        if 'set_customer' in decision.effects:
                             customer_id = subscription_obj.get('customer')
                             if customer_id:
                                 await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
@@ -1148,7 +1122,7 @@ async def stripe_webhook(
                     )
                     # Emit after the durable write; replacement adoption is
                     # reconciliation, not an incoming-event start or churn.
-                    if billing_owner_confirmed and not adopted_active_paid:
+                    if 'billing_telemetry' in decision.effects:
                         from utils.observability.billing_webhook import schedule_billing_webhook_events
 
                         await schedule_billing_webhook_events(
@@ -1169,7 +1143,7 @@ async def stripe_webhook(
                         )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
-                    if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
+                    if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
@@ -1186,6 +1160,7 @@ async def stripe_webhook(
                     f"Stripe webhook: could not build subscription for user {uid}, "
                     f"subscription {subscription_id}, price {price_id} — unknown price ID"
                 )
+                return RetryableBillingSkip(status='success')
 
     # Handle subscription schedule events
     if event['type'] in [
@@ -1210,13 +1185,18 @@ async def stripe_webhook(
                                 f"Could not build subscription from scheduled upgrade for user {uid}, "
                                 f"subscription {new_subscription_id} — unknown price ID"
                             )
+                            return RetryableBillingSkip(status='success')
                         else:
+                            decision = schedule_transition(event, new_subscription, int(time.time()))
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
+                            new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
-                            if is_paid_plan(new_subscription.plan):
+                            if 'clear_fair_use' in decision.effects:
                                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
                                 f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
@@ -1226,7 +1206,12 @@ async def stripe_webhook(
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping scheduled upgrade update"
                     )
                 except Exception as e:
-                    logger.error(f"Error updating subscription after scheduled upgrade: {e}")
+                    if isinstance(e, stripe.error.InvalidRequestError) and e.code == 'resource_missing':
+                        logger.warning('Schedule subscription no longer exists in Stripe')
+                        return {"status": "success"}
+                    logger.error(f"Error updating subscription after scheduled upgrade: {sanitize(str(e))}")
+                    if webhook_ledger_enabled():
+                        raise HTTPException(503, "Subscription schedule update must be retried") from None
             elif schedule_obj.get('status') == 'canceled':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1242,8 +1227,12 @@ async def stripe_webhook(
                                 f"Could not build subscription from schedule cancellation for user {uid}, "
                                 f"subscription {subscription_id} — unknown price ID"
                             )
+                            return RetryableBillingSkip(status='success')
                         else:
-                            new_subscription.cancel_at_period_end = True
+                            decision = schedule_transition(event, new_subscription, int(time.time()))
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
+                            new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
@@ -1257,7 +1246,12 @@ async def stripe_webhook(
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping schedule cancellation update"
                     )
                 except Exception as e:
-                    logger.error(f"Error updating subscription after schedule cancellation: {e}")
+                    if isinstance(e, stripe.error.InvalidRequestError) and e.code == 'resource_missing':
+                        logger.warning('Schedule subscription no longer exists in Stripe')
+                        return {"status": "success"}
+                    logger.error(f"Error updating subscription after schedule cancellation: {sanitize(str(e))}")
+                    if webhook_ledger_enabled():
+                        raise HTTPException(503, "Subscription schedule update must be retried") from None
 
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']

@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from config.dream_agent import FULL_MODEL_SECONDS
+
 from llm_gateway.gateway.config_loader import load_gateway_config, _generated_desktop_vertex_items
 from llm_gateway.gateway.dream_lanes import dream_lane_items
 from utils.dream_transport import TRIAGE_LANE, MAIN_LANE
@@ -43,3 +45,12 @@ def test_reserved_policy_is_inherited_only_with_dedicated_and_luna_fallback():
     reserved[0]['fallbacks'] = []
     _, unsafe = dream_lane_items(lanes, reserved)
     assert unsafe[1]['primary']['model'] == 'gpt-6-luna'
+
+
+def test_dream_reasoning_deadline_covers_full_model_while_triage_stays_bounded():
+    config = load_gateway_config(prod_mode=True)
+    triage = config.route_artifacts[config.lanes[TRIAGE_LANE].active_route]
+    reasoning = config.route_artifacts[config.lanes[MAIN_LANE].active_route]
+    assert triage.timeouts.request_ms == 60000
+    assert reasoning.timeouts.request_ms == FULL_MODEL_SECONDS * 1000 == 480000
+    assert reasoning.retry.max_attempts == 1

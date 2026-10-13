@@ -22,6 +22,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
+import 'package:omi/widgets/connection_guide_sheet.dart';
 
 @visibleForTesting
 Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
@@ -286,7 +287,18 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
-          showError: (error) => OmiFeedback.error(context, error),
+          showError: (error) {
+            if (error == 'DEVICE_CONNECT_FAILED') {
+              OmiFeedback.error(
+                context,
+                context.l10n.anErrorOccurredTryAgain,
+                actionLabel: context.l10n.howToPair,
+                onAction: () => ConnectionGuideSheet.show(context),
+              );
+            } else {
+              OmiFeedback.error(context, error);
+            }
+          },
           showInfo: (info) {
             if (info == "DEVICE_CONNECTED") {
               // Navigator.of(context).pushAndRemoveUntil(

@@ -3912,7 +3912,22 @@ the three-entry evidence deque will evict before gating the next extraction.
 A rejected voice, including a far/noisy rejection, can then reach another
 five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
 the usable remainder only if its actual PCM duration still meets the extraction
-floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+floor. Exact stored span ends use the span's integer byte count: subtracting
+large epoch timestamps and truncating the result can discard one real sample per
+frame, making an exactly sufficient physical window appear too short. Interior
+endpoints retain the existing PCM16 floor, gaps stay absent, and byte proof uses
+the same boundary rule as extraction. No tolerance, silence padding, thresholds,
+budget, scheduling or identity authority changes are introduced.
+`omi_speaker_id_pcm_windows_restored_total{reason="full_span_rounding"}` counts
+selected candidate windows whose actual PCM meets the current extraction floor
+while the old floored byte count on those selected windows would not. It records
+candidate qualification before quota admission; it does not count unique voices,
+GPU reservations, owner comparisons or owner recognition gains. Recovery's
+newer-audio pool passes the same floor to avoid counting an insufficient pool
+before an older-audio fallback. The one preinitialized closed label adds one total
+series, with no IDs (the shared metrics endpoint suppresses `_created`). Compare
+its rate with short-window exits, actual reservations/comparisons per conversation,
+and live owner outcomes after deployment. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
 remainder reports `window_shorter_than_minimum`.
 
 Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
@@ -4061,9 +4076,16 @@ is cache-policy isolation, not a retrofit of the old image's independent matchin
 behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
-at most two submitted/running late batches, without a waiting queue. Each scans
+at most two submitted/running late batches. Saturated admission can retain at
+most two additional ID-only batches, each with at most 128 distinct candidates.
+These wait asynchronously for 5, 15, 30, 60 and 120 seconds (230 seconds total),
+then expire if admission is still unavailable. Waiting performs no Firestore,
+audio, or model calls and borrows no executor thread. Submissions coalesce across
+active and waiting keys; the handoff is atomic. Fresh eligibility, consent,
+manual authority and the document revision are read only after admission.
+The waiting path retains no PCM and changes no audio retention policy. Each admitted batch scans
 at most 128 distinct conversations and selects at most eight eligible rows,
-including all deferred completion rechecks. Rows still `in_progress` or
+including all deferred completion rechecks; admission waits spend none of those passes. Rows still `in_progress` or
 `processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
 re-read only those rows (at most six metadata snapshots per candidate, 768 per
 batch). Waits borrow no executor thread but retain the batch's admission slot.
@@ -4186,7 +4208,10 @@ people/projection, entitlement and name reads are separate. The bounded owner
 work does not replenish after a session-hour. Live audio adds at most 256 model
 attempts plus three owner-enrollment repairs per socket (existing paid-person
 repair is separate). Late audio adds at most 192 model attempts per admitted
-batch and zero enrollment repairs, with at most two batches per process.
+batch and zero enrollment repairs, with at most two active batches and two
+ID-only admission waiters per process. At most 512 distinct `(uid, conversation)` keys
+are tracked; only the 256 active candidate keys can own executor work. Waiting
+can improve utilization of the existing two slots, without adding GPU concurrency.
 
 ### Relevance decision analytics
 
@@ -4254,15 +4279,29 @@ Another batch after completion may count the same conversation again. These
 are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
-The 28 funnel `(stage,reason)` pairs are closed:
+The 29 funnel `(stage,reason)` pairs are closed:
 
 | Stage | Reasons | Meaning |
 | --- | --- | --- |
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
+| deferred | slot_limit | Candidates retained in one of two bounded ID-only admission waiters; no snapshot or audio has been read. |
 | skipped | slot_limit, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
+
+Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,reason=slot_limit`
+counts retained candidates. Full waiting capacity, expiry and cancellation
+before admission emit
+`stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
+one bounded stage/reason pair (61 pairs, at most 122 series across both passes);
+UID and conversation IDs remain outside Prometheus labels. Deferred admission
+counts are not commits or owner additions. Terminal waiters remove their keys
+under the admission lock before recording the skip; later callbacks release only
+their waiting permit and cannot erase a same-turn resubmission. Cancellation,
+including before the waiter starts, records one skip and releases only its
+metadata reservation; handed-off batches add no admission skip. A cancelled active coordinator still
+retains its slot until the storage future finishes.
 
 `resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
 `no_audio`, `all_short`, `no_eligible`, `no_vectors`, `global_manifest_ambiguity`,
@@ -4307,3 +4346,34 @@ Cloud Run backend, backend-sync and backend-sync-backfill for their first-pass
 coverage. No new flags, indexes, stored fields, routes or app release are needed.
 This telemetry adds no retries, audio downloads, embedding calls or profile
 reads. Mixed image versions are safe; older images simply emit no new samples.
+
+## Dark at-cap choice contract
+
+`HELD_CONTENT_ENABLED` defaults to `false`; `X-Omi-Held-Content: 1` is also
+required for `GET` and `PUT /v1/users/budget-choice`. Missing/unknown capabilities
+receive 404 before route auth and any choice or allowance read for a valid body.
+Malformed PUT JSON can return 422 before dependencies; it performs no Firestore reads. This foundation does not change
+sync/listen admission or existing `is_locked` rows.
+
+The API uses the existing UTC calendar-month usage bucket (including annual
+subscriptions). One metadata-only document at
+`users/{uid}/budget_choice/current` holds the period, `on_device` or `upgrade`,
+and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
+same period return 409. A new period logically expires the old choice and
+replaces the same document, avoiding unbounded history. Delayed older-period
+writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+processing still requires a positive answer from the existing allowance resolver.
+A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
+`X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
+invalid keys before this route; it cannot grant managed access. GET and PUT share
+a boost-exempt six-per-minute UID limit, failing closed before monthly usage
+reads when Redis is unavailable. The plans API alone owns storefront visibility;
+this response makes no upgrade-availability claim. Responses are typed OpenAPI
+models with generated wire DTOs, not manual client JSON adapters. The API adds no entitlement,
+quota, provider, subscription, or captured-content mutation.
+
+Do not enable this flag before capable clients, capture custody, recovery and
+on-device continuation are implemented and verified. In particular, staged sync
+audio expires after one day and is not a safe month-long hold store. Client WAL
+custody must survive a hold until successful processing, within the existing
+retention contract. No new client capability is advertised by this foundation.

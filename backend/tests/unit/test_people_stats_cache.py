@@ -286,10 +286,13 @@ def test_corrupted_entry_is_a_clean_miss(monkeypatch, fake_redis, payload):
 
 def test_oversized_entry_is_a_miss_and_oversized_result_is_not_stored(monkeypatch, fake_redis):
     fake, _now = fake_redis
+    # Exercise both oversized paths with a small configured ceiling; building
+    # 30,000 entries made this boundary test exceed the fast-unit CPU budget.
+    monkeypatch.setattr(people_stats_cache, 'PEOPLE_STATS_MAX_ENTRY_BYTES', 1024)
     generation = people_stats_cache.current_generation(UID)
     big = {
         'schema_version': 1,
-        'stats': {'p' * 300000: {'conversation_count': 1, 'auto_conversation_count': 0, 'talk_seconds': 0.0}},
+        'stats': {'p' * 2000: {'conversation_count': 1, 'auto_conversation_count': 0, 'talk_seconds': 0.0}},
     }
     _seed_entry(fake, UID, generation, big)
     rows, pulled = _pull_counted([_conv('p1')])
@@ -303,7 +306,7 @@ def test_oversized_entry_is_a_miss_and_oversized_result_is_not_stored(monkeypatc
             'talk_seconds': 0.0,
             'auto_conversation_count': 0,
         }
-        for i in range(30000)
+        for i in range(128)
     }
     people_stats_cache.write_people_stats_cache(UID, generation, 500, huge_stats)
     assert _cache_key(people_stats_cache._entry_path(UID, generation, 500)) not in fake._store
@@ -498,6 +501,10 @@ class _DirectQuery:
     def where(self, *args, filter=None, **_kwargs):
         assert filter is not None and not args
         return _DirectQuery(self._database, self._path, self._filters + (filter,), self._limit)
+
+    def select(self, fields):
+        assert fields == []
+        return self
 
     def limit(self, count):
         return _DirectQuery(self._database, self._path, self._filters, count)
@@ -1031,3 +1038,15 @@ def test_unconfigured_redis_disables_the_cache_without_error(monkeypatch):
     assert people_stats_cache.read_people_stats_cache('u1', 'g1', 1000) is None
     people_stats_cache.write_people_stats_cache('u1', 'g1', 1000, {})
     people_stats_cache.invalidate_people_stats_cache('u1')
+
+
+def test_reset_unlock_conversations_is_bounded_and_repairs_cache_on_empty_retry(writer_env):
+    store, invalidated = writer_env
+    for index in range(101):
+        store.seed_conv('u1', f'l{index}', status='completed', is_locked=True)
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 100
+    assert sum(row.get('is_locked', False) for row in store.rows.values()) == 1
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 1
+    invalidated.clear()
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 0
+    assert invalidated == ['u1']

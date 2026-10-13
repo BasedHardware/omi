@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'goal_text_cleanup.dart';
 
@@ -45,17 +46,24 @@ class IntroductionAnswer {
   final String? originalText;
   int editRevision = 0;
   String? submittedGoal;
-  bool get locked => saved || submittedGoal != null;
+  String? submittedMemory;
+  bool get locked => saved || submittedGoal != null || submittedMemory != null;
   bool keep = true;
   bool saved = false;
 }
 
 class GuidedVoiceController extends ChangeNotifier {
   static const promptCount = 4;
-  GuidedVoiceController(this.io, {this.flowSource = 'first_run', this.flowVariant = 'guided_voice_v1'});
+  GuidedVoiceController(
+    this.io, {
+    this.flowSource = 'first_run',
+    this.flowVariant = 'guided_voice_v1',
+    this.accountUid,
+  });
   final GuidedVoiceIO io;
   final String flowSource;
   final String flowVariant;
+  final String? accountUid;
   IntroductionStage stage = IntroductionStage.ready;
   int promptIndex = 0;
   int alternative = 0;
@@ -305,10 +313,12 @@ class GuidedVoiceController extends ChangeNotifier {
       final text = (await io.transcribe(audio)).trim();
       if (!_current(generation)) return;
       if (text.isEmpty) throw StateError('No speech');
+      final uid = accountUid ?? (SharedPreferencesUtil().uid.isNotEmpty ? SharedPreferencesUtil().uid : null);
+      final answerId = isGoalPrompt ? 'intro-goal-${uid ?? _sessionId}' : 'intro-$_sessionId-${answers.length}';
       final answer = IntroductionAnswer(
         isGoalPrompt ? cleanIntroductionGoal(text) : text,
         audio,
-        'intro-$_sessionId-${answers.length}',
+        answerId,
         isGoal: isGoalPrompt,
         originalText: isGoalPrompt ? text : null,
       );
@@ -555,9 +565,14 @@ class GuidedVoiceController extends ChangeNotifier {
         } else {
           memoryAttempted++;
         }
-        if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
-        final saved =
-            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
+        if (answer.isGoal) {
+          answer.submittedGoal ??= answer.text.trim();
+        } else {
+          answer.submittedMemory ??= answer.text.trim();
+        }
+        final saved = answer.isGoal
+            ? await io.saveGoal(answer.submittedGoal!, answer.id)
+            : await io.remember(answer.submittedMemory!);
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {

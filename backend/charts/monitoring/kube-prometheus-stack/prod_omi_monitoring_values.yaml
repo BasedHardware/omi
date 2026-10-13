@@ -10,6 +10,24 @@ kubeScheduler:
 kubeControllerManager:
   enabled: false
 
+# 2026-10-13 cost audit: no committed consumer or live recording/alert rule
+# reads feature inventories, REST-client byte sizes, or probe duration histograms.
+# Keep probe result counters and all kubelet latency/error signals in use.
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      # Preserve chart 75.15.1's default: Helm replaces this entire list.
+      - action: drop
+        sourceLabels: [__name__, le]
+        regex: (csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\.0)?
+      - action: drop
+        sourceLabels: [__name__]
+        regex: kubernetes_feature_enabled|rest_client_(request|response)_size_bytes_(bucket|sum|count)
+    probesMetricRelabelings:
+      - action: drop
+        sourceLabels: [__name__]
+        regex: prober_probe_duration_seconds_(bucket|sum|count)
+
 grafana:
   enabled: true
   serviceAccount:
@@ -51,8 +69,11 @@ grafana:
     rendering:
       server_url: http://prod-omi-kube-prometheus-stack-grafana-image-renderer:8081/render
       callback_url: http://prod-omi-kube-prometheus-stack-grafana:80/
+    # Alert screenshots off (2026-10-13): renders call back into Grafana, so a slow
+    # dashboard query stalled HTTP handlers and the external health check flapped 502.
+    # Telegram notifications carry dashboard/panel links instead.
     unified_alerting.screenshots:
-      capture: true
+      capture: false
     server:
       root_url: https://monitor.omi.me/
   affinity:
