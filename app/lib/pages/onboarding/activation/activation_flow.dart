@@ -860,7 +860,9 @@ class _SummaryCardState extends State<_SummaryCard> {
                       height: 44,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                      child: Text(_r.emoji, style: const TextStyle(fontSize: 22)),
+                      child: Text(_r.emoji,
+                          style: const TextStyle(
+                              fontSize: 22)), // omi-ux-allow: font-size-literal -- emoji glyph sized to its 44 pt tile
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
@@ -1168,7 +1170,7 @@ class _RatingAsk extends StatefulWidget {
 }
 
 class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
-  static const _gold = Color(0xFFFFC53D);
+  static const _gold = Color(0xFFFFC53D); // omi-ux-allow: color-literal -- rating stars in App Store gold
   Timer? _ask;
   bool _promptShowing = false;
   bool _asked = false;

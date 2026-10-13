@@ -103,7 +103,9 @@ class OnboardingPermissionToggle extends StatelessWidget {
             ? denyColor
             : OmiColors.surface3;
     // On the accent track the thumb takes the accent's contrast colour (white on black, black on white).
-    final thumb = on ? OmiColors.onAccent : const Color(0xFFFFFFFF);
+    final thumb = on
+        ? OmiColors.onAccent
+        : const Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- switch thumb is white when off, as on iOS
     return AnimatedContainer(
       duration: motion.standard,
       curve: Curves.easeOut,
@@ -121,7 +123,9 @@ class OnboardingPermissionToggle extends StatelessWidget {
           decoration: BoxDecoration(
             color: thumb,
             shape: BoxShape.circle,
-            boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 4, offset: Offset(0, 2))],
+            boxShadow: const [
+              BoxShadow(color: Color(0x26000000), blurRadius: 4, offset: Offset(0, 2))
+            ], // omi-ux-allow: color-literal -- switch thumb shadow
           ),
           child: Center(
             child: busy
@@ -129,7 +133,11 @@ class OnboardingPermissionToggle extends StatelessWidget {
                 : denied && !on
                     ? Text(
                         '!',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: denyColor, height: 1),
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: denyColor,
+                            height: 1), // omi-ux-allow: font-size-literal -- "!" glyph sized to the switch thumb
                       )
                     : null,
           ),

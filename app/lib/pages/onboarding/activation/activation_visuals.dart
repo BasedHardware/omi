@@ -72,7 +72,9 @@ class NoteCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: OmiColors.surface1,
         borderRadius: OmiRadius.lgAll,
-        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 8))],
+        boxShadow: const [
+          BoxShadow(color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 8))
+        ], // omi-ux-allow: color-literal -- soft card shadow, same in both themes
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,12 +166,12 @@ class ConfettiPainter extends CustomPainter {
   final double t;
 
   static const _colors = [
-    Color(0xFFFFC53D),
-    Color(0xFFFF6B6B),
-    Color(0xFF4DABF7),
-    Color(0xFF51CF66),
-    Color(0xFF38D9A9),
-    Color(0xFFFF922B),
+    Color(0xFFFFC53D), // omi-ux-allow: color-literal -- celebration confetti palette
+    Color(0xFFFF6B6B), // omi-ux-allow: color-literal -- celebration confetti palette
+    Color(0xFF4DABF7), // omi-ux-allow: color-literal -- celebration confetti palette
+    Color(0xFF51CF66), // omi-ux-allow: color-literal -- celebration confetti palette
+    Color(0xFF38D9A9), // omi-ux-allow: color-literal -- celebration confetti palette
+    Color(0xFFFF922B), // omi-ux-allow: color-literal -- celebration confetti palette
   ];
 
   @override
