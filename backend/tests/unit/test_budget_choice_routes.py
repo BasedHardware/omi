@@ -17,7 +17,7 @@ def route_module():
         managed=False, reason='plan_allowance_exhausted'
     )
     auth = ModuleType('utils.other.endpoints')
-    auth.get_current_user_uid = lambda: 'synthetic-test-user'
+    auth.get_current_user_uid_no_byok_validation = lambda: 'synthetic-test-user'
     with stub_modules({'utils.subscription': subscription, 'utils.other.endpoints': auth}):
         yield load_module_fresh(
             'routers.budget_choice', str(Path(__file__).resolve().parents[2] / 'routers/budget_choice.py')

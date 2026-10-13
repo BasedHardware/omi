@@ -2,8 +2,6 @@
 
 import os
 
-from config.held_content import HELD_CONTENT_CAPABILITY
-
 HELD_CONTENT_ENABLED = 'HELD_CONTENT_ENABLED'
 
 

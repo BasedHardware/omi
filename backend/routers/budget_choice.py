@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, StrictBool
 
-from config.held_content import budget_period, capture_state
+from config.held_content import HELD_CONTENT_CAPABILITY, budget_period, capture_state
 from database import budget_choice as choices_db
 from utils import held_content_flags
 from utils.executors import db_executor, run_blocking
@@ -22,13 +22,13 @@ class BudgetChoiceRequest(BaseModel):
     dont_ask_again: StrictBool = False
 
 
-def require_capability(x_omi_held_content: str | None = Header(None, alias='X-Omi-Held-Content')) -> None:
+def require_capability(x_omi_held_content: str | None = Header(None, alias=HELD_CONTENT_CAPABILITY)) -> None:
     if not held_content_flags.capable(x_omi_held_content):
         raise HTTPException(status_code=404, detail='held_content_unavailable')
 
 
 @router.get('/v1/users/budget-choice', dependencies=[Depends(require_capability)])
-async def get_budget_choice(uid: str = Depends(auth.get_current_user_uid)):
+async def get_budget_choice(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
     period = budget_period()
     allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid)
     choice = await run_blocking(db_executor, choices_db.get_choice, uid, period)
@@ -43,7 +43,9 @@ async def get_budget_choice(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.put('/v1/users/budget-choice', dependencies=[Depends(require_capability)])
-async def put_budget_choice(body: BudgetChoiceRequest, uid: str = Depends(auth.get_current_user_uid)):
+async def put_budget_choice(
+    body: BudgetChoiceRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)
+):
     period = budget_period()
     if body.period != period:
         raise HTTPException(status_code=409, detail='budget_period_changed')
