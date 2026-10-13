@@ -39,6 +39,7 @@ TARGET_SCHEMAS = (
     'BudgetChoiceRecord',
     'BudgetChoiceResponse',
     'BudgetChoiceWriteResponse',
+    'StorefrontResponse',
     'ProactivityTarget',
     'ProactivityFeedItem',
     'ProactivityFeedResponse',

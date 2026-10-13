@@ -3,11 +3,12 @@
 import json
 from collections import Counter
 from functools import lru_cache
-from typing import get_args
+from typing import get_args, TypedDict
 
 from pydantic import ValidationError
 
 from models.dream_agent import Plan, Triage
+from config.dream_agent import context_mode, FULL_CONTEXT_WINDOW, FULL_MODEL_SECONDS
 
 import httpx
 
@@ -23,10 +24,23 @@ TRIAGE_LANE = 'omi:auto:dream-triage'
 MAIN_LANE = 'omi:auto:dream-reasoning'
 
 
+class RequestOptions(TypedDict, total=False):
+    timeout: httpx.Timeout
+
+
 def input_ceiling(messages, schema):
     # A conservative byte upper bound includes schema, role framing and tokenizer
     # overhead. No provider call is made if input + completion exceeds the cap.
     return len(json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str).encode()) + 256
+
+
+def input_estimate(messages, schema):
+    return (len(json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str)) + 3) // 4 + 256
+
+
+def full_input_bounds(messages, schema):
+    serialized = json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str)
+    return (len(serialized) + 3) // 4 + 256, len(serialized.encode()) + 256
 
 
 class PreTokenFailure(RuntimeError):
@@ -141,26 +155,36 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
         usage_sink['usage_unknown'] = False
     schema = mount.schema.model_json_schema()
     ceiling = input_ceiling(messages, schema)
-    remaining = mount.budget.tokens - ceiling
+    full = context_mode(uid) == 'full' and lane == MAIN_LANE
+    estimated = input_estimate(messages, schema) if full else ceiling
+    remaining = mount.budget.tokens - estimated
     if remaining < 128:
         raise ValueError('dream_input_token_budget')
-    completion = min(4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    completion = min(16000 if full else 4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    if full and ceiling + completion > FULL_CONTEXT_WINDOW:
+        raise ValueError('dream_model_context_budget')
     reservation_model = None
     if lane == MAIN_LANE:
         reservation_model = await dream_capacity.available_model()
         if reservation_model is None:
             raise CapacityWait('dream_capacity_wait')
+    if full and usage_sink is not None:
+        usage_sink['input_tokens_estimate'] = estimated
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
     # Resolve local configuration before marking the provider outcome unknown.
     client = get_llm_gateway_client()
     url = get_llm_gateway_base_url() + '/v1/chat/completions'
+    options: RequestOptions = {}
+    if full:
+        options['timeout'] = httpx.Timeout(FULL_MODEL_SECONDS, connect=3.0, write=60.0, pool=5.0)
     async with get_llm_gateway_semaphore():
         if usage_sink is not None:
             usage_sink['usage_unknown'] = True
         response = await client.post(
             url,
             headers=headers,
+            **options,
             json={
                 'model': lane,
                 'messages': messages,

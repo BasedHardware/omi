@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+if __package__:
+    from .dart_schema_groups import additional_schema_groups
+else:
+    from dart_schema_groups import additional_schema_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 if __package__:
@@ -17,6 +22,10 @@ if __package__:
 else:
     from dart_model_groups import DEFAULT_OUTPUT_DIR, SCHEMA_GROUPS
 
+SCHEMA_GROUPS = {
+    **SCHEMA_GROUPS,
+    **additional_schema_groups(DEFAULT_OUTPUT_DIR),
+}
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
     'Event': {'start': ('startsAt',)},

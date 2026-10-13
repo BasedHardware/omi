@@ -238,8 +238,8 @@ def test_hourly_transcription_writer_keeps_plan_and_missing_cost_explicit(mock_d
     )
 
     update = hourly_ref.set.call_args.args[0]
-    assert getattr(update['plan_usage.plus.transcription_seconds'], '_value', None) == 12
-    assert getattr(update['plan_usage.plus._metadata.cost_status_counts.missing'], '_value', None) == 1
+    assert getattr(update['plan_usage']['plus']['transcription_seconds'], '_value', None) == 12
+    assert getattr(update['plan_usage']['plus']['_metadata']['cost_status_counts']['missing'], '_value', None) == 1
     assert all('cost_usd' not in key for key in update)
 
 

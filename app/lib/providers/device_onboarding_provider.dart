@@ -172,6 +172,15 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
+    notifyListeners();
+  }
+
   /// The question was dropped before sending (no audio captured) or the
   /// server reported no speech detected. Reset back to the pre-press state
   /// so the step can show a retry hint instead of processing forever.
