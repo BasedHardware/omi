@@ -802,6 +802,29 @@ OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN = Gauge(
 for _queue_name in OMI_QUEUE_NAMES:
     OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=_queue_name).set(0)
 
+# Closed sweep dispositions. Zero-initialize every child so an idle process
+# exports the whole set; never label by uid.
+CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS = (
+    'dead_letter_generation_mismatch',
+    'dead_letter_malformed',
+    'dead_letter_missing_created_at',
+    'dead_letter_stale_abandoned',
+    'error',
+    'retried',
+    'skipped_attempt_budget',
+    'skipped_live_lease',
+    'skipped_not_claimed',
+    'skipped_not_due',
+    'skipped_pending_young',
+)
+OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
+    'omi_candidate_integration_sweep_total',
+    'Candidate integration outbox sweep rows by closed disposition',
+    ['disposition'],
+)
+for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
+    OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',

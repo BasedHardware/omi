@@ -117,7 +117,8 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `sync-backfill` ──► backend-sync-backfill POST /v2/sync-jobs/run (OIDC; historical lane)
   ├── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
-  └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
+  ├── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
+  └── ──────► Cloud Scheduler `candidate-integration-sweep` ──► POST /v2/candidate-integrations/sweep (OIDC, same sync-job audience)
 
 Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```

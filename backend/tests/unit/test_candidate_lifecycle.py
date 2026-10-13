@@ -1158,6 +1158,26 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
     assert outbox['attempt_count'] == 1
 
 
+def test_accept_schedules_integration_without_waiting_for_the_provider(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    calls = []
+
+    async def sync(uid, task, **kwargs):
+        calls.append(task['id'])
+        return {'synced': True}
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: None)
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+
+    assert calls == []
+    outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
+    assert outbox['status'] == 'processing'
+    assert outbox['attempt_count'] == 1
+
+
 def test_failed_integration_outbox_is_retryable_without_reaccepting_task(fake_db):
     record = create_record(fake_db)
     candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)

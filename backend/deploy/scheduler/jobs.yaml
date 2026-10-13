@@ -81,6 +81,29 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: candidate-integration-sweep
+        lifecycle: planned
+        region: us-central1
+        schedule: "*/15 * * * *"
+        time_zone: UTC
+        # Dev shares prod Firestore. A live sweeper here would dead-letter and
+        # retry production candidate exports. Keep paused until the outbox is
+        # environment-scoped. An explicit --jobs apply still creates it paused.
+        state: PAUSED
+        target:
+          type: http
+          uri: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/candidate-integrations/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+            audience: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 120s
+        owner: backend/utils/task_intelligence/candidate_integration_sweeper.py
       - name: memory-maintenance-hourly
         region: us-central1
         schedule: "0 * * * *"
@@ -222,6 +245,26 @@ environments:
           min_backoff: 5s
         attempt_deadline: 300s
         owner: backend/docs/runbooks/dream-agent.md
+      - name: candidate-integration-sweep
+        lifecycle: planned
+        region: us-central1
+        schedule: "*/15 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/candidate-integrations/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 120s
+        owner: backend/utils/task_intelligence/candidate_integration_sweeper.py
       - name: dream-agent-canary-half-hourly
         region: us-central1
         schedule: "*/30 * * * *"

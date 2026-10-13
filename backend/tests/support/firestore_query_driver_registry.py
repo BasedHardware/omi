@@ -461,6 +461,13 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.candidate_integration_outbox.list_candidate_integration_sweep_rows',
+        domains={'status': ['failed', 'pending', 'processing']},
+        neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    DriverEntry(
         'database.candidates.list_candidates',
         base={'uid': UID},
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},

@@ -7,7 +7,7 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import db
+from database._client import db, get_firestore_client
 from database.candidates import (
     TASK_INTELLIGENCE_CONTROL_COLLECTION,
     TASK_INTELLIGENCE_CONTROL_DOCUMENT,
@@ -18,6 +18,19 @@ from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
+CANDIDATE_INTEGRATION_LEASE_SECONDS = 300
+# Equality-only collection-group scan. Metadata fields only; uid comes from the path.
+SWEEP_METADATA_FIELDS = (
+    'account_generation',
+    'attempt_count',
+    'available_at',
+    'candidate_id',
+    'claimed_at',
+    'created_at',
+    'status',
+    'task_id',
+)
+ABANDON_REASONS = frozenset({'stale_abandoned', 'generation_mismatch', 'missing_created_at'})
 
 
 def _integration_outbox_ref(uid: str, candidate_id: str):
@@ -46,7 +59,7 @@ def claim_candidate_integration_dispatch(
     *,
     account_generation: int,
     now: Optional[datetime] = None,
-    lease_seconds: int = 300,
+    lease_seconds: int = CANDIDATE_INTEGRATION_LEASE_SECONDS,
 ) -> Optional[str]:
     """Claim a durable accepted-task integration side effect for delivery."""
 
@@ -233,6 +246,106 @@ def dead_letter_malformed_candidate_integration(
     return apply(transaction)
 
 
+def current_task_account_generation(uid: str) -> int:
+    """Current task-workflow generation. A missing control document is generation 0."""
+    snapshot = _task_control_ref(uid).get()
+    if not snapshot.exists:
+        return TaskWorkflowControl().account_generation
+    return parse_snapshot_strict(TaskWorkflowControl, snapshot).account_generation
+
+
+def _sweep_row(snapshot: Any) -> Optional[dict[str, Any]]:
+    payload = _snapshot_dict(snapshot)
+    reference = getattr(snapshot, 'reference', None)
+    path = getattr(reference, 'path', '') if reference is not None else ''
+    parts = [part for part in str(path).split('/') if part]
+    if len(parts) != 4 or parts[0] != 'users' or parts[2] != CANDIDATE_INTEGRATION_OUTBOX_COLLECTION:
+        return None
+    row = {field: payload.get(field) for field in SWEEP_METADATA_FIELDS}
+    row['uid'] = parts[1]
+    row['candidate_id'] = parts[3]
+    return row
+
+
+def list_candidate_integration_sweep_rows(
+    status: str,
+    *,
+    limit: int = 200,
+    firestore_client: Any = None,
+) -> list[dict[str, Any]]:
+    """One equality page of outbox metadata. No task text and no provider call.
+
+    ``status ==`` on the collection group is covered by
+    ``candidate_integration_outbox_status_group_ascending``. Do not add a range
+    or a second equality: that would need a composite index.
+    """
+    if limit <= 0:
+        return []
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection_group(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
+        .where(filter=FieldFilter('status', '==', status))
+        .select(list(SWEEP_METADATA_FIELDS))
+        .limit(limit)
+    )
+    rows: list[dict[str, Any]] = []
+    for snapshot in query.stream():
+        try:
+            row = _sweep_row(snapshot)
+        except Exception:
+            continue
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def abandon_candidate_integration_dispatch(
+    uid: str,
+    candidate_id: str,
+    *,
+    reason: str,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Terminal metadata write. Does not read the task or call a provider.
+
+    A live 300s processing lease is left alone so this cannot clobber an in-flight attempt.
+    """
+    if reason not in ABANDON_REASONS:
+        raise ValueError('unsupported dead-letter reason')
+    completion_time = now or datetime.now(timezone.utc)
+    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction):
+        snapshot = outbox_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return False
+        payload = _snapshot_dict(snapshot)
+        if payload.get('status') in {'completed', 'suppressed', 'dead_letter'}:
+            return False
+        if payload.get('status') == 'processing':
+            claimed_at = payload.get('claimed_at')
+            if isinstance(claimed_at, datetime):
+                if claimed_at.tzinfo is None or claimed_at.utcoffset() is None:
+                    claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+                if claimed_at + timedelta(seconds=CANDIDATE_INTEGRATION_LEASE_SECONDS) > completion_time:
+                    return False
+        write_transaction.update(
+            outbox_ref,
+            {
+                'status': 'dead_letter',
+                'lease_token': None,
+                'updated_at': completion_time,
+                'last_error_text': None,
+                'dead_letter_reason': reason,
+            },
+        )
+        return True
+
+    return apply(transaction)
+
+
 def list_candidate_integration_dispatches(
     uid: str,
     *,
@@ -259,10 +372,16 @@ def list_candidate_integration_dispatches(
 
 
 __all__ = [
+    'ABANDON_REASONS',
+    'CANDIDATE_INTEGRATION_LEASE_SECONDS',
     'CANDIDATE_INTEGRATION_POLICY',
+    'SWEEP_METADATA_FIELDS',
+    'abandon_candidate_integration_dispatch',
     'claim_candidate_integration_dispatch',
     'complete_candidate_integration_dispatch',
+    'current_task_account_generation',
     'dead_letter_malformed_candidate_integration',
     'list_candidate_integration_dispatches',
+    'list_candidate_integration_sweep_rows',
     'redrive_candidate_integration_dead_letter',
 ]

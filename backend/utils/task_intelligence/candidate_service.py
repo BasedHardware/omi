@@ -57,23 +57,43 @@ def create_candidate(
     )
 
 
-def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
-    lease_token = integration_outbox_db.claim_candidate_integration_dispatch(
+def _fail_missing_task(uid: str, candidate_id: str, *, account_generation: int, lease_token: str) -> None:
+    integration_outbox_db.complete_candidate_integration_dispatch(
         uid,
         candidate_id,
         account_generation=account_generation,
+        lease_token=lease_token,
+        succeeded=False,
+        error_text='task_not_found',
     )
-    if lease_token is None:
-        return False
-    task = action_items_db.get_action_item(uid, task_id)
-    if not task:
+    record_fallback(
+        component='other',
+        from_mode='candidate_integration',
+        to_mode='retry_queue',
+        reason='other',
+        outcome='degraded',
+    )
+
+
+def _record_integration_result(
+    uid: str,
+    candidate_id: str,
+    task: dict,
+    *,
+    account_generation: int,
+    lease_token: str,
+) -> bool:
+    """Run the provider sync and complete or fail the lease. Blocking."""
+    try:
+        result = asyncio.run(auto_sync_action_item(uid, task, skip_apple_reminders=False))
+    except Exception:
         integration_outbox_db.complete_candidate_integration_dispatch(
             uid,
             candidate_id,
             account_generation=account_generation,
             lease_token=lease_token,
             succeeded=False,
-            error_text='task_not_found',
+            error_text='integration_exception',
         )
         record_fallback(
             component='other',
@@ -82,53 +102,86 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
             reason='other',
             outcome='degraded',
         )
+        raise
+    terminal_noop = result.get('reason') in {
+        'no_default_integration',
+        'integration_not_found',
+        'integration_not_connected',
+        'client_handles_sync',
+    }
+    succeeded = bool(result.get('synced')) or terminal_noop
+    integration_outbox_db.complete_candidate_integration_dispatch(
+        uid,
+        candidate_id,
+        account_generation=account_generation,
+        lease_token=lease_token,
+        succeeded=succeeded,
+        error_text=None if succeeded else 'integration_not_synced',
+    )
+    if not succeeded:
+        record_fallback(
+            component='other',
+            from_mode='candidate_integration',
+            to_mode='retry_queue',
+            reason='other',
+            outcome='degraded',
+        )
+    return succeeded
+
+
+def _claim_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int):
+    """Claim the outbox row and load the task. ``(None, None)`` when the claim is lost."""
+    lease_token = integration_outbox_db.claim_candidate_integration_dispatch(
+        uid,
+        candidate_id,
+        account_generation=account_generation,
+    )
+    if lease_token is None:
+        return None, None
+    task = action_items_db.get_action_item(uid, task_id)
+    if not task:
+        _fail_missing_task(uid, candidate_id, account_generation=account_generation, lease_token=lease_token)
+        return lease_token, None
+    return lease_token, task
+
+
+def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
+    """Accept path: claim, then schedule the provider sync. Returns before it finishes."""
+    lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
+    if lease_token is None or task is None:
         return False
 
     def run_sync() -> None:
-        try:
-            result = asyncio.run(auto_sync_action_item(uid, task, skip_apple_reminders=False))
-        except Exception:
-            integration_outbox_db.complete_candidate_integration_dispatch(
-                uid,
-                candidate_id,
-                account_generation=account_generation,
-                lease_token=lease_token,
-                succeeded=False,
-                error_text='integration_exception',
-            )
-            record_fallback(
-                component='other',
-                from_mode='candidate_integration',
-                to_mode='retry_queue',
-                reason='other',
-                outcome='degraded',
-            )
-            raise
-        terminal_noop = result.get('reason') in {
-            'no_default_integration',
-            'integration_not_found',
-            'integration_not_connected',
-            'client_handles_sync',
-        }
-        succeeded = bool(result.get('synced')) or terminal_noop
-        integration_outbox_db.complete_candidate_integration_dispatch(
+        _record_integration_result(
             uid,
             candidate_id,
+            task,
             account_generation=account_generation,
             lease_token=lease_token,
-            succeeded=succeeded,
-            error_text=None if succeeded else 'integration_not_synced',
         )
-        if not succeeded:
-            record_fallback(
-                component='other',
-                from_mode='candidate_integration',
-                to_mode='retry_queue',
-                reason='other',
-                outcome='degraded',
-            )
 
     submit_with_context(postprocess_executor, run_sync)
+    return True
+
+
+def dispatch_task_integration_blocking(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
+    """Claim, sync, and complete before returning.
+
+    True when this call recorded the attempt (success, terminal noop, or retryable failure).
+    False when the row was not claimed. A provider exception is recorded as a failure and re-raised.
+    """
+    lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
+    if lease_token is None:
+        return False
+    if task is None:
+        return True
+    _record_integration_result(
+        uid,
+        candidate_id,
+        task,
+        account_generation=account_generation,
+        lease_token=lease_token,
+    )
     return True
 
 
@@ -312,6 +365,7 @@ __all__ = [
     'accept_candidate',
     'clear_workstream_candidate_resolver',
     'create_candidate',
+    'dispatch_task_integration_blocking',
     'drain_candidate_integrations',
     'expire_candidate',
     'register_workstream_candidate_resolver',

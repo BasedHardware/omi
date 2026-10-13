@@ -33,6 +33,7 @@ install_firebase_auth_mutation_guard()
 from routers import messaging
 from routers import (
     budget_choice,
+    candidate_integration_sweep,
     chat_receipts,
     dream_cohort,
     dream_report,
@@ -227,6 +228,7 @@ app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
 app.include_router(dream_report.router)
 app.include_router(dream_sweep.router)
+app.include_router(candidate_integration_sweep.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -348,6 +350,7 @@ methods_timeout = {
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
