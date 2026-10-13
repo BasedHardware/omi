@@ -16,6 +16,7 @@ from utils.other import endpoints as auth
 from utils import storefront_flags, subscription as subscription_utils
 from utils.observability.fallback import record_fallback
 from utils.storefront import build_storefront, load_ladder
+from utils.storefront_copy import present_usage
 
 router = APIRouter()
 
@@ -39,7 +40,14 @@ def _retrieve_price(price_id: str) -> dict[str, Any]:
         raise
 
 
-def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
+def _usage(uid: str, subscription: Subscription, locale: str | None = None) -> StorefrontUsage:
+    plan_id = subscription.plan.value
+
+    def rendered(kind: str, percent: float | None = None, reset_at: int | None = None) -> StorefrontUsage:
+        return StorefrontUsage(
+            **present_usage(plan_id=plan_id, kind=kind, percent=percent, reset_at=reset_at, locale=locale)
+        )
+
     try:
         # W3 may provide a display-ready projection on the shared facade. Do not
         # guess units or denominators; only accept percentage/reset fields.
@@ -60,30 +68,31 @@ def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
                 and type(reset) is int
                 and reset > 0
             ):
-                return StorefrontUsage(kind='usage_budget', budget_percent=percent, reset_at=reset)
+                return rendered('usage_budget', float(percent), reset)
         if ladder_subscriber:
-            return StorefrontUsage()
+            return rendered('unavailable')
         # Existing legacy speech allowance; explicitly labelled so clients never
         # mistake it for the new shared-unit budget.
         limit = subscription_utils.transcription_allowance_seconds(subscription.plan)
         if limit is None or limit <= 0:
-            return StorefrontUsage()
+            return rendered('unavailable')
         usage = subscription_utils.get_monthly_usage_for_subscription(uid)
         used = usage.get('transcription_seconds')
         if type(used) is not int or used < 0:
-            return StorefrontUsage()
+            return rendered('unavailable')
         now = datetime.now(timezone.utc)
         reset = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
-        return StorefrontUsage(kind='transcription', budget_percent=used * 100 / limit, reset_at=int(reset.timestamp()))
+        return rendered('transcription', used * 100 / limit, int(reset.timestamp()))
     except Exception:
         _degraded('storefront_usage', 'unavailable_usage')
-        return StorefrontUsage()
+        return rendered('unavailable')
 
 
 @router.get('/v2/payments/plans', response_model=StorefrontResponse, tags=['payments'])
 def get_storefront(
     source: Optional[str] = Query(None, description='Paywall Opened source vocabulary (#21337)'),
     trigger: Optional[Literal['proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap']] = Query(None),
+    locale: Optional[str] = Query(None, description='BCP 47 tag. Unknown locales fall back to en.'),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid_no_byok_validation, 'storefront:plans')),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -118,7 +127,8 @@ def get_storefront(
         subscription=subscription,
         retrieve_price=_retrieve_price,
         purchasable=subscription_utils.is_purchasable_price_id,
-        usage=_usage(uid, subscription),
+        usage=_usage(uid, subscription, locale),
         source=source,
         trigger=trigger,
+        locale=locale,
     )

@@ -722,32 +722,6 @@ public enum OmiAPI {
   }
 
 
-  public struct AnnualSavings: Codable {
-    public let amountMinor: Int
-    public let formatted: String
-    public let percent: Double
-
-    private enum CodingKeys: String, CodingKey {
-      case amountMinor = "amount_minor"
-      case formatted
-      case percent
-    }
-
-    public init(from decoder: Decoder) throws {
-      let c = try decoder.container(keyedBy: CodingKeys.self)
-      amountMinor = try c.decode(Int.self, forKey: .amountMinor)
-      formatted = try c.decode(String.self, forKey: .formatted)
-      percent = try c.decode(Double.self, forKey: .percent)
-    }
-
-    public init(amountMinor: Int, formatted: String, percent: Double) {
-      self.amountMinor = amountMinor
-      self.formatted = formatted
-      self.percent = percent
-    }
-  }
-
-
   public struct AppResult: Codable {
     public let appId: String?
     public let content: String
@@ -4319,26 +4293,6 @@ public enum OmiAPI {
   }
 
 
-  public struct PlanFeature: Codable {
-    public let included: Bool?
-    public let key: String
-    public let label: String
-
-    public init(from decoder: Decoder) throws {
-      let c = try decoder.container(keyedBy: CodingKeys.self)
-      included = try c.decodeIfPresent(Bool.self, forKey: .included)
-      key = try c.decode(String.self, forKey: .key)
-      label = try c.decode(String.self, forKey: .label)
-    }
-
-    public init(included: Bool? = nil, key: String, label: String) {
-      self.included = included
-      self.key = key
-      self.label = label
-    }
-  }
-
-
   public struct PluginResult: Codable {
     public let content: String
     public let pluginId: String?
@@ -4998,26 +4952,46 @@ public enum OmiAPI {
   }
 
 
-  public struct StorefrontCurrentPlan: Codable {
+  public struct StorefrontCurrent: Codable {
+    public let cancelAtPeriodEnd: Bool?
+    public let interval: String?
     public let legacy: Bool
+    public let legacyNote: String?
+    public let line: String
+    public let name: String
     public let planId: String
     public let priceId: String?
 
     private enum CodingKeys: String, CodingKey {
+      case cancelAtPeriodEnd = "cancel_at_period_end"
+      case interval
       case legacy
+      case legacyNote = "legacy_note"
+      case line
+      case name
       case planId = "plan_id"
       case priceId = "price_id"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      cancelAtPeriodEnd = try c.decodeIfPresent(Bool.self, forKey: .cancelAtPeriodEnd)
+      interval = try c.decodeIfPresent(String.self, forKey: .interval)
       legacy = try c.decode(Bool.self, forKey: .legacy)
+      legacyNote = try c.decodeIfPresent(String.self, forKey: .legacyNote)
+      line = try c.decode(String.self, forKey: .line)
+      name = try c.decode(String.self, forKey: .name)
       planId = try c.decode(String.self, forKey: .planId)
       priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
     }
 
-    public init(legacy: Bool, planId: String, priceId: String? = nil) {
+    public init(cancelAtPeriodEnd: Bool? = nil, interval: String? = nil, legacy: Bool, legacyNote: String? = nil, line: String, name: String, planId: String, priceId: String? = nil) {
+      self.cancelAtPeriodEnd = cancelAtPeriodEnd
+      self.interval = interval
       self.legacy = legacy
+      self.legacyNote = legacyNote
+      self.line = line
+      self.name = name
       self.planId = planId
       self.priceId = priceId
     }
@@ -5026,164 +5000,188 @@ public enum OmiAPI {
 
   public struct StorefrontPrice: Codable {
     public let amountMinor: Int
-    public let annualSavings: AnnualSavings?
     public let currency: String
-    public let formattedAmount: String
+    public let headline: String
     public let interval: String
-    public let monthlyEquivalent: String
+    public let monthsFree: Int?
     public let priceId: String?
+    public let renewalLine: String?
+    public let subline: String?
 
     private enum CodingKeys: String, CodingKey {
       case amountMinor = "amount_minor"
-      case annualSavings = "annual_savings"
       case currency
-      case formattedAmount = "formatted_amount"
+      case headline
       case interval
-      case monthlyEquivalent = "monthly_equivalent"
+      case monthsFree = "months_free"
       case priceId = "price_id"
+      case renewalLine = "renewal_line"
+      case subline
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       amountMinor = try c.decode(Int.self, forKey: .amountMinor)
-      annualSavings = try c.decodeIfPresent(AnnualSavings.self, forKey: .annualSavings)
       currency = try c.decode(String.self, forKey: .currency)
-      formattedAmount = try c.decode(String.self, forKey: .formattedAmount)
+      headline = try c.decode(String.self, forKey: .headline)
       interval = try c.decode(String.self, forKey: .interval)
-      monthlyEquivalent = try c.decode(String.self, forKey: .monthlyEquivalent)
+      monthsFree = try c.decodeIfPresent(Int.self, forKey: .monthsFree)
       priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
+      renewalLine = try c.decodeIfPresent(String.self, forKey: .renewalLine)
+      subline = try c.decodeIfPresent(String.self, forKey: .subline)
     }
 
-    public init(amountMinor: Int, annualSavings: AnnualSavings? = nil, currency: String, formattedAmount: String, interval: String, monthlyEquivalent: String, priceId: String? = nil) {
+    public init(amountMinor: Int, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
       self.amountMinor = amountMinor
-      self.annualSavings = annualSavings
       self.currency = currency
-      self.formattedAmount = formattedAmount
+      self.headline = headline
       self.interval = interval
-      self.monthlyEquivalent = monthlyEquivalent
+      self.monthsFree = monthsFree
       self.priceId = priceId
+      self.renewalLine = renewalLine
+      self.subline = subline
     }
   }
 
 
   public struct StorefrontResponse: Codable {
     public let catalogRevision: Int
-    public let current: StorefrontCurrentPlan?
-    public let nextOfferTierId: String?
+    public let current: StorefrontCurrent?
+    public let header: String?
     public let schemaVersion: Int?
     public let showSubscriptionUi: Bool?
     public let tiers: [StorefrontTier]?
     public let usage: StorefrontUsage?
+    public let yearlyToggleLabel: String?
 
     private enum CodingKeys: String, CodingKey {
       case catalogRevision = "catalog_revision"
       case current
-      case nextOfferTierId = "next_offer_tier_id"
+      case header
       case schemaVersion = "schema_version"
       case showSubscriptionUi = "show_subscription_ui"
       case tiers
       case usage
+      case yearlyToggleLabel = "yearly_toggle_label"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       catalogRevision = try c.decode(Int.self, forKey: .catalogRevision)
-      current = try c.decodeIfPresent(StorefrontCurrentPlan.self, forKey: .current)
-      nextOfferTierId = try c.decodeIfPresent(String.self, forKey: .nextOfferTierId)
+      current = try c.decodeIfPresent(StorefrontCurrent.self, forKey: .current)
+      header = try c.decodeIfPresent(String.self, forKey: .header)
       schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
       showSubscriptionUi = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUi)
       tiers = try c.decodeIfPresent([StorefrontTier].self, forKey: .tiers)
       usage = try c.decodeIfPresent(StorefrontUsage.self, forKey: .usage)
+      yearlyToggleLabel = try c.decodeIfPresent(String.self, forKey: .yearlyToggleLabel)
     }
 
-    public init(catalogRevision: Int, current: StorefrontCurrentPlan? = nil, nextOfferTierId: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil) {
+    public init(catalogRevision: Int, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
       self.catalogRevision = catalogRevision
       self.current = current
-      self.nextOfferTierId = nextOfferTierId
+      self.header = header
       self.schemaVersion = schemaVersion
       self.showSubscriptionUi = showSubscriptionUi
       self.tiers = tiers
       self.usage = usage
+      self.yearlyToggleLabel = yearlyToggleLabel
     }
   }
 
 
   public struct StorefrontTier: Codable {
     public let action: String
-    public let displayName: String
-    public let entitlementVersion: String
-    public let features: [PlanFeature]
-    public let legacy: Bool?
+    public let bullets: [String]
+    public let ctaLabel: String?
+    public let hoursLine: String
+    public let isCurrent: Bool?
+    public let name: String
     public let planId: String
     public let prices: [StorefrontPrice]
     public let recommended: Bool?
-    public let tagline: String
     public let tierId: String
 
     private enum CodingKeys: String, CodingKey {
       case action
-      case displayName = "display_name"
-      case entitlementVersion = "entitlement_version"
-      case features
-      case legacy
+      case bullets
+      case ctaLabel = "cta_label"
+      case hoursLine = "hours_line"
+      case isCurrent = "is_current"
+      case name
       case planId = "plan_id"
       case prices
       case recommended
-      case tagline
       case tierId = "tier_id"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       action = try c.decode(String.self, forKey: .action)
-      displayName = try c.decode(String.self, forKey: .displayName)
-      entitlementVersion = try c.decode(String.self, forKey: .entitlementVersion)
-      features = try c.decode([PlanFeature].self, forKey: .features)
-      legacy = try c.decodeIfPresent(Bool.self, forKey: .legacy)
+      bullets = try c.decode([String].self, forKey: .bullets)
+      ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
+      hoursLine = try c.decode(String.self, forKey: .hoursLine)
+      isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent)
+      name = try c.decode(String.self, forKey: .name)
       planId = try c.decode(String.self, forKey: .planId)
       prices = try c.decode([StorefrontPrice].self, forKey: .prices)
       recommended = try c.decodeIfPresent(Bool.self, forKey: .recommended)
-      tagline = try c.decode(String.self, forKey: .tagline)
       tierId = try c.decode(String.self, forKey: .tierId)
     }
 
-    public init(action: String, displayName: String, entitlementVersion: String, features: [PlanFeature], legacy: Bool? = nil, planId: String, prices: [StorefrontPrice], recommended: Bool? = nil, tagline: String, tierId: String) {
+    public init(action: String, bullets: [String], ctaLabel: String? = nil, hoursLine: String, isCurrent: Bool? = nil, name: String, planId: String, prices: [StorefrontPrice], recommended: Bool? = nil, tierId: String) {
       self.action = action
-      self.displayName = displayName
-      self.entitlementVersion = entitlementVersion
-      self.features = features
-      self.legacy = legacy
+      self.bullets = bullets
+      self.ctaLabel = ctaLabel
+      self.hoursLine = hoursLine
+      self.isCurrent = isCurrent
+      self.name = name
       self.planId = planId
       self.prices = prices
       self.recommended = recommended
-      self.tagline = tagline
       self.tierId = tierId
     }
   }
 
 
   public struct StorefrontUsage: Codable {
-    public let budgetPercent: Double?
     public let kind: String?
-    public let resetAt: Int?
+    public let meterLine: String?
+    public let nudgeLine: String?
+    public let percent: Int?
+    public let periodId: String?
+    public let proGates: [String]?
+    public let resetLabel: String?
 
     private enum CodingKeys: String, CodingKey {
-      case budgetPercent = "budget_percent"
       case kind
-      case resetAt = "reset_at"
+      case meterLine = "meter_line"
+      case nudgeLine = "nudge_line"
+      case percent
+      case periodId = "period_id"
+      case proGates = "pro_gates"
+      case resetLabel = "reset_label"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
-      budgetPercent = try c.decodeIfPresent(Double.self, forKey: .budgetPercent)
       kind = try c.decodeIfPresent(String.self, forKey: .kind)
-      resetAt = try c.decodeIfPresent(Int.self, forKey: .resetAt)
+      meterLine = try c.decodeIfPresent(String.self, forKey: .meterLine)
+      nudgeLine = try c.decodeIfPresent(String.self, forKey: .nudgeLine)
+      percent = try c.decodeIfPresent(Int.self, forKey: .percent)
+      periodId = try c.decodeIfPresent(String.self, forKey: .periodId)
+      proGates = try c.decodeIfPresent([String].self, forKey: .proGates)
+      resetLabel = try c.decodeIfPresent(String.self, forKey: .resetLabel)
     }
 
-    public init(budgetPercent: Double? = nil, kind: String? = nil, resetAt: Int? = nil) {
-      self.budgetPercent = budgetPercent
+    public init(kind: String? = nil, meterLine: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
       self.kind = kind
-      self.resetAt = resetAt
+      self.meterLine = meterLine
+      self.nudgeLine = nudgeLine
+      self.percent = percent
+      self.periodId = periodId
+      self.proGates = proGates
+      self.resetLabel = resetLabel
     }
   }
 
@@ -18691,7 +18689,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getStorefrontV2PaymentsPlansGet(client: OmiApiClient, source: String? = nil, trigger: String? = nil, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> StorefrontResponse {
+  public static func getStorefrontV2PaymentsPlansGet(client: OmiApiClient, source: String? = nil, trigger: String? = nil, locale: String? = nil, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> StorefrontResponse {
     let _path = "/v2/payments/plans"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -18702,6 +18700,9 @@ public enum OmiAPI {
     }
     if let trigger {
       queryItems.append(URLQueryItem(name: "trigger", value: String(trigger)))
+    }
+    if let locale {
+      queryItems.append(URLQueryItem(name: "locale", value: String(locale)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }

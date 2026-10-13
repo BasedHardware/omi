@@ -1,7 +1,6 @@
 """Executable presentation policy, live-price arithmetic, and dark-route contract."""
 
 import json
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -12,7 +11,8 @@ from models.users import PlanType, Subscription
 from models.storefront import StorefrontUsage
 from routers import storefront as route
 from utils.rate_limit_config import get_effective_limit
-from utils.storefront import build_storefront, load_ladder, present_prices
+from utils.storefront import _valid_price_rows, build_storefront, load_ladder
+from utils.storefront_copy import months_free
 
 
 def price(identifier, amount, interval='month', **overrides):
@@ -43,7 +43,7 @@ def build(plan='basic', current_price=None, rows=None, bindings=None, recognized
 
 def test_empty_bindings_hide_unpurchasable_tiers_but_keep_architect_contact():
     sheet = build()
-    assert [(tier.plan_id, tier.action) for tier in sheet.tiers] == [('basic', 'current'), ('architect', 'contact')]
+    assert [(tier.plan_id, tier.action) for tier in sheet.tiers] == [('basic', 'current'), ('architect', 'none')]
     assert sheet.current.legacy is False
 
 
@@ -52,10 +52,10 @@ def test_legacy_subscriber_has_exactly_one_current_row_even_without_stripe(plan)
     sheet = build(plan, 'price_old')
     current = [tier for tier in sheet.tiers if tier.action == 'current']
     assert len(current) == 1
-    assert current[0].plan_id == plan and current[0].legacy
+    assert current[0].plan_id == plan and sheet.current.legacy
     assert current[0].prices == []
     assert sheet.current.price_id == 'price_old' and sheet.current.legacy
-    assert not any(tier.action == 'upgrade' for tier in sheet.tiers)
+    assert not any(tier.action == 'checkout' for tier in sheet.tiers)
 
 
 def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
@@ -68,36 +68,34 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
                 {'price_id': key, 'plan_id': plan, 'interval': interval, 'entitlement_version': 'ladder_v1'}
             )
     sheet = build(rows=rows, bindings=list(rows), recognized=recognized)
-    assert [tier.plan_id for tier in sheet.tiers] == ['basic', 'plus', 'operator', 'architect']
-    assert [tier.action for tier in sheet.tiers] == ['current', 'upgrade', 'upgrade', 'upgrade']
-    plus = sheet.tiers[1]
-    assert sheet.next_offer_tier_id == 'plus:ladder_v1'
-    assert plus.recommended
-    assert plus.prices[1].monthly_equivalent == '$16.66/mo'
-    assert plus.prices[1].annual_savings.amount_minor == 3998
-    assert plus.prices[1].annual_savings.percent == 16.67
-    assert {f.key: f.included for f in plus.features}['screen_context'] is False
-    pro = sheet.tiers[2]
-    assert {f.key: f.included for f in pro.features}['proactive_agent'] is True
+    assert [tier.plan_id for tier in sheet.tiers] == ['plus', 'basic', 'operator', 'architect']
+    assert [tier.action for tier in sheet.tiers] == ['checkout', 'current', 'checkout', 'checkout']
+    plus = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
+    assert plus.recommended and plus.cta_label == 'Get Plus'
+    yearly = next(item for item in plus.prices if item.interval == 'year')
+    assert yearly.headline == '$16.66/month'
+    assert yearly.subline == '$199.90 billed yearly · 2 months free'
+    assert yearly.months_free == 2
+    pro = next(tier for tier in sheet.tiers if tier.plan_id == 'operator')
+    assert pro.cta_label == 'Get Pro'
+    assert pro.bullets[0] == "Omi reminds you of things you said you'd do"
     paid = build('operator', 'price_operator_month', rows, list(rows), recognized)
-    assert paid.next_offer_tier_id == 'architect:ladder_v1'
-    assert [tier.action for tier in paid.tiers] == [
-        'downgrade_not_offered',
-        'downgrade_not_offered',
-        'current',
-        'upgrade',
-    ]
+    assert [tier.plan_id for tier in paid.tiers] == ['basic', 'plus', 'operator', 'architect']
+    assert [tier.action for tier in paid.tiers] == ['none', 'none', 'current', 'checkout']
+    assert not any(tier.recommended for tier in paid.tiers)
+    assert next(tier for tier in paid.tiers if tier.plan_id == 'architect').cta_label == 'Upgrade to Architect'
 
 
-def test_price_currency_interval_and_negative_savings_validation():
-    assert not present_prices([price('bad', 1999, currency='jpy')])
-    assert not present_prices([price('bad', 1999, active=False)])
-    assert not present_prices([price('bad', 1999, recurring={'interval': 'month', 'interval_count': 3})])
-    rows = present_prices([price('month', 2100), price('year', 25000, 'year')])
-    assert rows[1].annual_savings.amount_minor == 200
-    assert rows[1].annual_savings.percent == 0.79
-    assert present_prices([price('month', 1000), price('year', 13000, 'year')])[1].annual_savings is None
-    assert present_prices([price('old', 1999, active=False)], current=True)
+def test_price_currency_interval_and_months_free_validation():
+    assert not _valid_price_rows([price('bad', 1999, currency='jpy')])
+    assert not _valid_price_rows([price('bad', 1999, active=False)])
+    assert not _valid_price_rows([price('bad', 1999, recurring={'interval': 'month', 'interval_count': 3})])
+    assert _valid_price_rows([price('old', 1999, active=False)], current=True)
+    # 12 - 25000/2100 is under one month, so the free-months line stays off.
+    assert months_free(2100, 25000) is None
+    assert months_free(1000, 13000) is None
+    assert months_free(1999, 19990) == 2
+    assert months_free(1000, 11000) == 1
 
 
 @pytest.fixture
@@ -161,7 +159,9 @@ def test_every_surface_has_identical_presentation_and_read_only_subscription(cli
         for platform in ['ios', 'android', 'macos', 'windows', 'web']
     ]
     assert all(body == bodies[0] for body in bodies)
-    assert [tier['display_name'] for tier in json.loads(bodies[0])['tiers']] == ['Free', 'Plus', 'Pro', 'Architect']
+    body = json.loads(bodies[0])
+    assert body['schema_version'] == 2
+    assert [tier['name'] for tier in body['tiers']] == ['Plus', 'Free', 'Pro', 'Architect']
     assert all(call.kwargs == {'provision': False} for call in read.call_args_list)
 
 
@@ -169,7 +169,7 @@ def test_new_current_row_survives_missing_purchasable_prices():
     sheet = build('plus', 'price_new', bindings=['price_new'])
     current = [tier for tier in sheet.tiers if tier.action == 'current']
     assert len(current) == 1 and current[0].plan_id == 'plus'
-    assert not current[0].legacy
+    assert sheet.current.legacy is False
 
 
 def test_legacy_current_price_is_preserved_even_when_archived():
@@ -183,7 +183,7 @@ def test_usage_absence_and_bad_projection_never_invent_budget(monkeypatch):
     monkeypatch.setattr(
         route.subscription_utils, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 62}
     )
-    assert route._usage('fixture', Subscription()).model_dump()['budget_percent'] == 62
+    assert route._usage('fixture', Subscription()).model_dump()['percent'] == 62
     monkeypatch.setattr(
         route.subscription_utils,
         'get_usage_units',
@@ -205,12 +205,17 @@ def test_api_openapi_names_the_versioned_presentation_contract(client):
     assert operation['responses']['200']['content']['application/json']['schema']['$ref'].endswith(
         '/StorefrontResponse'
     )
+    version = schema['components']['schemas']['StorefrontResponse']['properties']['schema_version']
+    assert version.get('const', version.get('enum')) in (2, [2])
     assert schema['components']['schemas']['StorefrontTier']['properties']['action']['enum'] == [
+        'checkout',
         'current',
-        'upgrade',
-        'downgrade_not_offered',
-        'contact',
+        'none',
     ]
+    assert 'tagline' not in schema['components']['schemas']['StorefrontTier']['properties']
+    assert 'hours_line' in schema['components']['schemas']['StorefrontTier']['properties']
+    parameters = {item['name'] for item in operation['parameters']}
+    assert {'source', 'trigger', 'locale'} <= parameters
 
 
 def test_registration_does_not_bypass_existing_checkout_guard():
@@ -232,16 +237,10 @@ def test_registration_does_not_bypass_existing_checkout_guard():
 
 
 def test_shared_client_fixture_matches_production_presentation():
-    rows, recognized = {}, []
-    for plan, monthly in [('plus', 1999), ('operator', 4999), ('architect', 19900)]:
-        for interval, amount in [('month', monthly), ('year', monthly * 10)]:
-            key = f'price_fixture_{plan}_{interval}'
-            rows[key] = price(key, amount, interval)
-            recognized.append(
-                {'price_id': key, 'plan_id': plan, 'interval': interval, 'entitlement_version': 'ladder_v1'}
-            )
-    expected = json.loads((Path(__file__).parent / 'fixtures/storefront/ladder_v1_free.json').read_text())
-    assert build(rows=rows, bindings=list(rows), recognized=recognized).model_dump() == expected
+    # Schema v2 goldens live in test_storefront_presentation.py.
+    assert load_ladder()['tiers'][1]['plan_id'] == 'plus'
+    assert 'tagline' not in load_ladder()['tiers'][1]
+    assert 'recommended' not in load_ladder()['tiers'][1]
 
 
 @pytest.mark.parametrize('plan', ['basic', 'plus', 'operator', 'architect', 'unlimited', 'unlimited_v2'])
@@ -274,7 +273,7 @@ def test_contextual_recommendation_per_subscription_and_gate(plan, trigger):
     )
     assert [tier.plan_id for tier in sheet.tiers if tier.recommended] == expected
     if plan != 'basic':
-        assert not any(tier.action == 'upgrade' for tier in sheet.tiers)
+        assert not any(tier.action == 'checkout' for tier in sheet.tiers)
 
 
 @pytest.mark.parametrize(
@@ -337,17 +336,17 @@ def test_non_ladder_paid_plans_only_offer_explicit_higher_tiers(plan, registered
             )
     sheet = build(plan, 'price_current', rows, bindings, recognized)
     by_plan = {tier.plan_id: tier for tier in sheet.tiers}
-    assert by_plan['basic'].action == 'downgrade_not_offered'
+    assert by_plan['basic'].action == 'none'
     if offers:
-        assert by_plan['plus'].action == 'downgrade_not_offered'
+        assert by_plan['plus'].action == 'none'
         assert not by_plan['plus'].recommended
-        assert by_plan['operator'].action == by_plan['architect'].action == 'contact'
+        assert by_plan['operator'].action == by_plan['architect'].action == 'none'
         assert by_plan['operator'].recommended
     assert len([tier for tier in sheet.tiers if tier.action == 'current']) == 1
-    assert by_plan[plan].action == 'current' and by_plan[plan].legacy
+    assert by_plan[plan].action == 'current' and sheet.current.legacy
     assert by_plan[plan].prices[0].amount_minor == 2999
-    assert [feature.key for feature in by_plan[plan].features] == ['legacy_entitlements']
-    assert sheet.next_offer_tier_id is None
+    assert by_plan[plan].bullets == []
+    assert not any(tier.action == 'checkout' for tier in sheet.tiers)
 
 
 @pytest.mark.parametrize('plan', ['plus', 'operator', 'architect'])
@@ -362,8 +361,9 @@ def test_legacy_ladder_plan_has_one_card_and_only_existing_entitlement_copy(plan
     )
     cards = [tier for tier in sheet.tiers if tier.plan_id == plan]
     assert len(cards) == 1
-    assert cards[0].action == 'current' and cards[0].legacy
-    assert [feature.key for feature in cards[0].features] == ['legacy_entitlements']
+    assert cards[0].action == 'current' and sheet.current.legacy
+    assert cards[0].bullets == []
+    assert cards[0].hours_line == ''
     assert not cards[0].recommended
 
 
@@ -436,7 +436,7 @@ def test_legacy_usage_never_accepts_shared_budget_projection(monkeypatch, plan):
         route.subscription_utils, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 62}
     )
     result = route._usage('fixture', Subscription(plan=PlanType(plan), current_price_id='price_legacy'))
-    assert result.kind == 'transcription' and result.budget_percent == 62
+    assert result.kind == 'transcription' and result.percent == 62
     projection.assert_not_called()
 
 
@@ -449,7 +449,7 @@ def test_legacy_chat_meter_without_speech_allowance_is_explicitly_unavailable(mo
     )
     monkeypatch.setattr(route.subscription_utils, 'transcription_allowance_seconds', lambda plan: None)
     result = route._usage('fixture', Subscription(plan=PlanType.operator, current_price_id='price_legacy'))
-    assert result.kind == 'unavailable' and result.budget_percent is None
+    assert result.kind == 'unavailable' and result.percent is None
 
 
 @pytest.mark.parametrize('plan', ['basic', 'plus'])
@@ -458,5 +458,5 @@ def test_shared_budget_projection_is_only_for_free_or_ladder_subscribers(monkeyp
     projection = Mock(return_value={'budget_percent': 80, 'reset_at': 1800000000})
     monkeypatch.setattr(route.subscription_utils, 'get_usage_units', projection, raising=False)
     result = route._usage('fixture', Subscription(plan=PlanType(plan), current_price_id='price_new'))
-    assert result.kind == 'usage_budget' and result.budget_percent == 80
+    assert result.kind == 'usage_budget' and result.percent == 80
     projection.assert_called_once_with('fixture')

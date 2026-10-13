@@ -1674,29 +1674,6 @@
         "title": "AnnouncementType",
         "type": "string"
       },
-      "AnnualSavings": {
-        "properties": {
-          "amount_minor": {
-            "title": "Amount Minor",
-            "type": "integer"
-          },
-          "formatted": {
-            "title": "Formatted",
-            "type": "string"
-          },
-          "percent": {
-            "title": "Percent",
-            "type": "number"
-          }
-        },
-        "required": [
-          "amount_minor",
-          "percent",
-          "formatted"
-        ],
-        "title": "AnnualSavings",
-        "type": "object"
-      },
       "App": {
         "description": "Full App model - includes large/internal fields for detail views.",
         "properties": {
@@ -23599,29 +23576,6 @@
         "title": "PhoneNumbersResponse",
         "type": "object"
       },
-      "PlanFeature": {
-        "properties": {
-          "included": {
-            "default": true,
-            "title": "Included",
-            "type": "boolean"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "label"
-        ],
-        "title": "PlanFeature",
-        "type": "object"
-      },
       "PlanIdentitySubscription": {
         "properties": {
           "cancel_at_period_end": {
@@ -29896,11 +29850,50 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
-      "StorefrontCurrentPlan": {
+      "StorefrontCurrent": {
         "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
           "legacy": {
             "title": "Legacy",
             "type": "boolean"
+          },
+          "legacy_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Note"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "plan_id": {
             "title": "Plan Id",
@@ -29920,9 +29913,11 @@
         },
         "required": [
           "plan_id",
-          "legacy"
+          "name",
+          "legacy",
+          "line"
         ],
-        "title": "StorefrontCurrentPlan",
+        "title": "StorefrontCurrent",
         "type": "object"
       },
       "StorefrontPrice": {
@@ -29931,22 +29926,12 @@
             "title": "Amount Minor",
             "type": "integer"
           },
-          "annual_savings": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AnnualSavings"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "currency": {
             "title": "Currency",
             "type": "string"
           },
-          "formatted_amount": {
-            "title": "Formatted Amount",
+          "headline": {
+            "title": "Headline",
             "type": "string"
           },
           "interval": {
@@ -29957,9 +29942,16 @@
             "title": "Interval",
             "type": "string"
           },
-          "monthly_equivalent": {
-            "title": "Monthly Equivalent",
-            "type": "string"
+          "months_free": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Months Free"
           },
           "price_id": {
             "anyOf": [
@@ -29971,14 +29963,35 @@
               }
             ],
             "title": "Price Id"
+          },
+          "renewal_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Line"
+          },
+          "subline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subline"
           }
         },
         "required": [
           "interval",
-          "currency",
           "amount_minor",
-          "formatted_amount",
-          "monthly_equivalent"
+          "currency",
+          "headline"
         ],
         "title": "StorefrontPrice",
         "type": "object"
@@ -29992,14 +30005,14 @@
           "current": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/StorefrontCurrentPlan"
+                "$ref": "#/components/schemas/StorefrontCurrent"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "next_offer_tier_id": {
+          "header": {
             "anyOf": [
               {
                 "type": "string"
@@ -30008,11 +30021,11 @@
                 "type": "null"
               }
             ],
-            "title": "Next Offer Tier Id"
+            "title": "Header"
           },
           "schema_version": {
-            "const": 1,
-            "default": 1,
+            "const": 2,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -30030,6 +30043,17 @@
           },
           "usage": {
             "$ref": "#/components/schemas/StorefrontUsage"
+          },
+          "yearly_toggle_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Toggle Label"
           }
         },
         "required": [
@@ -30042,33 +30066,43 @@
         "properties": {
           "action": {
             "enum": [
+              "checkout",
               "current",
-              "upgrade",
-              "downgrade_not_offered",
-              "contact"
+              "none"
             ],
             "title": "Action",
             "type": "string"
           },
-          "display_name": {
-            "title": "Display Name",
-            "type": "string"
-          },
-          "entitlement_version": {
-            "title": "Entitlement Version",
-            "type": "string"
-          },
-          "features": {
+          "bullets": {
             "items": {
-              "$ref": "#/components/schemas/PlanFeature"
+              "type": "string"
             },
-            "title": "Features",
+            "title": "Bullets",
             "type": "array"
           },
-          "legacy": {
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "hours_line": {
+            "title": "Hours Line",
+            "type": "string"
+          },
+          "is_current": {
             "default": false,
-            "title": "Legacy",
+            "title": "Is Current",
             "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "plan_id": {
             "title": "Plan Id",
@@ -30086,10 +30120,6 @@
             "title": "Recommended",
             "type": "boolean"
           },
-          "tagline": {
-            "title": "Tagline",
-            "type": "string"
-          },
           "tier_id": {
             "title": "Tier Id",
             "type": "string"
@@ -30098,40 +30128,50 @@
         "required": [
           "tier_id",
           "plan_id",
-          "entitlement_version",
-          "display_name",
-          "tagline",
-          "features",
-          "prices",
-          "action"
+          "name",
+          "hours_line",
+          "bullets",
+          "action",
+          "prices"
         ],
         "title": "StorefrontTier",
         "type": "object"
       },
       "StorefrontUsage": {
         "properties": {
-          "budget_percent": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Percent"
-          },
           "kind": {
             "default": "unavailable",
             "enum": [
-              "transcription",
               "usage_budget",
+              "transcription",
               "unavailable"
             ],
             "title": "Kind",
             "type": "string"
           },
-          "reset_at": {
+          "meter_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meter Line"
+          },
+          "nudge_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nudge Line"
+          },
+          "percent": {
             "anyOf": [
               {
                 "type": "integer"
@@ -30140,7 +30180,36 @@
                 "type": "null"
               }
             ],
-            "title": "Reset At"
+            "title": "Percent"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "pro_gates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pro Gates",
+            "type": "array"
+          },
+          "reset_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Label"
           }
         },
         "title": "StorefrontUsage",
@@ -78470,6 +78539,24 @@
                 }
               ],
               "title": "Trigger"
+            }
+          },
+          {
+            "description": "BCP 47 tag. Unknown locales fall back to en.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "BCP 47 tag. Unknown locales fall back to en.",
+              "title": "Locale"
             }
           },
           {

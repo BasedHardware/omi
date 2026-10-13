@@ -1,62 +1,68 @@
-"""Versioned backend presentation contract; clients need no tier policy."""
+"""Versioned backend presentation contract; clients render fields verbatim."""
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
-
-
-class PlanFeature(BaseModel):
-    key: str
-    label: str
-    included: bool = True
-
-
-class AnnualSavings(BaseModel):
-    amount_minor: int
-    percent: float
-    formatted: str
+from pydantic import BaseModel, Field, model_serializer
 
 
 class StorefrontPrice(BaseModel):
     price_id: str | None = None
     interval: Literal['month', 'year']
-    currency: str
     amount_minor: int
-    formatted_amount: str
-    monthly_equivalent: str
-    annual_savings: AnnualSavings | None = None
+    currency: str
+    headline: str
+    subline: str | None = None
+    renewal_line: str | None = None
+    months_free: int | None = None
+
+    @model_serializer(mode='wrap')
+    def _omit_empty_months_free(self, handler):
+        data = handler(self)
+        if data.get('months_free') is None:
+            data.pop('months_free', None)
+        return data
 
 
 class StorefrontTier(BaseModel):
     tier_id: str
     plan_id: str
-    entitlement_version: str
-    display_name: str
-    tagline: str
-    features: list[PlanFeature]
-    prices: list[StorefrontPrice]
-    action: Literal['current', 'upgrade', 'downgrade_not_offered', 'contact']
+    name: str
     recommended: bool = False
-    legacy: bool = False
+    is_current: bool = False
+    hours_line: str
+    bullets: list[str]
+    action: Literal['checkout', 'current', 'none']
+    cta_label: str | None = None
+    prices: list[StorefrontPrice]
 
 
-class StorefrontCurrentPlan(BaseModel):
+class StorefrontCurrent(BaseModel):
     plan_id: str
+    name: str
     price_id: str | None = None
+    interval: Literal['month', 'year'] | None = None
     legacy: bool
+    cancel_at_period_end: bool = False
+    line: str
+    legacy_note: str | None = None
 
 
 class StorefrontUsage(BaseModel):
-    kind: Literal['transcription', 'usage_budget', 'unavailable'] = 'unavailable'
-    budget_percent: float | None = None
-    reset_at: int | None = None
+    kind: Literal['usage_budget', 'transcription', 'unavailable'] = 'unavailable'
+    percent: int | None = None
+    period_id: str | None = None
+    reset_label: str | None = None
+    meter_line: str | None = None
+    nudge_line: str | None = None
+    pro_gates: list[str] = Field(default_factory=list)
 
 
 class StorefrontResponse(BaseModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     catalog_revision: int
     show_subscription_ui: bool = True
-    tiers: list[StorefrontTier] = Field(default_factory=list)
-    next_offer_tier_id: str | None = None
-    current: StorefrontCurrentPlan | None = None
+    header: str | None = None
+    current: StorefrontCurrent | None = None
     usage: StorefrontUsage = Field(default_factory=StorefrontUsage)
+    tiers: list[StorefrontTier] = Field(default_factory=list)
+    yearly_toggle_label: str | None = None
