@@ -3925,7 +3925,22 @@ the three-entry evidence deque will evict before gating the next extraction.
 A rejected voice, including a far/noisy rejection, can then reach another
 five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
 the usable remainder only if its actual PCM duration still meets the extraction
-floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+floor. Exact stored span ends use the span's integer byte count: subtracting
+large epoch timestamps and truncating the result can discard one real sample per
+frame, making an exactly sufficient physical window appear too short. Interior
+endpoints retain the existing PCM16 floor, gaps stay absent, and byte proof uses
+the same boundary rule as extraction. No tolerance, silence padding, thresholds,
+budget, scheduling or identity authority changes are introduced.
+`omi_speaker_id_pcm_windows_restored_total{reason="full_span_rounding"}` counts
+selected candidate windows whose actual PCM meets the current extraction floor
+while the old floored byte count on those selected windows would not. It records
+candidate qualification before quota admission; it does not count unique voices,
+GPU reservations, owner comparisons or owner recognition gains. Recovery's
+newer-audio pool passes the same floor to avoid counting an insufficient pool
+before an older-audio fallback. The one preinitialized closed label adds one total
+series, with no IDs (the shared metrics endpoint suppresses `_created`). Compare
+its rate with short-window exits, actual reservations/comparisons per conversation,
+and live owner outcomes after deployment. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
 remainder reports `window_shorter_than_minimum`.
 
 Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled

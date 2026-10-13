@@ -18,9 +18,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.oauth2.credentials import Credentials
 
 QUEUES = {
-    'projection_repairs': ('status', ('queued', 'failed', 'dead_letter')),
     'candidate_integration_outbox': ('status', ('pending', 'failed', 'processing', 'dead_letter')),
-    'chat_first_proactive_intents': ('delivery_state', ('ready', 'pending_kernel_receipt', 'dead_letter')),
 }
 FIELDS = ('status', 'delivery_state', 'created_at', 'attempt_count', 'source', 'available_at', 'claimed_at')
 
