@@ -676,7 +676,7 @@
       "component": "live-transcription",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -973,7 +973,7 @@
       "component": "ai-chat",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -1001,7 +1001,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "expr": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1218,7 +1218,7 @@
       "component": "llm-gateway",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -1359,7 +1359,7 @@
       "component": "llm-gateway",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -2640,7 +2640,7 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
