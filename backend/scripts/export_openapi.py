@@ -88,6 +88,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/memories',
     '/v1/payment-methods',
     '/v1/payments',
+    '/v2/payments',
     '/v1/paypal',
     '/v1/persons',
     '/v1/phone',
