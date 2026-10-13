@@ -33,7 +33,11 @@ def _provider_attempt_outcome(result: Dict[str, Any]) -> str:
         return "accepted"
     code = result.get("error_code")
     if code == "api_error":
-        return "definite_error"
+        # A 5xx (or a gateway 504) can arrive after the provider committed the create.
+        status = result.get("status_code")
+        if isinstance(status, int) and status < 500:
+            return "definite_error"
+        return "in_doubt"
     if code in _PROVIDER_NOT_SENT:
         return "not_sent"
     return "in_doubt"
