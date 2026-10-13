@@ -259,7 +259,7 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.1 }}
               className="mb-1 text-center font-display text-2xl font-semibold text-text-primary"
             >
-              {isReferralFlow ? 'One free month of Operator' : 'Omi'}
+              {isReferralFlow ? 'One free month of Pro' : 'Omi'}
             </motion.h1>
 
             {/* Tagline */}

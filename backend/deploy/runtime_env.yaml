@@ -2269,6 +2269,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
+            POSTHOG_BILLING_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest

@@ -141,3 +141,23 @@ class AudioRingBuffer:
         if not result:
             return None
         return bytes(result)
+
+    def proven_byte_ranges(self, start_ts: float, end_ts: float) -> list[tuple[int, int]]:
+        """Physical PCM positions intersecting a window; timestamps cannot invent bytes.
+
+        Use the same sample alignment as extraction. Absolute append positions
+        survive ring wrap and distinguish new buffered PCM from segment replays.
+        """
+        result = []
+        cursor = start_ts
+        for span_start, n_bytes, start_abs in self._spans:
+            lo, hi = max(cursor, span_start), min(end_ts, span_start + n_bytes / self.bytes_per_second)
+            if hi <= lo:
+                continue
+            offset = int((lo - span_start) * self.bytes_per_second)
+            offset -= offset % 2
+            length = ((int((hi - span_start) * self.bytes_per_second) - offset) // 2) * 2
+            if length > 0:
+                result.append((start_abs + offset, start_abs + offset + length))
+                cursor = hi
+        return result

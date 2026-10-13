@@ -332,6 +332,11 @@ checks:
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
+  - id: grafana-deadman-contract
+    command: ["python3", ".github/scripts/test_ensure_grafana_deadman.py"]
+    triggers: [".github/scripts/ensure_grafana_deadman.py", ".github/scripts/test_ensure_grafana_deadman.py", "backend/deploy/monitoring/grafana-deadman.json", ".github/workflows/gcp_cloud_run_metrics_egress.yml"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-12 Grafana SQLite lock bursts dropped evaluations and failed health probes; the external health check must retain scoped five-minute paging, idempotent reconciliation and required channels"
   - id: backend-route-5xx-alert-contract
     command: ["python3", ".github/scripts/test_ensure_backend_route_5xx_alert.py"]
     triggers: [".github/scripts/ensure_backend_route_5xx_alert.py", ".github/scripts/test_ensure_backend_route_5xx_alert.py", ".github/monitoring/backend_route_5xx_metric.json", ".github/monitoring/backend_route_5xx_policy.json", ".github/workflows/gcp_backend.yml", ".github/scripts/ensure_monitoring_metric_alert_policy.py", ".github/scripts/ensure_firestore_missing_index_alert.py", "backend/docs/runbooks/backend-route-5xx.md"]

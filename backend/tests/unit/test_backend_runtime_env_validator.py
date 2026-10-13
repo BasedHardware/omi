@@ -1257,7 +1257,7 @@ def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, servic
     entry = next(item for item in entries if item['name'] == setting)
     if stale is None:
         entries.remove(entry)
-    elif setting == 'DREAM_AGENT_FEEDBACK_SALT':
+    elif setting in {'DREAM_AGENT_FEEDBACK_SALT', 'POSTHOG_BILLING_API_KEY'}:
         entry['valueFrom']['secretKeyRef']['key'] = stale
     else:
         entry['value'] = stale
@@ -3546,3 +3546,22 @@ def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts()
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
         assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+
+
+@pytest.mark.parametrize('stale_version', [None, '1'])
+def test_prod_backend_billing_secret_requires_live_prebind(monkeypatch, stale_version):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    entries = deployed['services']['backend']['env']
+    entry = next(item for item in entries if item['name'] == 'POSTHOG_BILLING_API_KEY')
+    assert entry['valueFrom']['secretKeyRef'] == {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}
+    assert not any(item['name'] == 'POSTHOG_PROJECT_API_KEY' for item in entries)
+    assert validator._validate_cloud_run(env_config, deployed, strict_provisional=False) == []
+    if stale_version is None:
+        entries.remove(entry)
+    else:
+        entry['valueFrom']['secretKeyRef']['key'] = stale_version
+    errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
+    assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)

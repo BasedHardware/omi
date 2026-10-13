@@ -438,9 +438,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 Expanded(
                   child: widget.playbackController == null
                       ? _buildTranscript(null)
-                      : ListenableBuilder(
-                          listenable: widget.playbackController!,
-                          builder: (context, _) => _buildTranscript(widget.playbackController),
+                      : _PlaybackFollowScope(
+                          controller: widget.playbackController!,
+                          builder: (context) => _buildTranscript(widget.playbackController),
                         ),
                 ),
               ],
@@ -497,6 +497,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             if (segments.isNotEmpty && reviewQuestion != null) 'review-question-${reviewQuestion.itemId}',
           ],
           currentSegmentId: controller?.currentSegmentId,
+          highlightedSegment: controller?.highlightedSegment,
           followTargetSegmentId: controller?.followTargetSegmentId,
           // Follow while the reader hasn't taken the scroll back AND playback
           // is either running or a fresh explicit request (line tap, scrub,
@@ -628,4 +629,69 @@ class _TranscriptHeading extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds the transcript when playback follow changes, and not when a reader
+/// scroll only moves the highlighted line. That highlight is [ConversationPlaybackController.highlightedSegment].
+class _PlaybackFollowScope extends StatefulWidget {
+  const _PlaybackFollowScope({required this.controller, required this.builder});
+
+  final ConversationPlaybackController controller;
+  final WidgetBuilder builder;
+
+  @override
+  State<_PlaybackFollowScope> createState() => _PlaybackFollowScopeState();
+}
+
+class _PlaybackFollowScopeState extends State<_PlaybackFollowScope> {
+  late bool _playing;
+  late bool _following;
+  late int _followRequest;
+  late String? _followTarget;
+
+  @override
+  void initState() {
+    super.initState();
+    _capture();
+    widget.controller.addListener(_onController);
+  }
+
+  @override
+  void didUpdateWidget(_PlaybackFollowScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onController);
+      _capture();
+      widget.controller.addListener(_onController);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onController);
+    super.dispose();
+  }
+
+  void _capture() {
+    final controller = widget.controller;
+    _playing = controller.isPlaying;
+    _following = controller.isFollowing;
+    _followRequest = controller.followRequest;
+    _followTarget = controller.followTargetSegmentId;
+  }
+
+  void _onController() {
+    if (!mounted) return;
+    final controller = widget.controller;
+    final followActive = controller.isFollowing && (controller.isPlaying || controller.followRequest > 0);
+    final transportChanged = controller.isPlaying != _playing ||
+        controller.isFollowing != _following ||
+        controller.followRequest != _followRequest;
+    final targetChanged = followActive && controller.followTargetSegmentId != _followTarget;
+    if (!transportChanged && !targetChanged) return;
+    setState(_capture);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
 }

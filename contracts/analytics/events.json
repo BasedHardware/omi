@@ -1154,7 +1154,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -1167,7 +1168,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -1180,7 +1182,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "app-update-prompt"
       ],
       "correlation": null
     },
@@ -1193,7 +1196,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "app-update-prompt"
       ],
       "correlation": null
     },
@@ -1206,7 +1210,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -2499,6 +2504,424 @@
       "correlation": null
     },
     {
+      "id": "billingSubscriptionStarted",
+      "wire_name": "Billing Subscription Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionChurned",
+      "wire_name": "Billing Subscription Churned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionCancellationScheduled",
+      "wire_name": "Billing Subscription Cancellation Scheduled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionPlanChanged",
+      "wire_name": "Billing Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "mrrBeforeCents": {
+          "type": "int",
+          "wire_name": "mrr_before_cents"
+        },
+        "mrrAfterCents": {
+          "type": "int",
+          "wire_name": "mrr_after_cents"
+        },
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-plan-changes"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
       "id": "speakerTagPromptsClosed",
       "wire_name": "Speaker Tag Prompts Closed",
       "status": "active",
@@ -2958,6 +3381,338 @@
       "properties": {},
       "consumers": [
         "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallOpened",
+      "wire_name": "Paywall Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "chat_quota_exceeded",
+            "freemium_switch",
+            "locked_conversation",
+            "locked_memory",
+            "chat_apps",
+            "usage_page",
+            "transcription_settings",
+            "unlimited_deeplink",
+            "macos_billing",
+            "macos_usage_limit",
+            "macos_chat_quota_banner",
+            "windows_billing",
+            "windows_usage_limit",
+            "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
+            "unknown"
+          ]
+        },
+        "currentPlan": {
+          "type": "enum",
+          "wire_name": "current_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradePlanSelected",
+      "wire_name": "Upgrade Plan Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "chat_quota_exceeded",
+            "freemium_switch",
+            "locked_conversation",
+            "locked_memory",
+            "chat_apps",
+            "usage_page",
+            "transcription_settings",
+            "unlimited_deeplink",
+            "macos_billing",
+            "macos_usage_limit",
+            "macos_chat_quota_banner",
+            "windows_billing",
+            "windows_usage_limit",
+            "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeSucceededAttributed",
+      "wire_name": "Upgrade Succeeded Attributed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPlanChanged",
+      "wire_name": "Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "changeSource": {
+          "type": "enum",
+          "wire_name": "change_source",
+          "values": [
+            "mobile_checkout",
+            "macos_checkout",
+            "windows_checkout",
+            "web_checkout"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelReasonSelected",
+      "wire_name": "Subscription Cancel Reason Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelConfirmed",
+      "wire_name": "Subscription Cancel Confirmed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        },
+        "hasDetails": {
+          "type": "bool",
+          "wire_name": "has_details"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelKeptPlan",
+      "wire_name": "Subscription Cancel Kept Plan",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelAbandoned",
+      "wire_name": "Subscription Cancel Abandoned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
       ],
       "correlation": null
     }

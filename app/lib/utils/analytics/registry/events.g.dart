@@ -1561,6 +1561,270 @@ final class SpeakerTagPromptAnswerSubmitted extends RegisteredEvent {
   Map<String, Object> get properties => {"kind": kind.wireName, "answer": answer.wireName, "clip_played": clipPlayed, "first_time": firstTime, "succeeded": succeeded};
 }
 
+enum BillingSubscriptionStartedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionStartedPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionStartedInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const BillingSubscriptionStartedInterval(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionStartedReason {
+  cancellationRequested("cancellation_requested"),
+  paymentFailure("payment_failure"),
+  paymentDisputed("payment_disputed"),
+  none("none");
+  const BillingSubscriptionStartedReason(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionStartedPriceGeneration {
+  legacy("legacy"),
+  ladderV1("ladder_v1"),
+  unknown("unknown");
+  const BillingSubscriptionStartedPriceGeneration(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionStartedBillingMeasurement {
+  trialPlanEntitlement("trial_plan_entitlement"),
+  paidPlanEntitlement("paid_plan_entitlement");
+  const BillingSubscriptionStartedBillingMeasurement(this.wireName);
+  final String wireName;
+}
+
+final class BillingSubscriptionStarted extends RegisteredEvent {
+  const BillingSubscriptionStarted({required this.plan, required this.interval, required this.reason, required this.priceGeneration, required this.isTrial, required this.billingMeasurement, required this.mrrCents});
+  final BillingSubscriptionStartedPlan plan;
+  final BillingSubscriptionStartedInterval interval;
+  final BillingSubscriptionStartedReason reason;
+  final BillingSubscriptionStartedPriceGeneration priceGeneration;
+  final bool isTrial;
+  final BillingSubscriptionStartedBillingMeasurement billingMeasurement;
+  final int mrrCents;
+  @override
+  String get wireName => "Billing Subscription Started";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "interval": interval.wireName, "reason": reason.wireName, "price_generation": priceGeneration.wireName, "is_trial": isTrial, "billing_measurement": billingMeasurement.wireName, "mrr_cents": mrrCents};
+}
+
+enum BillingSubscriptionChurnedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionChurnedPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionChurnedInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const BillingSubscriptionChurnedInterval(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionChurnedReason {
+  cancellationRequested("cancellation_requested"),
+  paymentFailure("payment_failure"),
+  paymentDisputed("payment_disputed"),
+  none("none");
+  const BillingSubscriptionChurnedReason(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionChurnedPriceGeneration {
+  legacy("legacy"),
+  ladderV1("ladder_v1"),
+  unknown("unknown");
+  const BillingSubscriptionChurnedPriceGeneration(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionChurnedBillingMeasurement {
+  trialPlanEntitlement("trial_plan_entitlement"),
+  paidPlanEntitlement("paid_plan_entitlement");
+  const BillingSubscriptionChurnedBillingMeasurement(this.wireName);
+  final String wireName;
+}
+
+final class BillingSubscriptionChurned extends RegisteredEvent {
+  const BillingSubscriptionChurned({required this.plan, required this.interval, required this.reason, required this.priceGeneration, required this.isTrial, required this.billingMeasurement, required this.mrrCents});
+  final BillingSubscriptionChurnedPlan plan;
+  final BillingSubscriptionChurnedInterval interval;
+  final BillingSubscriptionChurnedReason reason;
+  final BillingSubscriptionChurnedPriceGeneration priceGeneration;
+  final bool isTrial;
+  final BillingSubscriptionChurnedBillingMeasurement billingMeasurement;
+  final int mrrCents;
+  @override
+  String get wireName => "Billing Subscription Churned";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "interval": interval.wireName, "reason": reason.wireName, "price_generation": priceGeneration.wireName, "is_trial": isTrial, "billing_measurement": billingMeasurement.wireName, "mrr_cents": mrrCents};
+}
+
+enum BillingSubscriptionCancellationScheduledPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionCancellationScheduledPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionCancellationScheduledInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const BillingSubscriptionCancellationScheduledInterval(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionCancellationScheduledReason {
+  cancellationRequested("cancellation_requested"),
+  paymentFailure("payment_failure"),
+  paymentDisputed("payment_disputed"),
+  none("none");
+  const BillingSubscriptionCancellationScheduledReason(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionCancellationScheduledPriceGeneration {
+  legacy("legacy"),
+  ladderV1("ladder_v1"),
+  unknown("unknown");
+  const BillingSubscriptionCancellationScheduledPriceGeneration(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionCancellationScheduledBillingMeasurement {
+  trialPlanEntitlement("trial_plan_entitlement"),
+  paidPlanEntitlement("paid_plan_entitlement");
+  const BillingSubscriptionCancellationScheduledBillingMeasurement(this.wireName);
+  final String wireName;
+}
+
+final class BillingSubscriptionCancellationScheduled extends RegisteredEvent {
+  const BillingSubscriptionCancellationScheduled({required this.plan, required this.interval, required this.reason, required this.priceGeneration, required this.isTrial, required this.billingMeasurement, required this.mrrCents});
+  final BillingSubscriptionCancellationScheduledPlan plan;
+  final BillingSubscriptionCancellationScheduledInterval interval;
+  final BillingSubscriptionCancellationScheduledReason reason;
+  final BillingSubscriptionCancellationScheduledPriceGeneration priceGeneration;
+  final bool isTrial;
+  final BillingSubscriptionCancellationScheduledBillingMeasurement billingMeasurement;
+  final int mrrCents;
+  @override
+  String get wireName => "Billing Subscription Cancellation Scheduled";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "interval": interval.wireName, "reason": reason.wireName, "price_generation": priceGeneration.wireName, "is_trial": isTrial, "billing_measurement": billingMeasurement.wireName, "mrr_cents": mrrCents};
+}
+
+enum BillingSubscriptionPlanChangedPreviousPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPreviousPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedNewPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedNewPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedInterval(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPlan(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedReason {
+  cancellationRequested("cancellation_requested"),
+  paymentFailure("payment_failure"),
+  paymentDisputed("payment_disputed"),
+  none("none");
+  const BillingSubscriptionPlanChangedReason(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedPriceGeneration {
+  legacy("legacy"),
+  ladderV1("ladder_v1"),
+  unknown("unknown");
+  const BillingSubscriptionPlanChangedPriceGeneration(this.wireName);
+  final String wireName;
+}
+
+enum BillingSubscriptionPlanChangedBillingMeasurement {
+  trialPlanEntitlement("trial_plan_entitlement"),
+  paidPlanEntitlement("paid_plan_entitlement");
+  const BillingSubscriptionPlanChangedBillingMeasurement(this.wireName);
+  final String wireName;
+}
+
+final class BillingSubscriptionPlanChanged extends RegisteredEvent {
+  const BillingSubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.interval, required this.mrrBeforeCents, required this.mrrAfterCents, required this.plan, required this.reason, required this.priceGeneration, required this.isTrial, required this.billingMeasurement, required this.mrrCents});
+  final BillingSubscriptionPlanChangedPreviousPlan previousPlan;
+  final BillingSubscriptionPlanChangedNewPlan newPlan;
+  final BillingSubscriptionPlanChangedInterval interval;
+  final int mrrBeforeCents;
+  final int mrrAfterCents;
+  final BillingSubscriptionPlanChangedPlan plan;
+  final BillingSubscriptionPlanChangedReason reason;
+  final BillingSubscriptionPlanChangedPriceGeneration priceGeneration;
+  final bool isTrial;
+  final BillingSubscriptionPlanChangedBillingMeasurement billingMeasurement;
+  final int mrrCents;
+  @override
+  String get wireName => "Billing Subscription Plan Changed";
+  @override
+  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "interval": interval.wireName, "mrr_before_cents": mrrBeforeCents, "mrr_after_cents": mrrAfterCents, "plan": plan.wireName, "reason": reason.wireName, "price_generation": priceGeneration.wireName, "is_trial": isTrial, "billing_measurement": billingMeasurement.wireName, "mrr_cents": mrrCents};
+}
+
 final class SpeakerTagPromptsClosed extends RegisteredEvent {
   const SpeakerTagPromptsClosed({required this.answeredCount, required this.promptCount});
   final int answeredCount;
@@ -1912,4 +2176,279 @@ final class ChatAppWaitlistJoined extends RegisteredEvent {
   String get wireName => "Chat App Waitlist Joined";
   @override
   Map<String, Object> get properties => {};
+}
+
+enum PaywallOpenedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown");
+  const PaywallOpenedSource(this.wireName);
+  final String wireName;
+}
+
+enum PaywallOpenedCurrentPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const PaywallOpenedCurrentPlan(this.wireName);
+  final String wireName;
+}
+
+final class PaywallOpened extends RegisteredEvent {
+  const PaywallOpened({required this.source, required this.currentPlan});
+  final PaywallOpenedSource source;
+  final PaywallOpenedCurrentPlan currentPlan;
+  @override
+  String get wireName => "Paywall Opened";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
+}
+
+enum UpgradePlanSelectedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const UpgradePlanSelectedPlan(this.wireName);
+  final String wireName;
+}
+
+enum UpgradePlanSelectedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradePlanSelectedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum UpgradePlanSelectedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown");
+  const UpgradePlanSelectedSource(this.wireName);
+  final String wireName;
+}
+
+final class UpgradePlanSelected extends RegisteredEvent {
+  const UpgradePlanSelected({required this.plan, required this.billingInterval, required this.source});
+  final UpgradePlanSelectedPlan plan;
+  final UpgradePlanSelectedBillingInterval billingInterval;
+  final UpgradePlanSelectedSource source;
+  @override
+  String get wireName => "Upgrade Plan Selected";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName, "source": source.wireName};
+}
+
+enum UpgradeSucceededAttributedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const UpgradeSucceededAttributedPlan(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeSucceededAttributedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeSucceededAttributedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeSucceededAttributed extends RegisteredEvent {
+  const UpgradeSucceededAttributed({required this.plan, required this.billingInterval});
+  final UpgradeSucceededAttributedPlan plan;
+  final UpgradeSucceededAttributedBillingInterval billingInterval;
+  @override
+  String get wireName => "Upgrade Succeeded Attributed";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName};
+}
+
+enum SubscriptionPlanChangedPreviousPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const SubscriptionPlanChangedPreviousPlan(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedNewPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const SubscriptionPlanChangedNewPlan(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const SubscriptionPlanChangedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionPlanChangedChangeSource {
+  mobileCheckout("mobile_checkout"),
+  macosCheckout("macos_checkout"),
+  windowsCheckout("windows_checkout"),
+  webCheckout("web_checkout");
+  const SubscriptionPlanChangedChangeSource(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPlanChanged extends RegisteredEvent {
+  const SubscriptionPlanChanged({required this.previousPlan, required this.newPlan, required this.billingInterval, required this.changeSource});
+  final SubscriptionPlanChangedPreviousPlan previousPlan;
+  final SubscriptionPlanChangedNewPlan newPlan;
+  final SubscriptionPlanChangedBillingInterval billingInterval;
+  final SubscriptionPlanChangedChangeSource changeSource;
+  @override
+  String get wireName => "Subscription Plan Changed";
+  @override
+  Map<String, Object> get properties => {"previous_plan": previousPlan.wireName, "new_plan": newPlan.wireName, "billing_interval": billingInterval.wireName, "change_source": changeSource.wireName};
+}
+
+enum SubscriptionCancelReasonSelectedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelReasonSelectedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelReasonSelected extends RegisteredEvent {
+  const SubscriptionCancelReasonSelected({required this.reason});
+  final SubscriptionCancelReasonSelectedReason reason;
+  @override
+  String get wireName => "Subscription Cancel Reason Selected";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+enum SubscriptionCancelConfirmedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelConfirmedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelConfirmed extends RegisteredEvent {
+  const SubscriptionCancelConfirmed({required this.reason, required this.hasDetails});
+  final SubscriptionCancelConfirmedReason reason;
+  final bool hasDetails;
+  @override
+  String get wireName => "Subscription Cancel Confirmed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "has_details": hasDetails};
+}
+
+enum SubscriptionCancelKeptPlanReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelKeptPlanReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelKeptPlan extends RegisteredEvent {
+  const SubscriptionCancelKeptPlan({required this.step, required this.reason});
+  final int step;
+  final SubscriptionCancelKeptPlanReason reason;
+  @override
+  String get wireName => "Subscription Cancel Kept Plan";
+  @override
+  Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
+}
+
+enum SubscriptionCancelAbandonedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionCancelAbandonedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionCancelAbandoned extends RegisteredEvent {
+  const SubscriptionCancelAbandoned({required this.step, required this.reason});
+  final int step;
+  final SubscriptionCancelAbandonedReason reason;
+  @override
+  String get wireName => "Subscription Cancel Abandoned";
+  @override
+  Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }

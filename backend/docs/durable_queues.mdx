@@ -162,3 +162,14 @@ New queues must import those modules. The oldest-ready gauge is
 `omi-queue-oldest-ready` in `backend/charts/monitoring/alerts/resilience.json`
 with `noDataState: Alerting`. No new Firestore composite indexes. Failure-class
 registry JSON is not edited in this PR.
+
+### Consumer liveness audit
+
+A drain helper in this inventory does not prove a scheduled production consumer.
+The 2026-10-12 metadata-only audit found projection repairs without a production
+drain caller, candidate integrations without an autonomous retry caller, and
+Chat-first retirement gated on client polling. The counts, read-only dry-run
+script and operational boundaries are in
+[`stale-queues-and-desktop-vertex.md`](runbooks/stale-queues-and-desktop-vertex.md).
+Age sampling projects metadata only and excludes future retries and live
+candidate leases; expired leases remain ready so vanished dispatchers still page.

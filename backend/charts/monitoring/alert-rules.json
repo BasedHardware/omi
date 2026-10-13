@@ -8628,6 +8628,200 @@
     "record": null
   },
   {
+    "uid": "cft8izabmcjk0e",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet GPU OOM events detected",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (pod) (increase(parakeet_gpu_oom_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "1m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A Parakeet worker hit a CUDA out-of-memory error while transcribing.",
+      "user_impact": "Requests on the affected replica may fail or fall back to another STT provider until it recovers.",
+      "scope": "One production Parakeet GPU pod (grouped by pod).",
+      "verification": "Confirm parakeet_gpu_oom_total stops increasing for the pod and that the replica serves successful transcription requests again.",
+      "safe_next_action": "Check the pod for oversized batches or concurrent streams above its admission limit; recycle the replica if OOMs repeat."
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "alert_identity": "cft8izabmcjk0e",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "dft8iyoy04s8wf",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "GPU VRAM utilization > 90% on node",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (Hostname, gpu) (DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_TOTAL * 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  90
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A GPU has used more than 90% of its framebuffer memory for 10 minutes.",
+      "user_impact": "No user impact yet; the next allocation spike on this GPU may OOM and fail transcription requests.",
+      "scope": "One GPU on one GKE node (DCGM exporter, grouped by Hostname and gpu).",
+      "verification": "Confirm framebuffer use drops below 90% and that no parakeet_gpu_oom_total increase followed.",
+      "safe_next_action": "Check stream admission and batch settings for the workload on that GPU before raising capacity."
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "alert_identity": "dft8iyoy04s8wf",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
     "uid": "omi-cloud-run-metric-names-unnormalized",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -10866,7 +11060,7 @@
     "title": "Durable queue - oldest ready item stalled",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
       {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
       {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
     ],
@@ -10876,11 +11070,11 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "A durable queue has a ready item older than 6 hours, or the omi_queue_oldest_ready_age_seconds gauge is absent",
-      "threshold": "oldest ready age > 6h or absent() for 5m",
+      "summary": "A durable queue has a ready item older than 6 hours, or an age sample is absent or unknown",
+      "threshold": "oldest ready age > 6h, absent(), or unknown sample for 5m",
       "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
       "scope": "Every backend durable queue that publishes omi_queue_oldest_ready_age_seconds.",
-      "verification": "Break down omi_queue_oldest_ready_age_seconds by queue, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
+      "verification": "Break down omi_queue_oldest_ready_age_seconds and omi_queue_oldest_ready_sample_unknown by queue; check the sampler read cap and metadata failures, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
       "safe_next_action": "Confirm poison items reached a dead letter; redrive by identity only after the error is understood. Do not raise the attempt budget.",
       "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
     },
@@ -15927,6 +16121,182 @@
       "impact": "user-experience",
       "severity": "critical",
       "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-daily-recap-generation-failing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Daily recaps",
+    "title": "Daily recap generation is failing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 10800,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "generation failures",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "+60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/daily_summary_user_failed",
+              "AND",
+              "resource.label.job_name",
+              "=",
+              "notifications-job",
+              "AND",
+              "metric.label.reason",
+              "=",
+              "generation_error",
+              "AND",
+              "metric.label.error_type",
+              "!=",
+              "DailySummaryDeliveryError"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "A",
+          "reducer": "sum",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  24
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "B"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "73",
+      "summary": "More than 24 daily recaps failed to generate in the last 3 hours.",
+      "user_impact": "Users who recorded conversations today get no daily recap notification and no recap in the app for this day until generation recovers and the backfill walk fills the hole.",
+      "scope": "notifications-job current-day recap generation (daily_summary_generated and daily_summary_user_failed log lines, as Cloud Logging metrics daily_summary_recap_generated and daily_summary_user_failed). Excludes DailySummaryDeliveryError, where the recap was generated and only the push failed. Failures are counted per cohort pass, so one recipient retried every 15 minutes counts up to four times per hour.",
+      "verification": "Open the Core Features Daily recap stats and the Recap outcomes graph. Then read notifications-job daily_summary_user_failed lines for the dominant error_type, and daily_summary_job_summary for attempted and failed counts.",
+      "safe_next_action": "For APIConnectionError or provider errors, check the LLM gateway endpoint the notifications job is deployed with (OMI_LLM_GATEWAY_URL) and the gateway lane health, then redeploy the job from main. Do not clear cohort cursors or re-run generation by hand; failed recipients are retried and later backfilled. Runbook: backend/docs/runbooks/daily-summary-cutover.md.",
+      "runbook": "backend/docs/runbooks/daily-summary-cutover.md",
+      "threshold": "Generation failures (reason=generation_error, excluding DailySummaryDeliveryError) summed over a trailing 3h > 24, for 15m. Queries Cloud Monitoring as timeSeriesList: the datasource PromQL query type panics Grafana's alert evaluator (nil pointer at tsdb/cloud-monitoring/promql_query.go:23, 2026-10-13), and a missing generated series reads as NoData, which masked exactly the total-outage case. No failures means no series, which is OK.",
+      "evaluated_bad": "2026-10-10 05:33 UTC to 2026-10-12: every generation failed with APIConnectionError. 8 to 516 generation failures per hour, so the trailing 3h sum crossed 24 within the first hour at busy hours and within 3h at the quietest hours.",
+      "evaluated_good": "2026-10-08: zero generation failures (all failures were DailySummaryDeliveryError, excluded). One persistently retried recipient adds at most 12 in 3h (4 passes per hour), below the threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-daily-recap-generation-failing",
+      "component": "daily-recap",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "api"
     },
     "isPaused": false,
     "notification_settings": {
