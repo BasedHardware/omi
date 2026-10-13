@@ -32,6 +32,7 @@ install_firebase_auth_mutation_guard()
 
 from routers import messaging
 from routers import (
+    budget_choice,
     chat_receipts,
     dream_cohort,
     dream_report,
@@ -221,6 +222,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(budget_choice.router)
 app.include_router(messaging.router)
 app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
