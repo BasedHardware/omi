@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from config.rate_card_versions import RATE_CARD_SHA256
+from config.plan_catalog_generated import ENTITLEMENT_VERSIONS
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, provider_for_model_token
 
 EXCLUDED_FUNDING = frozenset({'byok', 'custom', 'on_device'})
 
@@ -69,28 +71,30 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
     rt = _card()['realtime_models'].get(key)
     if rt:
         modalities = event.get('modality_tokens')
-        if not isinstance(modalities, Mapping):
-            # Current realtime ledger retains a caller-priced list-card amount, not modality splits.
-            if (
-                event.get('rate_card_id') == rt['reference_rate_card_id']
-                and event.get('estimated_cost_micro_usd') is not None
-            ):
-                return _result(
-                    _d(event['estimated_cost_micro_usd']),
-                    'estimated',
-                    'realtime_modality_counts_missing',
-                    *tool_reasons,
-                )
-            return _result(Decimal(0), 'missing', 'realtime_modality_counts_missing', *tool_reasons)
-        rates = rt['rates_micro_usd_per_million']
-        cost = Decimal(0)
-        for modality in ('text', 'audio', 'image'):
-            cached = _d(modalities.get(f'cached_{modality}', 0))
-            uncached = max(_d(modalities.get(f'input_{modality}', 0)) - cached, Decimal(0))
-            cost += uncached * rates[f'input_{modality}'] + cached * rates[f'cached_{modality}']
-        cost += _d(modalities.get('output_text', 0)) * rates['output_text']
-        cost += _d(modalities.get('output_audio', 0)) * rates['output_audio']
-        return _result(cost / 1_000_000, 'estimated' if tool_reasons else 'complete', *tool_reasons)
+        if isinstance(modalities, Mapping):
+            rates = rt['rates_micro_usd_per_million']
+            cost = Decimal(0)
+            for modality in ('text', 'audio', 'image'):
+                cached = _d(modalities.get(f'cached_{modality}', 0))
+                uncached = max(_d(modalities.get(f'input_{modality}', 0)) - cached, Decimal(0))
+                cost += uncached * rates[f'input_{modality}'] + cached * rates[f'cached_{modality}']
+            output_text = _d(modalities.get('output_text', 0))
+            if not event.get('output_tokens_include_reasoning', False):
+                output_text += _d(event.get('reasoning_tokens', 0))
+            cost += output_text * rates['output_text']
+            cost += _d(modalities.get('output_audio', 0)) * rates['output_audio']
+            if cost:
+                return _result(cost / 1_000_000, 'estimated' if tool_reasons else 'complete', *tool_reasons)
+            reason = 'empty_provider_usage'
+        else:
+            reason = 'realtime_modality_counts_missing'
+        # Legacy realtime events may retain a caller-priced amount instead of usable splits.
+        if (
+            event.get('rate_card_id') == rt['reference_rate_card_id']
+            and event.get('estimated_cost_micro_usd') is not None
+        ):
+            return _result(_d(event['estimated_cost_micro_usd']), 'estimated', reason, *tool_reasons)
+        return _result(Decimal(0), 'missing', reason, *tool_reasons)
     if event.get('unit_type') == 'images':
         cards = [
             c
@@ -162,12 +166,20 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
     return _result(cost / 1_000_000, status, *reasons)
 
 
+def normalize_transcription_provider(provider: Any) -> str:
+    provider = str(getattr(provider, 'value', provider)).strip().lower()
+    if provider == DEEPGRAM_CLOUD_PROVIDER or provider_for_model_token(provider) == DEEPGRAM_CLOUD_PROVIDER:
+        provider = 'deepgram'
+    return provider
+
+
 def price_transcription(
     seconds: Any, *, provider: str = 'unknown', funding: str = 'omi', accepted: bool = False
 ) -> dict[str, Any]:
     exclusion = _funding(funding)
     if exclusion is not None:
         return exclusion
+    provider = normalize_transcription_provider(provider)
     card = _card()['transcription'].get(provider, _card()['transcription']['unknown'])
     quantity = _d(seconds)
     if not accepted:
@@ -187,7 +199,9 @@ def price_request(feature: str, count: Any = 1, *, funding: str = 'omi') -> dict
     exclusion = _funding(funding)
     if exclusion is not None:
         return exclusion
-    card = _card()['requests'][feature]
+    card = _card()['requests'].get(feature)
+    if card is None:
+        return _result(Decimal(0), 'missing', 'request_card_missing')
     # Infra placeholder is already loaded, so do not apply L a second time.
     return {
         'micro_units': int((_d(count) * card['micro_usd_per_request'] * 1000).to_integral_value()),
@@ -205,9 +219,7 @@ def standard_chat_units() -> Decimal:
 
 
 def free_budget_units() -> int:
-    speech = price_transcription(18000, provider=_card()['default_speech_provider'], accepted=True)
-    total = Decimal(speech['micro_units']) / 1_000_000 + 30 * standard_chat_units()
-    return int(total.to_integral_value(rounding=ROUND_CEILING))
+    return _mix_budget_units(ENTITLEMENT_VERSIONS['ladder_v1']['monthly_budgets']['basic'])
 
 
 def budget_units(entitlements: Mapping[str, Any]) -> int | None:
@@ -217,8 +229,16 @@ def budget_units(entitlements: Mapping[str, Any]) -> int | None:
     if budget['kind'] == 'units':
         return int(budget['value'])
     if budget['kind'] == 'rate_card_mix':
-        return free_budget_units()
+        return _mix_budget_units(budget)
     raise ValueError('unknown budget expression')
+
+
+def _mix_budget_units(budget: Mapping[str, Any]) -> int:
+    if budget['chat_tier'] != 'standard':
+        raise ValueError('unknown budget chat tier')
+    speech = price_transcription(budget['speech_seconds'], provider=_card()['default_speech_provider'], accepted=True)
+    total = Decimal(speech['micro_units']) / 1_000_000 + _d(budget['chat_messages']) * standard_chat_units()
+    return int(total.to_integral_value(rounding=ROUND_CEILING))
 
 
 def _speech_hour_units(mix: Mapping[str, Any]) -> Decimal:
