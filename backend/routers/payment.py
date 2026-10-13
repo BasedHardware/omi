@@ -227,11 +227,9 @@ class AvailablePlansResponse(BaseModel):
 
 def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | None:
     """Builds a Subscription object from a Stripe Subscription object."""
-    stripe_status = stripe_sub['status']
-
     # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
     # regardless of price ID — ensures deleted/canceled users don't keep paid access
-    if stripe_status not in ('active', 'trialing'):
+    if stripe_sub['status'] not in ('active', 'trialing'):
         return project_subscription(stripe_sub, None, get_basic_plan_limits())
 
     # Active subscriptions: resolve plan from price ID
@@ -279,9 +277,8 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
                 new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
                 if new_subscription is None:
                     return False
-                if new_subscription:
-                    users_db.update_user_subscription(uid, new_subscription.model_dump())
-                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
+                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
             f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
