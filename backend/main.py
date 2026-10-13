@@ -5,6 +5,7 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.logging_config import configure_health_access_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
@@ -16,6 +17,7 @@ load_backend_env()  # No-op if no env files exist (production); stage + local ov
 install_google_adc_guard()
 
 logging.basicConfig(level=logging.INFO)
+configure_health_access_logging()
 logger = logging.getLogger(__name__)
 
 import firebase_admin

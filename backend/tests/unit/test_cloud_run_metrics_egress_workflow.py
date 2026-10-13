@@ -118,7 +118,7 @@ def test_workflow_values_exist_for_every_environment() -> None:
         assert (STACK_VALUES / f'{environment}_omi_monitoring_values.yaml').is_file()
 
 
-def test_deadman_is_prod_only_and_fails_before_deploy_without_channels() -> None:
+def test_deadman_is_prod_only_and_cannot_block_the_helm_rollout() -> None:
     steps = _workflow()['jobs']['deploy']['steps']
     names = [step['name'] for step in steps]
     validate = steps[names.index('Validate prod dead-man notification channels')]
@@ -130,6 +130,8 @@ def test_deadman_is_prod_only_and_fails_before_deploy_without_channels() -> None
     assert 'must be created' in validate['run']
     assert names.index(validate['name']) < names.index('Google Auth (prod WIF)')
     assert names.index('Google Auth (prod WIF)') < names.index(ensure['name'])
-    assert names.index(ensure['name']) < names.index('Deploy Prometheus scrape configuration')
+    # A Monitoring IAM gap must not block the Grafana/Prometheus rollout (2026-10-13 prod run 38344425582).
+    assert names.index('Deploy Prometheus scrape configuration') < names.index(ensure['name'])
+    assert names.index('Verify deployed egress resources') < names.index(ensure['name'])
     assert '--notification-channels="$ALERT_CHANNELS"' in ensure['run']
     assert 'SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS' not in WORKFLOW.read_text()
