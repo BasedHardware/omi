@@ -53,8 +53,9 @@ class OmiBleForegroundService : Service() {
         // Storage-drain service registered by Omi-family firmware when
         // CONFIG_OMI_ENABLE_OFFLINE_STORAGE is compiled in; mirrors
         // storageDataStreamServiceUuid in app/lib/services/devices/models.dart.
-        // Its presence in a discovered GATT table is the INV-CAP-1 retention signal.
+        // Advertisement alone is insufficient: storage_init() can fail at boot.
         private const val STORAGE_DRAIN_SERVICE_UUID = "30295780-4301-eabd-2904-2849adfeae43"
+        private const val STORAGE_DRAIN_READ_CHAR_UUID = "30295782-4301-eabd-2904-2849adfeae43"
         private const val COMPANION_RATE_LIMIT_MS = 15_000L
         private const val PREFS_NAME = "ble_config"
         private const val PREFS_KEY = "managed_device"
@@ -157,11 +158,10 @@ class OmiBleForegroundService : Service() {
         var connectionStartTime: Long? = null,
         var currentGattHash: Int? = null,
         var hasEverConnected: Boolean = false,
-        /** INV-CAP-1 gate for the reconnect backoff: true once service discovery
-         * saw a storage-drain service on this device, i.e. firmware verifiably
-         * retains audio while disconnected. Only then may failed retries wait
-         * longer than the legacy cadence. */
-        var hasVerifiedRetention: Boolean = false,
+        /** Advertisement record only; runtime storage status must also be verified. */
+        @Volatile var hasVerifiedRetention: Boolean = false,
+        @Volatile var retentionRuntimeVerified: Boolean = false,
+        var retentionProbeInFlight: Boolean = false,
         var pendingReconnect: Runnable? = null,
         var pendingReconnectDelayMs: Long = 0L,
         /** Uptime deadline of the pending retry, 0 when none is scheduled.
@@ -347,6 +347,7 @@ class OmiBleForegroundService : Service() {
     private fun fireDeviceReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
         recordVerifiedRetention(addr, services)
+        probeRetentionRuntime(addr)
         ensureBackgroundAudioSubscription(addr, services)
         limitlessDrainEngine.onDeviceReady(addr)
         if (OmiBleManager.isFlutterAlive) {
@@ -374,23 +375,45 @@ class OmiBleForegroundService : Service() {
         bleManager.subscribeCharacteristic(address, target.first, target.second)
     }
 
-    /**
-     * INV-CAP-1: the escalated reconnect schedule is only licensed by firmware that
-     * verifiably retains audio while disconnected. The GATT table is that verification —
-     * Omi-family firmware registers its storage-drain service (storageDataStreamServiceUuid
-     * in app/lib/services/devices/models.dart) whenever CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-     * is compiled in, and the phone drains it over that same service after reconnecting.
-     * A device without the service (e.g. Friend Pendant, whose retention the app cannot
-     * verify) keeps the legacy flat retry cadence, so out-of-range audio is never parked
-     * behind a battery wait it cannot afford.
-     */
+    /** INV-CAP-1 requires both advertisement and a successful runtime storage probe. */
     private fun recordVerifiedRetention(address: String, services: List<BleService>) {
         val managed = managedDevices[address] ?: return
-        val advertised = services.any { it.uuid.equals(STORAGE_DRAIN_SERVICE_UUID, ignoreCase = true) }
-        if (advertised && !managed.hasVerifiedRetention) {
-            Log.i(TAG, "Verified offline retention for $address (storage-drain service advertised)")
+        synchronized(managed) {
+            managed.hasVerifiedRetention = services.any {
+                it.uuid.equals(STORAGE_DRAIN_SERVICE_UUID, ignoreCase = true)
+            }
+            // Every ready event must prove storage again; never persist this capability.
+            managed.retentionRuntimeVerified = false
         }
-        managed.hasVerifiedRetention = advertised
+    }
+
+    private fun probeRetentionRuntime(address: String) {
+        val managed = managedDevices[address] ?: return
+        val gatt = bleManager.connectedGatts[address] ?: return
+        synchronized(managed) {
+            if (!managed.hasVerifiedRetention || managed.retentionProbeInFlight) return
+            managed.retentionProbeInFlight = true
+        }
+        val completeProbe: (Result<ByteArray>) -> Unit = completeProbe@ { result ->
+            synchronized(managed) {
+                managed.retentionProbeInFlight = false
+                // A read from a replaced device/connection must not license its successor.
+                if (managedDevices[address] !== managed || bleManager.connectedGatts[address] !== gatt) return@completeProbe
+                managed.retentionRuntimeVerified = managed.hasVerifiedRetention &&
+                    BleReconnectBackoff.retentionProbeSucceeds(result.getOrNull())
+                if (managed.retentionRuntimeVerified) {
+                    Log.i(TAG, "Verified runtime offline retention for $address (storage status nonzero)")
+                } else {
+                    Log.w(TAG, "Runtime offline retention unverified for $address; keeping flat retry cadence: " +
+                        (result.exceptionOrNull()?.message ?: "invalid or all-zero storage status"))
+                }
+            }
+        }
+        try {
+            bleManager.readCharacteristic(address, STORAGE_DRAIN_SERVICE_UUID, STORAGE_DRAIN_READ_CHAR_UUID, completeProbe)
+        } catch (e: Exception) {
+            completeProbe(Result.failure(e))
+        }
     }
 
     private fun mapGattServices(services: List<BluetoothGattService>): List<BleService> =
@@ -699,7 +722,7 @@ class OmiBleForegroundService : Service() {
             addr,
             cccdTimeout,
             cccdDelay,
-            retentionVerified = managed.hasVerifiedRetention,
+            retentionVerified = managed.hasVerifiedRetention && managed.retentionRuntimeVerified,
         ) ?: return false
         managed.retryCount = (managed.retryCount + 1).coerceAtMost(reconnectBackoff.maxTrackedFailures)
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")

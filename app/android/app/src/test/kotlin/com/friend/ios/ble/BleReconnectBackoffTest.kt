@@ -1,7 +1,9 @@
 package com.friend.ios.ble
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleReconnectBackoffTest {
@@ -99,7 +101,7 @@ class BleReconnectBackoffTest {
     fun `flat cadence leaves no stale step so a later verified device escalates from the fastest interval`() {
         val backoff = BleReconnectBackoff()
         repeat(10) { backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = false) }
-        // The same device later advertises retention (e.g. firmware upgrade):
+        // The same device later advertises retention and passes its runtime probe:
         // it must start the escalated schedule from the fastest interval.
         assertEquals(3_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
         assertEquals(6_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
@@ -113,4 +115,61 @@ class BleReconnectBackoffTest {
         // CCCD pass-through must not consume or advance the ordinary schedule.
         assertEquals(3_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
     }
+
+    @Test
+    fun `advertised service with failed storage initialization keeps flat cadence`() {
+        assertFlatCadenceWithProbe(ByteArray(16))
+    }
+
+    @Test
+    fun `failed read or absent runtime probe keeps flat cadence`() {
+        assertFlatCadenceWithProbe(null)
+    }
+
+    @Test
+    fun `malformed storage status or RTC alone keeps flat cadence`() {
+        for (size in listOf(0, 12, 15, 17, 20)) {
+            assertFlatCadenceWithProbe(ByteArray(size) { 1 })
+        }
+        assertFlatCadenceWithProbe(storageStatus(rtc = 1))
+    }
+
+    @Test
+    fun `nonzero free bytes license escalation only with advertisement`() {
+        val runtimeVerified = BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = 4096))
+        assertTrue(runtimeVerified)
+        val backoff = BleReconnectBackoff()
+        val advertised = true
+        assertEquals(
+            listOf(3_000L, 6_000L, 12_000L, 30_000L, 60_000L),
+            List(5) { backoff.delayForFailure("A", false, null, advertised && runtimeVerified) },
+        )
+        val missingAdvertisement = false
+        repeat(10) {
+            assertEquals(3_000L, backoff.delayForFailure("A", false, null, missingAdvertisement && runtimeVerified))
+        }
+    }
+
+    @Test
+    fun `used or unread status proves storage and uint32 totals do not overflow`() {
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 1)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(unread = 1)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = Int.MIN_VALUE)))
+        // Unsigned sum is 2^32, which would wrap to zero in Int arithmetic.
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = -1, free = 1)))
+    }
+
+    private fun assertFlatCadenceWithProbe(payload: ByteArray?) {
+        val advertised = true
+        val runtimeVerified = BleReconnectBackoff.retentionProbeSucceeds(payload)
+        assertFalse(runtimeVerified)
+        val backoff = BleReconnectBackoff()
+        repeat(50) {
+            assertEquals(3_000L, backoff.delayForFailure("A", false, null, advertised && runtimeVerified))
+        }
+    }
+
+    private fun storageStatus(used: Int = 0, unread: Int = 0, free: Int = 0, rtc: Int = 0): ByteArray =
+        java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putInt(used).putInt(unread).putInt(free).putInt(rtc).array()
 }

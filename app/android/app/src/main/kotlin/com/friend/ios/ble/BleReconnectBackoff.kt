@@ -33,7 +33,7 @@ internal class BleReconnectBackoff(
      * including when that delay is null because the CCCD budget is spent.
      *
      * [retentionVerified] is INV-CAP-1's gate: only a device that advertises a
-     * storage-drain service (firmware writes audio to storage while disconnected)
+     * storage-drain service and confirms initialized storage via a runtime status read
      * may wait longer between attempts. Every other device keeps the legacy flat
      * [FASTEST_DELAY_MS] cadence, because its out-of-range audio has no durable
      * destination and stretching the gap only widens the loss.
@@ -91,6 +91,21 @@ internal class BleReconnectBackoff(
         (scheduledDelayMs - elapsedMs).coerceAtLeast(0L)
 
     companion object {
+        /**
+         * Firmware status is exactly four LE uint32s: used, unread, free, RTC valid.
+         * Only a nonzero used + unread + free total proves initialized storage;
+         * RTC validity alone cannot license backoff. Null includes failed reads.
+         */
+        fun retentionProbeSucceeds(payload: ByteArray?): Boolean {
+            if (payload == null || payload.size != 16) return false
+            val status = java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val used = status.int.toLong() and 0xffff_ffffL
+            val unread = status.int.toLong() and 0xffff_ffffL
+            val free = status.int.toLong() and 0xffff_ffffL
+            status.int // RTC validity is not evidence of usable storage.
+            return used + unread + free > 0L
+        }
+
         val DEFAULT_STEPS_MS = longArrayOf(3_000L, 6_000L, 12_000L, 30_000L, 60_000L)
         const val FASTEST_DELAY_MS = 3_000L
     }
