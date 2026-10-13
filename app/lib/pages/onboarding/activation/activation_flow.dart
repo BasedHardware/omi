@@ -1105,6 +1105,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   static const _gold = Color(0xFFFFC53D);
   Timer? _ask;
   bool _promptShowing = false;
+  bool _asked = false;
   bool _done = false;
 
   @override
@@ -1126,6 +1127,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
     try {
       await widget.requestReview();
     } catch (_) {}
+    _asked = true;
   }
 
   /// iOS gives no callback for its rating pop-up, but the app goes inactive while it is up and
@@ -1144,6 +1146,18 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Not every iOS build makes the app inactive under the pop-up (the simulator never does). The
+    // pop-up takes every touch while it is up, so the first tap here after asking means it closed.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        if (_asked) _leave();
+      },
+      child: _buildStage(context),
+    );
+  }
+
+  Widget _buildStage(BuildContext context) {
     return _Stage(
       title: context.l10n.onboardingActRateTitle,
       bodyAtTop: true,

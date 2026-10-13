@@ -151,6 +151,28 @@ void main() {
     expect(run.events, ['review', 'paywall', 'finished']);
   });
 
+  testWidgets('rating: when iOS sends no lifecycle cue, the first tap after the pop-up moves on', (tester) async {
+    final run = await pump(tester);
+    await tester.pump(const Duration(seconds: 4));
+    run.capture.live.value = 'Remind me to send the deck';
+    await tester.pump();
+    await tapKey(tester, 'activation_dictation_done');
+    await tapKey(tester, 'activation_continue_summary');
+    await tapKey(tester, 'activation_continue_tasks');
+    await tapKey(tester, 'activation_continue_congrats');
+
+    // A tap before the pop-up has been asked for stays on the rating screen.
+    await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
+    await tester.pump();
+    expect(run.events, isEmpty);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(run.events, ['review']);
+    await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
+    await tester.pump();
+    expect(run.events, ['review', 'paywall', 'finished'], reason: 'the closed pop-up leads to the paywall');
+  });
+
   testWidgets('Omi owners see the wear step first; other wearables go straight to the intro', (tester) async {
     await pump(tester, hasDevice: true, showWearTips: true);
     await tester.pump(const Duration(seconds: 1));
