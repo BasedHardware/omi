@@ -232,6 +232,7 @@ void main() {
     final json = fixture();
     json['current'] = {
       'id': 'unlimited_v2',
+      'comparison_tier_id': 'plus',
       'name': 'Unlimited',
       'price_id': 'fixture_legacy',
       'legacy': true,
@@ -241,6 +242,9 @@ void main() {
     expect(find.text('Current · Unlimited · Legacy plan'), findsOneWidget);
     expect(find.textContaining('legacy plan stays unchanged'), findsNothing);
     await capture(tester, '008-mobile-ios-storefront-legacy.png');
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Other plans · Free, Plus'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

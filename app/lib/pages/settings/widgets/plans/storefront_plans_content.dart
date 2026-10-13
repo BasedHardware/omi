@@ -41,7 +41,7 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     final data = widget.storefront;
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
     final tiers = data?.tiers ?? const <StorefrontTier>[];
-    final currentIndex = tiers.indexWhere((tier) => tier.id == data?.current?.id);
+    final currentIndex = tiers.indexWhere((tier) => tier.id == (data?.current?.comparisonTierId ?? data?.current?.id));
     final other = <StorefrontTier>[];
     final visible = <StorefrontTier>[];
     for (var i = 0; i < tiers.length; i++) {

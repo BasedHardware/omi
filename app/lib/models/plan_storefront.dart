@@ -143,6 +143,9 @@ class StorefrontCurrentPlan {
   final String message;
   final String? formattedPrice;
   final String? renewalLabel;
+
+  /// Backend-selected tier for display grouping of legacy plans; never an entitlement.
+  final String? comparisonTierId;
   const StorefrontCurrentPlan(
       {required this.id,
       required this.name,
@@ -150,7 +153,8 @@ class StorefrontCurrentPlan {
       required this.legacy,
       required this.message,
       this.formattedPrice,
-      this.renewalLabel});
+      this.renewalLabel,
+      this.comparisonTierId});
   factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) => StorefrontCurrentPlan(
       id: _text(json, 'id'),
       name: _text(json, 'name'),
@@ -158,7 +162,8 @@ class StorefrontCurrentPlan {
       legacy: _boolean(json, 'legacy'),
       message: _text(json, 'message'),
       formattedPrice: json['formatted_price'] as String?,
-      renewalLabel: json['renewal_label'] as String?);
+      renewalLabel: json['renewal_label'] as String?,
+      comparisonTierId: json['comparison_tier_id'] as String?);
 }
 
 class StorefrontUsageContext {

@@ -12,6 +12,8 @@ void main() {
     expect(data.usageContext!.periodId, '2026-10');
     expect(data.usageContext!.budgetNudgeLabel, contains('80%'));
     final json = fixture();
+    json['current']['comparison_tier_id'] = 'plus';
+    expect(PlanStorefront.fromJson(json).current!.comparisonTierId, 'plus');
     json['current'].remove('formatted_price');
     json['current'].remove('renewal_label');
     json['usage_context'].remove('period_id');
