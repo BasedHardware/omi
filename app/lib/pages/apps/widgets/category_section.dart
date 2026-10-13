@@ -53,7 +53,10 @@ class CategorySection extends StatelessWidget {
     }
 
     final rowText = lineOf(OmiType.body) + 2 + lineOf(OmiType.footnote) + 2 + lineOf(OmiType.caption);
-    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText) + 1);
+    // TextPainter's sample glyphs can be shorter than the actual app name and
+    // localized category/rating lines. Keep a line-height of vertical slack so
+    // fallback fonts and platform font metrics do not clip the final line.
+    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText + 32) + 1);
     const double crossAxisSpacing = 0.0;
     const double mainAxisSpacing = 14.0;
     const int maxRows = 3;

@@ -110,7 +110,8 @@ void main() {
         isNull,
         reason: 'CategorySection should not overflow at scale  on width ',
       );
-      expect(find.text('Productivity'), findsOneWidget);
+      // The heading and each app card display this category label.
+      expect(find.text('Productivity'), findsNWidgets(testApps.length + 1));
       expect(find.text('Productivity Booster Pro'), findsOneWidget);
     }
   });
