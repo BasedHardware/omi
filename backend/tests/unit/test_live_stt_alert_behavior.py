@@ -59,12 +59,15 @@ def _series(metric, track, increase, *, pod='one', job='backend-listen-metrics',
 @pytest.mark.parametrize(
     'canary_transcribed,canary_failures,stable_transcribed,stable_failures,expected_transcribed,expected_ratio,fires',
     [
-        (100, 2, 10000, 0, 10100, 2 / 10100, False),  # Stable traffic contributes to denominator.
-        (100, 2, 0, 0, 100, 0.02, True),
-        (0, 0, 100, 2, 100, 0.02, True),  # Stable traffic contributes to numerator.
+        # 2026-09-28..10-12 measured p90 17.8%; batch 1 pages above 25%.
+        (100, 30, 10000, 0, 10100, 30 / 10100, False),  # Stable traffic contributes to denominator.
+        (100, 30, 0, 0, 100, 0.30, True),
+        (0, 0, 100, 30, 100, 0.30, True),  # Stable traffic contributes to numerator.
         (10, 0, 10, 0, 20, 0, False),  # Both cohorts count toward the volume floor.
-        (10, 1, 10, 0, 20, 0.05, True),
-        (100, 1, 0, 0, 100, 0.01, False),  # Threshold is strictly greater than 1%.
+        (10, 6, 10, 0, 20, 0.30, True),
+        (100, 25, 0, 0, 100, 0.25, False),  # Threshold is strictly greater than 25%.
+        (100, 2, 0, 0, 100, 0.02, False),  # The former 1% threshold paged on normal traffic.
+        (10, 6, 0, 0, 10, 0.60, False),  # High ratio below the volume floor stays healthy.
         (0, 0, 0, 0, 0, 0, False),
     ],
 )

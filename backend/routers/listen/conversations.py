@@ -156,7 +156,7 @@ class LiveConversationController:
         await self.host.persistence.call(
             redis_db.set_in_progress_conversation_id, self.host.request.uid, binding['conversation_id']
         )
-        await self.host.speakers.refresh_for_conversation(binding['conversation_id'])
+        await self._refresh_speakers(binding['conversation_id'])
         self.send_conversation_session(binding, self.host.recording_session_id)
         return True
 
@@ -257,7 +257,38 @@ class LiveConversationController:
             self.emit_recording_lifecycle_event(conversation_id, 'processing'), name='recording_session_processing'
         )
 
+    async def _refresh_speakers(self, conversation_id: str, **kwargs: Any) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        previous = observation.current if observation else None
+        try:
+            await self.host.speakers.refresh_for_conversation(conversation_id, **kwargs)
+        finally:
+            # refresh closes the old generation before loading the successor.
+            # Persist its frozen counts, including work after the early checkpoint.
+            if previous is not None and previous.closed:
+                await self._persist_speaker_diagnostics(previous.data['conversation'])
+
+    async def _persist_speaker_diagnostics(self, conversation_id: str) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation is None:
+            return
+        snapshot = observation.boundary_snapshot(conversation_id)
+        if snapshot:
+            try:
+                await self.host.persistence.call(
+                    conversations_db.update_owner_recognition_diagnostics,
+                    self.host.request.uid,
+                    conversation_id,
+                    snapshot,
+                )
+            except Exception:
+                observation.flush_failed(snapshot)
+
     async def schedule_finalization(self, conversation_id: str) -> bool:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation:
+            observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            await self._persist_speaker_diagnostics(conversation_id)
         if not self.host.request_conversation_processing and not is_listen_finalization_dispatch_enabled():
             logger.warning('Pusher unavailable; finalization remains queued conversation=%s', conversation_id)
             return False
@@ -474,7 +505,7 @@ class LiveConversationController:
                         {'uses_custom_stt': True},
                     )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
-                await self.host.speakers.refresh_for_conversation(conversation_id)
+                await self._refresh_speakers(conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
             if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
@@ -596,7 +627,7 @@ class LiveConversationController:
             note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
             if note_carry is not None:
                 note_carry(carried_ids)
-        await self.host.speakers.refresh_for_conversation(
+        await self._refresh_speakers(
             conversation_id,
             owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
             owner_carry_donor=automatic_donor,

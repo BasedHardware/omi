@@ -3459,10 +3459,16 @@ abstract class AppLocalizations {
   /// **'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.'**
   String get multipleSpeakersDesc;
 
+  /// Shown once when the only conversation was discarded as too short or empty.
+  ///
+  /// In en, this message translates to:
+  /// **'That recording was too short or empty to keep.'**
+  String get discardedOnlyRecording;
+
   /// Error description for recording being too short
   ///
   /// In en, this message translates to:
-  /// **'There is not enough speech detected. Please speak more and try again.'**
+  /// **'Not enough speech to make a conversation. Try talking for 30 seconds or more.'**
   String get tooShortDesc;
 
   /// Error description for invalid recording duration
@@ -16983,6 +16989,12 @@ abstract class AppLocalizations {
   /// **'Fair-use limit reached — syncing will resume automatically'**
   String get syncCardRateLimited;
 
+  /// Offline Sync cooldown after a temporary request throttle; syncing resumes automatically, recording is unaffected.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing paused briefly — it will resume automatically'**
+  String get syncCardThrottlePaused;
+
   /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
   ///
   /// In en, this message translates to:
@@ -18201,6 +18213,24 @@ abstract class AppLocalizations {
   /// **'Memory'**
   String get chatBlockMemory;
 
+  /// Caption on a chat card for a change to one of the user's people
+  ///
+  /// In en, this message translates to:
+  /// **'Person'**
+  String get chatBlockPerson;
+
+  /// Shown on a chat change receipt after the change was undone
+  ///
+  /// In en, this message translates to:
+  /// **'Undone'**
+  String get chatBlockUndone;
+
+  /// Error when undoing a change from chat fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t undo that change'**
+  String get chatBlockUndoFailed;
+
   /// Eyebrow label on a chat question card block
   ///
   /// In en, this message translates to:
@@ -18302,6 +18332,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Memory graph'**
   String get memoryGraph;
+
+  /// No description provided for @guidedVoiceExperience.
+  ///
+  /// In en, this message translates to:
+  /// **'{part, select, unavailable{Voice transcription is unavailable right now. Type your answer instead.} type{Type Your Answer Instead} typing{Your answer} heard{Here\'s what I heard} transcribing{Got it, transcribing…} confirm{Use This Answer} answer{Save Answer} retry{Try Speaking Again} title{Here\'s what I\'ll remember} question{What should I focus on this week?} fallback{I’ll use these to help you.} thinking{Thinking about your answers…} failed{We couldn\'t transcribe that answer. You can type it instead or try speaking again.} engine{The microphone couldn\'t start. Try again or type your answer instead.} retryTranscription{Retry transcription} namePrompt{My name is ___, and I usually ___.} other{}}'**
+  String guidedVoiceExperience(String part);
 
   /// Guided voice introduction copy. English source fallback pending translation review.
   ///
@@ -23210,6 +23246,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This changed since Dream suggested it, so nothing was applied.'**
   String get reviewProposalConflict;
+
+  /// Title of the sheet that lists the items an Omi link points at (conversations, tasks, memories)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
+  String itemLinkListTitle(int count);
+
+  /// No description provided for @firstCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How will you capture?'**
+  String get firstCaptureTitle;
+
+  /// No description provided for @firstCaptureDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how you want to capture your first conversation.'**
+  String get firstCaptureDescription;
+
+  /// No description provided for @firstCaptureOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'I Have an Omi'**
+  String get firstCaptureOmi;
+
+  /// No description provided for @firstCapturePhone.
+  ///
+  /// In en, this message translates to:
+  /// **'This Phone'**
+  String get firstCapturePhone;
+
+  /// No description provided for @firstCaptureWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch'**
+  String get firstCaptureWatch;
+
+  /// No description provided for @firstCaptureSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get firstCaptureSkip;
+
+  /// No description provided for @firstCapturePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.'**
+  String get firstCapturePrompt;
+
+  /// No description provided for @firstCaptureKeepGoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep going… 30 seconds is ideal.'**
+  String get firstCaptureKeepGoing;
+
+  /// No description provided for @firstCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'You can finish now, or keep talking.'**
+  String get firstCaptureReady;
+
+  /// No description provided for @firstCaptureStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Recording'**
+  String get firstCaptureStart;
+
+  /// No description provided for @firstCaptureFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish Recording'**
+  String get firstCaptureFinish;
+
+  /// No description provided for @firstCaptureListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… your words will appear here.'**
+  String get firstCaptureListening;
+
+  /// No description provided for @firstCaptureProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your first conversation…'**
+  String get firstCaptureProcessing;
+
+  /// No description provided for @firstCaptureResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Your first conversation'**
+  String get firstCaptureResult;
+
+  /// No description provided for @firstCaptureEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'I didn\'t catch enough speech, try again with a few sentences'**
+  String get firstCaptureEmpty;
+
+  /// No description provided for @firstCaptureWatchInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.'**
+  String get firstCaptureWatchInstructions;
+
+  /// No description provided for @firstCaptureWatchInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.'**
+  String get firstCaptureWatchInstall;
+
+  /// No description provided for @firstCaptureWatchPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.'**
+  String get firstCaptureWatchPair;
+
+  /// No description provided for @firstCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording could not start. Check microphone access and your connection, then try again.'**
+  String get firstCaptureUnavailable;
+
+  /// No description provided for @firstCaptureDelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording is taking longer to process. You can check your conversations on Home or try again.'**
+  String get firstCaptureDelayed;
+
+  /// No description provided for @firstCaptureEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try that again'**
+  String get firstCaptureEmptyTitle;
+
+  /// No description provided for @firstCaptureShortTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish This Recording?'**
+  String get firstCaptureShortTitle;
+
+  /// No description provided for @firstCaptureShortWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A few more sentences help Omi understand you. About 30 seconds is ideal.'**
+  String get firstCaptureShortWarning;
+
+  /// No description provided for @firstCaptureCancelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave This Recording?'**
+  String get firstCaptureCancelTitle;
+
+  /// No description provided for @firstCaptureCancelWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Going back stops this recording. Keep talking to give Omi a few more sentences.'**
+  String get firstCaptureCancelWarning;
+
+  /// No description provided for @firstCaptureSiriTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: Enable Omi in Shortcuts → Siri.'**
+  String get firstCaptureSiriTip;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

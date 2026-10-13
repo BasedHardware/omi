@@ -194,6 +194,11 @@ def _is_canonical_promotion_metadata(line: str, match: re.Match[str]) -> bool:
     if match.group(0) != "promotion":
         return False
     start, end = match.span()
+    # A literal canonical-apply payload key is metadata, not a lifecycle
+    # implementation. Identifiers/imports/calls with this prefix stay inventoried.
+    for field in re.finditer(r"[\"']promotion_audit[\"']\s*:", line):
+        if start == field.start() + 1:
+            return True
 
     def is_identifier(character: str) -> bool:
         return character.isalnum() or character == "_"

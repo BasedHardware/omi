@@ -99,7 +99,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  20
                 ],
                 "type": "gt"
               },
@@ -133,12 +133,12 @@
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "57",
-      "threshold": "1",
+      "threshold": ">20 denied rps for 10m. Supplied production Prometheus/Cloud Monitoring pre-storm triage, 2026-09-28..2026-10-07 at 1h steps: p50 3.7 / p99 6.5 / max 7.1 rps; threshold above the measured normal maximum.",
       "summary": "Omi API alert: Cloud Armor denied requests per second is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",
@@ -147,7 +147,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {

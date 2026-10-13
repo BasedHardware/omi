@@ -128,9 +128,8 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 4. 401 responses trigger automatic refresh + retry
 
 ### Auth Methods
-- Google Sign In (`google_sign_in` package)
-- Apple Sign In (`sign_in_with_apple` package, includes PKCE via nonce+sha256)
-- Firebase Auth as the identity layer
+- Google `google_sign_in`; Apple `sign_in_with_apple` (nonce+SHA256 PKCE).
+- Firebase Auth; browser flows: [mobile auth](docs/mobile-browser-auth.md).
 
 ### Request Headers
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.

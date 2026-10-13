@@ -1,4 +1,7 @@
 import 'package:omi/services/onboarding_sync_runtime.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'onboarding_step_telemetry.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -20,6 +23,8 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/guided_voice_controller.dart';
+import 'package:omi/pages/onboarding/guided_voice_io.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -39,6 +44,25 @@ class OnboardingWrapper extends StatefulWidget {
 
   final bool forceAuthPage;
 
+  /// The step helpers live on the private state class. Tests call them through the public widget.
+  @visibleForTesting
+  static bool isResumableStepForTesting(int index) => _OnboardingWrapperState.isResumableStepForTesting(index);
+
+  @visibleForTesting
+  static int? previousStepForTesting({
+    required int currentIndex,
+    required bool setupPageEnabled,
+    required bool knowledgeGraphStepEnabled,
+  }) =>
+      _OnboardingWrapperState.previousStepForTesting(
+        currentIndex: currentIndex,
+        setupPageEnabled: setupPageEnabled,
+        knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
+      );
+
+  @visibleForTesting
+  static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
@@ -54,7 +78,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kSpeechProfilePage = 6; // Guided voice introduction
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
-  static const int kCompletePage = 9; // "You're all set" completion screen
+  static const int kCompletePage = 9; // Capture choice; keep persisted index stable.
   static const int kPageCount = 10;
 
   /// The steps the progress dots count, in order. Auth, consent and the completion screen are not
@@ -80,8 +104,26 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   Future<void>? _knowledgeGraphPrebuildFuture;
   Future<bool>? _setupPageEnabled;
+  bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  late final _stepTelemetry = MobileOnboardingStepTelemetry(
+    emit: const TypedEvents().emit,
+    platform: () => switch (Theme.of(context).platform) {
+      TargetPlatform.iOS => OnboardingStepCompletedPlatform.ios,
+      TargetPlatform.android => OnboardingStepCompletedPlatform.android,
+      _ => OnboardingStepCompletedPlatform.other,
+    },
+  );
+  GuidedVoiceController? _voiceController;
+
+  GuidedVoiceController _getVoiceController() {
+    return _voiceController ??= GuidedVoiceController(
+      DeviceGuidedVoiceIO(),
+      flowSource: 'first_run',
+      accountUid: SharedPreferencesUtil().uid,
+    );
+  }
 
   @override
   void initState() {
@@ -92,10 +134,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
+    final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
+    final initialIndex =
+        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
-    _controller = TabController(length: kPageCount, vsync: this);
+    _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
+      _stepTelemetry.enter(_controller!.index);
       setState(() {});
       _rememberStep(_controller!.index);
       // Update background image when page changes
@@ -107,7 +154,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
-        _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled();
+        _ensureSetupPageFlag();
       }
     });
 
@@ -120,6 +167,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       end: 1.0,
     ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
 
+    _currentBackgroundImage = _getBackgroundImageForIndex(initialIndex) ?? _currentBackgroundImage;
     // Start initial animations
     _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -153,6 +201,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void dispose() {
     _onboardingAttempt?.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
+    _voiceController?.dispose();
     _controller?.dispose();
     _backgroundAnimationController.dispose();
     super.dispose();
@@ -164,6 +213,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   Future<void> _routeWithPermissionsCheck(BuildContext context) async {
+    _stepTelemetry.exit();
     if (!SharedPreferencesUtil().permissionsCompleted) {
       final granted = await arePermissionsGranted();
       if (!granted) {
@@ -196,8 +246,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// Setup page when the flag allows it, otherwise the completion screen. Used by the Knowledge
   /// Graph step's Continue and, while that step is hidden, straight from the speech profile.
+  void _ensureSetupPageFlag() {
+    _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled().then((enabled) {
+      _setupPageEnabledResolved = enabled;
+      if (mounted) setState(() {});
+      return enabled;
+    });
+  }
+
   Future<void> _continueAfterKnowledgeGraph() async {
-    final enabled = await (_setupPageEnabled ?? OnboardingSetupRatingPromptGate.isEnabled());
+    _ensureSetupPageFlag();
+    final enabled = await _setupPageEnabled!;
+    _setupPageEnabledResolved = enabled;
     if (!mounted) return;
     _controller!.animateTo(stepAfterKnowledgeGraph(setupPageEnabled: enabled));
   }
@@ -215,8 +275,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// Per-account key so a different account signing in on this phone starts at the Name step.
   String get _resumeKey => 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
 
+  bool _isResumableStep(int index) => index >= kNamePage && index <= kCompletePage;
+
   void _rememberStep(int index) {
-    if (widget.forceAuthPage || !kProgressSteps.contains(index)) return;
+    if (widget.forceAuthPage || !_isResumableStep(index)) return;
     SharedPreferencesUtil().saveInt(_resumeKey, index);
   }
 
@@ -224,15 +286,66 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// or Name.
   int _resumeStep() {
     final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
-    return kProgressSteps.contains(saved) ? saved : kNamePage;
+    return resolveResumeStep(saved);
+  }
+
+  static int resolveResumeStep(int saved) {
+    if (!isResumableStepForTesting(saved)) return kNamePage;
+    if (!kKnowledgeGraphStepEnabled && saved == kKnowledgeGraphPage) {
+      return stepAfterKnowledgeGraph(setupPageEnabled: false);
+    }
+    return saved;
   }
 
   /// The step before the current one, or null when there is nothing to go back to (Auth, consent,
-  /// Name, completion).
+  /// Name).
   int? get _previousStep {
-    final position = kProgressSteps.indexOf(_controller!.index);
+    final current = _controller!.index;
+    if (current == kCompletePage) {
+      return _setupPageEnabledResolved == true
+          ? kSetupPage
+          : (kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
+    }
+    if (current == kSetupPage) {
+      return kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage;
+    }
+    if (current == kKnowledgeGraphPage) {
+      return kSpeechProfilePage;
+    }
+    final position = kProgressSteps.indexOf(current);
     if (position <= 0) return null;
     return kProgressSteps[position - 1];
+  }
+
+  @visibleForTesting
+  static bool isResumableStepForTesting(int index) => index >= kNamePage && index <= kCompletePage;
+
+  @visibleForTesting
+  static int? previousStepForTesting({
+    required int currentIndex,
+    required bool setupPageEnabled,
+    required bool knowledgeGraphStepEnabled,
+  }) {
+    if (currentIndex == kCompletePage) {
+      return setupPageEnabled ? kSetupPage : (knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
+    }
+    if (currentIndex == kSetupPage) {
+      return knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage;
+    }
+    if (currentIndex == kKnowledgeGraphPage) {
+      return kSpeechProfilePage;
+    }
+    final steps = [
+      kNamePage,
+      kPrimaryLanguagePage,
+      kFoundOmiPage,
+      kPermissionsPage,
+      kSpeechProfilePage,
+      if (knowledgeGraphStepEnabled) kKnowledgeGraphPage,
+    ];
+    final position = steps.indexOf(currentIndex);
+    if (position <= 0) return null;
+    return steps[position - 1];
   }
 
   bool _speechStepBusy = false;
@@ -244,11 +357,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     // Never leave while the introduction is saving; its own PopScope blocks too.
     if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
     OmiHaptics.selection();
+    _stepTelemetry.skipped = false;
+    _stepTelemetry.exitReason = OnboardingStepCompletedExitReason.back;
     _controller!.animateTo(previous);
   }
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
+    _voiceController?.dispose();
+    _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
     final rootContext = globalNavigatorKey.currentContext;
     if (rootContext != null && rootContext.mounted) clearAllUserState(rootContext);
@@ -429,6 +546,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // reviews statements before explicitly saving them as memories.
           : SpeechProfileWidget(
               flowSource: 'first_run',
+              controller: _getVoiceController(),
               onBusyChanged: (busy) => _speechStepBusy = busy,
               goNext: () {
                 // All Done is not enroll success (#12765). Upload/embedding
@@ -438,6 +556,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               },
               onSkip: () {
                 PlatformManager.instance.analytics.speechProfileSkipped();
+                _stepTelemetry.skipped = true;
                 _leaveSpeechProfile();
               },
             ),
@@ -450,6 +569,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
       ),
       OnboardingCompleteScreen(
+        onSkipped: () => _stepTelemetry.skipped = true,
         onComplete: () async {
           if (_finishing) return;
           _finishing = true;
@@ -463,6 +583,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
           SharedPreferencesUtil().remove(_resumeKey);
+          _stepTelemetry.exit();
           _completeOnboardingTelemetry();
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();

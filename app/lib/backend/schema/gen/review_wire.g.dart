@@ -444,6 +444,7 @@ class GeneratedReviewItem {
   final String kind;
   final String? quote;
   final GeneratedSamePersonItem? samePerson;
+  final String? sourceRef;
   final GeneratedSpeakerItem? speaker;
   final GeneratedSpellingItem? spelling;
   final GeneratedTaskItem? task;
@@ -455,6 +456,7 @@ class GeneratedReviewItem {
     required this.kind,
     this.quote,
     this.samePerson,
+    this.sourceRef,
     this.speaker,
     this.spelling,
     this.task,
@@ -468,6 +470,7 @@ class GeneratedReviewItem {
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: false, nullable: true),
       samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonItem.fromJson), requiredField: false, nullable: true),
+      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<GeneratedSpeakerItem>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson), requiredField: false, nullable: true),
       spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingItem.fromJson), requiredField: false, nullable: true),
       task: _readFieldValue<GeneratedTaskItem>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson), requiredField: false, nullable: true),
@@ -482,6 +485,7 @@ class GeneratedReviewItem {
       'kind': kind,
       'quote': quote,
       'same_person': samePerson?.toJson(),
+      'source_ref': sourceRef,
       'speaker': speaker?.toJson(),
       'spelling': spelling?.toJson(),
       'task': task?.toJson(),
@@ -497,6 +501,7 @@ class GeneratedReviewItemV2 {
   final String kind;
   final String? quote;
   final GeneratedSamePersonItem? samePerson;
+  final String? sourceRef;
   final GeneratedSpeakerItem? speaker;
   final GeneratedSpellingItem? spelling;
   final GeneratedTaskItem? task;
@@ -509,6 +514,7 @@ class GeneratedReviewItemV2 {
     required this.kind,
     this.quote,
     this.samePerson,
+    this.sourceRef,
     this.speaker,
     this.spelling,
     this.task,
@@ -523,6 +529,7 @@ class GeneratedReviewItemV2 {
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: false, nullable: true),
       samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonItem.fromJson), requiredField: false, nullable: true),
+      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<GeneratedSpeakerItem>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson), requiredField: false, nullable: true),
       spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingItem.fromJson), requiredField: false, nullable: true),
       task: _readFieldValue<GeneratedTaskItem>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson), requiredField: false, nullable: true),
@@ -538,6 +545,7 @@ class GeneratedReviewItemV2 {
       'kind': kind,
       'quote': quote,
       'same_person': samePerson?.toJson(),
+      'source_ref': sourceRef,
       'speaker': speaker?.toJson(),
       'spelling': spelling?.toJson(),
       'task': task?.toJson(),

@@ -156,6 +156,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'not_authorized',
         'authorization_unavailable',
         'unmigrated_principal',
+        'document_size_limit',
         'other',
         'none',
     }
