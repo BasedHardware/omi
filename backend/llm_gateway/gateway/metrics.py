@@ -54,7 +54,7 @@ REQUEST_LATENCY_SECONDS = Histogram(
 REQUESTS_TOTAL = Counter(
     'llm_gateway_requests_total',
     'LLM gateway requests by route selection and terminal outcome',
-    _REQUEST_LABELS,
+    [*_REQUEST_LABELS, 'upstream_http_status'],
 )
 
 AUTH_REJECTIONS_TOTAL = Counter(
@@ -256,7 +256,7 @@ def observe_route_result(
         'completion_size': _completion_size_label(completion_size),
         'finish_reason': _finish_reason_label(finish_reason),
     }
-    REQUESTS_TOTAL.labels(**labels).inc()
+    REQUESTS_TOTAL.labels(**labels, upstream_http_status=_http_status_label(upstream_http_status)).inc()
     REQUEST_LATENCY_SECONDS.labels(**labels).observe(time.monotonic() - started_at)
     if streaming and ttfb_seconds is not None:
         STREAM_TTFB_SECONDS.labels(
@@ -476,3 +476,12 @@ def _finish_reason_label(value: str) -> str:
 
 def _bool_label(value: bool) -> str:
     return 'true' if value else 'false'
+
+
+def _http_status_label(value: int | None) -> str:
+    """A fixed status vocabulary, without multiplying latency histogram series."""
+    if type(value) is not int or not 100 <= value <= 599:
+        return 'none'
+    if value in {400, 401, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504}:
+        return str(value)
+    return f'{value // 100}xx'
