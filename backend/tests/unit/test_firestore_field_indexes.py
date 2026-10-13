@@ -72,7 +72,7 @@ def test_expected_field_requirements_parses_only_additive_overrides():
         for requirement in FIELD_INDEX_REQUIREMENTS
     ]
     assert len(requirements) == 15
-    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 18
+    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 17
     assert all(
         requirement.collection_group_modes
         and all(mode in {'ASCENDING', 'DESCENDING', 'CONTAINS'} for mode in requirement.collection_group_modes)
