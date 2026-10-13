@@ -1745,9 +1745,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   Future<void> deleteAllPendingWals() async {
     final generation = _sessionGeneration;
-    final pendingWals = _wals
-        .where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0))
-        .toList();
+    final pendingWals =
+        _wals.where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0)).toList();
     for (final wal in pendingWals) {
       if (!_isCurrent(generation)) break;
       await _deleteWal(wal, generation: generation);
