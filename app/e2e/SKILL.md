@@ -123,13 +123,15 @@ Onboarding (wrapper.dart) — step wizard
 ├── 0: Auth (auth.dart) — Google/Apple sign-in
 ├── 1: AI Consent
 ├── 2: Name (name_widget.dart)
-├── 3: Primary Language (primary_language_widget.dart)
-├── 4: Found Omi (found_omi_widget.dart)
-├── 5: Permissions (permissions_widget.dart)
-├── 6: User Review (user_review_page.dart)
-├── 9: Speech Profile (speech_profile_widget.dart)
-├── 10: Knowledge Graph (knowledge_graph_step.dart)
-└── 11: Complete (complete_screen.dart) → Home
+├── 3: Permissions (permissions_widget.dart)
+├── 4: Primary Language (primary_language_widget.dart)
+├── 5: Connect Omi (connect_omi/connect_omi_step.dart)
+├── 6: Ending, A/B by flag `onboarding-activation-flow`:
+│      control → Speech Profile (speech_profile_widget.dart);
+│      treatment → Activation (activation/activation_flow.dart) → Home
+├── 7: Knowledge Graph (knowledge_graph_step.dart, control only)
+├── 8: Setup (setup_page.dart, control only, flag-gated)
+└── 9: Complete (complete_screen.dart, control only) → Home
 
 Home (home/page.dart) — main app after auth, 4-slot bottom nav
 ├── ["Ask Omi" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab

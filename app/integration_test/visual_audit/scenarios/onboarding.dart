@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
-import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
@@ -26,16 +25,6 @@ final onboardingScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(AiConsentWidget(onAgree: () {}, onUseDifferentAccount: () {}));
       await a.shot('AI consent: Agree & Continue and Use a Different Account');
-    },
-  ),
-  AuditScenario(
-    id: 'onboarding-found-omi',
-    title: '"Where did you hear about Omi" survey',
-    page: 'lib/pages/onboarding/found_omi/found_omi_widget.dart (FoundOmiWidget)',
-    state: 'No answer chosen yet',
-    run: (a) async {
-      await a.pump(FoundOmiWidget(goNext: () {}));
-      await a.shot('The survey with its Skip affordance');
     },
   ),
   AuditScenario(

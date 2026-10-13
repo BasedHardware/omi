@@ -13,7 +13,8 @@ covers:
   - app/lib/pages/onboarding/auth.dart
   - app/lib/pages/onboarding/name/name_widget.dart
   - app/lib/pages/onboarding/primary_language/primary_language_widget.dart
-  - app/lib/pages/onboarding/found_omi/found_omi_widget.dart
+  - app/lib/pages/onboarding/connect_omi/connect_omi_step.dart
+  - app/lib/pages/onboarding/activation/activation_flow.dart
   - app/lib/pages/onboarding/permissions/permissions_widget.dart
   - app/lib/pages/onboarding/speech_profile_widget.dart
   - app/lib/pages/onboarding/knowledge_graph_step.dart
