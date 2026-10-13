@@ -614,7 +614,6 @@ class _ReplayCaptureController extends CaptureController {
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
-    super.processInProgressConversation,
     super.processInProgressOutcome,
     super.omiCallState,
     super.calendarGapMonitor,
