@@ -1,0 +1,57 @@
+"""At-cap choice API. Dark until both server flag and client capability are present."""
+
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, ConfigDict, StrictBool
+
+from config.held_content import budget_period, capture_state
+from database import budget_choice as choices_db
+from utils import held_content_flags
+from utils.executors import db_executor, run_blocking
+from utils.other import endpoints as auth
+from utils.subscription import resolve_transcription_allowance
+
+router = APIRouter()
+
+
+class BudgetChoiceRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    period: str
+    choice: Literal['on_device', 'upgrade']
+    dont_ask_again: StrictBool = False
+
+
+def require_capability(x_omi_held_content: str | None = Header(None, alias='X-Omi-Held-Content')) -> None:
+    if not held_content_flags.capable(x_omi_held_content):
+        raise HTTPException(status_code=404, detail='held_content_unavailable')
+
+
+@router.get('/v1/users/budget-choice', dependencies=[Depends(require_capability)])
+async def get_budget_choice(uid: str = Depends(auth.get_current_user_uid)):
+    period = budget_period()
+    allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid)
+    choice = await run_blocking(db_executor, choices_db.get_choice, uid, period)
+    exhausted = allowance.reason == 'plan_allowance_exhausted'
+    return {
+        'period': period,
+        'state': capture_state(managed=allowance.managed, exhausted=exhausted, choice=choice),
+        'choice': choice,
+        'ask': exhausted and choice is None,
+        'upgrade_available': True,
+    }
+
+
+@router.put('/v1/users/budget-choice', dependencies=[Depends(require_capability)])
+async def put_budget_choice(body: BudgetChoiceRequest, uid: str = Depends(auth.get_current_user_uid)):
+    period = budget_period()
+    if body.period != period:
+        raise HTTPException(status_code=409, detail='budget_period_changed')
+    allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid)
+    if allowance.reason != 'plan_allowance_exhausted':
+        raise HTTPException(status_code=409, detail='budget_not_exhausted')
+    try:
+        choice = await run_blocking(db_executor, choices_db.set_choice, uid, period, body.choice, body.dont_ask_again)
+    except choices_db.BudgetChoiceConflict:
+        raise HTTPException(status_code=409, detail='choice_already_recorded')
+    return {'period': period, 'choice': choice, 'ask': False}
