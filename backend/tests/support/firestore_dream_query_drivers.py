@@ -19,8 +19,26 @@ def trim_overflow(client):
     return patch.object(dream_store, 'dirty_count', side_effect=[501, 501, 0])
 
 
+def finish_lease():
+    return {
+        'run_id': 'shape-run',
+        'day': '2026-10-08',
+        'started_at': datetime(2026, 10, 8, tzinfo=timezone.utc),
+        'watermark': datetime(1970, 1, 1, tzinfo=timezone.utc),
+        'score': 1,
+        'mode': 'shadow',
+        'reservation_usd': 0.24,
+        'budget_charge_usd': 0.24,
+        'admission_refunded': False,
+        'max_usd_per_token': Caps().max_usd_per_token,
+        'spend_scope': 'user',
+        'dirty_dropped': 0,
+        'dirty_dropped_reported': 0,
+    }
+
+
 def finish_state(client, args, trial):
-    client.documents['dream_users/' + UID] = {'lease': {'run_id': 'shape-run'}, 'score': 1}
+    client.documents['dream_users/' + UID] = {'lease': finish_lease(), 'score': 1}
 
 
 def admission_state(client, args, trial):
@@ -106,17 +124,7 @@ def entries():
             'database.dream_store.finish',
             base={
                 'uid': UID,
-                'lease': {
-                    'run_id': 'shape-run',
-                    'day': '2026-10-08',
-                    'started_at': datetime(2026, 10, 8, tzinfo=timezone.utc),
-                    'watermark': datetime(1970, 1, 1, tzinfo=timezone.utc),
-                    'score': 1,
-                    'mode': 'shadow',
-                    'reservation_usd': 0.24,
-                    'dirty_dropped': 0,
-                    'dirty_dropped_reported': 0,
-                },
+                'lease': finish_lease(),
                 'report': {'status': 'complete'},
             },
             domains={

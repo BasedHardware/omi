@@ -203,7 +203,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         ('dream_users', UID),
         ('dream_users', UID, 'dirty', 'fixture'),
         ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
-        ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
+        ('dream_users', UID, 'spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
 

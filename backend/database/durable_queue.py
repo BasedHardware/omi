@@ -29,13 +29,18 @@ from utils.durable_queue_policy import (
 
 
 def redrive_patch(*, now: datetime) -> dict:
-    """Additive fields to move a dead letter back to ready by identity."""
+    """Additive fields to move a dead letter back to ready by identity.
+
+    ``redriven_at`` is the age anchor for a later stale sweep. ``created_at`` stays
+    the original enqueue time, so a redrive of an old row is not immediately stale.
+    """
     return {
         'status': 'pending',
         'attempt_count': 0,
         'available_at': now,
         'dead_letter_reason': None,
         'last_error_text': None,
+        'redriven_at': now,
         'updated_at': now,
     }
 
