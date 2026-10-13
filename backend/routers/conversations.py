@@ -11,7 +11,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
-import database.voice_profiles as voice_profiles_db
+from database import voice_profiles as voice_profiles_db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import (
