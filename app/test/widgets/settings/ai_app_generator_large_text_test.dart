@@ -104,8 +104,15 @@ void main() {
         isNull,
         reason: 'AI app generator suggestion strip should not overflow at scale $scale on width $testWidth',
       );
-      expect(find.text('Try something like'), findsOneWidget);
+      // The localized label includes an ellipsis. While the prompt request is
+      // pending, the horizontal strip renders its loading cards; no network
+      // response is required to verify their layout.
+      expect(find.text('Try something like…'), findsOneWidget);
       expect(find.text('A playful gratitude spinner for daily positivity'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((widget) => widget is ListView && widget.scrollDirection == Axis.horizontal),
+        findsOneWidget,
+      );
     }
   });
 }
