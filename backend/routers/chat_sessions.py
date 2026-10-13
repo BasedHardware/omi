@@ -52,6 +52,16 @@ class CreateChatSessionRequest(BaseModel):
     title: str | None = Field(None, max_length=500)
     app_id: str | None = Field(None, max_length=200)
 
+    @field_validator('title')
+    @classmethod
+    def validate_title(cls, value: str | None) -> str | None:
+        if value is not None:
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError('Title cannot be empty or blank')
+            return normalized
+        return value
+
 
 class UpdateChatSessionRequest(BaseModel):
     title: str | None = Field(None, max_length=500)
