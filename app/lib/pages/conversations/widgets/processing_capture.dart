@@ -182,16 +182,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     );
   }
 
-  /// The pendant is capturing and all is well: nothing to say beyond Home's pill.
+  /// The pendant is capturing: Home's bottom bar already says so (listening, still connecting to
+  /// transcription, buffering), so no separate "Listening" card. The card stays for what needs the
+  /// person: paused, or transcription that has failed.
   static bool _pendantJustListening(CaptureProvider provider) {
     final source = provider.liveCaptureSource;
-    return source != null &&
-        source != 'phone' &&
-        !provider.isPaused &&
-        provider.pendantCaptureVerified &&
-        provider.transcriptServiceReady &&
-        provider.terminalTranscriptionFailure == null &&
-        provider.customSttBufferingDuration == null;
+    return source != null && source != 'phone' && !provider.isPaused && provider.terminalTranscriptionFailure == null;
   }
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter

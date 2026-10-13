@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io' show File;
 import 'dart:typed_data';
 
@@ -69,6 +70,10 @@ abstract class ActivationCapture {
   /// What has been heard since [start], updated live.
   ValueListenable<String> get liveText;
 
+  /// How loud the audio coming in is, 0–1, updated live: Omi visibly hears the person before any
+  /// words come back.
+  ValueListenable<double> get level;
+
   /// Starts listening.
   Future<ActivationStart> start();
 
@@ -92,6 +97,7 @@ class PipelineActivationCapture implements ActivationCapture {
   final ConversationProvider _conversations;
   final HomeProvider _home;
   final ValueNotifier<String> _live = ValueNotifier('');
+  final ValueNotifier<double> _level = ValueNotifier(0);
   int _startIndex = 0;
   bool _device = false;
   bool _phoneStarted = false;
@@ -123,6 +129,32 @@ class PipelineActivationCapture implements ActivationCapture {
   @override
   ValueListenable<String> get liveText => _live;
 
+  @override
+  ValueListenable<double> get level => _level;
+
+  /// Eases toward [target] so the meter moves with speech without flickering.
+  void _meter(double target) {
+    final next = _level.value * 0.6 + target.clamp(0.0, 1.0) * 0.4;
+    if ((next - _level.value).abs() > 0.01) _level.value = next;
+  }
+
+  /// Loudness of 16-bit little-endian PCM: speech sits roughly between 500 and 6000 RMS.
+  static double _pcmLevel(List<int> pcm) {
+    var sum = 0.0;
+    var n = 0;
+    for (var i = 0; i + 1 < pcm.length; i += 2) {
+      var v = pcm[i] | (pcm[i + 1] << 8);
+      if (v >= 0x8000) v -= 0x10000;
+      sum += v * v;
+      n++;
+    }
+    if (n == 0) return 0;
+    return ((math.sqrt(sum / n) - 300) / 4000).clamp(0.0, 1.0);
+  }
+
+  /// The pendant's packets are compressed: louder speech makes bigger packets, silence small ones.
+  static double _packetLevel(List<int> packet) => ((packet.length - 30) / 110).clamp(0.0, 1.0);
+
   void _onCapture() {
     if (!_listening) return;
     final segments = _capture.segments;
@@ -145,6 +177,7 @@ class PipelineActivationCapture implements ActivationCapture {
       if (_cancelled) return ActivationStart.failed;
       _device = _isDeviceRecording;
       if (_device) {
+        _capture.deviceAudioTap = (packet) => _meter(_packetLevel(packet));
         // The Omi has been listening since it connected (unboxing, the screens before this one).
         // Close that first, so the dictation is a conversation of its own.
         if (_capture.segments.isNotEmpty) await _capture.forceProcessingCurrentConversation();
@@ -152,11 +185,11 @@ class PipelineActivationCapture implements ActivationCapture {
         if (!await Permission.microphone.isGranted) return ActivationStart.needsMicrophone;
         if (_cancelled) return ActivationStart.failed;
         _phoneStarted = true;
-        if (!SharedPreferencesUtil().hasSpeakerProfile) {
-          _capture.phoneMicAudioTap = (pcm) {
-            if (_voice.length < _maxVoiceSeconds * _bytesPerSecond) _voice.add(pcm);
-          };
-        }
+        final keepVoice = !SharedPreferencesUtil().hasSpeakerProfile;
+        _capture.phoneMicAudioTap = (pcm) {
+          _meter(_pcmLevel(pcm));
+          if (keepVoice && _voice.length < _maxVoiceSeconds * _bytesPerSecond) _voice.add(pcm);
+        };
         await _capture.streamRecording();
         // Skipped while the microphone was starting: cancel()'s stop may have run before it was on,
         // so stop it again now that it is.
@@ -207,6 +240,8 @@ class PipelineActivationCapture implements ActivationCapture {
     _listening = false;
     _capture.removeListener(_onCapture);
     _capture.phoneMicAudioTap = null;
+    _capture.deviceAudioTap = null;
+    _level.value = 0;
   }
 
   /// Uploads the dictation as the reader's voice profile, in the background: it never holds up the
@@ -323,7 +358,9 @@ class DemoActivationCapture implements ActivationCapture {
   final String script;
   final ActivationResult result;
   final ValueNotifier<String> _live = ValueNotifier('');
+  final ValueNotifier<double> _level = ValueNotifier(0);
   Timer? _timer;
+  int _beat = 0;
 
   @override
   bool get usesDevice => pretendsDevice;
@@ -332,13 +369,21 @@ class DemoActivationCapture implements ActivationCapture {
   ValueListenable<String> get liveText => _live;
 
   @override
+  ValueListenable<double> get level => _level;
+
+  @override
   Future<ActivationStart> start() async {
     final words = script.split(' ');
     var shown = 0;
     _timer = Timer.periodic(const Duration(milliseconds: 260), (timer) {
-      if (shown >= words.length) return timer.cancel();
+      if (shown >= words.length) {
+        _level.value = 0;
+        return timer.cancel();
+      }
       shown++;
       _live.value = words.take(shown).join(' ');
+      // A speaking rhythm for the meter.
+      _level.value = 0.35 + 0.5 * ((_beat++ * 7) % 10) / 10;
     });
     return ActivationStart.listening;
   }

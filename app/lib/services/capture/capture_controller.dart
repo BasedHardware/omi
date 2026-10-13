@@ -209,6 +209,9 @@ class CaptureController extends ChangeNotifier
   /// that needs the sound itself: onboarding enrolls the reader's voice from its first dictation.
   void Function(List<int> pcm)? phoneMicAudioTap;
 
+  /// Receives each encoded audio packet from the pendant as it arrives (for a live level meter).
+  void Function(List<int> packet)? deviceAudioTap;
+
   IMicRecorderService get _phoneMic => _phoneMicRecorderOverride ?? ServiceManager.instance().phoneMic;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
@@ -2026,6 +2029,7 @@ class CaptureController extends ChangeNotifier
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
+        deviceAudioTap?.call(snapshot);
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);

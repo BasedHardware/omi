@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:in_app_review/in_app_review.dart';
@@ -471,6 +472,7 @@ class _DictationStepState extends State<_DictationStep> {
   @override
   void initState() {
     super.initState();
+    widget.capture.liveText.addListener(_onWords);
     // From the moment the step opens, so a start that hangs (waiting for the Omi, the microphone)
     // still ends in Continue.
     _stuckTimer = Timer(const Duration(seconds: 25), () {
@@ -496,8 +498,18 @@ class _DictationStepState extends State<_DictationStep> {
     });
   }
 
+  bool _heardOnce = false;
+
+  /// A light tap when the first words land: the moment Omi visibly understood.
+  void _onWords() {
+    if (_heardOnce || widget.capture.liveText.value.trim().isEmpty) return;
+    _heardOnce = true;
+    OmiHaptics.light();
+  }
+
   @override
   void dispose() {
+    widget.capture.liveText.removeListener(_onWords);
     _quietTimer?.cancel();
     _stuckTimer?.cancel();
     if (!_leaving) unawaited(widget.capture.cancel());
@@ -550,6 +562,7 @@ class _DictationStepState extends State<_DictationStep> {
                   onContinue: _skip,
                 )
               : _ListeningControl(
+                  level: widget.capture.level,
                   heard: heard,
                   listening: _started,
                   failed: _failed,
@@ -608,8 +621,12 @@ class _ListeningControl extends StatelessWidget {
     required this.failed,
     required this.status,
     required this.onDone,
+    required this.level,
   });
 
+  /// How loud the person is right now: the ring around ✓ and the meter follow it, so it is
+  /// obvious Omi hears them even before words come back.
+  final ValueListenable<double> level;
   final bool heard;
   final bool listening;
   final bool failed;
@@ -630,6 +647,21 @@ class _ListeningControl extends StatelessWidget {
             children: [
               if (listening && !failed)
                 ScanningRippleWidget(isScanning: true, size: 140, color: OmiColors.textTertiary),
+              if (listening && !failed)
+                ValueListenableBuilder<double>(
+                  valueListenable: level,
+                  builder: (context, v, _) => AnimatedContainer(
+                    key: const Key('activation_voice_ring'),
+                    duration: const Duration(milliseconds: 90),
+                    curve: Curves.easeOut,
+                    width: 76 + 60 * v,
+                    height: 76 + 60 * v,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: OmiColors.textPrimary.withValues(alpha: 0.05 + 0.09 * v),
+                    ),
+                  ),
+                ),
               Semantics(
                 button: true,
                 enabled: heard,
@@ -659,16 +691,63 @@ class _ListeningControl extends StatelessWidget {
           ),
         ),
         const SizedBox(height: OmiSpacing.xs),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: Text(
-            status,
-            key: ValueKey(status),
-            textAlign: TextAlign.center,
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (listening && !failed) ...[
+              _LevelMeter(level: level),
+              const SizedBox(width: OmiSpacing.xs),
+            ],
+            Flexible(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: Text(
+                  status,
+                  key: ValueKey(status),
+                  textAlign: TextAlign.center,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// Four small bars that move with the voice, next to "Listening".
+class _LevelMeter extends StatelessWidget {
+  const _LevelMeter({required this.level});
+
+  final ValueListenable<double> level;
+
+  static const _shape = [0.55, 1.0, 0.75, 0.4];
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: ValueListenableBuilder<double>(
+        valueListenable: level,
+        builder: (context, v, _) => Row(
+          key: const Key('activation_level_meter'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            for (final s in _shape)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 90),
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                width: 3,
+                height: 3 + 11 * (v * s).clamp(0.0, 1.0),
+                decoration: BoxDecoration(
+                  color: v > 0.05 ? OmiColors.textPrimary : OmiColors.textTertiary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

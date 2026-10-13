@@ -26,6 +26,11 @@ class _FakeCapture implements ActivationCapture {
   @override
   ValueListenable<String> get liveText => live;
 
+  final ValueNotifier<double> levelNotifier = ValueNotifier(0);
+
+  @override
+  ValueListenable<double> get level => levelNotifier;
+
   @override
   Future<ActivationStart> start() async => startsAs;
 
@@ -301,5 +306,20 @@ void main() {
     await tapKey(tester, 'activation_continue_rating');
     expect(run.events, ['review', 'paywall', 'finished', 'finished'], reason: 'retried without a second paywall');
     expect(attempts, 2);
+  });
+
+  testWidgets('Omi visibly hears the person: the voice ring and meter follow the level', (tester) async {
+    final run = await pump(tester);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    final ring = find.byKey(const Key('activation_voice_ring'));
+    expect(ring, findsOneWidget);
+    expect(find.byKey(const Key('activation_level_meter')), findsOneWidget);
+    final quiet = tester.getSize(ring).width;
+
+    run.capture.levelNotifier.value = 1;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(ring).width, greaterThan(quiet + 40));
   });
 }
