@@ -69,6 +69,7 @@ def env(monkeypatch):
         'database._client',
         'utils.subscription',
         'utils.observability.fallback',
+        'utils.fair_use',
     ]:
         fakes[name] = ModuleType(name)
     fakes['database.memories'].unlock_all_memories = unlock('memories')
@@ -81,6 +82,7 @@ def env(monkeypatch):
     fakes['utils.subscription'].resolve_transcription_allowance = allowance
     fakes['utils.subscription'].clear_trial_paywall_cache = cache
     fakes['utils.observability.fallback'].record_fallback = MagicMock()
+    fakes['utils.fair_use'].invalidate_enforcement_cache = MagicMock()
     monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'true')
     with stub_modules(fakes):
         module = load_module_fresh(
@@ -115,6 +117,7 @@ def test_idempotent_same_period_and_next_reset(env):
     assert env.calls == ['memories', 'actions', 'conversations']
     env.signal.assert_called_once_with('test-user')
     env.cache.assert_called_once_with('test-user')
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     # Content locked later in this period is held until its next reset.
     env.locks['conversations'] = 1
     env.redis.next_request()

@@ -17,7 +17,8 @@ collection: legacy memories, canonical memory items, action items, conversations
 The field mask reads document names only. These helpers retain canonical memory
 lock-field authority, people-stat invalidation, action-list generation changes and
 updated-at stamping. Recovery also sends the upgrade credits invalidation signal
-and clears trial-paywall caches. It does not clear rolling fair-use/abuse counters.
+and clears trial-paywall and fair-use enforcement caches. It does not clear
+rolling fair-use/abuse counters.
 
 Remaining lock fields are the progress checkpoint; no cursor can skip a failed
 batch. A token-fenced Redis lease (the existing notification-job release Lua

@@ -22,6 +22,7 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
     # Lazy imports keep the flag-off auth path free of additional dependencies.
     from database import action_items, conversations, memories, redis_db
     from database._client import db
+    from utils.fair_use import invalidate_enforcement_cache
     from utils.subscription import clear_trial_paywall_cache, resolve_transcription_allowance
     from utils.observability.fallback import record_fallback
 
@@ -69,6 +70,7 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
         conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
         redis_db.set_credits_invalidation_signal(uid)
         clear_trial_paywall_cache(uid)
+        invalidate_enforcement_cache(uid)
         # Two memory collections can each return PAGE_SIZE. A full page is
         # conservatively incomplete; a later request proves the empty tail.
         if memory_count < PAGE_SIZE and action_count < PAGE_SIZE and conversation_count < PAGE_SIZE:
