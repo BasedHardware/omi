@@ -31,10 +31,32 @@ internal class BleReconnectBackoff(
      * Delay for the next automatic retry, then advance one step (capped).
      * A CCCD timeout passes [cccdDelayMs] through and leaves the ordinary step alone,
      * including when that delay is null because the CCCD budget is spent.
+     *
+     * [retentionVerified] is INV-CAP-1's gate: only a device that advertises a
+     * storage-drain service (firmware writes audio to storage while disconnected)
+     * may wait longer between attempts. Every other device keeps the legacy flat
+     * [FASTEST_DELAY_MS] cadence, because its out-of-range audio has no durable
+     * destination and stretching the gap only widens the loss.
      */
-    fun delayForFailure(address: String, cccdTimeout: Boolean, cccdDelayMs: Long?): Long? {
+    fun delayForFailure(
+        address: String,
+        cccdTimeout: Boolean,
+        cccdDelayMs: Long?,
+        retentionVerified: Boolean = true,
+    ): Long? {
         if (cccdTimeout) return cccdDelayMs
+        if (!retentionVerified) return flatDelayMs(address)
         return nextDelayMs(address)
+    }
+
+    /**
+     * The legacy cadence for devices without verified offline retention: the fastest
+     * interval every time, never escalating. The per-device step still resets with
+     * everyone else so a later verified-retention firmware upgrade escalates cleanly.
+     */
+    private fun flatDelayMs(address: String): Long = synchronized(lock) {
+        stepByAddress.remove(address.uppercase())
+        stepsMs.first()
     }
 
     fun nextDelayMs(address: String): Long = synchronized(lock) {

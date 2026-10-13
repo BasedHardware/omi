@@ -83,4 +83,34 @@ class BleReconnectBackoffTest {
         repeat(3) { backoff.delayForFailure("A", cccdTimeout = true, cccdDelayMs = null) }
         assertEquals(12_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null))
     }
+
+    @Test
+    fun `unverified retention keeps the legacy flat cadence and never escalates`() {
+        // INV-CAP-1: a device whose firmware has not advertised a storage-drain
+        // service must keep the pre-backoff 3s retry loop; stretching the gap
+        // would park out-of-range audio behind a wait it cannot afford.
+        val backoff = BleReconnectBackoff()
+        repeat(50) {
+            assertEquals(3_000L, backoff.delayForFailure("AA:BB:CC:DD:EE:FF", cccdTimeout = false, cccdDelayMs = null, retentionVerified = false))
+        }
+    }
+
+    @Test
+    fun `flat cadence leaves no stale step so a later verified device escalates from the fastest interval`() {
+        val backoff = BleReconnectBackoff()
+        repeat(10) { backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = false) }
+        // The same device later advertises retention (e.g. firmware upgrade):
+        // it must start the escalated schedule from the fastest interval.
+        assertEquals(3_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
+        assertEquals(6_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
+    }
+
+    @Test
+    fun `CCCD timeout passes its own delay through regardless of retention verification`() {
+        val backoff = BleReconnectBackoff()
+        assertEquals(6_000L, backoff.delayForFailure("A", cccdTimeout = true, cccdDelayMs = 6_000L, retentionVerified = false))
+        assertNull(backoff.delayForFailure("A", cccdTimeout = true, cccdDelayMs = null, retentionVerified = false))
+        // CCCD pass-through must not consume or advance the ordinary schedule.
+        assertEquals(3_000L, backoff.delayForFailure("A", cccdTimeout = false, cccdDelayMs = null, retentionVerified = true))
+    }
 }

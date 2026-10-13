@@ -50,6 +50,11 @@ class OmiBleForegroundService : Service() {
         // Base delay for CCCD-timeout recovery. Ordinary out-of-range retries use
         // reconnectBackoff so a fixed 3s loop cannot spin the radio forever.
         private const val RECONNECT_DELAY_MS = 3_000L
+        // Storage-drain service registered by Omi-family firmware when
+        // CONFIG_OMI_ENABLE_OFFLINE_STORAGE is compiled in; mirrors
+        // storageDataStreamServiceUuid in app/lib/services/devices/models.dart.
+        // Its presence in a discovered GATT table is the INV-CAP-1 retention signal.
+        private const val STORAGE_DRAIN_SERVICE_UUID = "30295780-4301-eabd-2904-2849adfeae43"
         private const val COMPANION_RATE_LIMIT_MS = 15_000L
         private const val PREFS_NAME = "ble_config"
         private const val PREFS_KEY = "managed_device"
@@ -152,6 +157,11 @@ class OmiBleForegroundService : Service() {
         var connectionStartTime: Long? = null,
         var currentGattHash: Int? = null,
         var hasEverConnected: Boolean = false,
+        /** INV-CAP-1 gate for the reconnect backoff: true once service discovery
+         * saw a storage-drain service on this device, i.e. firmware verifiably
+         * retains audio while disconnected. Only then may failed retries wait
+         * longer than the legacy cadence. */
+        var hasVerifiedRetention: Boolean = false,
         var pendingReconnect: Runnable? = null,
         var pendingReconnectDelayMs: Long = 0L,
         /** Uptime deadline of the pending retry, 0 when none is scheduled.
@@ -336,6 +346,7 @@ class OmiBleForegroundService : Service() {
 
     private fun fireDeviceReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
+        recordVerifiedRetention(addr, services)
         ensureBackgroundAudioSubscription(addr, services)
         limitlessDrainEngine.onDeviceReady(addr)
         if (OmiBleManager.isFlutterAlive) {
@@ -361,6 +372,25 @@ class OmiBleForegroundService : Service() {
 
         Log.i(TAG, "Ensuring BLE audio subscription for background transcription on $address")
         bleManager.subscribeCharacteristic(address, target.first, target.second)
+    }
+
+    /**
+     * INV-CAP-1: the escalated reconnect schedule is only licensed by firmware that
+     * verifiably retains audio while disconnected. The GATT table is that verification —
+     * Omi-family firmware registers its storage-drain service (storageDataStreamServiceUuid
+     * in app/lib/services/devices/models.dart) whenever CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+     * is compiled in, and the phone drains it over that same service after reconnecting.
+     * A device without the service (e.g. Friend Pendant, whose retention the app cannot
+     * verify) keeps the legacy flat retry cadence, so out-of-range audio is never parked
+     * behind a battery wait it cannot afford.
+     */
+    private fun recordVerifiedRetention(address: String, services: List<BleService>) {
+        val managed = managedDevices[address] ?: return
+        val advertised = services.any { it.uuid.equals(STORAGE_DRAIN_SERVICE_UUID, ignoreCase = true) }
+        if (advertised && !managed.hasVerifiedRetention) {
+            Log.i(TAG, "Verified offline retention for $address (storage-drain service advertised)")
+        }
+        managed.hasVerifiedRetention = advertised
     }
 
     private fun mapGattServices(services: List<BluetoothGattService>): List<BleService> =
@@ -662,8 +692,15 @@ class OmiBleForegroundService : Service() {
         } else {
             null
         }
-        // CCCD recovery keeps its own budget. Ordinary failures advance the capped backoff.
-        val delayMs = reconnectBackoff.delayForFailure(addr, cccdTimeout, cccdDelay) ?: return false
+        // CCCD recovery keeps its own budget. Ordinary failures advance the capped backoff,
+        // but only for devices whose firmware verifiably retains audio while disconnected
+        // (INV-CAP-1); others keep the legacy flat cadence.
+        val delayMs = reconnectBackoff.delayForFailure(
+            addr,
+            cccdTimeout,
+            cccdDelay,
+            retentionVerified = managed.hasVerifiedRetention,
+        ) ?: return false
         managed.retryCount = (managed.retryCount + 1).coerceAtMost(reconnectBackoff.maxTrackedFailures)
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")
         scheduleReconnect(addr, managed, delayMs, "retry_${managed.retryCount}")
