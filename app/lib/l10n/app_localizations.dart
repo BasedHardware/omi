@@ -3459,10 +3459,16 @@ abstract class AppLocalizations {
   /// **'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.'**
   String get multipleSpeakersDesc;
 
+  /// Shown once when the only conversation was discarded as too short or empty.
+  ///
+  /// In en, this message translates to:
+  /// **'That recording was too short or empty to keep.'**
+  String get discardedOnlyRecording;
+
   /// Error description for recording being too short
   ///
   /// In en, this message translates to:
-  /// **'There is not enough speech detected. Please speak more and try again.'**
+  /// **'Not enough speech to make a conversation. Try talking for 30 seconds or more.'**
   String get tooShortDesc;
 
   /// Error description for invalid recording duration
@@ -18326,6 +18332,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Memory graph'**
   String get memoryGraph;
+
+  /// No description provided for @guidedVoiceExperience.
+  ///
+  /// In en, this message translates to:
+  /// **'{part, select, unavailable{Voice transcription is unavailable right now. Type your answer instead.} type{Type Your Answer Instead} typing{Your answer} heard{Here\'s what I heard} transcribing{Got it, transcribing…} confirm{Use This Answer} answer{Save Answer} retry{Try Speaking Again} title{Here\'s what I\'ll remember} question{What should I focus on this week?} fallback{I’ll use these to help you.} thinking{Thinking about your answers…} failed{We couldn\'t transcribe that answer. You can type it instead or try speaking again.} engine{The microphone couldn\'t start. Try again or type your answer instead.} retryTranscription{Retry transcription} namePrompt{My name is ___, and I usually ___.} other{}}'**
+  String guidedVoiceExperience(String part);
 
   /// Guided voice introduction copy. English source fallback pending translation review.
   ///

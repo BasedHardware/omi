@@ -67,6 +67,8 @@ def test_plan_caps_all_arrays_including_optional_referenced_models(transport):
         'kind': 'speaker',
         'title': 'synthetic',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'speaker': {
             'prompt_id': 'synthetic',
             'conversation_id': 'synthetic',
@@ -83,10 +85,19 @@ def test_plan_caps_all_arrays_including_optional_referenced_models(transport):
         'kind': 'spelling',
         'title': 'synthetic',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'synthetic', 'options': ['a', 'b', 'c', 'd'], 'allow_custom': True},
     }
     items = {
-        'edits': {'kind': 'spelling', 'target': ref, 'reason': 'synthetic', 'evidence': [ref] * 11},
+        'edits': {
+            'kind': 'spelling',
+            'target': ref,
+            'before': 'wrng',
+            'after': 'right',
+            'reason': 'synthetic',
+            'evidence': [ref] * 11,
+        },
         'questions': question,
         'vocabulary': {'kind': 'jargon', 'spelling': 'synthetic', 'aliases': ['a'] * 6, 'evidence': [ref] * 11},
         'frames': {'screen_ref': ref, 'question': 'synthetic'},
@@ -135,10 +146,19 @@ def test_mixed_plan_retains_valid_items_in_every_list(transport):
         'kind': 'spelling',
         'title': 'Invented spelling',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
     }
     valid = {
-        'edits': {'kind': 'spelling', 'target': ref, 'reason': 'Invented typo', 'evidence': [ref]},
+        'edits': {
+            'kind': 'spelling',
+            'target': ref,
+            'before': 'wrng',
+            'after': 'right',
+            'reason': 'Invented typo',
+            'evidence': [ref],
+        },
         'questions': question,
         'vocabulary': {'kind': 'jargon', 'spelling': 'Invented', 'evidence': [ref]},
         'frames': {'screen_ref': ref, 'question': 'Invented question'},
@@ -183,6 +203,8 @@ def test_matching_payload_validator_still_drops_question(transport):
         'kind': 'task',
         'title': 'Invented',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
     }
     sink = {'tokens': 0}

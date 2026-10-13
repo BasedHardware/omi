@@ -7,7 +7,7 @@ from collections import deque
 import numpy as np
 import pytest
 
-from routers.listen import speakers
+from routers.listen import speakers, speaker_audio
 from tests.unit.test_speaker_match import _live_matcher, _segment
 from tests.unit.test_owner_recognition_embedding_budget import _clock
 from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
@@ -161,7 +161,9 @@ async def test_reservations_settle_extraction_only_without_refunds(monkeypatch, 
 
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
     if outcome == 'encoding_failed':
-        monkeypatch.setattr(speakers.av, 'open', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('encoding failed')))
+        monkeypatch.setattr(
+            speaker_audio.av, 'open', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('encoding failed'))
+        )
     if outcome == 'cancelled':
 
         async def cancel(*args, **kwargs):

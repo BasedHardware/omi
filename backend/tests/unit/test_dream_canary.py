@@ -156,6 +156,7 @@ def test_scheduler_prod_and_paused_dev_auth_match_sweep():
     assert canary['target']['uri'] == sweep['target']['uri'].replace('/sweep', '/canary')
     dev = next(row for row in config['environments']['dev']['jobs'] if row['name'] == canary['name'])
     assert dev['state'] == 'PAUSED'
+    assert canary['attempt_deadline'] == dev['attempt_deadline'] == '180s'
 
 
 @pytest.mark.parametrize('reject_vertex', [False, True])

@@ -711,7 +711,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   ),
                 ],
               ],
-              if (stats != null) ..._buildFreeMeters(provider.subscription),
+              if (stats != null) ..._buildAllowanceMeters(provider.subscription),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
@@ -723,12 +723,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  List<Widget> _buildFreeMeters(UserSubscriptionResponse? subscription) {
-    if (subscription == null || subscription.subscription.plan != PlanType.basic) return [];
+  List<Widget> _buildAllowanceMeters(UserSubscriptionResponse? subscription) {
+    if (subscription == null) return [];
     final l10n = context.l10n;
     final format = NumberFormat.decimalPattern(l10n.localeName);
     final rows = <Widget>[];
-    if (subscription.transcriptionSecondsLimit > 0) {
+    // Enforcement can be unlimited while an older snapshot carries Free's BYOK cap.
+    final allowance = subscription.transcriptionAllowance;
+    final unlimited = allowance != null && allowance.remainingSeconds == null;
+    if (!unlimited && subscription.transcriptionSecondsLimit > 0) {
       final used = (subscription.transcriptionSecondsUsed / 60).round();
       final limit = (subscription.transcriptionSecondsLimit / 60).round();
       final ratio = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
@@ -753,7 +756,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         ),
       );
     }
-    if (subscription.wordsTranscribedLimit > 0) {
+    if (subscription.subscription.plan == PlanType.basic && subscription.wordsTranscribedLimit > 0) {
       rows.add(
         _UsageMeter(
           text: l10n.wordsUsedThisMonth(
@@ -765,7 +768,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         ),
       );
     }
-    if (subscription.insightsGainedLimit > 0) {
+    if (subscription.subscription.plan == PlanType.basic && subscription.insightsGainedLimit > 0) {
       rows.add(
         _UsageMeter(
           text: l10n.insightsUsedThisMonth(

@@ -5,7 +5,8 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
-from models.review import ReviewItem, SpellingItem
+from models.review import SpellingItem
+from models.dream_agent import DreamReviewItem
 from utils.conversations.summary_selection import render_sections_markdown
 
 
@@ -93,11 +94,12 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
 
 def spelling_question(edit, *, now=None):
     key = hashlib.sha256((edit.target + '\0' + edit.before + '\0' + edit.after).encode()).hexdigest()
-    return ReviewItem(
+    return DreamReviewItem(
         item_id='spelling:' + key,
         kind='spelling',
         title='Which spelling is correct?',
         quote=edit.before,
+        source_ref=edit.target,
         created_at=now or datetime.now(timezone.utc),
         spelling=SpellingItem(term_id=key, options=[edit.before, edit.after], allow_custom=True),
     )

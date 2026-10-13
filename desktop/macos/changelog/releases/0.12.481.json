@@ -1,0 +1,7 @@
+{
+  "version": "0.12.481",
+  "date": "2026-10-13",
+  "changes": [
+    "Fixed silent microphone recovery interrupting system-audio recordings, with a microphone-signal warning that clears when audio returns"
+  ]
+}

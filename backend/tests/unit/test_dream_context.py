@@ -333,14 +333,17 @@ def test_dense_repeated_triage_metadata_is_compacted_and_budgeted():
 
 def test_merge_question_cannot_mutate_context_entity():
     from datetime import datetime, timezone
-    from models.review import ReviewItem, SamePersonItem, EntitySummary
+    from models.review import SamePersonItem, EntitySummary
+    from models.dream_agent import DreamReviewItem
 
     left = EntitySummary(entity_id='person:a', type='person', name='Synthetic Nuvra')
     right = EntitySummary(entity_id='person:b', type='person', name='Synthetic Nuvrah')
-    question = ReviewItem(
+    question = DreamReviewItem(
         item_id='synthetic',
         kind='same_person',
         title='Same person?',
+        source_ref='people/a',
+        quote='Synthetic Nuvra',
         created_at=datetime.now(timezone.utc),
         same_person=SamePersonItem(left=left, right=right, reason='Synthetic'),
     )

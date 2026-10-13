@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.481",
+      "date": "2026-10-13",
+      "changes": [
+        "Fixed silent microphone recovery interrupting system-audio recordings, with a microphone-signal warning that clears when audio returns"
+      ]
+    },
+    {
+      "version": "0.12.480",
+      "date": "2026-10-13",
+      "changes": [
+        "Made onboarding shortcuts ready to accept, kept Continue visible while connecting context, and clarified notification benefits"
+      ]
+    },
+    {
+      "version": "0.12.479",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.478",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.477",
+      "date": "2026-10-12",
+      "changes": [
+        "Receive your actual subscription tier while preserving compatibility with older apps"
+      ]
+    },
+    {
       "version": "0.12.476",
       "date": "2026-10-12",
       "changes": [

@@ -14,9 +14,16 @@ from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
 from models.candidate import CandidateCreate, TaskCreateCandidate
-from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItemV2
+from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from utils.entity_pages import resolve_entity
-from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
+from utils.dream_guards import (
+    spelling_rejection,
+    summary_rejection,
+    task_rejection,
+    vocabulary_rejection,
+    verbatim_quote,
+)
+from utils.dream_context import EvidenceRecords
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 
 
@@ -90,7 +97,7 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
     return value
 
 
-def validate_summary_edit(edit, row):
+def validate_summary_edit(edit, row, *, full=False):
     if edit.kind not in {'title', 'overview'}:
         return
     if row.get('is_locked') or not conversations.is_visible_conversation(row):
@@ -99,7 +106,7 @@ def validate_summary_edit(edit, row):
         raise review_store.ReviewConflict('Dream title was set by the user')
     if edit.before != ((row.get('structured') or {}).get(edit.kind) or ''):
         raise review_store.ReviewConflict('Dream summary changed')
-    reason = summary_rejection(edit, row)
+    reason = summary_rejection(edit, row, full=full)
     if reason:
         raise ValueError('dream_summary_' + reason)
 
@@ -114,7 +121,7 @@ def validate_edit(edit, records):
     if reason:
         raise ValueError('dream_' + reason)
     row = records[edit.target]
-    validate_summary_edit(edit, row)
+    validate_summary_edit(edit, row, full=getattr(records, 'context_mode', 'bounded') == 'full')
     if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
         raise ValueError('dream_invalid_spelling')
     collection, separator, key_id = edit.target.partition('/')
@@ -248,7 +255,7 @@ def apply_edit(uid, edit, records, *, expected_records=None):
             or current.get('user_title') != row.get('user_title')
         ):
             raise review_store.ReviewConflict('Dream conversation changed')
-        validate_summary_edit(edit, current)
+        validate_summary_edit(edit, current, full=getattr(records, 'context_mode', 'bounded') == 'full')
         patch = {'structured.' + edit.kind: edit.after}
         if edit.kind == 'overview':
             # Clients compose notes from sections when present. Clear stale projections
@@ -327,6 +334,8 @@ def apply_grounded_edit(uid, edit, records):
 
 def suggest_spelling(uid, edit, records, run_id):
     validate_edit(edit, records)
+    if not verbatim_quote(edit.before, records[edit.target]):
+        raise ValueError('dream_invalid_question_evidence')
     source: dict[str, Any] = {
         'records': {ref: records[ref] for ref in {edit.target, *edit.evidence}},
         'edit_key': edit_key(edit, records),
@@ -337,7 +346,7 @@ def suggest_spelling(uid, edit, records, run_id):
     validate_canonical_proposal(uid, edit)
     return review_store.enqueue_review_proposal(
         uid,
-        spelling_question(edit),
+        ReviewItem.model_validate(spelling_question(edit).model_dump()),
         edit_key=edit_key(edit, records),
         source=source,
         dream_run_id=run_id,
@@ -411,6 +420,9 @@ def revalidate_proposal(uid, source):
         collection, key = path.split('/', 1)
         if review_store.user(uid).collection(collection).document(key).get().to_dict() != snapshot:
             raise review_store.ReviewConflict('Dream proposal target changed')
+    if source.get('context_mode') == 'full':
+        records = EvidenceRecords(records)
+        records.context_mode = 'full'
     return records
 
 
@@ -481,6 +493,8 @@ def suggest_edit(uid, edit, records):
         return 'suppressed'
     refs = set([edit.target, *edit.evidence, *([edit.other] if edit.other else [])])
     source: dict[str, Any] = {'records': {ref: records[ref] for ref in refs}, 'edit_key': key, 'auxiliary': {}}
+    if getattr(records, 'context_mode', 'bounded') == 'full':
+        source['context_mode'] = 'full'
     if edit.kind == 'entity_summary':
         entity_id = records[edit.target]['entity_id']
         raw = review_store.user(uid).collection('entity_pages').document(entity_id).get().to_dict()
@@ -612,7 +626,11 @@ def answer_proposal(uid, proposal, source, decision):
 def ask(uid, item, records):
     if item.kind not in {'same_person', 'spelling'}:
         raise ValueError('dream_question_kind')
-    review_store.enqueue_review_proposal(uid, item, evidence_version=review_store.fingerprint(records))
+    if item.source_ref not in records or not verbatim_quote(item.quote, records[item.source_ref]):
+        raise ValueError('dream_invalid_question_evidence')
+    review_store.enqueue_review_proposal(
+        uid, ReviewItem.model_validate(item.model_dump()), evidence_version=review_store.fingerprint(records)
+    )
 
 
 def request_frame(uid, question, records):

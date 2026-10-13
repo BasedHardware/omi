@@ -10,6 +10,7 @@ POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply 
 
 PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
+RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
 
 REJECTED = Counter('omi_dream_rejected_total', 'Dream deterministic proposal rejections', ['reason'])
@@ -25,12 +26,19 @@ REJECTION_REASONS = {
     'feedback_cap',
     'privacy_rejected',
     'invalid_evidence',
+    'invalid_spelling',
     'stale_task_evidence',
     'task_too_recent',
     'bad_target',
     'common_word',
     'context_target',
     'ungrounded_spelling',
+    'edit_cap',
+    'invalid_edit',
+    'duplicate_edit',
+    'noop',
+    'contradictory_spelling',
+    'invalid_question_evidence',
 }
 
 logger = logging.getLogger(__name__)
@@ -63,6 +71,7 @@ ERROR_TYPES = {
     'DeadlineExceeded',
     'AdmissionDenied',
     'DreamTranscriptReadError',
+    'InvalidModelResponse',
 }
 
 
@@ -73,6 +82,8 @@ def record_pass(report):
     error = report.get('error_type')
     PASSES.labels(status, error if error in ERROR_TYPES else 'other' if error else 'none').inc()
     TOKENS.inc(max(0, int(report.get('tokens', 0))))
+    retries = max(0, int(report.get('response_retries', 0)))
+    RESPONSE_RETRIES.inc(retries)
 
     for reason, count in report.get('rejected', {}).items():
         if reason in REJECTION_REASONS:
@@ -98,15 +109,28 @@ def record_pass(report):
     for key, count in diagnostics['context_budget_counts'].items():
         CONTEXT_BUDGET.labels(key).inc(count)
     logger.info(
-        'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
+        'Dream pass status=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
+        'triage_evidence_chars=%d reasoning_evidence_chars=%d '
         'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
         'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
         status,
+        'full' if report.get('context_mode') == 'full' else 'bounded',
+        max(0, int(report.get('input_tokens_estimate', 0))),
+        max(0, int(report.get('targets', 0))),
+        max(0, int(report.get('records', 0))),
+        retries,
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
         json.dumps(report.get('validation_errors', {}), sort_keys=True),
-        json.dumps(report.get('rejected', {}), sort_keys=True),
+        json.dumps(
+            {
+                reason: max(0, int(count))
+                for reason, count in report.get('rejected', {}).items()
+                if reason in REJECTION_REASONS
+            },
+            sort_keys=True,
+        ),
         max(0, int(report.get('poisoned', 0))),
         json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
         json.dumps(diagnostics['retrieval_failure_counts'], sort_keys=True),

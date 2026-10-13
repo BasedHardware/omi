@@ -784,15 +784,24 @@ OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
 OMI_QUEUE_NAMES = (
     'memory_outbox',
     'candidate_integration_outbox',
-    'chat_first_proactive_intents',
     'conversation_finalization_jobs',
     'daily_summary_hour_groups',
     'daily_memory_sweep',
     'vector_repair_outbox',
     'task_recurrence_inbox',
     'frame_deletion_outbox',
-    'projection_repairs',
 )
+
+# Closed queue inventory bounds cardinality. Before the first tick, age absence
+# remains the startup signal; thereafter unknown is explicit per queue.
+OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN = Gauge(
+    'omi_queue_oldest_ready_sample_unknown',
+    'Whether the latest durable-queue age sample is unknown; aggregate with max()',
+    ['queue'],
+)
+for _queue_name in OMI_QUEUE_NAMES:
+    OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=_queue_name).set(0)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
@@ -1283,12 +1292,6 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     'task_intelligence_attribution_total',
     'Privacy-safe task intervention, feedback, and outcome events',
     ['event', 'subject_kind', 'code'],
-)
-
-CHAT_FIRST_PROACTIVE_TOTAL = Counter(
-    'chat_first_proactive_total',
-    'Chat-first proactive engine activity with no user content',
-    ['event', 'source', 'reason'],
 )
 
 MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(

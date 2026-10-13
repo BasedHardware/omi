@@ -1,5 +1,160 @@
 # Dream agent phase 1
 
+## Opt-in full context (rung 1)
+
+`DREAM_AGENT_CONTEXT_MODE=bounded` is the default. `full` applies only to the
+comma-separated `DREAM_AGENT_FULL_CONTEXT_UIDS`; empty/unknown configuration
+keeps bounded behavior. This allowlist does not replace ordinary Dream
+eligibility, mode, Review enablement, admission, USD caps or Undo/suppression.
+No deployment or cohort is enabled by this source change.
+
+Full mode bypasses triage and uses one reasoning turn in the existing `run_loop`.
+`DREAM_AGENT_FULL_CONTEXT_TOKENS` defaults to 400000 input tokens;
+`DREAM_AGENT_FULL_COMPLETION_TOKENS` defaults to 32768 (maximum 32768, including thinking).
+Input admission estimates serialized characters / 4 plus framing, including
+system instructions, schema, vocabulary and the complete projected records.
+A separate conservative UTF-8 byte upper bound plus completion must fit
+1048576, the reserved model's context window. This final safety fence can admit
+less than the configured estimate, especially for multibyte text; the gateway
+has no count-tokens surface. Neither estimate is represented as observed usage.
+See [the provider model limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
+The existing reservation/USD accounting reserves the combined input/completion
+budget plus one malformed-response retry (865536 tokens, $8.65536 at the default upper-bound rate); daily USD and
+per-user pass caps still apply.
+
+Dirty targets have first priority in oldest-first inspection order, then history
+seeds, then existing linked/lexical/semantic/temporal retrieval order. All fitting
+targets in the existing 32-version inspection window may be admitted. Full
+snapshots retain the entire transcript, speaker labels, title, overview, sections
+and all memory/task/person fields. There are no per-record excerpt caps or middle
+truncation. Oversized records are skipped whole, allowing later smaller records
+to fit; omitted dirty versions remain queued. Retrieval keeps its existing query
+bounds, and seeds keep their visibility/cooldown rules. Every supplied record is
+eligible for edits supported by the existing action schema, including retrieved
+context and merge partners. Target/source roles survive only as queue diagnostics.
+
+The short full prompt states the goal and hard constraints. Schema, supplied
+references, post-task independent evidence, independent spelling grounding,
+feedback privacy, edit/attention caps, leases, kill switch and journals remain.
+`context_target`, `not_a_failure`, `language_not_defect`, `placeholder` and
+`task_too_recent` are disabled only for full evidence. Nonempty summary fields
+remain protected, including user titles and section summaries; the other summary
+validation and visibility rules stay intact. Ungrounded spelling becomes Review.
+Full mode allows 25 edits; risky kinds and vocabulary still require Review.
+Encrypted proposal source metadata retains full guard policy through acceptance,
+which still rehydrates and fences current evidence. Bounded proposals keep their
+existing policy.
+
+Full model/HTTP read deadlines are 480 seconds (connect 3, write 60, pool 5).
+Passes, including full-mode manual runs, allow 600 seconds; drain/manual outer
+bounds and capacity-slot cancellation fences allow 660 seconds, including a
+30-second settlement margin. The HTTP middleware gives the sweep/manual paths
+690 seconds only when full mode is configured with a nonempty allowlist; their
+handlers still enforce each UID's own mode. Bounded model/pass/drain/manual/slot deadlines are
+unchanged. Owner leases already have no timed expiry and remain conservative
+on ambiguous cancellation. `deploy/scheduler/jobs.yaml` sets the prod sweep
+attempt deadline to 720 seconds, above the 690-second HTTP bound. Prod and dev
+canary jobs retain 180 seconds (their handler has a 90-second bound); dev canary
+stays paused, and no dev sweep is declared.
+
+`llm_gateway/gateway/dream_lanes.py` derives the Dream routes from the desktop
+reserved artifact. Reasoning now uses `timeouts.request_ms=480000`, matching
+full mode's model/read bound; triage retains 60000 and both stages retain one
+provider attempt. The gateway chart's BackendConfig has `timeoutSec: 960`, so
+the ingress does not impose an earlier 60-second cutoff. There is no Dream input
+size ceiling in chat validation or route artifacts.
+
+The repo's Luna cost card (`llm_gateway/config/cost_rate_cards.yaml`) has a
+272000-token **pricing** threshold, not a maximum input size. No smaller Luna
+context maximum is declared in the gateway. Official
+[GPT-6 Luna limits](https://developers.openai.com/api/docs/models/gpt-6-luna),
+verified 2026-10-13, give a 1050000-token context window and 128000-token maximum
+output. At the requested 32768-token output limit, that leaves 1017232 tokens
+for input; the full-mode hard input-plus-completion fence is 1048576, below
+Luna's total window. No additional shrinking is needed, even at the maximum
+operator-configured full budget. Gemini request-rejection recovery can therefore
+retain the whole admitted request when trying the existing Luna fallback.
+Reservation exhaustion and provider 429 already have **no** Dream provider/LKG
+fallback in `gateway/reserved_fallback.py` and `gateway/resolver.py`; backend
+transport turns those failures into `CapacityWait` and retains dirty work.
+This policy is retained and tested through the executor/transport boundary.
+No shared/pay-as-you-go Gemini route is added.
+
+Cloud Run timeout metadata was read only via managed `ro-prod`/`ro-dev` service
+accounts on 2026-10-13: `backend-sync` in `us-central1` is 3600 seconds in prod
+and 300 seconds in dev. Prod covers the required 690 seconds; dev does not.
+The timeout is not declared in `deploy/runtime_env/_base.yaml` or the env overlays.
+The existing deploy action consumes the rendered common flags without `--timeout`,
+so it preserves the live setting; `scripts/verify_backend_release_vector.py`
+currently enforces only a 300-second minimum. Before enabling full mode on the
+dev HTTP host, raise its request timeout to at least 690 seconds (900 recommended).
+The code change does not alter live Cloud Run settings or enable full mode.
+
+Rung 1.1 makes the output interface self-describing: `Edit.before` is the exact
+wrong text in the target, `after` is the corrected text, and `other` is only a
+second merge record. Empty spelling/title/overview replacements, empty spelling
+sources, and non-merge `other` refs fail Pydantic validation as `invalid_edit`.
+One spelling edit fixes every occurrence in its target. Parsing retains valid
+items; deterministic filtering then keeps the first edit for each
+(kind, target, before, after), counts later copies as `duplicate_edit`, drops
+exact spelling no-ops as `noop`, and drops both reciprocal spelling edits for
+one target as `contradictory_spelling`. A standalone capitalization correction
+is retained. These are structural comparisons, with no new regex policy.
+
+Dream's question schema requires `source_ref` and `quote`; the ref must be
+supplied and the quote must occur verbatim inside one field in that record.
+Missing/mismatched evidence is counted once per question as
+`invalid_question_evidence`. Generated spelling questions use the edit's target
+and exact wrong text and obey the same evidence requirement. The prompt asks
+for a question only when its answer changes what future agents should believe,
+because it costs user attention. Existing client Review records keep the
+optional source field for compatibility; Dream's planning contract requires it.
+
+Full mode uses a 32768-token **total** completion limit and a high 16384-token
+thinking budget (capped to half a smaller configured completion allowance).
+[Google's thinking documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking)
+allows explicit thinking on Gemini 2.5 Flash, and
+[output limits include thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
+Thus this is about 16k of JSON headroom when that thinking budget is used,
+not 32k of JSON plus thinking. Only the full Dream request sends high effort;
+the gateway applies `thinkingBudget=16384` to the actually reserved 2.5 Flash,
+or `thinkingLevel=high` to the declared 3.8 Flash migration target, after the
+shared adapter's default thinking normalization. Both use the existing
+`dedicated` request header and reservation endpoint; bounded and other lanes
+retain their existing settings. No PayGo Gemini route or reservation change.
+Thinking consumes provisioned output throughput, as described by the
+[PT burndown contract](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/measure-provisioned-throughput).
+No live high-thinking inference has been used to validate quality/latency.
+
+On `finish_reason=length`/`max_tokens` or invalid model-content JSON, full mode
+retries the identical request once inside the existing shaped-loop 480-second
+wall deadline and 600-second pass deadline. It does not replay partial edits
+or add malformed text to the prompt. Schema item failures remain isolated
+item rejections, not retries; capacity/HTTP failures retain their existing
+semantics. Both attempts' known usage contributes to settlement and returned
+tokens, and `response_retries` is a counts-only log field and Prometheus counter.
+Admission reserves two request budgets up front (default $8.65536); daily USD
+caps still apply. Each attempt still fits input plus completion inside the
+1048576 context fence. If the second response fails or time/token budget ends,
+the pass fails through its existing cleanup path without applying a plan.
+
+`dry_run(uid, records, vocabulary=...)` uses the same gated projection, planning
+and guards without storage reads, lease/admission, acknowledgement or effects.
+Both modes return `raw_plan` before deterministic guards; full mode also applies
+feedback privacy and edit caps, labels spelling policy, and returns
+`context_mode` and `input_tokens_estimate`. Raw plans are private owner replay
+output and may contain rejected feedback: never log/persist them as telemetry.
+Real pass reports remove raw plans before persistence. For an in-pod comparison,
+use the same authorized decrypted records and vocabulary, set mode `bounded`,
+call `dry_run`, then set mode `full` plus the full UID allowlist and call again.
+Do not publish either result's content. Provider-free replay supplies `turn`.
+
+The pass log gains `context_mode`, `input_tokens_estimate`, `targets`, `records`
+and allowlisted per-guard rejection counts. It never emits records, raw plans,
+UIDs, proposal text or provider messages. `targets` counts admitted dirty/history
+seeds; `records` includes all model evidence. Full mode makes both editable.
+
+
 ## Target neighbourhoods and read-only planning
 
 Spelling auto-apply additionally requires the corrected form in a cited
@@ -676,7 +831,7 @@ Older targets join before retrieval and must fit the 70% target slice with at mo
 
 The drain selects bounded 100-owner document-ID pages, then ranks by usage weight × age since successful pass (paid weight 2, paid ties first). Priority is page-local: bounded Firestore reads and deterministic page rotation are preferable to scanning every owner or synchronizing a stale global entitlement score. Under continuing capacity and repeated sweeps, advancing only past a contiguous attempted prefix reaches all owners; there is no permanent top-100 cutoff. A capacity wait stops new work and retains untried owners. Current subscription plans are projected outside transactions; cursor completion is compare-and-set on the prior cursor.
 
-Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 300 seconds in the checked-in contract; the backend-sync Cloud Run request timeout must also be at least 240 seconds. Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
+Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 720 seconds in the checked-in contract; full drains require a backend-sync Cloud Run request timeout of at least 690 seconds (prod is 3600; dev is 300 and must be raised before full-mode HTTP enablement). Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
 
 Shared Redis slots default to two (env bound 1–8), expire in 240 seconds, and release by matching token. Reservation evidence is advisory: unknown evidence or an unavailable reservation store admits through the existing gateway route. Explicit 120-second cooldowns and occupied slots still wait. During Redis outages, bounded local slots retain the 240-second cancellation fence and locally observed cooldowns retain their expiry; distributed concurrency evidence is unavailable. Reserved-only Gemini reasoning cannot use provider/LKG fallback for capacity errors. Global USD, per-user caps and owner leases remain authoritative. Runtime-contract tests compare computed reservation keys across backend and gateway envs, including compute project and reservation location.
 
