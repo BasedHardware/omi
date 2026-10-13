@@ -129,15 +129,16 @@ def _record_integration_result(
 ) -> bool:
     """Run the provider sync and complete or fail the lease. Blocking.
 
-    Marks the attempt ``in_doubt`` before the provider call. A crash or a timeout
-    after that point must not be retried. A definite pre-accept failure overwrites
-    the marker when the call returns.
+    The lease is confirmed first (outcome still ``not_sent``). ``on_provider_attempt``
+    marks it ``in_doubt`` at the provider boundary, so a crash or timeout after the
+    request may be sent is never retried, while a crash before it stays retryable.
+    A definite pre-accept failure overwrites the marker when the call returns.
     """
     noted = integration_outbox_db.note_candidate_integration_provider_attempt(
         uid,
         candidate_id,
         lease_token=lease_token,
-        outcome='in_doubt',
+        outcome='not_sent',
         firestore_client=firestore_client,
     )
     if not noted:
