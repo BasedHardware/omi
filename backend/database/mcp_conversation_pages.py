@@ -32,7 +32,12 @@ def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
     paths: List[str] = list(MCP_CONVERSATION_CARD_FIELD_PATHS)
     if extra_field_paths:
         paths.extend(extra_field_paths)
-    return paths
+    # Firestore masks must not contain both a parent and its nested fields.
+    return [
+        path
+        for path in dict.fromkeys(paths)
+        if not any(path.startswith(parent + ".") for parent in paths if parent != path)
+    ]
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)

@@ -858,6 +858,23 @@ class TestConversationKeysetPage:
         assert page[0]["decrypted_for"] == UID
         assert "decrypted_for" not in page[1]  # standard level untouched
 
+    def test_developer_projection_does_not_select_parent_and_child_paths(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+        query = _DescKeysetQuery([])
+        selected = []
+
+        def select(fields):
+            selected.extend(fields)
+            assert not any(left != right and left.startswith(right + '.') for left in fields for right in fields)
+            return query
+
+        query.select = select
+        with self._stub_client(query):
+            pages_db.get_mcp_conversation_cards_page(UID, 2, extra_field_paths=['structured', 'source', 'folder_id'])
+        assert 'structured' in selected and 'source' in selected
+        assert 'structured.title' not in selected
+        assert 'transcript_segments' not in selected
+
     def test_none_created_at_resume_position_is_rejected(self):
         pages_db = _import_real_module("database.mcp_conversation_pages")
 
