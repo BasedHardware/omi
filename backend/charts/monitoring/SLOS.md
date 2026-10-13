@@ -66,9 +66,12 @@ because it includes client disconnects. Over these 10 days chat `failure` was
 scraped from Cloud Run (`job="cloud-run-application-metrics"`). Per-instance
 series churn makes `sum(increase(accepted)) - sum(increase(success))` invent
 phantom misses, so chat does not use that subtraction. A total chat outage
-(accepts with no successes) is already paged by
+that produces failure terminals is paged by
 `omi-journey-chat-success-critical` and `omi-journey-chat-fail` in
-`alerts/resilience.json`. Chat critical has no 10-minute zero-completion arm.
+`alerts/resilience.json`. A hang that produces no terminal at all is not
+covered by these rules or those two: at about 34 accepts an hour it stays under
+their 20-accept floor. Closing that gap needs an in-flight age signal, not a
+ratio over terminals. Chat critical has no 10-minute zero-completion arm.
 Its pending period is five minutes. The other critical rules pend for two
 minutes and the warnings for fifteen; the burn-rate window pairs already
 debounce, and the pending period is the floor for every ratio rule.
@@ -106,16 +109,18 @@ ORed into one critical and one warning identity per journey.
 
 | Severity | Pair 1 | Pair 2 | live bad share | chat bad share | pusher bad share |
 | --- | --- | --- | --- | --- | --- |
-| critical | 1h AND 5m >14.4x | 6h AND 30m >6x | 113.76% / 47.4% | 8.64% / 3.6% | 15.84% / 6.6% |
+| critical | 1h AND 5m >14.4x | 6h AND 30m >6x | 50% (capped) / 47.4% | 8.64% / 3.6% | 15.84% / 6.6% |
 | warning | 24h AND 2h >3x | 3d AND 6h >1x | 23.7% / 7.9% | 1.8% / 0.6% | 3.3% / 1.1% |
 
-Live's 14.4x arm requires a bad share above 100%, so that pair cannot fire.
-The 6h and 30m pair at 47.4% is the live page. Chat critical does not use 5m
+Live's 14.4x burn would require a bad share above 100%, so its 1h and 5m
+pair is capped at a 50% bad share: half of eligible sessions failing. The worst
+1h live bad share in the 10-day window was 24.4%, and the capped arm had no true
+sample. Every burn threshold must stay below 100% so every arm can fire. Chat critical does not use 5m
 or 30m ratios; its two numbers are the 1h and 6h thresholds.
 
 Live critical keeps both short windows, with >=20 long-window and >=5
 short-window eligible sessions. One miss at each of those gates stays under
-that pair's burn share: 5m is 20% < 113.76%, and 30m is 20% < 47.4%.
+that pair's burn share: 5m is 20% < 50%, and 30m is 20% < 47.4%.
 
 Pusher critical uses the same pairs on terminal counts. One miss at the old
 floor of 5 is a 20% bad share, which is above both 15.84% and 6.6%. The short

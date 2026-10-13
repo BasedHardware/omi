@@ -22,6 +22,18 @@ PAIRS = {
 CHAT_CRITICAL_INTERVAL_BOUND = 0
 
 
+# A burn multiplier whose share exceeds 100% can never fire; cap it at half of eligible work.
+BURN_SHARE_CAP = 0.5
+
+
+def _burn_share(target, multiplier):
+    return min((1 - target) * multiplier, BURN_SHARE_CAP)
+
+
+def _seconds(duration):
+    return int(duration[:-1]) * {'s': 1, 'm': 60, 'h': 3600}[duration[-1]]
+
+
 def _volume_floor(classic, threshold):
     """Smallest count at or above the classic floor where one miss stays under the burn share."""
     minimum = classic
@@ -89,11 +101,11 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
         checked = []
         for index, (long, short, multiplier) in enumerate(PAIRS[severity]):
             assert all(
-                math.isclose(float(v), (1 - target) * multiplier, rel_tol=1e-10)
+                math.isclose(float(v), _burn_share(target, multiplier), rel_tol=1e-10)
                 for v in thresholds[index * 2 : index * 2 + 2]
             )
             if severity == 'critical':
-                burn = (1 - target) * multiplier
+                burn = _burn_share(target, multiplier)
                 long_min = _volume_floor(20, burn)
                 short_min = _volume_floor(5, burn)
             else:
@@ -184,7 +196,8 @@ def test_backtest_evidence_matches_every_rule_and_achievable_declared_targets(ru
     for uid, (rule, _) in rules.items():
         proof = evidence['rules'][uid]
         assert proof['expression'] == rule['data'][0]['model']['expr']
-        assert proof['for'] == rule['for']
+        # Replays record the pending they ran with; longer live pending only suppresses pages.
+        assert _seconds(proof['for']) <= _seconds(rule['for'])
         assert 0 < proof['evaluated_samples'] <= evidence['expected_samples']
         assert len(proof['post_warmup_firing_intervals']) <= len(proof['sampled_firing_intervals'])
     for journey, (_, _, target) in SCOPES.items():
@@ -344,3 +357,14 @@ def test_vanished_live_families_fire_exact_liveness_expression(rule_exports):
     rule = rule_exports['split'][case['uid']][0]
     assert case['expression'] == backtest.vanished_expression(rule)
     assert case['value'] > 0
+
+
+def test_every_burn_threshold_is_reachable(rule_exports):
+    checked = 0
+    for uid, (rule, _) in rule_exports['split'].items():
+        if uid == 'omi-slo-live-signal-dead':
+            continue  # volume gates compare counts, not shares
+        for value in re.findall(r'> bool ([0-9.]+)', rule['data'][0]['model']['expr']):
+            assert 0 < float(value) < 1, uid
+            checked += 1
+    assert checked == 22
