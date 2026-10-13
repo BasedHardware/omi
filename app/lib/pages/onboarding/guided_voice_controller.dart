@@ -46,7 +46,8 @@ class IntroductionAnswer {
   final String? originalText;
   int editRevision = 0;
   String? submittedGoal;
-  bool get locked => saved || submittedGoal != null;
+  String? submittedMemory;
+  bool get locked => saved || submittedGoal != null || submittedMemory != null;
   bool keep = true;
   bool saved = false;
 }
@@ -564,9 +565,14 @@ class GuidedVoiceController extends ChangeNotifier {
         } else {
           memoryAttempted++;
         }
-        if (answer.isGoal) answer.submittedGoal ??= answer.text.trim();
-        final saved =
-            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.text.trim());
+        if (answer.isGoal) {
+          answer.submittedGoal ??= answer.text.trim();
+        } else {
+          answer.submittedMemory ??= answer.text.trim();
+        }
+        final saved = answer.isGoal
+            ? await io.saveGoal(answer.submittedGoal!, answer.id)
+            : await io.remember(answer.submittedMemory!);
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {
