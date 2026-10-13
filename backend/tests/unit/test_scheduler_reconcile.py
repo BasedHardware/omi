@@ -86,7 +86,6 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
     prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
     assert set(dev_jobs) == {
-        "candidate-integration-sweep",
         "dream-agent-canary-half-hourly",
         "daily-memory-sweep-hourly",
         "day3-reengagement-email-daily",
@@ -108,6 +107,9 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert "agent-vm-reconciler-5m" not in dev_jobs
+    assert "candidate-integration-sweep" not in dev_jobs
+    assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
+    assert prod_jobs["candidate-integration-sweep"]["lifecycle"] == "planned"
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
         assert job["lifecycle"] == "planned"

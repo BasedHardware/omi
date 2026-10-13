@@ -18,6 +18,8 @@ from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
+# Claim protocol only. The sweeper does not reclaim a processing row on this
+# timer; see candidate_integration_sweeper.SWEEP_RECLAIM_AFTER.
 CANDIDATE_INTEGRATION_LEASE_SECONDS = 300
 # Equality-only collection-group scan. Metadata fields only; uid comes from the path.
 SWEEP_METADATA_FIELDS = (
@@ -105,6 +107,44 @@ def claim_candidate_integration_dispatch(
             },
         )
         return lease_token
+
+    return apply(transaction)
+
+
+def refresh_candidate_integration_lease(
+    uid: str,
+    candidate_id: str,
+    *,
+    lease_token: str,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Re-stamp ``claimed_at`` iff this token still owns a processing row.
+
+    Call this when a worker is about to invoke the provider, including an inline
+    accept job that has been queued since the original claim. A False result
+    means ownership was lost; the caller must not call the provider. This does
+    not increment ``attempt_count`` or mint a new token.
+    """
+    refresh_time = now or datetime.now(timezone.utc)
+    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction):
+        snapshot = outbox_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return False
+        payload = _snapshot_dict(snapshot)
+        if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
+            return False
+        write_transaction.update(
+            outbox_ref,
+            {
+                'claimed_at': refresh_time,
+                'updated_at': refresh_time,
+            },
+        )
+        return True
 
     return apply(transaction)
 
@@ -384,4 +424,5 @@ __all__ = [
     'list_candidate_integration_dispatches',
     'list_candidate_integration_sweep_rows',
     'redrive_candidate_integration_dead_letter',
+    'refresh_candidate_integration_lease',
 ]

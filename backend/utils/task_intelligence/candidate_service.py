@@ -1,6 +1,7 @@
 """Candidate lifecycle orchestration and post-commit integration policy."""
 
 import asyncio
+import logging
 from typing import Optional, Protocol
 
 import database.action_items as action_items_db
@@ -23,6 +24,8 @@ from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
+
+logger = logging.getLogger(__name__)
 
 
 class WorkstreamCandidateResolver(Protocol):
@@ -145,6 +148,22 @@ def _claim_task_integration(uid: str, candidate_id: str, task_id: str, *, accoun
     return lease_token, task
 
 
+def _retain_lease_for_provider_call(uid: str, candidate_id: str, lease_token: str) -> bool:
+    """Fresh lease iff this token still owns the processing row. Otherwise do not export."""
+    owned = integration_outbox_db.refresh_candidate_integration_lease(
+        uid,
+        candidate_id,
+        lease_token=lease_token,
+    )
+    if not owned:
+        logger.info(
+            'candidate integration lease lost before provider call uid=%s candidate_id=%s',
+            uid,
+            candidate_id,
+        )
+    return owned
+
+
 def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
     """Accept path: claim, then schedule the provider sync. Returns before it finishes."""
     lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
@@ -152,6 +171,11 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
         return False
 
     def run_sync() -> None:
+        # The pool may have queued this past the 300s claim lease. Re-stamp only
+        # while this token still owns the row; a sweeper that took it must be
+        # the only provider call.
+        if not _retain_lease_for_provider_call(uid, candidate_id, lease_token):
+            return
         _record_integration_result(
             uid,
             candidate_id,
@@ -165,16 +189,19 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
 
 
 def dispatch_task_integration_blocking(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
-    """Claim, sync, and complete before returning.
+    """Claim, confirm the lease, sync, and complete before returning.
 
     True when this call recorded the attempt (success, terminal noop, or retryable failure).
-    False when the row was not claimed. A provider exception is recorded as a failure and re-raised.
+    False when the row was not claimed or the lease was lost before the provider call.
+    A provider exception is recorded as a failure and re-raised.
     """
     lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
     if lease_token is None:
         return False
     if task is None:
         return True
+    if not _retain_lease_for_provider_call(uid, candidate_id, lease_token):
+        return False
     _record_integration_result(
         uid,
         candidate_id,

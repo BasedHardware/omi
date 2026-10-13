@@ -5,6 +5,12 @@ at ``BUDGET_SECONDS``. Rows older than seven days, missing ``created_at``, or
 on a previous account generation are dead-lettered with no provider call.
 Younger due rows use the blocking dispatch so the lease is completed before
 the pass moves on.
+
+A ``processing`` row is reclaimed only when ``claimed_at`` is older than
+``SWEEP_RECLAIM_AFTER`` (one hour). The claim protocol's 300s lease stays as
+it is: an inline accept job can sit on the shared postprocess pool past those
+300s and still own the row. That job re-stamps ``claimed_at`` when it starts,
+and this pass's blocking dispatch does the same just before the provider call.
 """
 
 import logging
@@ -23,6 +29,10 @@ MAX_ROWS = 200
 BUDGET_SECONDS = 50.0
 STALE_AFTER = timedelta(days=7)
 PENDING_GRACE = timedelta(minutes=10)
+# Not the 300s claim lease. Reclaiming a processing row at 300s races an inline
+# export that is still queued; one hour is long enough for that job to start
+# and re-stamp, or to lose the token and skip the provider.
+SWEEP_RECLAIM_AFTER = timedelta(hours=1)
 SCAN_STATUSES = ('failed', 'processing', 'pending')
 
 
@@ -40,13 +50,13 @@ def _bump(counts: dict[str, int], disposition: str) -> None:
 
 
 def _lease_is_live(row: dict[str, Any], now: datetime) -> bool:
+    """True while this pass must not reclaim or dead-letter the processing row."""
     if row.get('status') != 'processing':
         return False
     claimed_at = row.get('claimed_at')
     if not isinstance(claimed_at, datetime):
         return False
-    lease = timedelta(seconds=integration_outbox_db.CANDIDATE_INTEGRATION_LEASE_SECONDS)
-    return _aware(claimed_at) + lease > now
+    return _aware(claimed_at) + SWEEP_RECLAIM_AFTER > now
 
 
 async def _generation(uid: str, cache: dict[str, int]) -> int:

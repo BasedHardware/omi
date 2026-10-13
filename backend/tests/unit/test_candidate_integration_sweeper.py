@@ -242,37 +242,130 @@ def test_future_available_at_and_young_pending_are_skipped(store, monkeypatch):
     assert store.rows[pending]['status'] == 'pending'
 
 
-def test_live_lease_is_skipped_and_expired_lease_is_reclaimed(store, monkeypatch):
+def test_sweeper_skips_a_ten_minute_processing_row_and_reclaims_a_two_hour_one(store, monkeypatch):
     now = _now()
     calls = _allow_sync(monkeypatch, {'synced': True})
-    live = _put(
+    recent = _put(
         store,
-        'live',
+        'ten-minutes',
         now=now,
         status='processing',
-        claimed_at=now - timedelta(seconds=30),
-        lease_token='live-lease',
+        task_id='task-recent',
+        claimed_at=now - timedelta(minutes=10),
+        lease_token='recent-lease',
         attempt_count=1,
     )
-    expired = _put(
+    abandoned = _put(
         store,
-        'expired',
+        'two-hours',
         now=now,
         status='processing',
-        claimed_at=now - timedelta(seconds=301),
-        lease_token='expired-lease',
+        task_id='task-abandoned',
+        claimed_at=now - timedelta(hours=2),
+        lease_token='abandoned-lease',
         attempt_count=1,
     )
 
     counts, _client = _sweep(store, now=now)
 
+    assert sweeper.SWEEP_RECLAIM_AFTER == timedelta(hours=1)
+    assert integration_outbox_db.CANDIDATE_INTEGRATION_LEASE_SECONDS == 300
     assert counts['skipped_live_lease'] == 1
     assert counts['retried'] == 1
-    assert calls == ['task-1']
-    assert store.rows[live]['status'] == 'processing'
-    assert store.rows[live]['lease_token'] == 'live-lease'
-    assert store.rows[expired]['status'] == 'completed'
-    assert store.rows[expired]['attempt_count'] == 2
+    assert calls == ['task-abandoned']
+    assert store.rows[recent]['status'] == 'processing'
+    assert store.rows[recent]['lease_token'] == 'recent-lease'
+    assert store.rows[recent]['attempt_count'] == 1
+    assert store.rows[abandoned]['status'] == 'completed'
+    assert store.rows[abandoned]['attempt_count'] == 2
+    assert store.rows[abandoned]['claimed_at'] >= now
+
+
+def _schedule_inline_job(store, monkeypatch):
+    now = _now()
+    path = _put(store, 'inline', now=now, status='pending', attempt_count=0, task_id='task-inline')
+    calls = []
+    scheduled = []
+
+    async def sync(uid, task, **kwargs):
+        calls.append(
+            {
+                'task_id': task['id'],
+                'claimed_at': store.rows[path]['claimed_at'],
+                'lease_token': store.rows[path]['lease_token'],
+            }
+        )
+        return {'synced': True}
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+
+    def capture(executor, function):
+        scheduled.append(function)
+
+    monkeypatch.setattr(candidate_service, 'submit_with_context', capture)
+    assert candidate_service._dispatch_task_integration('user-1', 'inline', 'task-inline', account_generation=3)
+    assert len(scheduled) == 1
+    assert calls == []
+    return path, calls, scheduled[0]
+
+
+def test_inline_job_delayed_past_the_claim_lease_is_the_only_provider_call(store, monkeypatch):
+    path, calls, run_sync = _schedule_inline_job(store, monkeypatch)
+    sweep_now = _now()
+    original_token = store.rows[path]['lease_token']
+    store.rows[path]['claimed_at'] = sweep_now - timedelta(seconds=301)
+
+    counts, _client = _sweep(store, now=sweep_now)
+    assert counts['skipped_live_lease'] == 1
+    assert counts['retried'] == 0
+    assert calls == []
+
+    run_sync()
+
+    assert [call['task_id'] for call in calls] == ['task-inline']
+    assert calls[0]['lease_token'] == original_token
+    assert calls[0]['claimed_at'] >= sweep_now
+    assert store.rows[path]['status'] == 'completed'
+    assert store.rows[path]['attempt_count'] == 1
+
+
+def test_inline_job_that_lost_its_lease_makes_no_provider_call(store, monkeypatch):
+    path, calls, run_sync = _schedule_inline_job(store, monkeypatch)
+    claimed_at = store.rows[path]['claimed_at']
+    store.rows[path]['lease_token'] = 'taken-over'
+
+    run_sync()
+
+    assert calls == []
+    assert store.rows[path]['status'] == 'processing'
+    assert store.rows[path]['lease_token'] == 'taken-over'
+    assert store.rows[path]['claimed_at'] == claimed_at
+    assert store.rows[path]['attempt_count'] == 1
+
+
+def test_blocking_dispatch_skips_the_provider_when_the_lease_is_lost_before_the_call(store, monkeypatch):
+    now = _now()
+    path = _put(store, 'due', now=now, status='failed', attempt_count=1)
+    calls = []
+
+    def steal_before_provider(uid, task_id):
+        store.rows[path]['lease_token'] = 'stolen'
+        return {'id': task_id}
+
+    async def sync(uid, task, **kwargs):
+        calls.append(task['id'])
+        return {'synced': True}
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', steal_before_provider)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+
+    recorded = candidate_service.dispatch_task_integration_blocking('user-1', 'due', 'task-1', account_generation=3)
+
+    assert recorded is False
+    assert calls == []
+    assert store.rows[path]['status'] == 'processing'
+    assert store.rows[path]['lease_token'] == 'stolen'
 
 
 def test_row_and_wall_clock_budgets_stop_the_pass(store, monkeypatch):
@@ -315,39 +408,30 @@ def test_sweep_counter_zero_inits_the_closed_disposition_set():
     assert samples == set(CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS)
 
 
-def test_scheduler_job_matches_the_sync_oidc_audience_and_cannot_block_a_full_reconcile():
+def test_scheduler_job_exists_only_for_prod():
     from pathlib import Path
 
     manifest = yaml.load(
         (Path(__file__).resolve().parents[2] / 'deploy/scheduler/jobs.yaml').read_text(),
         Loader=yaml.CSafeLoader,
     )
-    for environment, host, account in (
-        (
-            'dev',
-            'https://backend-sync-dt5lrfkkoa-uc.a.run.app',
-            'sync-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com',
-        ),
-        (
-            'prod',
-            'https://backend-sync-hhibjajaja-uc.a.run.app',
-            'sync-tasks-invoker@based-hardware.iam.gserviceaccount.com',
-        ),
-    ):
-        jobs = manifest['environments'][environment]['jobs']
-        job = next(item for item in jobs if item['name'] == 'candidate-integration-sweep')
-        sequencer = next(item for item in jobs if item['name'] == 'sync-backfill-uid-sequencer')
-        assert job['lifecycle'] == 'planned'
-        assert job['schedule'] == '*/15 * * * *'
-        assert job['attempt_deadline'] == '120s'
-        assert job['state'] == ('PAUSED' if environment == 'dev' else 'ENABLED')
-        assert job['target']['uri'] == host + '/v2/candidate-integrations/sweep'
-        assert job['target']['method'] == 'POST'
-        assert job['target']['oidc'] == {
-            'service_account': account,
-            'audience': sequencer['target']['oidc']['audience'],
-        }
-        assert job['retry'] == sequencer['retry']
+    dev_names = {item['name'] for item in manifest['environments']['dev']['jobs']}
+    assert 'candidate-integration-sweep' not in dev_names
+    jobs = manifest['environments']['prod']['jobs']
+    job = next(item for item in jobs if item['name'] == 'candidate-integration-sweep')
+    sequencer = next(item for item in jobs if item['name'] == 'sync-backfill-uid-sequencer')
+    host = 'https://backend-sync-hhibjajaja-uc.a.run.app'
+    assert job['lifecycle'] == 'planned'
+    assert job['schedule'] == '*/15 * * * *'
+    assert job['attempt_deadline'] == '120s'
+    assert job['state'] == 'ENABLED'
+    assert job['target']['uri'] == host + '/v2/candidate-integrations/sweep'
+    assert job['target']['method'] == 'POST'
+    assert job['target']['oidc'] == {
+        'service_account': 'sync-tasks-invoker@based-hardware.iam.gserviceaccount.com',
+        'audience': sequencer['target']['oidc']['audience'],
+    }
+    assert job['retry'] == sequencer['retry']
 
 
 @pytest.fixture
