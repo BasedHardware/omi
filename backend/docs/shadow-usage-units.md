@@ -23,7 +23,7 @@ reasoning exactly once (missing inclusion metadata defaults to extra reasoning).
 Gemini audio without a modality price, and Gemini tool-use prompt tokens, remain
 estimated with explicit missing-rate reasons, including realtime tool tokens. Flex and reserved capacity do not discount shadow units.
 Realtime modality rates and image output rates are pinned separately. Missing
-modality counts can use an exact matching pinned legacy realtime card amount,
+or empty modality counts can use an exact matching pinned legacy realtime card amount,
 with estimated completeness. Unknown models/rates or funding are incomplete,
 never a complete zero. BYOK, custom and on-device provider usage is zero; Omi-paid
 extraction of a customer-funded transcript still draws LLM units independently.
@@ -56,3 +56,55 @@ user-routed accepted-speech `speech_provider_shares` (nonnegative, summing to on
 or a known single `speech_provider`, plus supplied recording/chat overhead.
 Without a supplied mix they use the same conservative Deepgram maximum; these remain
 internal helpers with no API/client surface.
+
+## Persistence and reads
+
+`database.usage_units` projects units into the same `hourly_usage` set/merge
+writes and the existing `llm_gateway_user_days` rollup writes. Sync's content
+marker remains in its existing transaction. Gateway attempt identity remains
+the canonical deduplication boundary, and each immutable attempt includes its
+v1 unit annotation. LLM retries are separate cost attempts; duplicate attempt
+IDs do not add units. Provider counters are never copied into request content.
+
+Live provenance follows the provider serving at flush time. A Deepgram BYOK
+key only excludes cloud Deepgram; Parakeet/Modulate remain Omi-funded, and
+self-hosted Deepgram retains its provider identity with the explicit unlisted-rate compute proxy.
+Custom STT is zero for transcription while funded downstream LLM calls still
+consume units. Current listen, sync and proxy counters are estimated as counter
+seconds × 0.32; no producer falsely declares these accepted speech. Sync's
+counter is already initial VAD duration, so its mandated ratio proxy can
+particularly underestimate accepted speech; that basis is recorded. The
+optional accepted-speech hook preserves fractional quantities when available.
+Invalid or nonfinite accepted quantities fail open inside pricing: the legacy
+write proceeds and the shadow leaf records missing coverage.
+Sync v1 currently stamps Omi-funded/unknown-provider estimates without successful
+segment funding provenance. Deepgram BYOK work can therefore be overstated in
+shadow units; do not use that projection for admission or billing. Correcting
+this requires carrying successful segment provider/funding through aggregation.
+On-device/PTT/import paths without these writers remain coverage gaps.
+
+Firestore write counts are unchanged: ordinary hourly writes 1→1, sync content
+marker transactions 2→2, gateway attempt+day rollup 2→2. There are no new per-event
+write calls or subscriptions reads for projection. MCP/API-only requests have
+no existing durable usage write on cache hits, so strict zero additional writes
+means their request quantities remain explicitly incomplete. Web synthesis
+attempts piggyback the provisional web-tool infra charge on the existing rollup;
+vendor search request fees remain unmeasured.
+
+`get_usage_units(uid, period)` takes a timezone-aware datetime selecting a UTC
+calendar month; annual plans also reset monthly. It reads one projected hourly
+query, at most 31 direct hashed day-rollups, and subscription metadata. It never
+scans attempts or reads user content. Outputs include used units, the price-
+resolved version's budget (legacy has none), feature/funding totals, status
+counts, and coverage gaps. It remains an internal helper with no route/client
+surface. Missing old projections are counted as incomplete lower-bound data;
+no historical document is rewritten or backfilled. Attempt delivery and
+rollups retain their existing best-effort failure contract; complete capture
+cannot be asserted from the rollup alone.
+
+Hourly plan attribution now uses the existing nested-field expansion primitive
+before set/merge. Reporting adds disjoint historical literal dotted fields to
+new nested increments. Root meter/finops counters are unchanged, so monthly
+allowance and finops extraction remain on their existing quantity. Tests use
+the real Firestore protobuf serializer to verify unquoted nested field paths
+and preserve the root-counter readers across both stored shapes.
