@@ -150,9 +150,14 @@ but the oldest retained data cannot reconstruct full windows.
 
 ## Backtest, exclusions and rollout
 
-Five-minute `query_range` counts and the one-minute replay are in
-`slo-backtest.prod.json` (`one_minute_replay`). Grafana evaluates every minute.
-A run pages when `last true sample - first true sample + 60s` exceeds `for`.
+Five-minute `query_range` counts and the page replay are in
+`slo-backtest.prod.json` (`page_replay`). The replay samples every 15 minutes,
+because one-minute replays of multi-day windows overloaded prod Prometheus on
+2026-10-13. Grafana evaluates every minute, so a condition shorter than 15
+minutes can fall between replay samples; the zero-page result is a sampled
+estimate, not proof. A run pages when `last true sample - first true sample +
+60s` exceeds `for`. A full rerun of `scripts/backtest_journey_slos.py` keeps the
+existing `page_replay` section.
 The page target is 0 critical episodes and at most one warning episode per
 rule across the 10 days.
 

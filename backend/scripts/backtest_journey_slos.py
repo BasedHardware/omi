@@ -187,6 +187,14 @@ def main():
             baselines={},
             rules={},
         )
+        # The throttled page replay is measured separately (its own replayed_at_utc); keep it and its notes.
+        if receipt_path.exists():
+            previous = json.loads(receipt_path.read_text())
+            evidence['limitations'] += [
+                note for note in previous.get('limitations', []) if note not in evidence['limitations']
+            ]
+            if 'page_replay' in previous:
+                evidence['page_replay'] = previous['page_replay']
         for journey, (bad_template, valid_template, presence_selector) in SLIS.items():
             bad_query = bad_template.replace('WINDOW', '10d')
             valid_query = valid_template.replace('WINDOW', '10d')
