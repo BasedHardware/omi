@@ -13111,4 +13111,96 @@ class AppLocalizationsCa extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Processament d\'IA: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Porta el teu Omi';
+
+  @override
+  String get onboardingActWearBody =>
+      'Escolta i recorda les teves converses. Prem un cop per preguntar-li el que vulguis.';
+
+  @override
+  String get onboardingActIntro => 'Vegem l\'Omi en acció.';
+
+  @override
+  String get onboardingActNotesTitle => 'Parla. Omi pren notes.';
+
+  @override
+  String get onboardingActNotesBody => 'Resums que pots cercar i amb què pots xatejar.';
+
+  @override
+  String get onboardingActTasksTitle => 'Després troba què cal fer.';
+
+  @override
+  String get onboardingActTasksBody => 'Perquè no se t\'escapi res.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi necessita el micròfon';
+
+  @override
+  String get onboardingActMicBody => 'Perquè Omi et senti quan li parlis.';
+
+  @override
+  String get onboardingActMicAllow => 'Permet el micròfon';
+
+  @override
+  String get onboardingActDictateTitle => 'Explica-li a Omi el teu dia';
+
+  @override
+  String get onboardingActDictateBody => 'Digues-ho a la teva manera. Omi s\'encarrega de la resta.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Acabo de dinar amb la Sam, se\'n va a viure a Lisboa al juny! Recorda\'m d\'enviar la presentació a l\'equip abans de divendres i de comprar llet de tornada a casa.';
+
+  @override
+  String get onboardingActDictateHint => 'Toca la marca quan acabis';
+
+  @override
+  String get onboardingActPhoneMic => 'Micròfon del telèfon';
+
+  @override
+  String get onboardingActWriting => 'Escrivint les teves notes…';
+
+  @override
+  String get onboardingActNotesLabel => 'Les teves notes';
+
+  @override
+  String get onboardingActTasksLabel => 'Les teves tasques';
+
+  @override
+  String get onboardingActYourWords => 'Això és el que has dit';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Tot a punt, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Porta l\'Omi durant el dia. Les teves converses apareixeran a l\'inici.';
+
+  @override
+  String get onboardingActRateTitle => 'T\'agrada Omi de moment?';
+
+  @override
+  String get onboardingActRateYes => 'Valora Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Et donem la benvinguda a Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Porta l\'Omi i parla com sempre. Cada conversa es converteix aquí en notes, tasques i records.';
+
+  @override
+  String get onboardingActDemoTitle => 'Dinar amb la Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'La Sam es muda a Lisboa al juny.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Enviar la presentació a l\'equip abans de divendres';
+
+  @override
+  String get onboardingActDemoTask2 => 'Comprar llet de tornada a casa';
 }

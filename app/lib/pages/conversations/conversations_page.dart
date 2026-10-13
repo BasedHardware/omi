@@ -9,6 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/onboarding_welcome_card.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
@@ -536,6 +537,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             slivers: [
               // The live capture row: recording, a call, or a conversation being captured.
               const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+              const SliverToBoxAdapter(child: OnboardingWelcomeCard()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.

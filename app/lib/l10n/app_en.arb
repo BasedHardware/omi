@@ -15801,5 +15801,127 @@
                 "example": "Deepgram, OpenAI"
             }
         }
+    },
+    "onboardingActWearTitle": "Wear your Omi",
+    "@onboardingActWearTitle": {
+        "description": "Activation: title for device users before the demo"
+    },
+    "onboardingActWearBody": "It listens and remembers your conversations. Press once to ask it anything.",
+    "@onboardingActWearBody": {
+        "description": "Activation: how the device works, shown to device users"
+    },
+    "onboardingActIntro": "Let's see Omi at work.",
+    "@onboardingActIntro": {
+        "description": "Activation: animated line before the demo slides"
+    },
+    "onboardingActNotesTitle": "Talk. Omi takes notes.",
+    "@onboardingActNotesTitle": {
+        "description": "Activation slide 1 title"
+    },
+    "onboardingActNotesBody": "Summaries you can search and chat with.",
+    "@onboardingActNotesBody": {
+        "description": "Activation slide 1 line"
+    },
+    "onboardingActTasksTitle": "Then it finds what to do.",
+    "@onboardingActTasksTitle": {
+        "description": "Activation slide 2 title"
+    },
+    "onboardingActTasksBody": "So nothing slips.",
+    "@onboardingActTasksBody": {
+        "description": "Activation slide 2 line"
+    },
+    "onboardingActMicTitle": "Omi needs your microphone",
+    "@onboardingActMicTitle": {
+        "description": "Activation: microphone pre-permission title (phone users)"
+    },
+    "onboardingActMicBody": "So Omi can hear you when you talk to it.",
+    "@onboardingActMicBody": {
+        "description": "Activation: why the microphone is needed"
+    },
+    "onboardingActMicAllow": "Allow Microphone",
+    "@onboardingActMicAllow": {
+        "description": "Activation: button that shows the microphone system prompt"
+    },
+    "onboardingActDictateTitle": "Tell Omi about your day",
+    "@onboardingActDictateTitle": {
+        "description": "Activation: dictation step title"
+    },
+    "onboardingActDictateBody": "Say it your way. Omi handles the rest.",
+    "@onboardingActDictateBody": {
+        "description": "Activation: line under the dictation title"
+    },
+    "onboardingActDictateExample": "Just had lunch with Sam, she's moving to Lisbon in June! Remind me to send the deck to my team by Friday, and to grab milk on the way home.",
+    "@onboardingActDictateExample": {
+        "description": "Activation: faded example in the dictation card (casual tone; keep 'Remind me' so Omi keeps it; Sam and Lisbon are example names)"
+    },
+    "onboardingActDictateHint": "Tap the check when you're done",
+    "@onboardingActDictateHint": {
+        "description": "Activation: hint in the dictation bar next to the check button"
+    },
+    "onboardingActPhoneMic": "Phone microphone",
+    "@onboardingActPhoneMic": {
+        "description": "Activation: which microphone is listening (phone)"
+    },
+    "onboardingActWriting": "Writing your notes…",
+    "@onboardingActWriting": {
+        "description": "Activation: shown while Omi processes the dictation"
+    },
+    "onboardingActNotesLabel": "Your notes",
+    "@onboardingActNotesLabel": {
+        "description": "Activation: small label above the generated summary"
+    },
+    "onboardingActTasksLabel": "Your tasks",
+    "@onboardingActTasksLabel": {
+        "description": "Activation: small label above the generated tasks"
+    },
+    "onboardingActYourWords": "Here's what you said",
+    "@onboardingActYourWords": {
+        "description": "Activation: fallback label when no summary could be made"
+    },
+    "onboardingActCongratsTitle": "You're all set, {name}",
+    "@onboardingActCongratsTitle": {
+        "description": "Activation: congratulations title with the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "Yinka"
+            }
+        }
+    },
+    "onboardingActCongratsBody": "Wear Omi through your day. Your conversations show up on Home.",
+    "@onboardingActCongratsBody": {
+        "description": "Activation: line under the congratulations title"
+    },
+    "onboardingActRateTitle": "Enjoying Omi so far?",
+    "@onboardingActRateTitle": {
+        "description": "Activation: rating ask on the congratulations screen"
+    },
+    "onboardingActRateYes": "Rate Omi",
+    "@onboardingActRateYes": {
+        "description": "Activation: button that opens the system rating prompt"
+    },
+    "onboardingWelcomeCardTitle": "Welcome to Omi",
+    "@onboardingWelcomeCardTitle": {
+        "description": "Home: welcome card title for people who skipped the first conversation"
+    },
+    "onboardingWelcomeCardBody": "Wear Omi and talk as usual. Each conversation turns into notes, tasks and memories right here.",
+    "@onboardingWelcomeCardBody": {
+        "description": "Home: welcome card text"
+    },
+    "onboardingActDemoTitle": "Lunch with Sam",
+    "@onboardingActDemoTitle": {
+        "description": "Activation slide illustration: example note title"
+    },
+    "onboardingActDemoSummary": "Sam is moving to Lisbon in June.",
+    "@onboardingActDemoSummary": {
+        "description": "Activation slide illustration: example summary line"
+    },
+    "onboardingActDemoTask1": "Send the deck to the team by Friday",
+    "@onboardingActDemoTask1": {
+        "description": "Activation slide illustration: example task"
+    },
+    "onboardingActDemoTask2": "Grab milk on the way home",
+    "@onboardingActDemoTask2": {
+        "description": "Activation slide illustration: example task"
     }
 }

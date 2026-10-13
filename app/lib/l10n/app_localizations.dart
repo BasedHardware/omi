@@ -23258,6 +23258,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI processing: {providers}'**
   String consentAiProviders(String providers);
+
+  /// Activation: title for device users before the demo
+  ///
+  /// In en, this message translates to:
+  /// **'Wear your Omi'**
+  String get onboardingActWearTitle;
+
+  /// Activation: how the device works, shown to device users
+  ///
+  /// In en, this message translates to:
+  /// **'It listens and remembers your conversations. Press once to ask it anything.'**
+  String get onboardingActWearBody;
+
+  /// Activation: animated line before the demo slides
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s see Omi at work.'**
+  String get onboardingActIntro;
+
+  /// Activation slide 1 title
+  ///
+  /// In en, this message translates to:
+  /// **'Talk. Omi takes notes.'**
+  String get onboardingActNotesTitle;
+
+  /// Activation slide 1 line
+  ///
+  /// In en, this message translates to:
+  /// **'Summaries you can search and chat with.'**
+  String get onboardingActNotesBody;
+
+  /// Activation slide 2 title
+  ///
+  /// In en, this message translates to:
+  /// **'Then it finds what to do.'**
+  String get onboardingActTasksTitle;
+
+  /// Activation slide 2 line
+  ///
+  /// In en, this message translates to:
+  /// **'So nothing slips.'**
+  String get onboardingActTasksBody;
+
+  /// Activation: microphone pre-permission title (phone users)
+  ///
+  /// In en, this message translates to:
+  /// **'Omi needs your microphone'**
+  String get onboardingActMicTitle;
+
+  /// Activation: why the microphone is needed
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi can hear you when you talk to it.'**
+  String get onboardingActMicBody;
+
+  /// Activation: button that shows the microphone system prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Microphone'**
+  String get onboardingActMicAllow;
+
+  /// Activation: dictation step title
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi about your day'**
+  String get onboardingActDictateTitle;
+
+  /// Activation: line under the dictation title
+  ///
+  /// In en, this message translates to:
+  /// **'Say it your way. Omi handles the rest.'**
+  String get onboardingActDictateBody;
+
+  /// Activation: faded example in the dictation card (casual tone; keep 'Remind me' so Omi keeps it; Sam and Lisbon are example names)
+  ///
+  /// In en, this message translates to:
+  /// **'Just had lunch with Sam, she\'s moving to Lisbon in June! Remind me to send the deck to my team by Friday, and to grab milk on the way home.'**
+  String get onboardingActDictateExample;
+
+  /// Activation: hint in the dictation bar next to the check button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the check when you\'re done'**
+  String get onboardingActDictateHint;
+
+  /// Activation: which microphone is listening (phone)
+  ///
+  /// In en, this message translates to:
+  /// **'Phone microphone'**
+  String get onboardingActPhoneMic;
+
+  /// Activation: shown while Omi processes the dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your notes…'**
+  String get onboardingActWriting;
+
+  /// Activation: small label above the generated summary
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes'**
+  String get onboardingActNotesLabel;
+
+  /// Activation: small label above the generated tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Your tasks'**
+  String get onboardingActTasksLabel;
+
+  /// Activation: fallback label when no summary could be made
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s what you said'**
+  String get onboardingActYourWords;
+
+  /// Activation: congratulations title with the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re all set, {name}'**
+  String onboardingActCongratsTitle(String name);
+
+  /// Activation: line under the congratulations title
+  ///
+  /// In en, this message translates to:
+  /// **'Wear Omi through your day. Your conversations show up on Home.'**
+  String get onboardingActCongratsBody;
+
+  /// Activation: rating ask on the congratulations screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enjoying Omi so far?'**
+  String get onboardingActRateTitle;
+
+  /// Activation: button that opens the system rating prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Rate Omi'**
+  String get onboardingActRateYes;
+
+  /// Home: welcome card title for people who skipped the first conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Omi'**
+  String get onboardingWelcomeCardTitle;
+
+  /// Home: welcome card text
+  ///
+  /// In en, this message translates to:
+  /// **'Wear Omi and talk as usual. Each conversation turns into notes, tasks and memories right here.'**
+  String get onboardingWelcomeCardBody;
+
+  /// Activation slide illustration: example note title
+  ///
+  /// In en, this message translates to:
+  /// **'Lunch with Sam'**
+  String get onboardingActDemoTitle;
+
+  /// Activation slide illustration: example summary line
+  ///
+  /// In en, this message translates to:
+  /// **'Sam is moving to Lisbon in June.'**
+  String get onboardingActDemoSummary;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Send the deck to the team by Friday'**
+  String get onboardingActDemoTask1;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Grab milk on the way home'**
+  String get onboardingActDemoTask2;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -13068,4 +13068,96 @@ class AppLocalizationsLt extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'DI apdorojimas: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Nešiokite savo Omi';
+
+  @override
+  String get onboardingActWearBody =>
+      'Jis klausosi ir įsimena jūsų pokalbius. Paspauskite kartą ir klauskite ko tik norite.';
+
+  @override
+  String get onboardingActIntro => 'Pažiūrėkime, kaip veikia Omi.';
+
+  @override
+  String get onboardingActNotesTitle => 'Kalbėkite. Omi užsirašo.';
+
+  @override
+  String get onboardingActNotesBody => 'Santraukos, kuriose galite ieškoti ir apie kurias galite klausti.';
+
+  @override
+  String get onboardingActTasksTitle => 'Tada jis randa, ką reikia padaryti.';
+
+  @override
+  String get onboardingActTasksBody => 'Kad niekas nepraslystų.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi reikia mikrofono';
+
+  @override
+  String get onboardingActMicBody => 'Kad Omi girdėtų, kai su juo kalbate.';
+
+  @override
+  String get onboardingActMicAllow => 'Leisti mikrofoną';
+
+  @override
+  String get onboardingActDictateTitle => 'Papasakokite Omi apie savo dieną';
+
+  @override
+  String get onboardingActDictateBody => 'Sakykite savaip. Visa kita padarys Omi.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Ką tik pietavau su Sem, birželį ji kraustosi į Lisaboną! Primink man iki penktadienio nusiųsti pristatymą komandai ir grįžtant namo nupirkti pieno.';
+
+  @override
+  String get onboardingActDictateHint => 'Baigę bakstelėkite varnelę';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefono mikrofonas';
+
+  @override
+  String get onboardingActWriting => 'Rašomi jūsų užrašai…';
+
+  @override
+  String get onboardingActNotesLabel => 'Jūsų užrašai';
+
+  @override
+  String get onboardingActTasksLabel => 'Jūsų užduotys';
+
+  @override
+  String get onboardingActYourWords => 'Štai ką pasakėte';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Viskas paruošta, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Nešiokite Omi visą dieną. Jūsų pokalbiai atsiras pradžios ekrane.';
+
+  @override
+  String get onboardingActRateTitle => 'Ar Omi jums patinka?';
+
+  @override
+  String get onboardingActRateYes => 'Įvertinti Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Sveiki atvykę į Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Nešiokite Omi ir kalbėkite kaip įprasta. Kiekvienas pokalbis čia virsta užrašais, užduotimis ir prisiminimais.';
+
+  @override
+  String get onboardingActDemoTitle => 'Pietūs su Sem';
+
+  @override
+  String get onboardingActDemoSummary => 'Sem birželį kraustosi į Lisaboną.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Iki penktadienio nusiųsti pristatymą komandai';
+
+  @override
+  String get onboardingActDemoTask2 => 'Grįžtant namo nupirkti pieno';
 }

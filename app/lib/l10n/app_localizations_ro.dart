@@ -13098,4 +13098,96 @@ class AppLocalizationsRo extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Procesare AI: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Poartă-ți Omi';
+
+  @override
+  String get onboardingActWearBody =>
+      'Ascultă și își amintește conversațiile tale. Apasă o dată ca să-l întrebi orice.';
+
+  @override
+  String get onboardingActIntro => 'Hai să vedem Omi la treabă.';
+
+  @override
+  String get onboardingActNotesTitle => 'Vorbește. Omi ia notițe.';
+
+  @override
+  String get onboardingActNotesBody => 'Rezumate pe care le poți căuta și cu care poți discuta.';
+
+  @override
+  String get onboardingActTasksTitle => 'Apoi găsește ce e de făcut.';
+
+  @override
+  String get onboardingActTasksBody => 'Ca nimic să nu-ți scape.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi are nevoie de microfon';
+
+  @override
+  String get onboardingActMicBody => 'Ca Omi să te audă când vorbești cu el.';
+
+  @override
+  String get onboardingActMicAllow => 'Permite microfonul';
+
+  @override
+  String get onboardingActDictateTitle => 'Povestește-i lui Omi despre ziua ta';
+
+  @override
+  String get onboardingActDictateBody => 'Spune-o în felul tău. Omi se ocupă de rest.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Tocmai am luat prânzul cu Sam, se mută la Lisabona în iunie! Amintește-mi să trimit prezentarea echipei până vineri și să iau lapte în drum spre casă.';
+
+  @override
+  String get onboardingActDictateHint => 'Atinge bifa când ai terminat';
+
+  @override
+  String get onboardingActPhoneMic => 'Microfonul telefonului';
+
+  @override
+  String get onboardingActWriting => 'Îți scriu notițele…';
+
+  @override
+  String get onboardingActNotesLabel => 'Notițele tale';
+
+  @override
+  String get onboardingActTasksLabel => 'Sarcinile tale';
+
+  @override
+  String get onboardingActYourWords => 'Iată ce ai spus';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Totul e gata, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Poartă Omi toată ziua. Conversațiile tale apar pe ecranul principal.';
+
+  @override
+  String get onboardingActRateTitle => 'Îți place Omi până acum?';
+
+  @override
+  String get onboardingActRateYes => 'Evaluează Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Bun venit în Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Poartă Omi și vorbește ca de obicei. Fiecare conversație devine aici notițe, sarcini și amintiri.';
+
+  @override
+  String get onboardingActDemoTitle => 'Prânz cu Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam se mută la Lisabona în iunie.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Trimite prezentarea echipei până vineri';
+
+  @override
+  String get onboardingActDemoTask2 => 'Ia lapte în drum spre casă';
 }

@@ -13067,4 +13067,96 @@ class AppLocalizationsPt extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Processamento de IA: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Use seu Omi';
+
+  @override
+  String get onboardingActWearBody =>
+      'Ele ouve e lembra suas conversas. Pressione uma vez para perguntar qualquer coisa.';
+
+  @override
+  String get onboardingActIntro => 'Vamos ver o Omi em ação.';
+
+  @override
+  String get onboardingActNotesTitle => 'Fale. O Omi anota.';
+
+  @override
+  String get onboardingActNotesBody => 'Resumos que você pode pesquisar e conversar.';
+
+  @override
+  String get onboardingActTasksTitle => 'Depois, ele encontra o que fazer.';
+
+  @override
+  String get onboardingActTasksBody => 'Para nada escapar.';
+
+  @override
+  String get onboardingActMicTitle => 'O Omi precisa do seu microfone';
+
+  @override
+  String get onboardingActMicBody => 'Para o Omi ouvir quando você falar com ele.';
+
+  @override
+  String get onboardingActMicAllow => 'Permitir microfone';
+
+  @override
+  String get onboardingActDictateTitle => 'Conte ao Omi sobre o seu dia';
+
+  @override
+  String get onboardingActDictateBody => 'Fale do seu jeito. O Omi cuida do resto.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Acabei de almoçar com a Sam, ela vai se mudar para Lisboa em junho! Me lembra de mandar a apresentação para o time até sexta e de comprar leite na volta para casa.';
+
+  @override
+  String get onboardingActDictateHint => 'Toque no check quando terminar';
+
+  @override
+  String get onboardingActPhoneMic => 'Microfone do celular';
+
+  @override
+  String get onboardingActWriting => 'Escrevendo suas notas…';
+
+  @override
+  String get onboardingActNotesLabel => 'Suas notas';
+
+  @override
+  String get onboardingActTasksLabel => 'Suas tarefas';
+
+  @override
+  String get onboardingActYourWords => 'Veja o que você disse';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Tudo pronto, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Use o Omi durante o dia. Suas conversas aparecem no Início.';
+
+  @override
+  String get onboardingActRateTitle => 'Está gostando do Omi?';
+
+  @override
+  String get onboardingActRateYes => 'Avaliar o Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Boas-vindas ao Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Use o Omi e converse normalmente. Cada conversa vira notas, tarefas e memórias bem aqui.';
+
+  @override
+  String get onboardingActDemoTitle => 'Almoço com a Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'A Sam vai se mudar para Lisboa em junho.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Mandar a apresentação para o time até sexta';
+
+  @override
+  String get onboardingActDemoTask2 => 'Comprar leite na volta para casa';
 }

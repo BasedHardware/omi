@@ -13104,4 +13104,96 @@ class AppLocalizationsMk extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'ВИ обработка: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Носете го вашиот Omi';
+
+  @override
+  String get onboardingActWearBody => 'Ги слуша и ги памети вашите разговори. Притиснете еднаш за да прашате било што.';
+
+  @override
+  String get onboardingActIntro => 'Да го видиме Omi на дело.';
+
+  @override
+  String get onboardingActNotesTitle => 'Зборувајте. Omi води белешки.';
+
+  @override
+  String get onboardingActNotesBody => 'Резимеа што можете да ги пребарувате и да разговарате со нив.';
+
+  @override
+  String get onboardingActTasksTitle => 'Потоа наоѓа што треба да се направи.';
+
+  @override
+  String get onboardingActTasksBody => 'За ништо да не ви промакне.';
+
+  @override
+  String get onboardingActMicTitle => 'На Omi му треба микрофонот';
+
+  @override
+  String get onboardingActMicBody => 'За Omi да ве слуша кога зборувате со него.';
+
+  @override
+  String get onboardingActMicAllow => 'Дозволи микрофон';
+
+  @override
+  String get onboardingActDictateTitle => 'Кажете му на Omi за вашиот ден';
+
+  @override
+  String get onboardingActDictateBody => 'Кажете го на свој начин. Omi ќе се погрижи за останатото.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Штотуку ручав со Сем, се сели во Лисабон во јуни! Потсети ме да ја пратам презентацијата на тимот до петок и да купам млеко на пат кон дома.';
+
+  @override
+  String get onboardingActDictateHint => 'Допрете ја штиклата кога ќе завршите';
+
+  @override
+  String get onboardingActPhoneMic => 'Микрофон на телефонот';
+
+  @override
+  String get onboardingActWriting => 'Ги пишувам вашите белешки…';
+
+  @override
+  String get onboardingActNotesLabel => 'Ваши белешки';
+
+  @override
+  String get onboardingActTasksLabel => 'Ваши задачи';
+
+  @override
+  String get onboardingActYourWords => 'Еве што рековте';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Сè е подготвено, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody =>
+      'Носете го Omi во текот на денот. Вашите разговори ќе се појават на почетната страница.';
+
+  @override
+  String get onboardingActRateTitle => 'Ви се допаѓа Omi досега?';
+
+  @override
+  String get onboardingActRateYes => 'Оценете го Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Добредојдовте во Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Носете го Omi и зборувајте како и обично. Секој разговор тука станува белешки, задачи и спомени.';
+
+  @override
+  String get onboardingActDemoTitle => 'Ручек со Сем';
+
+  @override
+  String get onboardingActDemoSummary => 'Сем се сели во Лисабон во јуни.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Да ја пратам презентацијата на тимот до петок';
+
+  @override
+  String get onboardingActDemoTask2 => 'Да купам млеко на пат кон дома';
 }

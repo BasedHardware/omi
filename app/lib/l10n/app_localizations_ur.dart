@@ -13057,4 +13057,95 @@ class AppLocalizationsUr extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'AI پروسیسنگ: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'اپنا Omi پہنیں';
+
+  @override
+  String get onboardingActWearBody => 'یہ آپ کی گفتگو سنتا اور یاد رکھتا ہے۔ کچھ بھی پوچھنے کے لیے ایک بار دبائیں۔';
+
+  @override
+  String get onboardingActIntro => 'آئیے Omi کو کام کرتے دیکھیں۔';
+
+  @override
+  String get onboardingActNotesTitle => 'بولیں۔ Omi نوٹس لیتا ہے۔';
+
+  @override
+  String get onboardingActNotesBody => 'خلاصے جنہیں آپ تلاش کر سکتے اور جن سے بات کر سکتے ہیں۔';
+
+  @override
+  String get onboardingActTasksTitle => 'پھر یہ ڈھونڈتا ہے کہ کیا کرنا ہے۔';
+
+  @override
+  String get onboardingActTasksBody => 'تاکہ کچھ بھی نہ چھوٹے۔';
+
+  @override
+  String get onboardingActMicTitle => 'Omi کو آپ کا مائیکروفون چاہیے';
+
+  @override
+  String get onboardingActMicBody => 'تاکہ جب آپ بات کریں تو Omi سن سکے۔';
+
+  @override
+  String get onboardingActMicAllow => 'مائیکروفون کی اجازت دیں';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi کو اپنے دن کے بارے میں بتائیں';
+
+  @override
+  String get onboardingActDictateBody => 'اپنے انداز میں کہیں۔ باقی Omi سنبھال لے گا۔';
+
+  @override
+  String get onboardingActDictateExample =>
+      'ابھی سیم کے ساتھ لنچ کیا، وہ جون میں لزبن جا رہی ہے! مجھے یاد دلانا کہ جمعہ تک ٹیم کو ڈیک بھیجنا ہے، اور گھر جاتے ہوئے دودھ لینا ہے۔';
+
+  @override
+  String get onboardingActDictateHint => 'ختم ہونے پر ٹک پر ٹیپ کریں';
+
+  @override
+  String get onboardingActPhoneMic => 'فون کا مائیکروفون';
+
+  @override
+  String get onboardingActWriting => 'آپ کے نوٹس لکھے جا رہے ہیں…';
+
+  @override
+  String get onboardingActNotesLabel => 'آپ کے نوٹس';
+
+  @override
+  String get onboardingActTasksLabel => 'آپ کے کام';
+
+  @override
+  String get onboardingActYourWords => 'آپ نے یہ کہا';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'سب تیار ہے، $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'دن بھر Omi پہنیں۔ آپ کی گفتگو ہوم پر نظر آئے گی۔';
+
+  @override
+  String get onboardingActRateTitle => 'اب تک Omi پسند آیا؟';
+
+  @override
+  String get onboardingActRateYes => 'Omi کو ریٹ کریں';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Omi میں خوش آمدید';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Omi پہنیں اور معمول کے مطابق بات کریں۔ ہر گفتگو یہیں نوٹس، کاموں اور یادوں میں بدل جاتی ہے۔';
+
+  @override
+  String get onboardingActDemoTitle => 'سیم کے ساتھ لنچ';
+
+  @override
+  String get onboardingActDemoSummary => 'سیم جون میں لزبن جا رہی ہے۔';
+
+  @override
+  String get onboardingActDemoTask1 => 'جمعہ تک ٹیم کو ڈیک بھیجنا';
+
+  @override
+  String get onboardingActDemoTask2 => 'گھر جاتے ہوئے دودھ لینا';
 }

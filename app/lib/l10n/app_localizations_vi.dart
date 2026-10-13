@@ -13042,4 +13042,96 @@ class AppLocalizationsVi extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Xử lý AI: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Đeo Omi của bạn';
+
+  @override
+  String get onboardingActWearBody =>
+      'Omi lắng nghe và ghi nhớ các cuộc trò chuyện. Nhấn một lần để hỏi bất cứ điều gì.';
+
+  @override
+  String get onboardingActIntro => 'Hãy xem Omi làm việc.';
+
+  @override
+  String get onboardingActNotesTitle => 'Cứ nói. Omi ghi chép.';
+
+  @override
+  String get onboardingActNotesBody => 'Bản tóm tắt để tìm kiếm và trò chuyện.';
+
+  @override
+  String get onboardingActTasksTitle => 'Rồi tìm ra việc cần làm.';
+
+  @override
+  String get onboardingActTasksBody => 'Để không bỏ sót điều gì.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi cần micrô của bạn';
+
+  @override
+  String get onboardingActMicBody => 'Để Omi nghe được khi bạn nói.';
+
+  @override
+  String get onboardingActMicAllow => 'Cho phép micrô';
+
+  @override
+  String get onboardingActDictateTitle => 'Kể cho Omi nghe về ngày của bạn';
+
+  @override
+  String get onboardingActDictateBody => 'Cứ nói theo cách của bạn. Omi lo phần còn lại.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Vừa ăn trưa với Sam, tháng Sáu cô ấy chuyển đến Lisbon! Nhắc mình gửi slide cho nhóm trước thứ Sáu, và mua sữa trên đường về nhà.';
+
+  @override
+  String get onboardingActDictateHint => 'Nhấn dấu tích khi bạn nói xong';
+
+  @override
+  String get onboardingActPhoneMic => 'Micrô điện thoại';
+
+  @override
+  String get onboardingActWriting => 'Đang viết ghi chú…';
+
+  @override
+  String get onboardingActNotesLabel => 'Ghi chú của bạn';
+
+  @override
+  String get onboardingActTasksLabel => 'Việc cần làm';
+
+  @override
+  String get onboardingActYourWords => 'Đây là những gì bạn nói';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Mọi thứ đã sẵn sàng, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Đeo Omi suốt ngày. Cuộc trò chuyện sẽ hiện ở Trang chủ.';
+
+  @override
+  String get onboardingActRateTitle => 'Bạn thích Omi chứ?';
+
+  @override
+  String get onboardingActRateYes => 'Đánh giá Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Chào mừng đến với Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Đeo Omi và nói chuyện như bình thường. Mỗi cuộc trò chuyện sẽ thành ghi chú, việc cần làm và ký ức ngay tại đây.';
+
+  @override
+  String get onboardingActDemoTitle => 'Ăn trưa với Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam chuyển đến Lisbon vào tháng Sáu.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Gửi slide cho nhóm trước thứ Sáu';
+
+  @override
+  String get onboardingActDemoTask2 => 'Mua sữa trên đường về nhà';
 }

@@ -13079,4 +13079,95 @@ class AppLocalizationsNl extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'AI-verwerking: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Draag je Omi';
+
+  @override
+  String get onboardingActWearBody => 'Hij luistert en onthoudt je gesprekken. Druk één keer om hem iets te vragen.';
+
+  @override
+  String get onboardingActIntro => 'Laten we Omi aan het werk zien.';
+
+  @override
+  String get onboardingActNotesTitle => 'Praat. Omi maakt notities.';
+
+  @override
+  String get onboardingActNotesBody => 'Samenvattingen om te doorzoeken en mee te chatten.';
+
+  @override
+  String get onboardingActTasksTitle => 'Dan vindt hij wat er moet gebeuren.';
+
+  @override
+  String get onboardingActTasksBody => 'Zodat er niets misgaat.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi heeft je microfoon nodig';
+
+  @override
+  String get onboardingActMicBody => 'Zodat Omi je hoort als je tegen hem praat.';
+
+  @override
+  String get onboardingActMicAllow => 'Microfoon toestaan';
+
+  @override
+  String get onboardingActDictateTitle => 'Vertel Omi over je dag';
+
+  @override
+  String get onboardingActDictateBody => 'Zeg het op jouw manier. Omi doet de rest.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Net geluncht met Sam, ze verhuist in juni naar Lissabon! Herinner me eraan de presentatie vóór vrijdag naar het team te sturen en op weg naar huis melk te halen.';
+
+  @override
+  String get onboardingActDictateHint => 'Tik op het vinkje als je klaar bent';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefoonmicrofoon';
+
+  @override
+  String get onboardingActWriting => 'Je notities worden geschreven…';
+
+  @override
+  String get onboardingActNotesLabel => 'Je notities';
+
+  @override
+  String get onboardingActTasksLabel => 'Je taken';
+
+  @override
+  String get onboardingActYourWords => 'Dit zei je';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Je bent klaar, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Draag Omi de hele dag. Je gesprekken verschijnen op Home.';
+
+  @override
+  String get onboardingActRateTitle => 'Bevalt Omi tot nu toe?';
+
+  @override
+  String get onboardingActRateYes => 'Omi beoordelen';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Welkom bij Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Draag Omi en praat zoals altijd. Elk gesprek wordt hier notities, taken en herinneringen.';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch met Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam verhuist in juni naar Lissabon.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Presentatie vóór vrijdag naar het team sturen';
+
+  @override
+  String get onboardingActDemoTask2 => 'Op weg naar huis melk halen';
 }

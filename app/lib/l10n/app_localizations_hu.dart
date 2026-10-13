@@ -13096,4 +13096,96 @@ class AppLocalizationsHu extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'MI-feldolgozás: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Viseld az Omid';
+
+  @override
+  String get onboardingActWearBody =>
+      'Hallgatja és megjegyzi a beszélgetéseidet. Nyomd meg egyszer, és kérdezz bármit.';
+
+  @override
+  String get onboardingActIntro => 'Lássuk az Omit munka közben.';
+
+  @override
+  String get onboardingActNotesTitle => 'Beszélj. Az Omi jegyzetel.';
+
+  @override
+  String get onboardingActNotesBody => 'Összefoglalók, amelyekben kereshetsz, és amelyekről kérdezhetsz.';
+
+  @override
+  String get onboardingActTasksTitle => 'Aztán kiszűri a teendőket.';
+
+  @override
+  String get onboardingActTasksBody => 'Hogy semmi ne csússzon ki.';
+
+  @override
+  String get onboardingActMicTitle => 'Az Ominak kell a mikrofonod';
+
+  @override
+  String get onboardingActMicBody => 'Hogy az Omi halljon, amikor beszélsz hozzá.';
+
+  @override
+  String get onboardingActMicAllow => 'Mikrofon engedélyezése';
+
+  @override
+  String get onboardingActDictateTitle => 'Meséld el az Ominak a napod';
+
+  @override
+  String get onboardingActDictateBody => 'Mondd a magad módján. A többit az Omi intézi.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Most ebédeltem Sammel, júniusban Lisszabonba költözik! Emlékeztess, hogy péntekig küldjem el a prezentációt a csapatnak, és hazafelé vegyek tejet.';
+
+  @override
+  String get onboardingActDictateHint => 'Ha végeztél, koppints a pipára';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefon mikrofonja';
+
+  @override
+  String get onboardingActWriting => 'Jegyzetek írása…';
+
+  @override
+  String get onboardingActNotesLabel => 'Jegyzeteid';
+
+  @override
+  String get onboardingActTasksLabel => 'Teendőid';
+
+  @override
+  String get onboardingActYourWords => 'Ezt mondtad';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Minden kész, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Viseld az Omit egész nap. A beszélgetéseid a kezdőlapon jelennek meg.';
+
+  @override
+  String get onboardingActRateTitle => 'Tetszik eddig az Omi?';
+
+  @override
+  String get onboardingActRateYes => 'Értékeld az Omit';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Üdvözöl az Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Viseld az Omit, és beszélj, ahogy szoktál. Minden beszélgetésből itt jegyzet, teendő és emlék lesz.';
+
+  @override
+  String get onboardingActDemoTitle => 'Ebéd Sammel';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam júniusban Lisszabonba költözik.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Péntekig elküldeni a prezentációt a csapatnak';
+
+  @override
+  String get onboardingActDemoTask2 => 'Hazafelé tejet venni';
 }

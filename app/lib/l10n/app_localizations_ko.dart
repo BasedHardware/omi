@@ -12863,4 +12863,94 @@ class AppLocalizationsKo extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'AI 처리: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Omi를 착용하세요';
+
+  @override
+  String get onboardingActWearBody => '대화를 듣고 기억해요. 한 번 누르면 무엇이든 물어볼 수 있어요.';
+
+  @override
+  String get onboardingActIntro => 'Omi가 일하는 모습을 볼까요?';
+
+  @override
+  String get onboardingActNotesTitle => '말하세요. Omi가 노트해요.';
+
+  @override
+  String get onboardingActNotesBody => '검색하고 대화할 수 있는 요약으로.';
+
+  @override
+  String get onboardingActTasksTitle => '그리고 할 일을 찾아내요.';
+
+  @override
+  String get onboardingActTasksBody => '아무것도 놓치지 않게.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi에 마이크 권한이 필요해요';
+
+  @override
+  String get onboardingActMicBody => '말할 때 Omi가 들을 수 있도록요.';
+
+  @override
+  String get onboardingActMicAllow => '마이크 허용';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi에게 오늘 하루를 말해 보세요';
+
+  @override
+  String get onboardingActDictateBody => '편하게 말하세요. 나머지는 Omi가 할게요.';
+
+  @override
+  String get onboardingActDictateExample =>
+      '방금 샘이랑 점심 먹었어. 6월에 리스본으로 이사 간대! 금요일까지 팀에 발표 자료 보내는 거랑, 집에 가는 길에 우유 사는 거 알려 줘.';
+
+  @override
+  String get onboardingActDictateHint => '다 말했으면 체크를 누르세요';
+
+  @override
+  String get onboardingActPhoneMic => '휴대폰 마이크';
+
+  @override
+  String get onboardingActWriting => '노트를 작성하는 중…';
+
+  @override
+  String get onboardingActNotesLabel => '내 노트';
+
+  @override
+  String get onboardingActTasksLabel => '할 일';
+
+  @override
+  String get onboardingActYourWords => '이렇게 말했어요';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '$name님, 준비가 끝났어요';
+  }
+
+  @override
+  String get onboardingActCongratsBody => '하루 종일 Omi를 착용하세요. 대화는 홈에 표시돼요.';
+
+  @override
+  String get onboardingActRateTitle => 'Omi 마음에 드시나요?';
+
+  @override
+  String get onboardingActRateYes => 'Omi 평가하기';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Omi에 오신 것을 환영해요';
+
+  @override
+  String get onboardingWelcomeCardBody => 'Omi를 착용하고 평소처럼 대화하세요. 모든 대화가 여기서 노트, 할 일, 기억이 돼요.';
+
+  @override
+  String get onboardingActDemoTitle => '샘과 점심';
+
+  @override
+  String get onboardingActDemoSummary => '샘은 6월에 리스본으로 이사해요.';
+
+  @override
+  String get onboardingActDemoTask1 => '금요일까지 팀에 발표 자료 보내기';
+
+  @override
+  String get onboardingActDemoTask2 => '집에 가는 길에 우유 사기';
 }

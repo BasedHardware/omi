@@ -13056,4 +13056,95 @@ class AppLocalizationsTr extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Yapay zekâ işleme: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Omi\'ni tak';
+
+  @override
+  String get onboardingActWearBody => 'Konuşmalarını dinler ve hatırlar. Bir şey sormak için bir kez bas.';
+
+  @override
+  String get onboardingActIntro => 'Omi\'yi iş başında görelim.';
+
+  @override
+  String get onboardingActNotesTitle => 'Konuş. Omi not alsın.';
+
+  @override
+  String get onboardingActNotesBody => 'Arayabileceğin ve sohbet edebileceğin özetler.';
+
+  @override
+  String get onboardingActTasksTitle => 'Sonra yapılacakları bulur.';
+
+  @override
+  String get onboardingActTasksBody => 'Böylece hiçbir şey gözden kaçmaz.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi\'nin mikrofonuna ihtiyacı var';
+
+  @override
+  String get onboardingActMicBody => 'Omi\'yle konuştuğunda seni duyabilmesi için.';
+
+  @override
+  String get onboardingActMicAllow => 'Mikrofona İzin Ver';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi\'ye gününü anlat';
+
+  @override
+  String get onboardingActDictateBody => 'Kendi tarzınla söyle. Gerisini Omi halleder.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Az önce Sam\'le öğle yemeği yedim, haziranda Lizbon\'a taşınıyor! Cumaya kadar sunumu ekibe göndermemi ve eve dönerken süt almamı hatırlat.';
+
+  @override
+  String get onboardingActDictateHint => 'Bitince onay işaretine dokun';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefon mikrofonu';
+
+  @override
+  String get onboardingActWriting => 'Notların yazılıyor…';
+
+  @override
+  String get onboardingActNotesLabel => 'Notların';
+
+  @override
+  String get onboardingActTasksLabel => 'Görevlerin';
+
+  @override
+  String get onboardingActYourWords => 'Söylediklerin';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Her şey hazır, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Omi\'yi gün boyunca tak. Konuşmaların Ana Sayfa\'da görünür.';
+
+  @override
+  String get onboardingActRateTitle => 'Omi\'yi beğendin mi?';
+
+  @override
+  String get onboardingActRateYes => 'Omi\'yi Puanla';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Omi\'ye hoş geldin';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Omi\'yi tak ve her zamanki gibi konuş. Her konuşma burada nota, göreve ve anıya dönüşür.';
+
+  @override
+  String get onboardingActDemoTitle => 'Sam\'le öğle yemeği';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam haziranda Lizbon\'a taşınıyor.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Cumaya kadar sunumu ekibe gönder';
+
+  @override
+  String get onboardingActDemoTask2 => 'Eve dönerken süt al';
 }

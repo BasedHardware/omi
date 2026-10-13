@@ -7,13 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/activation/activation_flow.dart';
+import 'package:omi/pages/onboarding/activation/onboarding_plans_sheet.dart';
 import 'package:omi/pages/onboarding/connect_omi/connect_omi_step.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
@@ -21,7 +23,6 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
-import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -54,7 +55,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kPermissionsPage = 3;
   static const int kPrimaryLanguagePage = 4;
   static const int kConnectOmiPage = 5; // Finds the reader's Omi (search starts after sign-in)
-  static const int kSpeechProfilePage = 6; // Guided voice introduction
+  static const int kSpeechProfilePage = 6; // Activation: Omi at work, the first conversation, congrats
+  static const int kActivationPage = kSpeechProfilePage;
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
   static const int kCompletePage = 9; // "You're all set" completion screen
@@ -112,13 +114,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
-      if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
-      }
-      // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
-      if (_controller!.index == kSpeechProfilePage) {
-        _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled();
-      }
     });
 
     // Initialize animation controllers
@@ -198,7 +193,43 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// Leaving "Connect your Omi". A device connected here skips the post-onboarding device
   /// tutorial (it stays in device settings).
+  OnboardingDeviceChoice? _deviceChoice;
+
+  /// End of the activation: the paywall, then Home (where the first conversation is waiting).
+  Future<void> _finishWithPaywall() async {
+    PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
+    final usage = context.read<UsageProvider>();
+    unawaited(usage.fetchSubscription());
+    await showOmiSheet<void>(
+      context: context,
+      padding: EdgeInsets.zero,
+      builder: (_) => const OnboardingPlansSheet(),
+    );
+    if (!mounted) return;
+    await _completeOnboarding();
+  }
+
+  Future<void> _completeOnboarding() async {
+    if (_finishing) return;
+    _finishing = true;
+    final saved = await OnboardingSyncRuntime.enqueue(completed: true);
+    _finishing = false;
+    if (!mounted || !context.mounted) return;
+    if (!saved) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
+    SharedPreferencesUtil().onboardingCompleted = true;
+    SharedPreferencesUtil().permissionsCompleted = true;
+    SharedPreferencesUtil().remove(_resumeKey);
+    _completeOnboardingTelemetry();
+    PlatformManager.instance.analytics.onboardingCompleted();
+    PaintingBinding.instance.imageCache.clear();
+    routeToPage(context, const HomePageWrapper(), replace: true);
+  }
+
   void _leaveConnectOmi(OnboardingDeviceChoice choice) {
+    _deviceChoice = choice;
     if (choice == OnboardingDeviceChoice.connected) {
       SharedPreferencesUtil().deviceOnboardingCompleted = true;
       unawaited(OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true));
@@ -230,14 +261,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller!.animateTo(stepAfterKnowledgeGraph(setupPageEnabled: enabled));
   }
 
-  void _leaveSpeechProfile() {
-    if (kKnowledgeGraphStepEnabled) {
-      _controller!.animateTo(kKnowledgeGraphPage);
-    } else {
-      _continueAfterKnowledgeGraph();
-    }
-  }
-
   // ---- Resume and back ----------------------------------------------------------------------
 
   /// Per-account key so a different account signing in on this phone starts at the Name step.
@@ -260,20 +283,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   int? get _previousStep {
     // Connect Omi is the threshold into the experience: no way back into the setup questions
     // (language and permissions can be changed later in Settings).
-    if (_controller!.index == kConnectOmiPage) return null;
+    // The activation that follows is a moment, not a form: no back either.
+    if (_controller!.index == kConnectOmiPage || _controller!.index == kActivationPage) return null;
     final position = kProgressSteps.indexOf(_controller!.index);
     if (position <= 0) return null;
     return kProgressSteps[position - 1];
   }
 
-  bool _speechStepBusy = false;
-
   /// Back — the on-screen control, Android system back and the iOS swipe all land here.
   void _goBack() {
     final previous = _previousStep;
     if (previous == null) return;
-    // Never leave while the introduction is saving; its own PopScope blocks too.
-    if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
     OmiHaptics.selection();
     _controller!.animateTo(previous);
   }
@@ -286,29 +306,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await SharedPreferencesUtil().clear();
     await AuthService.instance.signOut();
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
-  }
-
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
   }
 
   void _updateBackgroundImage(int pageIndex) {
@@ -444,21 +441,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       widget.forceAuthPage ? const SizedBox.shrink() : ConnectOmiStep(onDone: _leaveConnectOmi),
       widget.forceAuthPage
           ? const SizedBox.shrink()
-          // The guided introduction owns its transcription-only session and
-          // reviews statements before explicitly saving them as memories.
-          : SpeechProfileWidget(
-              flowSource: 'first_run',
-              onBusyChanged: (busy) => _speechStepBusy = busy,
-              goNext: () {
-                // All Done is not enroll success (#12765). Upload/embedding
-                // events fire only from the guided I/O upload receipt.
-                PlatformManager.instance.analytics.speechProfileContinued();
-                _leaveSpeechProfile();
-              },
-              onSkip: () {
-                PlatformManager.instance.analytics.speechProfileSkipped();
-                _leaveSpeechProfile();
-              },
+          : ActivationFlow(
+              hasDevice:
+                  _deviceChoice == OnboardingDeviceChoice.connected || context.read<DeviceProvider>().isConnected,
+              onFinished: _finishWithPaywall,
             ),
       OnboardingKnowledgeGraphStep(onContinue: _leaveKnowledgeGraph),
       OnboardingSetupPage(
@@ -468,26 +454,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _controller!.animateTo(kCompletePage);
         },
       ),
-      OnboardingCompleteScreen(
-        onComplete: () async {
-          if (_finishing) return;
-          _finishing = true;
-          final saved = await OnboardingSyncRuntime.enqueue(completed: true);
-          _finishing = false;
-          if (!mounted || !context.mounted) return;
-          if (!saved) {
-            OmiFeedback.error(context, context.l10n.somethingWentWrong);
-            return;
-          }
-          SharedPreferencesUtil().onboardingCompleted = true;
-          SharedPreferencesUtil().permissionsCompleted = true;
-          SharedPreferencesUtil().remove(_resumeKey);
-          _completeOnboardingTelemetry();
-          PlatformManager.instance.analytics.onboardingCompleted();
-          PaintingBinding.instance.imageCache.clear();
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
-      ),
+      OnboardingCompleteScreen(onComplete: _completeOnboarding),
     ];
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,
@@ -511,9 +478,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             children: [
               if (showBackground) _background(),
               OnboardingStepLayout(
-                reserveHeader: index == kSpeechProfilePage || index == kConnectOmiPage,
+                reserveHeader: index == kConnectOmiPage,
                 onBack: previous == null ? null : _goBack,
-                progress: kProgressSteps.contains(index)
+                // The activation is a moment, not a form: no progress line over it.
+                progress: kProgressSteps.contains(index) && index != kActivationPage
                     ? OnboardingProgressLine(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
                 child: _StepTransition(

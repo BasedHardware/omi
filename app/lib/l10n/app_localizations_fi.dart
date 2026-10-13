@@ -13049,4 +13049,95 @@ class AppLocalizationsFi extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Tekoälykäsittely: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Pidä Omia päälläsi';
+
+  @override
+  String get onboardingActWearBody => 'Se kuuntelee ja muistaa keskustelusi. Paina kerran ja kysy mitä vain.';
+
+  @override
+  String get onboardingActIntro => 'Katsotaan Omia töissä.';
+
+  @override
+  String get onboardingActNotesTitle => 'Puhu. Omi tekee muistiinpanot.';
+
+  @override
+  String get onboardingActNotesBody => 'Yhteenvetoja, joita voit hakea ja joilta voit kysyä.';
+
+  @override
+  String get onboardingActTasksTitle => 'Sitten se löytää, mitä pitää tehdä.';
+
+  @override
+  String get onboardingActTasksBody => 'Ettei mikään unohdu.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi tarvitsee mikrofonisi';
+
+  @override
+  String get onboardingActMicBody => 'Jotta Omi kuulee sinut, kun puhut sille.';
+
+  @override
+  String get onboardingActMicAllow => 'Salli mikrofoni';
+
+  @override
+  String get onboardingActDictateTitle => 'Kerro Omille päivästäsi';
+
+  @override
+  String get onboardingActDictateBody => 'Sano omin sanoin. Omi hoitaa loput.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Söin juuri lounasta Samin kanssa, hän muuttaa kesäkuussa Lissaboniin! Muistuta minua lähettämään esitys tiimille perjantaihin mennessä ja hakemaan maitoa kotimatkalla.';
+
+  @override
+  String get onboardingActDictateHint => 'Napauta valintamerkkiä, kun olet valmis';
+
+  @override
+  String get onboardingActPhoneMic => 'Puhelimen mikrofoni';
+
+  @override
+  String get onboardingActWriting => 'Kirjoitetaan muistiinpanojasi…';
+
+  @override
+  String get onboardingActNotesLabel => 'Muistiinpanosi';
+
+  @override
+  String get onboardingActTasksLabel => 'Tehtäväsi';
+
+  @override
+  String get onboardingActYourWords => 'Tämän sanoit';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Kaikki valmista, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Pidä Omia päivän ajan. Keskustelusi näkyvät etusivulla.';
+
+  @override
+  String get onboardingActRateTitle => 'Pidätkö Omista tähän mennessä?';
+
+  @override
+  String get onboardingActRateYes => 'Arvioi Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Tervetuloa Omiin';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Pidä Omia ja puhu kuten tavallisesti. Jokaisesta keskustelusta tulee tänne muistiinpanoja, tehtäviä ja muistoja.';
+
+  @override
+  String get onboardingActDemoTitle => 'Lounas Samin kanssa';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam muuttaa kesäkuussa Lissaboniin.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Lähetä esitys tiimille perjantaihin mennessä';
+
+  @override
+  String get onboardingActDemoTask2 => 'Hae maitoa kotimatkalla';
 }

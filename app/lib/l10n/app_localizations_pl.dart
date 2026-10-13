@@ -13082,4 +13082,95 @@ class AppLocalizationsPl extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Przetwarzanie AI: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Noś swoje Omi';
+
+  @override
+  String get onboardingActWearBody => 'Słucha i zapamiętuje Twoje rozmowy. Naciśnij raz, aby o coś zapytać.';
+
+  @override
+  String get onboardingActIntro => 'Zobaczmy Omi w akcji.';
+
+  @override
+  String get onboardingActNotesTitle => 'Mów. Omi robi notatki.';
+
+  @override
+  String get onboardingActNotesBody => 'Podsumowania, które przeszukasz i o które zapytasz.';
+
+  @override
+  String get onboardingActTasksTitle => 'Potem znajduje, co trzeba zrobić.';
+
+  @override
+  String get onboardingActTasksBody => 'Żeby nic nie umknęło.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi potrzebuje mikrofonu';
+
+  @override
+  String get onboardingActMicBody => 'Aby Omi słyszał Cię, gdy do niego mówisz.';
+
+  @override
+  String get onboardingActMicAllow => 'Zezwól na mikrofon';
+
+  @override
+  String get onboardingActDictateTitle => 'Opowiedz Omi o swoim dniu';
+
+  @override
+  String get onboardingActDictateBody => 'Powiedz to po swojemu. Resztą zajmie się Omi.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Właśnie zjadłem lunch z Sam, w czerwcu przeprowadza się do Lizbony! Przypomnij mi, żeby wysłać prezentację zespołowi do piątku i kupić mleko w drodze do domu.';
+
+  @override
+  String get onboardingActDictateHint => 'Gdy skończysz, dotknij znacznika';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String get onboardingActWriting => 'Piszę Twoje notatki…';
+
+  @override
+  String get onboardingActNotesLabel => 'Twoje notatki';
+
+  @override
+  String get onboardingActTasksLabel => 'Twoje zadania';
+
+  @override
+  String get onboardingActYourWords => 'Oto, co powiedziałeś';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Wszystko gotowe, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Noś Omi przez cały dzień. Twoje rozmowy pojawią się na ekranie głównym.';
+
+  @override
+  String get onboardingActRateTitle => 'Podoba Ci się Omi?';
+
+  @override
+  String get onboardingActRateYes => 'Oceń Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Witaj w Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Noś Omi i rozmawiaj jak zwykle. Każda rozmowa zamienia się tutaj w notatki, zadania i wspomnienia.';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch z Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam w czerwcu przeprowadza się do Lizbony.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Wysłać prezentację zespołowi do piątku';
+
+  @override
+  String get onboardingActDemoTask2 => 'Kupić mleko w drodze do domu';
 }

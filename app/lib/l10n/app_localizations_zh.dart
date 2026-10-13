@@ -12839,4 +12839,93 @@ class AppLocalizationsZh extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'AI 处理方：$providers';
   }
+
+  @override
+  String get onboardingActWearTitle => '戴上你的 Omi';
+
+  @override
+  String get onboardingActWearBody => '它会聆听并记住你的对话。按一下即可向它提问。';
+
+  @override
+  String get onboardingActIntro => '来看看 Omi 如何工作。';
+
+  @override
+  String get onboardingActNotesTitle => '你来说，Omi 来记。';
+
+  @override
+  String get onboardingActNotesBody => '可搜索、可对话的摘要。';
+
+  @override
+  String get onboardingActTasksTitle => '然后找出要做的事。';
+
+  @override
+  String get onboardingActTasksBody => '不再遗漏任何事。';
+
+  @override
+  String get onboardingActMicTitle => 'Omi 需要使用麦克风';
+
+  @override
+  String get onboardingActMicBody => '这样你说话时 Omi 才能听到。';
+
+  @override
+  String get onboardingActMicAllow => '允许使用麦克风';
+
+  @override
+  String get onboardingActDictateTitle => '跟 Omi 说说你的一天';
+
+  @override
+  String get onboardingActDictateBody => '随便说，剩下的交给 Omi。';
+
+  @override
+  String get onboardingActDictateExample => '刚和 Sam 吃完午饭，她六月要搬去里斯本！提醒我周五前把演示文稿发给团队，回家路上顺便买牛奶。';
+
+  @override
+  String get onboardingActDictateHint => '说完后点对勾';
+
+  @override
+  String get onboardingActPhoneMic => '手机麦克风';
+
+  @override
+  String get onboardingActWriting => '正在整理你的笔记…';
+
+  @override
+  String get onboardingActNotesLabel => '你的笔记';
+
+  @override
+  String get onboardingActTasksLabel => '你的待办';
+
+  @override
+  String get onboardingActYourWords => '你说的内容';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '一切就绪，$name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => '整天戴着 Omi，你的对话会显示在首页。';
+
+  @override
+  String get onboardingActRateTitle => '目前喜欢 Omi 吗？';
+
+  @override
+  String get onboardingActRateYes => '给 Omi 评分';
+
+  @override
+  String get onboardingWelcomeCardTitle => '欢迎使用 Omi';
+
+  @override
+  String get onboardingWelcomeCardBody => '戴上 Omi，照常说话。每段对话都会在这里变成笔记、待办和记忆。';
+
+  @override
+  String get onboardingActDemoTitle => '和 Sam 吃午饭';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam 六月要搬去里斯本。';
+
+  @override
+  String get onboardingActDemoTask1 => '周五前把演示文稿发给团队';
+
+  @override
+  String get onboardingActDemoTask2 => '回家路上买牛奶';
 }

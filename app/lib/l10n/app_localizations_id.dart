@@ -13054,4 +13054,96 @@ class AppLocalizationsId extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Pemrosesan AI: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Pakai Omi Anda';
+
+  @override
+  String get onboardingActWearBody =>
+      'Omi mendengar dan mengingat percakapan Anda. Tekan sekali untuk bertanya apa saja.';
+
+  @override
+  String get onboardingActIntro => 'Mari lihat Omi beraksi.';
+
+  @override
+  String get onboardingActNotesTitle => 'Bicara. Omi mencatat.';
+
+  @override
+  String get onboardingActNotesBody => 'Ringkasan yang bisa dicari dan diajak mengobrol.';
+
+  @override
+  String get onboardingActTasksTitle => 'Lalu Omi menemukan apa yang perlu dikerjakan.';
+
+  @override
+  String get onboardingActTasksBody => 'Agar tak ada yang terlewat.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi butuh mikrofon Anda';
+
+  @override
+  String get onboardingActMicBody => 'Agar Omi bisa mendengar saat Anda bicara.';
+
+  @override
+  String get onboardingActMicAllow => 'Izinkan Mikrofon';
+
+  @override
+  String get onboardingActDictateTitle => 'Ceritakan hari Anda ke Omi';
+
+  @override
+  String get onboardingActDictateBody => 'Katakan dengan gaya Anda. Omi urus sisanya.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Baru makan siang sama Sam, dia pindah ke Lisbon bulan Juni! Ingatkan aku kirim deck ke tim sebelum Jumat, dan beli susu di jalan pulang.';
+
+  @override
+  String get onboardingActDictateHint => 'Ketuk centang jika sudah selesai';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikrofon ponsel';
+
+  @override
+  String get onboardingActWriting => 'Menulis catatan Anda…';
+
+  @override
+  String get onboardingActNotesLabel => 'Catatan Anda';
+
+  @override
+  String get onboardingActTasksLabel => 'Tugas Anda';
+
+  @override
+  String get onboardingActYourWords => 'Ini yang Anda katakan';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Semua siap, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Pakai Omi sepanjang hari. Percakapan Anda muncul di Beranda.';
+
+  @override
+  String get onboardingActRateTitle => 'Suka Omi sejauh ini?';
+
+  @override
+  String get onboardingActRateYes => 'Beri Nilai Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Selamat datang di Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Pakai Omi dan bicara seperti biasa. Setiap percakapan menjadi catatan, tugas, dan kenangan di sini.';
+
+  @override
+  String get onboardingActDemoTitle => 'Makan siang dengan Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam pindah ke Lisbon bulan Juni.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Kirim deck ke tim sebelum Jumat';
+
+  @override
+  String get onboardingActDemoTask2 => 'Beli susu di jalan pulang';
 }

@@ -13037,4 +13037,95 @@ class AppLocalizationsEt extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Tehisaru töötlus: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Kanna oma Omit';
+
+  @override
+  String get onboardingActWearBody => 'See kuulab ja mäletab su vestlusi. Vajuta korra, et midagi küsida.';
+
+  @override
+  String get onboardingActIntro => 'Vaatame Omit töös.';
+
+  @override
+  String get onboardingActNotesTitle => 'Räägi. Omi teeb märkmeid.';
+
+  @override
+  String get onboardingActNotesBody => 'Kokkuvõtted, mida saad otsida ja millega vestelda.';
+
+  @override
+  String get onboardingActTasksTitle => 'Siis leiab ta, mida teha.';
+
+  @override
+  String get onboardingActTasksBody => 'Et midagi ei ununeks.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi vajab su mikrofoni';
+
+  @override
+  String get onboardingActMicBody => 'Et Omi kuuleks sind, kui sa temaga räägid.';
+
+  @override
+  String get onboardingActMicAllow => 'Luba mikrofon';
+
+  @override
+  String get onboardingActDictateTitle => 'Räägi Omile oma päevast';
+
+  @override
+  String get onboardingActDictateBody => 'Ütle omal moel. Ülejäänu teeb Omi.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Sõin just Samiga lõunat, ta kolib juunis Lissaboni! Tuleta mulle meelde saata esitlus reedeks tiimile ja osta koduteel piima.';
+
+  @override
+  String get onboardingActDictateHint => 'Kui oled valmis, puuduta linnukest';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefoni mikrofon';
+
+  @override
+  String get onboardingActWriting => 'Kirjutan su märkmeid…';
+
+  @override
+  String get onboardingActNotesLabel => 'Sinu märkmed';
+
+  @override
+  String get onboardingActTasksLabel => 'Sinu ülesanded';
+
+  @override
+  String get onboardingActYourWords => 'Seda sa ütlesid';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Kõik on valmis, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Kanna Omit terve päeva. Su vestlused ilmuvad avalehele.';
+
+  @override
+  String get onboardingActRateTitle => 'Kas Omi meeldib sulle seni?';
+
+  @override
+  String get onboardingActRateYes => 'Hinda Omit';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Tere tulemast Omisse';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Kanna Omit ja räägi nagu ikka. Iga vestlus muutub siin märkmeteks, ülesanneteks ja mälestusteks.';
+
+  @override
+  String get onboardingActDemoTitle => 'Lõuna Samiga';
+
+  @override
+  String get onboardingActDemoSummary => 'Sam kolib juunis Lissaboni.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Saata esitlus reedeks tiimile';
+
+  @override
+  String get onboardingActDemoTask2 => 'Osta koduteel piima';
 }

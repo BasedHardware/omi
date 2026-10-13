@@ -12858,4 +12858,93 @@ class AppLocalizationsJa extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'AI処理: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Omiを身につけよう';
+
+  @override
+  String get onboardingActWearBody => '会話を聞いて覚えておきます。1回押すと何でも質問できます。';
+
+  @override
+  String get onboardingActIntro => 'Omiの働きを見てみましょう。';
+
+  @override
+  String get onboardingActNotesTitle => '話すだけ。Omiがメモします。';
+
+  @override
+  String get onboardingActNotesBody => '検索もチャットもできる要約に。';
+
+  @override
+  String get onboardingActTasksTitle => 'そして、やることを見つけます。';
+
+  @override
+  String get onboardingActTasksBody => '抜け漏れゼロに。';
+
+  @override
+  String get onboardingActMicTitle => 'Omiにマイクの許可が必要です';
+
+  @override
+  String get onboardingActMicBody => '話しかけたときにOmiが聞き取れるようにします。';
+
+  @override
+  String get onboardingActMicAllow => 'マイクを許可';
+
+  @override
+  String get onboardingActDictateTitle => '今日のことをOmiに話そう';
+
+  @override
+  String get onboardingActDictateBody => '思うままに話してください。あとはOmiにお任せ。';
+
+  @override
+  String get onboardingActDictateExample => 'さっきサムとランチしたよ。6月にリスボンへ引っ越すんだって！金曜までにチームへ資料を送るのと、帰りに牛乳を買うのをリマインドして。';
+
+  @override
+  String get onboardingActDictateHint => '話し終えたらチェックをタップ';
+
+  @override
+  String get onboardingActPhoneMic => 'スマホのマイク';
+
+  @override
+  String get onboardingActWriting => 'メモを作成中…';
+
+  @override
+  String get onboardingActNotesLabel => 'あなたのメモ';
+
+  @override
+  String get onboardingActTasksLabel => 'あなたのタスク';
+
+  @override
+  String get onboardingActYourWords => 'あなたが話した内容';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '準備完了です、$nameさん';
+  }
+
+  @override
+  String get onboardingActCongratsBody => '一日中Omiを身につけてください。会話はホームに表示されます。';
+
+  @override
+  String get onboardingActRateTitle => 'Omiはいかがですか？';
+
+  @override
+  String get onboardingActRateYes => 'Omiを評価';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Omiへようこそ';
+
+  @override
+  String get onboardingWelcomeCardBody => 'Omiを身につけて普段どおり話すだけ。会話はここでメモ、タスク、記憶になります。';
+
+  @override
+  String get onboardingActDemoTitle => 'サムとランチ';
+
+  @override
+  String get onboardingActDemoSummary => 'サムは6月にリスボンへ引っ越す。';
+
+  @override
+  String get onboardingActDemoTask1 => '金曜までにチームへ資料を送る';
+
+  @override
+  String get onboardingActDemoTask2 => '帰りに牛乳を買う';
 }

@@ -13149,4 +13149,96 @@ class AppLocalizationsTl extends AppLocalizations {
   String consentAiProviders(String providers) {
     return 'Pagproseso ng AI: $providers';
   }
+
+  @override
+  String get onboardingActWearTitle => 'Isuot ang iyong Omi';
+
+  @override
+  String get onboardingActWearBody =>
+      'Nakikinig at naaalala nito ang mga usapan mo. Pindutin nang isang beses para magtanong ng kahit ano.';
+
+  @override
+  String get onboardingActIntro => 'Tingnan natin ang Omi sa trabaho.';
+
+  @override
+  String get onboardingActNotesTitle => 'Magsalita. Nagtatala ang Omi.';
+
+  @override
+  String get onboardingActNotesBody => 'Mga buod na mahahanap at makakausap mo.';
+
+  @override
+  String get onboardingActTasksTitle => 'Saka nito hahanapin ang dapat gawin.';
+
+  @override
+  String get onboardingActTasksBody => 'Para walang makaligtaan.';
+
+  @override
+  String get onboardingActMicTitle => 'Kailangan ng Omi ang mikropono mo';
+
+  @override
+  String get onboardingActMicBody => 'Para marinig ka ng Omi kapag kinakausap mo ito.';
+
+  @override
+  String get onboardingActMicAllow => 'Payagan ang Mikropono';
+
+  @override
+  String get onboardingActDictateTitle => 'Ikuwento sa Omi ang araw mo';
+
+  @override
+  String get onboardingActDictateBody => 'Sabihin mo sa sarili mong paraan. Ang Omi na ang bahala.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Kakatapos ko lang mag-lunch kasama si Sam, lilipat na siya sa Lisbon sa Hunyo! Ipaalala mo sa akin na ipadala ang deck sa team bago mag-Biyernes, at bumili ng gatas pauwi.';
+
+  @override
+  String get onboardingActDictateHint => 'I-tap ang check kapag tapos ka na';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikropono ng phone';
+
+  @override
+  String get onboardingActWriting => 'Isinusulat ang mga tala mo…';
+
+  @override
+  String get onboardingActNotesLabel => 'Mga tala mo';
+
+  @override
+  String get onboardingActTasksLabel => 'Mga gawain mo';
+
+  @override
+  String get onboardingActYourWords => 'Ito ang sinabi mo';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Handa ka na, $name';
+  }
+
+  @override
+  String get onboardingActCongratsBody => 'Isuot ang Omi buong araw. Lalabas sa Home ang mga usapan mo.';
+
+  @override
+  String get onboardingActRateTitle => 'Gusto mo ba ang Omi sa ngayon?';
+
+  @override
+  String get onboardingActRateYes => 'I-rate ang Omi';
+
+  @override
+  String get onboardingWelcomeCardTitle => 'Maligayang pagdating sa Omi';
+
+  @override
+  String get onboardingWelcomeCardBody =>
+      'Isuot ang Omi at makipag-usap gaya ng dati. Nagiging tala, gawain, at alaala dito ang bawat usapan.';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch kasama si Sam';
+
+  @override
+  String get onboardingActDemoSummary => 'Lilipat si Sam sa Lisbon sa Hunyo.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Ipadala ang deck sa team bago mag-Biyernes';
+
+  @override
+  String get onboardingActDemoTask2 => 'Bumili ng gatas pauwi';
 }
