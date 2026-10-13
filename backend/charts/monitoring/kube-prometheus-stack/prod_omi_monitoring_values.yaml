@@ -69,8 +69,11 @@ grafana:
     rendering:
       server_url: http://prod-omi-kube-prometheus-stack-grafana-image-renderer:8081/render
       callback_url: http://prod-omi-kube-prometheus-stack-grafana:80/
+    # Alert screenshots off (2026-10-13): renders call back into Grafana, so a slow
+    # dashboard query stalled HTTP handlers and the external health check flapped 502.
+    # Telegram notifications carry dashboard/panel links instead.
     unified_alerting.screenshots:
-      capture: true
+      capture: false
     server:
       root_url: https://monitor.omi.me/
   affinity:

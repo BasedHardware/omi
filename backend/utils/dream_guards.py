@@ -51,7 +51,7 @@ def task_rejection(edit, row, records, *, now=None):
             break
     else:
         return 'stale_task_evidence'
-    if edit.kind == 'retire_task':
+    if edit.kind == 'retire_task' and getattr(records, 'context_mode', 'bounded') != 'full':
         created = timestamp(row.get('created_at'))
         if created is None or (now or datetime.now(timezone.utc)) - created <= timedelta(days=MIN_RETIRE_TASK_DAYS):
             return 'task_too_recent'
@@ -173,7 +173,7 @@ def summary_eligibility(row):
     return {kind: summary_field_rejection(kind, row) or 'editable' for kind in ('title', 'overview')}
 
 
-def summary_rejection(edit, row, *, min_words=None):
+def summary_rejection(edit, row, *, min_words=None, full=False):
     if edit.kind not in {'title', 'overview'}:
         return None
     reason = summary_field_rejection(edit.kind, row, min_words=min_words)
@@ -181,7 +181,9 @@ def summary_rejection(edit, row, *, min_words=None):
         return reason
     speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
     after_words = tokens(edit.after)
-    if len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words)):
+    if not full and (
+        len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words))
+    ):
         return 'placeholder'
     if edit.kind == 'title' and not set(after_words).intersection(tokens(speech)):
         return 'ungrounded'
@@ -193,15 +195,15 @@ def summary_rejection(edit, row, *, min_words=None):
     return None
 
 
-def feedback_rejection(feedback):
-    if (
+def feedback_rejection(feedback, *, full=False):
+    if not full and (
         feedback.failure_class in {'success', 'none', 'ok'}
         or feedback.severity == 'info'
         or NON_FAILURE.search(' '.join(tokens(feedback.reproduction)))
     ):
         return 'not_a_failure'
     text = ' '.join((feedback.component, feedback.failure_class, feedback.reproduction))
-    if LANGUAGE.search(' '.join(tokens(text))):
+    if not full and LANGUAGE.search(' '.join(tokens(text))):
         return 'language_not_defect'
     if RECORD_REF.search(feedback.reproduction):
         return 'ref_leak'
@@ -211,10 +213,19 @@ def feedback_rejection(feedback):
 def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     """Drop unsafe proposals before any report persistence; diagnostics contain counts only."""
     rejected = Counter()
+    full = getattr(records, 'context_mode', 'bounded') == 'full'
     edits = []
     targets = set(records) if targets is None else set(targets)
+    if full:
+        targets = set(records)
     for edit in plan.edits:
         reason = spelling_rejection(edit)
+        if full and (
+            edit.target not in records
+            or any(ref not in records for ref in edit.evidence)
+            or (edit.other and edit.other not in records)
+        ):
+            reason = 'invalid_evidence'
         if edit.kind in {'close_task', 'retire_task'}:
             reason = (
                 'invalid_evidence'
@@ -225,11 +236,15 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
             reason = (
                 'invalid_evidence'
                 if edit.target not in records or any(ref not in records for ref in edit.evidence)
-                else summary_rejection(edit, records[edit.target])
+                else summary_rejection(edit, records[edit.target], full=full)
             )
-        if not reason and (
-            edit.target not in targets
-            or (edit.kind in {'merge_people', 'merge_memories'} and edit.other not in targets)
+        if (
+            not full
+            and not reason
+            and (
+                edit.target not in targets
+                or (edit.kind in {'merge_people', 'merge_memories'} and edit.other not in targets)
+            )
         ):
             reason = 'context_target'
         if reason:
@@ -247,33 +262,52 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
             question.same_person
             and not {question.same_person.left.entity_id, question.same_person.right.entity_id} <= entities
         ):
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         elif question.speaker and 'conversations/' + question.speaker.conversation_id not in targets:
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         elif question.task and 'candidates/' + question.task.candidate_id not in targets:
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         else:
             questions.append(question)
     vocabulary = []
     for term in plan.vocabulary:
-        reason = vocabulary_rejection(term)
+        reason = (
+            'invalid_evidence'
+            if full and any(ref not in records for ref in term.evidence)
+            else vocabulary_rejection(term)
+        )
         if reason:
             rejected[reason] += 1
         else:
             vocabulary.append(term)
     feedback = []
     for item in plan.feedback:
-        reason = feedback_rejection(item)
+        reason = feedback_rejection(item, full=full)
         if reason:
             rejected[reason] += 1
         else:
             feedback.append(item)
+    slow_tasks, frames = plan.slow_tasks, plan.frames
+    if full:
+        rejected['edit_cap'] += max(0, len(edits) - 25)
+        edits = edits[:25]
+        slow_tasks = [task for task in plan.slow_tasks if all(ref in records for ref in task.evidence)]
+        frames = [frame for frame in plan.frames if frame.screen_ref in records]
+        rejected['invalid_evidence'] += len(plan.slow_tasks) - len(slow_tasks) + len(plan.frames) - len(frames)
+        rejected = +rejected
     if usage_sink is not None:
         counts = Counter(usage_sink.get('rejected', {}))
         counts.update(rejected)
         usage_sink['rejected'] = dict(counts)
     return plan.model_copy(
-        update={'edits': edits, 'questions': questions, 'vocabulary': vocabulary, 'feedback': feedback}
+        update={
+            'edits': edits,
+            'questions': questions,
+            'vocabulary': vocabulary,
+            'feedback': feedback,
+            'slow_tasks': slow_tasks,
+            'frames': frames,
+        }
     )
 
 

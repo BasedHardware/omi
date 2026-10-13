@@ -690,7 +690,7 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 
 ### Alert Rules
 
-Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are enabled via the Grafana image renderer.
+Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are disabled: renders call back into Grafana and stalled it under load (2026-10-13). Notifications link to the dashboard panel instead.
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 

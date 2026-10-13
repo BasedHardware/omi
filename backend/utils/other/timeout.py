@@ -6,6 +6,7 @@ import asyncio
 import os
 import time
 from typing import Dict, Mapping, Optional
+from config.dream_agent import full_context_enabled, FULL_DRAIN_SECONDS
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
@@ -85,6 +86,12 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         timeout = (
             path_timeout if path_timeout is not None else self.methods_timeout.get(request.method, self.default_timeout)
         )
+        if (
+            request.method == 'POST'
+            and request.url.path in {'/v2/dream-agent/sweep', '/v1/dream/runs'}
+            and full_context_enabled()
+        ):
+            timeout = max(timeout, FULL_DRAIN_SECONDS + 30)
         # Stamp the monotonic request start so request-scoped read budgets
         # (utils.other.list_budget) can derive an internal deadline that leaves
         # serialization headroom under this middleware's hard cutoff.

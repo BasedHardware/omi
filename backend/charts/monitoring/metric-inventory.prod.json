@@ -2045,6 +2045,7 @@
     }
   },
   "admission_holds": {
+    "omi-sync-intake-fragmented": "Paused live 2026-10-13: each evaluation pages 30m of raw Cloud Logging lines (thousands per window), timed out with context deadline exceeded, dropped ticks and loaded Grafana into 502s. Re-admit only on a bounded signal: a log-based counter metric or the omi_sync_intake_total counter once backend-sync exports it.",
     "omi-queue-oldest-ready": "memory_outbox (230k pending, no prod consumer), vector_repair_outbox and candidate_integration_outbox (3.3k failed, no retry worker) exceed the sampler cap, so sample_unknown=1 on every publisher; admit after their consumers and an ordered age sampler land."
   }
 }

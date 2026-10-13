@@ -25,12 +25,14 @@ REJECTION_REASONS = {
     'feedback_cap',
     'privacy_rejected',
     'invalid_evidence',
+    'invalid_spelling',
     'stale_task_evidence',
     'task_too_recent',
     'bad_target',
     'common_word',
     'context_target',
     'ungrounded_spelling',
+    'edit_cap',
 }
 
 logger = logging.getLogger(__name__)
@@ -98,15 +100,27 @@ def record_pass(report):
     for key, count in diagnostics['context_budget_counts'].items():
         CONTEXT_BUDGET.labels(key).inc(count)
     logger.info(
-        'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
+        'Dream pass status=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d '
+        'triage_evidence_chars=%d reasoning_evidence_chars=%d '
         'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
         'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
         status,
+        'full' if report.get('context_mode') == 'full' else 'bounded',
+        max(0, int(report.get('input_tokens_estimate', 0))),
+        max(0, int(report.get('targets', 0))),
+        max(0, int(report.get('records', 0))),
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
         json.dumps(report.get('validation_errors', {}), sort_keys=True),
-        json.dumps(report.get('rejected', {}), sort_keys=True),
+        json.dumps(
+            {
+                reason: max(0, int(count))
+                for reason, count in report.get('rejected', {}).items()
+                if reason in REJECTION_REASONS
+            },
+            sort_keys=True,
+        ),
         max(0, int(report.get('poisoned', 0))),
         json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
         json.dumps(diagnostics['retrieval_failure_counts'], sort_keys=True),
