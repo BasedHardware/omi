@@ -743,7 +743,7 @@ class _LevelMeter extends StatelessWidget {
                 height: 3 + 11 * (v * s).clamp(0.0, 1.0),
                 decoration: BoxDecoration(
                   color: v > 0.05 ? OmiColors.textPrimary : OmiColors.textTertiary,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: OmiRadius.pillAll,
                 ),
               ),
           ],
