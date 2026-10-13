@@ -946,7 +946,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingStopped(callback: (Result<Unit>) -> Unit)
@@ -963,7 +963,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioData(audioDataArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -980,7 +980,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioChunk(audioChunkArg: ByteArray, chunkIndexArg: Long, isLastArg: Boolean, sampleRateArg: Double, callback: (Result<Unit>) -> Unit)
@@ -997,7 +997,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingError(errorArg: String, callback: (Result<Unit>) -> Unit)
@@ -1014,7 +1014,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -1031,7 +1031,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMainAppMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -1048,7 +1048,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onWatchBatteryUpdate(batteryLevelArg: Double, batteryStateArg: Long, callback: (Result<Unit>) -> Unit)
@@ -1065,7 +1065,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -1515,7 +1515,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDiscovered(peripheralArg: BlePeripheral, callback: (Result<Unit>) -> Unit)
@@ -1532,7 +1532,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onDeviceReady(peripheralUuidArg: String, servicesArg: List<BleService>, callback: (Result<Unit>) -> Unit)
@@ -1549,7 +1549,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDisconnected(peripheralUuidArg: String, errorArg: String?, callback: (Result<Unit>) -> Unit)
@@ -1566,7 +1566,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCharacteristicValueUpdated(peripheralUuidArg: String, serviceUuidArg: String, characteristicUuidArg: String, valueArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -1583,7 +1583,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRssiUpdate(peripheralUuidArg: String, rssiArg: Long, callback: (Result<Unit>) -> Unit)
@@ -1600,7 +1600,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onStateRestored(peripheralUuidsArg: List<String>, callback: (Result<Unit>) -> Unit)
@@ -1617,7 +1617,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** Native ingress evidence and bounded recovery. Contains no audio payload. */
@@ -1635,7 +1635,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /**
@@ -1656,7 +1656,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /**
@@ -1677,7 +1677,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -2065,7 +2065,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onGlassesDiscovered(glassesArg: RayBanMetaGlasses, callback: (Result<Unit>) -> Unit)
@@ -2082,7 +2082,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onConnectionStateChanged(deviceIdArg: String, stateArg: String, callback: (Result<Unit>) -> Unit)
@@ -2099,7 +2099,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic. */
@@ -2117,7 +2117,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** Whether the glasses' HFP mic is the active input route right now. */
@@ -2135,7 +2135,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** JPEG bytes plus clockwise orientation in degrees (0/90/180/270). */
@@ -2153,7 +2153,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** 'stopped' | 'starting' | 'streaming' | 'paused'. */
@@ -2171,7 +2171,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCameraPermissionChanged(statusArg: String, callback: (Result<Unit>) -> Unit)
@@ -2188,7 +2188,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onError(codeArg: String, messageArg: String, callback: (Result<Unit>) -> Unit)
@@ -2205,7 +2205,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
