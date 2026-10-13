@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
 
-/// The black bottom card every first-run step sits in, pinned to the bottom of the step.
+/// The bottom block of a first-run step (title, text, buttons), pinned to the bottom of the step.
+/// No card: it sits straight on the onboarding surface, under the Omi pendant.
 ///
 /// [content] scrolls when they do not fit (large text, small phones); [footer] (the step's
 /// buttons) stays visible under them. The card reserves the bottom system inset once, through its
@@ -35,10 +36,6 @@ class OnboardingCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: padding,
-      decoration: BoxDecoration(
-        color: OmiColors.surface0,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
-      ),
       child: SafeArea(
         top: false,
         bottom: reserveBottomInset,
@@ -63,7 +60,7 @@ class OnboardingCard extends StatelessWidget {
   }
 }
 
-/// A first-run step: the background shows through above, the [card] sits at the bottom and grows
+/// A first-run step: the pendant shows above, the [card] block sits at the bottom and grows
 /// up to the full height before its content scrolls.
 class OnboardingStep extends StatelessWidget {
   const OnboardingStep({super.key, required this.card});

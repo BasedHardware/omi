@@ -249,6 +249,10 @@ class $AssetsImagesGen {
   AssetGenImage get omiWithoutRope =>
       const AssetGenImage('assets/images/omi-without-rope.webp');
 
+  /// File path: assets/images/omi_pendant_glow.png
+  AssetGenImage get omiPendantGlow =>
+      const AssetGenImage('assets/images/omi_pendant_glow.png');
+
   /// File path: assets/images/onboarding-bg-1.webp
   AssetGenImage get onboardingBg1 =>
       const AssetGenImage('assets/images/onboarding-bg-1.webp');
@@ -387,6 +391,7 @@ class $AssetsImagesGen {
         omiWithoutRopeGreenCharging,
         omiWithoutRopeTurnedOff,
         omiWithoutRope,
+        omiPendantGlow,
         onboardingBg1,
         onboardingBg2,
         onboardingBg3,

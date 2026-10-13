@@ -210,6 +210,7 @@ flutter:
   assets:
     - assets/images/stars.png
     - assets/images/herologo.png
+    - assets/images/omi_pendant_glow.png
     - assets/fonts/
     - assets/images/
     - assets/test/tts_progressive_probe.mp3

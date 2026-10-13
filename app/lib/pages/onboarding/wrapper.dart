@@ -95,7 +95,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
   late Animation<double> _backgroundFadeAnimation;
-  String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   Future<void>? _knowledgeGraphPrebuildFuture;
   Future<bool>? _setupPageEnabled;
@@ -145,10 +144,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _knowledgeGraphPrebuildFuture ??= _prebuildKnowledgeGraph().catchError((_) {});
         _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled();
       }
-      // Update background image when page changes
-      _updateBackgroundImage(_controller!.index);
-      // Precache next image for smoother transitions
-      _precacheNextImage(_controller!.index);
     });
 
     // Initialize animation controllers
@@ -473,63 +468,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
   }
 
-  void _updateBackgroundImage(int pageIndex) {
-    final newImage = _getBackgroundImageForIndex(pageIndex) ?? Assets.images.onboardingBg1.path;
-    if (_currentBackgroundImage != newImage) {
-      setState(() {
-        _currentBackgroundImage = newImage;
-      });
-      _backgroundAnimationController.reset();
-      _backgroundAnimationController.forward();
-    }
-  }
-
-  void _precacheNextImage(int currentIndex) {
-    // Get the next background image path
-    String? nextImagePath = _getBackgroundImageForIndex(currentIndex + 1);
-    if (nextImagePath != null && mounted) {
-      // Precache the next image
-      precacheImage(
-        ResizeImage(
-          AssetImage(nextImagePath),
-          width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-          height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
-        ),
-        context,
-      );
-    }
-  }
-
-  String? _getBackgroundImageForIndex(int pageIndex) {
-    switch (pageIndex) {
-      case kAuthPage:
-      case kAiConsentPage:
-        return Assets.images.onboardingBg2.path;
-      case kSpeechProfilePage:
-        return Assets.images.onboardingBg3.path;
-      case kKnowledgeGraphPage:
-      case kSetupPage:
-      case kCompletePage:
-        return Assets.images.onboardingBg6.path;
-      default:
-        return null;
-    }
-  }
-
+  /// Sign-in and the data & privacy consent: the Omi pendant at the top, on the same light surface
+  /// as the rest of onboarding (no photo).
   Widget _background() {
     final media = MediaQuery.of(context);
     return FadeTransition(
       opacity: _backgroundFadeAnimation,
-      child: Container(
-        height: media.size.height,
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: ResizeImage(
-              AssetImage(_currentBackgroundImage),
-              width: (media.size.width * media.devicePixelRatio).round(),
-              height: (media.size.height * media.devicePixelRatio).round(),
-            ),
+      child: Align(
+        alignment: Alignment.topCenter,
+        // The cord runs off the top edge, so the pendant hangs into view.
+        child: ExcludeSemantics(
+          child: Assets.images.omiPendantGlow.image(
+            key: const Key('onboarding_pendant_hero'),
+            width: media.size.width,
+            height: media.size.height * 0.56,
             fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
           ),
         ),
       ),
