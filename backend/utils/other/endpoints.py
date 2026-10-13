@@ -190,6 +190,13 @@ def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
     )
 
 
+def _recover_locked_content_if_request(uid: str, request: Request | None) -> None:
+    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
+        from utils.locked_content_recovery import recover_locked_content
+
+        recover_locked_content(uid)
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
@@ -254,10 +261,7 @@ def get_current_user_uid(
     # headers are present.
     validate_byok_request(uid)
 
-    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
-        from utils.locked_content_recovery import recover_locked_content
-
-        recover_locked_content(uid)
+    _recover_locked_content_if_request(uid, request)
 
     return uid
 

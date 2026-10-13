@@ -91,6 +91,6 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
         if acquired:
             try:
                 # Existing token-fenced Redis lease-release primitive.
-                redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[lease_key], args=[token])
+                redis_db.release_token_lock(lease_key, token)
             except Exception:
                 pass  # TTL releases it; never delete a successor's lease.

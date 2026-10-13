@@ -22,7 +22,7 @@ rolling fair-use/abuse counters.
 
 Remaining lock fields are the progress checkpoint; no cursor can skip a failed
 batch. A token-fenced Redis lease (the existing notification-job release Lua
-primitive) coalesces work, with a 60-second retry throttle and a 300-second lease.
+primitive via `redis_db.release_token_lock`) coalesces work, with a 60-second retry throttle and a 300-second lease.
 Successful empty tails write one durable `completed_period` marker under
 `users/{uid}/locked_content_recovery/reset`, and a Redis done key expires at the
 next UTC month. Redis eviction costs one state read rather than a new unlock scan.
