@@ -12857,11 +12857,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingConnectOmi => 'Omi 연결';
 
   @override
-  String get consentShortMessage => 'Omi는 대화를 안전하게 저장하고 AI로 노트로 정리해요.';
+  String get consentShortMessage => 'Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI 처리: $providers';
+    return '$providers(으)로 처리됩니다.';
   }
 
   @override
@@ -12871,19 +12871,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingActWearBody => '대화를 듣고 기억해요. 한 번 누르면 무엇이든 물어볼 수 있어요.';
 
   @override
-  String get onboardingActIntro => 'Omi가 일하는 모습을 볼까요?';
-
-  @override
-  String get onboardingActNotesTitle => '말하세요. Omi가 노트해요.';
-
-  @override
-  String get onboardingActNotesBody => '검색하고 대화할 수 있는 요약으로.';
-
-  @override
-  String get onboardingActTasksTitle => '그리고 할 일을 찾아내요.';
-
-  @override
-  String get onboardingActTasksBody => '아무것도 놓치지 않게.';
+  String get onboardingActIntro => 'Omi를 써 볼까요?';
 
   @override
   String get onboardingActMicTitle => 'Omi에 마이크 권한이 필요해요';

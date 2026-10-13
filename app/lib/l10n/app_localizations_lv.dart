@@ -13066,11 +13066,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingConnectOmi => 'Savienot Omi';
 
   @override
-  String get consentShortMessage => 'Omi droši glabā jūsu sarunas un ar MI palīdzību pārvērš tās piezīmēs.';
+  String get consentShortMessage => 'Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'MI apstrāde: $providers';
+    return 'Apstrādā $providers.';
   }
 
   @override
@@ -13080,19 +13080,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingActWearBody => 'Tas klausās un atceras jūsu sarunas. Nospiediet vienreiz, lai jautātu jebko.';
 
   @override
-  String get onboardingActIntro => 'Paskatīsimies, kā Omi strādā.';
-
-  @override
-  String get onboardingActNotesTitle => 'Runājiet. Omi pieraksta.';
-
-  @override
-  String get onboardingActNotesBody => 'Kopsavilkumi, kuros var meklēt un par kuriem var jautāt.';
-
-  @override
-  String get onboardingActTasksTitle => 'Tad tas atrod, kas jādara.';
-
-  @override
-  String get onboardingActTasksBody => 'Lai nekas nepaslīdētu garām.';
+  String get onboardingActIntro => 'Izmēģināsim Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi vajag jūsu mikrofonu';

@@ -12971,11 +12971,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingConnectOmi => 'เชื่อมต่อ Omi';
 
   @override
-  String get consentShortMessage => 'Omi เก็บบทสนทนาของคุณอย่างปลอดภัยและใช้ AI สรุปเป็นโน้ต';
+  String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';
 
   @override
   String consentAiProviders(String providers) {
-    return 'การประมวลผล AI: $providers';
+    return 'ประมวลผลด้วย $providers';
   }
 
   @override
@@ -12985,19 +12985,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingActWearBody => 'Omi ฟังและจดจำบทสนทนาของคุณ กดหนึ่งครั้งเพื่อถามอะไรก็ได้';
 
   @override
-  String get onboardingActIntro => 'มาดู Omi ทำงานกัน';
-
-  @override
-  String get onboardingActNotesTitle => 'แค่พูด Omi จดให้';
-
-  @override
-  String get onboardingActNotesBody => 'สรุปที่ค้นหาและคุยต่อได้';
-
-  @override
-  String get onboardingActTasksTitle => 'แล้วหาสิ่งที่ต้องทำให้';
-
-  @override
-  String get onboardingActTasksBody => 'ไม่มีอะไรหลุดมือ';
+  String get onboardingActIntro => 'มาลองใช้ Omi กัน';
 
   @override
   String get onboardingActMicTitle => 'Omi ต้องใช้ไมโครโฟน';

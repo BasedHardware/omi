@@ -13019,11 +13019,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onboardingConnectOmi => 'Omi कनेक्ट करें';
 
   @override
-  String get consentShortMessage => 'Omi आपकी बातचीत सुरक्षित रूप से सहेजता है और AI से उन्हें नोट्स में बदलता है।';
+  String get consentShortMessage =>
+      'Omi AI की मदद से आपकी बातचीत को नोट्स में बदलता है। आप उन्हें कभी भी हटा सकते हैं।';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI प्रोसेसिंग: $providers';
+    return '$providers के साथ प्रोसेस किया जाता है।';
   }
 
   @override
@@ -13033,19 +13034,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onboardingActWearBody => 'यह आपकी बातचीत सुनता और याद रखता है। कुछ भी पूछने के लिए एक बार दबाएँ।';
 
   @override
-  String get onboardingActIntro => 'आइए Omi को काम करते देखें।';
-
-  @override
-  String get onboardingActNotesTitle => 'बोलिए। Omi नोट्स बनाता है।';
-
-  @override
-  String get onboardingActNotesBody => 'सारांश, जिन्हें आप खोज सकते हैं और जिनसे चैट कर सकते हैं।';
-
-  @override
-  String get onboardingActTasksTitle => 'फिर यह पता लगाता है कि क्या करना है।';
-
-  @override
-  String get onboardingActTasksBody => 'ताकि कुछ भी छूटे नहीं।';
+  String get onboardingActIntro => 'चलिए Omi आज़माएं।';
 
   @override
   String get onboardingActMicTitle => 'Omi को आपका माइक्रोफ़ोन चाहिए';

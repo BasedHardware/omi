@@ -13033,11 +13033,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingConnectOmi => 'Pripojte Omi';
 
   @override
-  String get consentShortMessage => 'Omi bezpečne ukladá vaše rozhovory a pomocou AI z nich robí poznámky.';
+  String get consentShortMessage => 'Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Spracovanie AI: $providers';
+    return 'Spracúva $providers.';
   }
 
   @override
@@ -13047,19 +13047,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingActWearBody => 'Počúva a pamätá si vaše rozhovory. Jedným stlačením sa ho na čokoľvek opýtate.';
 
   @override
-  String get onboardingActIntro => 'Pozrime sa, ako Omi pracuje.';
-
-  @override
-  String get onboardingActNotesTitle => 'Hovorte. Omi si robí poznámky.';
-
-  @override
-  String get onboardingActNotesBody => 'Zhrnutia, v ktorých môžete hľadať a pýtať sa ich.';
-
-  @override
-  String get onboardingActTasksTitle => 'Potom nájde, čo treba urobiť.';
-
-  @override
-  String get onboardingActTasksBody => 'Aby vám nič neušlo.';
+  String get onboardingActIntro => 'Vyskúšajme Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi potrebuje mikrofón';

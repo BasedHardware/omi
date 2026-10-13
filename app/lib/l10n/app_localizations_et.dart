@@ -13031,11 +13031,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingConnectOmi => 'Ühenda Omi';
 
   @override
-  String get consentShortMessage => 'Omi hoiab su vestlusi turvaliselt ja teeb neist tehisaru abil märkmed.';
+  String get consentShortMessage =>
+      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Tehisaru töötlus: $providers';
+    return 'Töödeldakse teenustega $providers.';
   }
 
   @override
@@ -13045,19 +13046,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingActWearBody => 'See kuulab ja mäletab su vestlusi. Vajuta korra, et midagi küsida.';
 
   @override
-  String get onboardingActIntro => 'Vaatame Omit töös.';
-
-  @override
-  String get onboardingActNotesTitle => 'Räägi. Omi teeb märkmeid.';
-
-  @override
-  String get onboardingActNotesBody => 'Kokkuvõtted, mida saad otsida ja millega vestelda.';
-
-  @override
-  String get onboardingActTasksTitle => 'Siis leiab ta, mida teha.';
-
-  @override
-  String get onboardingActTasksBody => 'Et midagi ei ununeks.';
+  String get onboardingActIntro => 'Proovime Omit.';
 
   @override
   String get onboardingActMicTitle => 'Omi vajab su mikrofoni';

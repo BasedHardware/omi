@@ -23250,13 +23250,13 @@ abstract class AppLocalizations {
   /// Onboarding data & privacy consent: one-line summary of storage and AI processing
   ///
   /// In en, this message translates to:
-  /// **'Omi stores your conversations securely and uses AI to turn them into notes.'**
+  /// **'Omi uses AI to turn your conversations into notes. You can delete them anytime.'**
   String get consentShortMessage;
 
   /// Onboarding consent: names the third-party AI providers (brand names, not translated)
   ///
   /// In en, this message translates to:
-  /// **'AI processing: {providers}'**
+  /// **'Processed with {providers}.'**
   String consentAiProviders(String providers);
 
   /// Activation: title for device users before the demo
@@ -23274,32 +23274,8 @@ abstract class AppLocalizations {
   /// Activation: animated line before the demo slides
   ///
   /// In en, this message translates to:
-  /// **'Let\'s see Omi at work.'**
+  /// **'Let\'s try Omi.'**
   String get onboardingActIntro;
-
-  /// Activation slide 1 title
-  ///
-  /// In en, this message translates to:
-  /// **'Talk. Omi takes notes.'**
-  String get onboardingActNotesTitle;
-
-  /// Activation slide 1 line
-  ///
-  /// In en, this message translates to:
-  /// **'Summaries you can search and chat with.'**
-  String get onboardingActNotesBody;
-
-  /// Activation slide 2 title
-  ///
-  /// In en, this message translates to:
-  /// **'Then it finds what to do.'**
-  String get onboardingActTasksTitle;
-
-  /// Activation slide 2 line
-  ///
-  /// In en, this message translates to:
-  /// **'So nothing slips.'**
-  String get onboardingActTasksBody;
 
   /// Activation: microphone pre-permission title (phone users)
   ///

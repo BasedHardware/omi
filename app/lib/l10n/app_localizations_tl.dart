@@ -13143,11 +13143,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Ligtas na sine-save ng Omi ang mga usapan mo at ginagawa itong mga tala gamit ang AI.';
+      'Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Pagproseso ng AI: $providers';
+    return 'Pinoproseso gamit ang $providers.';
   }
 
   @override
@@ -13158,19 +13158,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nakikinig at naaalala nito ang mga usapan mo. Pindutin nang isang beses para magtanong ng kahit ano.';
 
   @override
-  String get onboardingActIntro => 'Tingnan natin ang Omi sa trabaho.';
-
-  @override
-  String get onboardingActNotesTitle => 'Magsalita. Nagtatala ang Omi.';
-
-  @override
-  String get onboardingActNotesBody => 'Mga buod na mahahanap at makakausap mo.';
-
-  @override
-  String get onboardingActTasksTitle => 'Saka nito hahanapin ang dapat gawin.';
-
-  @override
-  String get onboardingActTasksBody => 'Para walang makaligtaan.';
+  String get onboardingActIntro => 'Subukan natin ang Omi.';
 
   @override
   String get onboardingActMicTitle => 'Kailangan ng Omi ang mikropono mo';

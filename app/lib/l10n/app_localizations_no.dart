@@ -13038,11 +13038,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onboardingConnectOmi => 'Koble til Omi';
 
   @override
-  String get consentShortMessage => 'Omi lagrer samtalene dine trygt og gjør dem om til notater med KI.';
+  String get consentShortMessage =>
+      'Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'KI-behandling: $providers';
+    return 'Behandles med $providers.';
   }
 
   @override
@@ -13053,19 +13054,7 @@ class AppLocalizationsNo extends AppLocalizations {
       'Den lytter og husker samtalene dine. Trykk én gang for å spørre om hva som helst.';
 
   @override
-  String get onboardingActIntro => 'La oss se Omi i aksjon.';
-
-  @override
-  String get onboardingActNotesTitle => 'Snakk. Omi tar notater.';
-
-  @override
-  String get onboardingActNotesBody => 'Sammendrag du kan søke i og chatte med.';
-
-  @override
-  String get onboardingActTasksTitle => 'Så finner den det du må gjøre.';
-
-  @override
-  String get onboardingActTasksBody => 'Så ingenting glipper.';
+  String get onboardingActIntro => 'La oss prøve Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi trenger mikrofonen din';

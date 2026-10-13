@@ -13022,11 +13022,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingConnectOmi => 'Connect Omi';
 
   @override
-  String get consentShortMessage => 'Omi stores your conversations securely and uses AI to turn them into notes.';
+  String get consentShortMessage => 'Omi uses AI to turn your conversations into notes. You can delete them anytime.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI processing: $providers';
+    return 'Processed with $providers.';
   }
 
   @override
@@ -13036,19 +13036,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingActWearBody => 'It listens and remembers your conversations. Press once to ask it anything.';
 
   @override
-  String get onboardingActIntro => 'Let\'s see Omi at work.';
-
-  @override
-  String get onboardingActNotesTitle => 'Talk. Omi takes notes.';
-
-  @override
-  String get onboardingActNotesBody => 'Summaries you can search and chat with.';
-
-  @override
-  String get onboardingActTasksTitle => 'Then it finds what to do.';
-
-  @override
-  String get onboardingActTasksBody => 'So nothing slips.';
+  String get onboardingActIntro => 'Let\'s try Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi needs your microphone';

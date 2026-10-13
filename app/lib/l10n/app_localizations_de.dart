@@ -13136,11 +13136,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get onboardingConnectOmi => 'Omi verbinden';
 
   @override
-  String get consentShortMessage => 'Omi speichert deine Gespräche sicher und macht mit KI Notizen daraus.';
+  String get consentShortMessage => 'Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'KI-Verarbeitung: $providers';
+    return 'Verarbeitet mit $providers.';
   }
 
   @override
@@ -13150,19 +13150,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get onboardingActWearBody => 'Es hört zu und merkt sich deine Gespräche. Einmal drücken, um alles zu fragen.';
 
   @override
-  String get onboardingActIntro => 'Sehen wir Omi in Aktion.';
-
-  @override
-  String get onboardingActNotesTitle => 'Sprich. Omi macht Notizen.';
-
-  @override
-  String get onboardingActNotesBody => 'Zusammenfassungen zum Durchsuchen und Nachfragen.';
-
-  @override
-  String get onboardingActTasksTitle => 'Dann findet es, was zu tun ist.';
-
-  @override
-  String get onboardingActTasksBody => 'Damit nichts untergeht.';
+  String get onboardingActIntro => 'Probier Omi aus.';
 
   @override
   String get onboardingActMicTitle => 'Omi braucht dein Mikrofon';

@@ -13092,11 +13092,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingConnectOmi => 'Conectează Omi';
 
   @override
-  String get consentShortMessage => 'Omi îți păstrează conversațiile în siguranță și le transformă în notițe cu AI.';
+  String get consentShortMessage =>
+      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Procesare AI: $providers';
+    return 'Procesat cu $providers.';
   }
 
   @override
@@ -13107,19 +13108,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Ascultă și își amintește conversațiile tale. Apasă o dată ca să-l întrebi orice.';
 
   @override
-  String get onboardingActIntro => 'Hai să vedem Omi la treabă.';
-
-  @override
-  String get onboardingActNotesTitle => 'Vorbește. Omi ia notițe.';
-
-  @override
-  String get onboardingActNotesBody => 'Rezumate pe care le poți căuta și cu care poți discuta.';
-
-  @override
-  String get onboardingActTasksTitle => 'Apoi găsește ce e de făcut.';
-
-  @override
-  String get onboardingActTasksBody => 'Ca nimic să nu-ți scape.';
+  String get onboardingActIntro => 'Hai să încercăm Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi are nevoie de microfon';

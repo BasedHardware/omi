@@ -12852,11 +12852,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingConnectOmi => 'Omiを接続';
 
   @override
-  String get consentShortMessage => 'Omiは会話を安全に保存し、AIでメモにまとめます。';
+  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI処理: $providers';
+    return '$providers で処理されます。';
   }
 
   @override
@@ -12866,19 +12866,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingActWearBody => '会話を聞いて覚えておきます。1回押すと何でも質問できます。';
 
   @override
-  String get onboardingActIntro => 'Omiの働きを見てみましょう。';
-
-  @override
-  String get onboardingActNotesTitle => '話すだけ。Omiがメモします。';
-
-  @override
-  String get onboardingActNotesBody => '検索もチャットもできる要約に。';
-
-  @override
-  String get onboardingActTasksTitle => 'そして、やることを見つけます。';
-
-  @override
-  String get onboardingActTasksBody => '抜け漏れゼロに。';
+  String get onboardingActIntro => 'Omiを試してみましょう。';
 
   @override
   String get onboardingActMicTitle => 'Omiにマイクの許可が必要です';

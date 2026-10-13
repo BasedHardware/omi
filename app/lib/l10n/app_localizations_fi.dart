@@ -13043,11 +13043,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi tallentaa keskustelusi turvallisesti ja tekee niistä muistiinpanoja tekoälyn avulla.';
+      'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Tekoälykäsittely: $providers';
+    return 'Käsittely: $providers.';
   }
 
   @override
@@ -13057,19 +13057,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingActWearBody => 'Se kuuntelee ja muistaa keskustelusi. Paina kerran ja kysy mitä vain.';
 
   @override
-  String get onboardingActIntro => 'Katsotaan Omia töissä.';
-
-  @override
-  String get onboardingActNotesTitle => 'Puhu. Omi tekee muistiinpanot.';
-
-  @override
-  String get onboardingActNotesBody => 'Yhteenvetoja, joita voit hakea ja joilta voit kysyä.';
-
-  @override
-  String get onboardingActTasksTitle => 'Sitten se löytää, mitä pitää tehdä.';
-
-  @override
-  String get onboardingActTasksBody => 'Ettei mikään unohdu.';
+  String get onboardingActIntro => 'Kokeillaan Omia.';
 
   @override
   String get onboardingActMicTitle => 'Omi tarvitsee mikrofonisi';

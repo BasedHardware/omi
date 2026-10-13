@@ -13036,11 +13036,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi lưu trữ cuộc trò chuyện của bạn an toàn và dùng AI để biến chúng thành ghi chú.';
+      'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Xử lý AI: $providers';
+    return 'Được xử lý bằng $providers.';
   }
 
   @override
@@ -13051,19 +13051,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Omi lắng nghe và ghi nhớ các cuộc trò chuyện. Nhấn một lần để hỏi bất cứ điều gì.';
 
   @override
-  String get onboardingActIntro => 'Hãy xem Omi làm việc.';
-
-  @override
-  String get onboardingActNotesTitle => 'Cứ nói. Omi ghi chép.';
-
-  @override
-  String get onboardingActNotesBody => 'Bản tóm tắt để tìm kiếm và trò chuyện.';
-
-  @override
-  String get onboardingActTasksTitle => 'Rồi tìm ra việc cần làm.';
-
-  @override
-  String get onboardingActTasksBody => 'Để không bỏ sót điều gì.';
+  String get onboardingActIntro => 'Cùng thử Omi nhé.';
 
   @override
   String get onboardingActMicTitle => 'Omi cần micrô của bạn';

@@ -44,7 +44,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
   /// The third-party AI services that receive audio and transcripts. Brand names, not translated.
   /// Keep in step with the privacy policy and the serving configuration (Apple 5.1.2(i): name who
   /// receives the data).
-  static const _aiProviders = 'Deepgram, OpenAI';
+  static const _aiProviders = 'Deepgram & OpenAI';
 
   @override
   Widget build(BuildContext context) {

@@ -53,55 +53,6 @@ Widget rise(double t, Widget child, {double distance = 10}) => Opacity(
       child: Transform.translate(offset: Offset(0, (1 - t) * distance), child: child),
     );
 
-/// Animated listening bars. [active] keeps them moving; otherwise they rest low.
-class ListeningBars extends StatefulWidget {
-  const ListeningBars({super.key, this.active = true, this.count = 11, this.color, this.height = 22});
-
-  final bool active;
-  final int count;
-  final Color? color;
-  final double height;
-
-  @override
-  State<ListeningBars> createState() => _ListeningBarsState();
-}
-
-class _ListeningBarsState extends State<ListeningBars> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
-    ..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.color ?? OmiColors.textPrimary;
-    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
-    return SizedBox(
-      height: widget.height,
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(widget.count, (i) {
-            final phase = _c.value * 2 * math.pi + i * 0.7;
-            final level = widget.active && !reduce ? (0.35 + 0.65 * (0.5 + 0.5 * math.sin(phase)).abs()) : 0.25;
-            return Container(
-              width: 4,
-              height: math.max(4, widget.height * level),
-              margin: const EdgeInsets.symmetric(horizontal: 2.5),
-              decoration: BoxDecoration(color: color, borderRadius: OmiRadius.pillAll),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-}
-
 /// A note card in the app's style: optional emoji + title, then body text.
 class NoteCard extends StatelessWidget {
   const NoteCard({super.key, this.emoji, this.title, this.body, this.child, this.minHeight = 0});
@@ -206,81 +157,47 @@ class WordReveal extends StatelessWidget {
   }
 }
 
-/// Slide 1: a voice (bars) becomes a note that writes itself.
-class NotesIllustration extends StatelessWidget {
-  const NotesIllustration({super.key, required this.title, required this.summary});
+/// A burst of confetti from the centre: pieces fly out, turn and fade as [t] goes 0→1.
+class ConfettiPainter extends CustomPainter {
+  ConfettiPainter({required this.t});
 
-  final String title;
-  final String summary;
+  final double t;
 
-  @override
-  Widget build(BuildContext context) {
-    return OneShot(
-      duration: const Duration(milliseconds: 3800),
-      delay: const Duration(milliseconds: 400),
-      builder: (context, t) {
-        final bars = 1 - segment(t, 0.3, 0.5);
-        final card = segment(t, 0.35, 0.6);
-        final text = segment(t, 0.55, 1.0, Curves.linear);
-        return SizedBox(
-          height: 220,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Opacity(opacity: bars, child: const ListeningBars(height: 40, count: 13)),
-              Opacity(
-                opacity: card,
-                child: Transform.scale(
-                  scale: 0.92 + 0.08 * card,
-                  child: NoteCard(
-                    title: title,
-                    emoji: '🥗',
-                    child: WordReveal(
-                      text: summary,
-                      t: text,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Slide 2: the note gives way to tasks that tick themselves off.
-class TasksIllustration extends StatelessWidget {
-  const TasksIllustration({super.key, required this.tasks});
-
-  final List<String> tasks;
+  static const _colors = [
+    Color(0xFFFFC53D),
+    Color(0xFFFF6B6B),
+    Color(0xFF4DABF7),
+    Color(0xFF51CF66),
+    Color(0xFFB197FC),
+    Color(0xFFFF922B),
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    return OneShot(
-      duration: const Duration(milliseconds: 3400),
-      delay: const Duration(milliseconds: 400),
-      builder: (context, t) {
-        return SizedBox(
-          height: 220,
-          child: Center(
-            child: NoteCard(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < tasks.length; i++)
-                    rise(
-                      segment(t, 0.1 + i * 0.2, 0.4 + i * 0.2),
-                      TaskRow(text: tasks[i], check: segment(t, 0.55 + i * 0.18, 0.75 + i * 0.18)),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0 || t >= 1) return;
+    final center = size.center(Offset.zero);
+    final random = math.Random(7);
+    final travel = Curves.easeOutCubic.transform(t);
+    final fade = t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3);
+    for (var i = 0; i < 36; i++) {
+      final angle = random.nextDouble() * 2 * math.pi;
+      final reach = size.width * (0.28 + random.nextDouble() * 0.24);
+      final fall = 40 * t * t;
+      final position = center + Offset(math.cos(angle) * reach * travel, math.sin(angle) * reach * travel + fall);
+      final paint = Paint()..color = _colors[i % _colors.length].withValues(alpha: fade.clamp(0.0, 1.0));
+      canvas.save();
+      canvas.translate(position.dx, position.dy);
+      canvas.rotate(angle + t * 6 * (random.nextBool() ? 1 : -1));
+      final w = 5 + random.nextDouble() * 4;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset.zero, width: w, height: w * 1.8), const Radius.circular(1.5)),
+        paint,
+      );
+      canvas.restore();
+    }
   }
+
+  @override
+  bool shouldRepaint(ConfettiPainter oldDelegate) => oldDelegate.t != t;
 }

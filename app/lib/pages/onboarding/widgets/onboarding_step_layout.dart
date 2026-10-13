@@ -34,7 +34,7 @@ class OnboardingStepLayout extends StatelessWidget {
             padding: const EdgeInsets.only(left: OmiSpacing.xs, top: OmiSpacing.xxs),
             child: Align(
               alignment: Alignment.topLeft,
-              child: OmiBackButton.circled(key: const Key('onboarding_back'), onPressed: onBack),
+              child: OmiBackButton(key: const Key('onboarding_back'), onPressed: onBack, color: OmiColors.textPrimary),
             ),
           ),
       ],

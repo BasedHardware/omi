@@ -13128,11 +13128,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi உங்கள் உரையாடல்களைப் பாதுகாப்பாகச் சேமித்து AI மூலம் குறிப்புகளாக மாற்றுகிறது.';
+      'Omi AI மூலம் உங்கள் உரையாடல்களைக் குறிப்புகளாக மாற்றுகிறது. எப்போது வேண்டுமானாலும் நீக்கலாம்.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI செயலாக்கம்: $providers';
+    return '$providers மூலம் செயலாக்கப்படுகிறது.';
   }
 
   @override
@@ -13143,19 +13143,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'இது உங்கள் உரையாடல்களைக் கேட்டு நினைவில் வைக்கும். எதையும் கேட்க ஒருமுறை அழுத்துங்கள்.';
 
   @override
-  String get onboardingActIntro => 'Omi வேலை செய்வதைப் பார்ப்போம்.';
-
-  @override
-  String get onboardingActNotesTitle => 'பேசுங்கள். Omi குறிப்பெடுக்கும்.';
-
-  @override
-  String get onboardingActNotesBody => 'தேடவும் உரையாடவும் கூடிய சுருக்கங்கள்.';
-
-  @override
-  String get onboardingActTasksTitle => 'பிறகு என்ன செய்ய வேண்டும் என்பதைக் கண்டுபிடிக்கும்.';
-
-  @override
-  String get onboardingActTasksBody => 'எதுவும் தவறாமல் இருக்க.';
+  String get onboardingActIntro => 'Omi-ஐ முயற்சிப்போம்.';
 
   @override
   String get onboardingActMicTitle => 'Omi-க்கு உங்கள் மைக்ரோஃபோன் தேவை';

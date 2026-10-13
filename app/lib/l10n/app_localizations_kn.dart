@@ -13076,11 +13076,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingConnectOmi => 'Omi ಸಂಪರ್ಕಿಸಿ';
 
   @override
-  String get consentShortMessage => 'Omi ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಉಳಿಸಿ AI ಬಳಸಿ ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ.';
+  String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI ಸಂಸ್ಕರಣೆ: $providers';
+    return '$providers ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.';
   }
 
   @override
@@ -13090,19 +13090,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingActWearBody => 'ಇದು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಕೇಳಿ ನೆನಪಿಡುತ್ತದೆ. ಏನಾದರೂ ಕೇಳಲು ಒಮ್ಮೆ ಒತ್ತಿ.';
 
   @override
-  String get onboardingActIntro => 'Omi ಕೆಲಸ ಮಾಡುವುದನ್ನು ನೋಡೋಣ.';
-
-  @override
-  String get onboardingActNotesTitle => 'ಮಾತನಾಡಿ. Omi ಟಿಪ್ಪಣಿ ಮಾಡುತ್ತದೆ.';
-
-  @override
-  String get onboardingActNotesBody => 'ಹುಡುಕಬಹುದಾದ ಮತ್ತು ಚಾಟ್ ಮಾಡಬಹುದಾದ ಸಾರಾಂಶಗಳು.';
-
-  @override
-  String get onboardingActTasksTitle => 'ನಂತರ ಏನು ಮಾಡಬೇಕು ಎಂದು ಕಂಡುಹಿಡಿಯುತ್ತದೆ.';
-
-  @override
-  String get onboardingActTasksBody => 'ಯಾವುದೂ ತಪ್ಪಿಹೋಗದಂತೆ.';
+  String get onboardingActIntro => 'Omi ಪ್ರಯತ್ನಿಸೋಣ.';
 
   @override
   String get onboardingActMicTitle => 'Omi ಗೆ ನಿಮ್ಮ ಮೈಕ್ರೊಫೋನ್ ಬೇಕು';

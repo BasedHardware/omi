@@ -195,18 +195,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// tutorial (it stays in device settings).
   OnboardingDeviceChoice? _deviceChoice;
 
-  /// End of the activation: the paywall, then Home (where the first conversation is waiting).
-  Future<void> _finishWithPaywall() async {
-    PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
-    final usage = context.read<UsageProvider>();
-    unawaited(usage.fetchSubscription());
-    await showOmiSheet<void>(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (_) => const OnboardingPlansSheet(),
-    );
-    if (!mounted) return;
-    await _completeOnboarding();
+  /// The paywall inside the activation, between the celebration and the rating ask.
+  Future<void> _showPaywall() async {
+    unawaited(context.read<UsageProvider>().fetchSubscription());
+    await showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const OnboardingPlansSheet());
   }
 
   Future<void> _completeOnboarding() async {
@@ -444,7 +436,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           : ActivationFlow(
               hasDevice:
                   _deviceChoice == OnboardingDeviceChoice.connected || context.read<DeviceProvider>().isConnected,
-              onFinished: _finishWithPaywall,
+              showPaywall: _showPaywall,
+              onFinished: () {
+                PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
+                _completeOnboarding();
+              },
             ),
       OnboardingKnowledgeGraphStep(onContinue: _leaveKnowledgeGraph),
       OnboardingSetupPage(

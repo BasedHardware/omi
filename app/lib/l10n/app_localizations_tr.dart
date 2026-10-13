@@ -13050,11 +13050,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingConnectOmi => 'Omi\'yi bağla';
 
   @override
-  String get consentShortMessage => 'Omi konuşmalarını güvenle saklar ve yapay zekâyla nota dönüştürür.';
+  String get consentShortMessage =>
+      'Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Yapay zekâ işleme: $providers';
+    return '$providers ile işlenir.';
   }
 
   @override
@@ -13064,19 +13065,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingActWearBody => 'Konuşmalarını dinler ve hatırlar. Bir şey sormak için bir kez bas.';
 
   @override
-  String get onboardingActIntro => 'Omi\'yi iş başında görelim.';
-
-  @override
-  String get onboardingActNotesTitle => 'Konuş. Omi not alsın.';
-
-  @override
-  String get onboardingActNotesBody => 'Arayabileceğin ve sohbet edebileceğin özetler.';
-
-  @override
-  String get onboardingActTasksTitle => 'Sonra yapılacakları bulur.';
-
-  @override
-  String get onboardingActTasksBody => 'Böylece hiçbir şey gözden kaçmaz.';
+  String get onboardingActIntro => 'Hadi Omi\'yi deneyelim.';
 
   @override
   String get onboardingActMicTitle => 'Omi\'nin mikrofonuna ihtiyacı var';

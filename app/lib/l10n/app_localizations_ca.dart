@@ -13105,11 +13105,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingConnectOmi => 'Connecta l\'Omi';
 
   @override
-  String get consentShortMessage => 'Omi desa les teves converses de manera segura i les converteix en notes amb IA.';
+  String get consentShortMessage =>
+      'Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Processament d\'IA: $providers';
+    return 'Processat amb $providers.';
   }
 
   @override
@@ -13120,19 +13121,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Escolta i recorda les teves converses. Prem un cop per preguntar-li el que vulguis.';
 
   @override
-  String get onboardingActIntro => 'Vegem l\'Omi en acció.';
-
-  @override
-  String get onboardingActNotesTitle => 'Parla. Omi pren notes.';
-
-  @override
-  String get onboardingActNotesBody => 'Resums que pots cercar i amb què pots xatejar.';
-
-  @override
-  String get onboardingActTasksTitle => 'Després troba què cal fer.';
-
-  @override
-  String get onboardingActTasksBody => 'Perquè no se t\'escapi res.';
+  String get onboardingActIntro => 'Provem Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi necessita el micròfon';

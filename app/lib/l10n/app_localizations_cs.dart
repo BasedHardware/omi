@@ -13039,11 +13039,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingConnectOmi => 'Připojte Omi';
 
   @override
-  String get consentShortMessage => 'Omi bezpečně ukládá vaše konverzace a pomocí AI z nich dělá poznámky.';
+  String get consentShortMessage => 'Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Zpracování AI: $providers';
+    return 'Zpracovává $providers.';
   }
 
   @override
@@ -13054,19 +13054,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Poslouchá a pamatuje si vaše konverzace. Jedním stiskem se ho na cokoli zeptáte.';
 
   @override
-  String get onboardingActIntro => 'Podívejme se, jak Omi pracuje.';
-
-  @override
-  String get onboardingActNotesTitle => 'Mluvte. Omi si dělá poznámky.';
-
-  @override
-  String get onboardingActNotesBody => 'Shrnutí, ve kterých můžete hledat a ptát se jich.';
-
-  @override
-  String get onboardingActTasksTitle => 'Pak najde, co je potřeba udělat.';
-
-  @override
-  String get onboardingActTasksBody => 'Aby vám nic neuteklo.';
+  String get onboardingActIntro => 'Vyzkoušejme Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi potřebuje mikrofon';

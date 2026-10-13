@@ -13090,11 +13090,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Az Omi biztonságosan tárolja a beszélgetéseidet, és MI segítségével jegyzetekké alakítja őket.';
+      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'MI-feldolgozás: $providers';
+    return 'Feldolgozás: $providers.';
   }
 
   @override
@@ -13105,19 +13105,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Hallgatja és megjegyzi a beszélgetéseidet. Nyomd meg egyszer, és kérdezz bármit.';
 
   @override
-  String get onboardingActIntro => 'Lássuk az Omit munka közben.';
-
-  @override
-  String get onboardingActNotesTitle => 'Beszélj. Az Omi jegyzetel.';
-
-  @override
-  String get onboardingActNotesBody => 'Összefoglalók, amelyekben kereshetsz, és amelyekről kérdezhetsz.';
-
-  @override
-  String get onboardingActTasksTitle => 'Aztán kiszűri a teendőket.';
-
-  @override
-  String get onboardingActTasksBody => 'Hogy semmi ne csússzon ki.';
+  String get onboardingActIntro => 'Próbáljuk ki az Omit.';
 
   @override
   String get onboardingActMicTitle => 'Az Ominak kell a mikrofonod';

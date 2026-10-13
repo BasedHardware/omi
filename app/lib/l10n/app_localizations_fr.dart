@@ -13141,11 +13141,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi stocke vos conversations en toute sécurité et utilise l\'IA pour en faire des notes.';
+      'Omi utilise l\'IA pour transformer vos conversations en notes. Vous pouvez les supprimer à tout moment.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Traitement IA : $providers';
+    return 'Traité avec $providers.';
   }
 
   @override
@@ -13156,19 +13156,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Il écoute et retient vos conversations. Appuyez une fois pour lui demander n\'importe quoi.';
 
   @override
-  String get onboardingActIntro => 'Voyons Omi à l\'œuvre.';
-
-  @override
-  String get onboardingActNotesTitle => 'Parlez. Omi prend des notes.';
-
-  @override
-  String get onboardingActNotesBody => 'Des résumés à rechercher et à interroger.';
-
-  @override
-  String get onboardingActTasksTitle => 'Puis il repère ce qu\'il y a à faire.';
-
-  @override
-  String get onboardingActTasksBody => 'Pour que rien ne vous échappe.';
+  String get onboardingActIntro => 'Essayons Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi a besoin de votre micro';

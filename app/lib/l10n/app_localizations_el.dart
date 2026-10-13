@@ -13122,11 +13122,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Το Omi αποθηκεύει με ασφάλεια τις συνομιλίες σας και τις μετατρέπει σε σημειώσεις με AI.';
+      'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Επεξεργασία AI: $providers';
+    return 'Επεξεργασία μέσω $providers.';
   }
 
   @override
@@ -13137,19 +13137,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Ακούει και θυμάται τις συνομιλίες σας. Πατήστε μία φορά για να ρωτήσετε οτιδήποτε.';
 
   @override
-  String get onboardingActIntro => 'Ας δούμε το Omi σε δράση.';
-
-  @override
-  String get onboardingActNotesTitle => 'Μιλήστε. Το Omi κρατά σημειώσεις.';
-
-  @override
-  String get onboardingActNotesBody => 'Περιλήψεις που μπορείτε να αναζητήσετε και να συζητήσετε.';
-
-  @override
-  String get onboardingActTasksTitle => 'Μετά βρίσκει τι πρέπει να γίνει.';
-
-  @override
-  String get onboardingActTasksBody => 'Για να μη σας ξεφεύγει τίποτα.';
+  String get onboardingActIntro => 'Ας δοκιμάσουμε το Omi.';
 
   @override
   String get onboardingActMicTitle => 'Το Omi χρειάζεται το μικρόφωνό σας';

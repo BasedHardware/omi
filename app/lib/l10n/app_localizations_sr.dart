@@ -13046,11 +13046,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get onboardingConnectOmi => 'Повежите Omi';
 
   @override
-  String get consentShortMessage => 'Omi безбедно чува ваше разговоре и помоћу ВИ их претвара у белешке.';
+  String get consentShortMessage =>
+      'Omi користи AI да ваше разговоре претвори у белешке. Можете их обрисати у било ком тренутку.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'ВИ обрада: $providers';
+    return 'Обрађује се помоћу $providers.';
   }
 
   @override
@@ -13060,19 +13061,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get onboardingActWearBody => 'Слуша и памти ваше разговоре. Притисните једном да га било шта питате.';
 
   @override
-  String get onboardingActIntro => 'Погледајмо Omi на делу.';
-
-  @override
-  String get onboardingActNotesTitle => 'Причајте. Omi води белешке.';
-
-  @override
-  String get onboardingActNotesBody => 'Сажеци које можете претраживати и са којима можете разговарати.';
-
-  @override
-  String get onboardingActTasksTitle => 'Затим пронађе шта треба урадити.';
-
-  @override
-  String get onboardingActTasksBody => 'Да ништа не промакне.';
+  String get onboardingActIntro => 'Испробајмо Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi-ју треба микрофон';

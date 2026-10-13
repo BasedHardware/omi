@@ -12945,11 +12945,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingConnectOmi => 'חיבור Omi';
 
   @override
-  String get consentShortMessage => 'Omi שומר את השיחות שלכם באופן מאובטח ומשתמש ב-AI כדי להפוך אותן להערות.';
+  String get consentShortMessage => 'Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'עיבוד AI: $providers';
+    return 'מעובד באמצעות $providers.';
   }
 
   @override
@@ -12959,19 +12959,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingActWearBody => 'הוא מקשיב וזוכר את השיחות שלכם. לחצו פעם אחת כדי לשאול כל דבר.';
 
   @override
-  String get onboardingActIntro => 'בואו נראה את Omi בפעולה.';
-
-  @override
-  String get onboardingActNotesTitle => 'דברו. Omi רושם הערות.';
-
-  @override
-  String get onboardingActNotesBody => 'סיכומים שאפשר לחפש בהם ולשוחח איתם.';
-
-  @override
-  String get onboardingActTasksTitle => 'ואז הוא מוצא מה צריך לעשות.';
-
-  @override
-  String get onboardingActTasksBody => 'כדי ששום דבר לא יתפספס.';
+  String get onboardingActIntro => 'בואו ננסה את Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi צריך את המיקרופון';

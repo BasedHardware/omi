@@ -13067,11 +13067,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingConnectOmi => 'Підключіть Omi';
 
   @override
-  String get consentShortMessage => 'Omi надійно зберігає ваші розмови й за допомогою ШІ перетворює їх на нотатки.';
+  String get consentShortMessage =>
+      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Обробка ШІ: $providers';
+    return 'Обробка: $providers.';
   }
 
   @override
@@ -13082,19 +13083,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Він слухає й запам\'ятовує ваші розмови. Натисніть один раз, щоб запитати що завгодно.';
 
   @override
-  String get onboardingActIntro => 'Подивимося на Omi в дії.';
-
-  @override
-  String get onboardingActNotesTitle => 'Говоріть. Omi робить нотатки.';
-
-  @override
-  String get onboardingActNotesBody => 'Підсумки, у яких можна шукати й ставити питання.';
-
-  @override
-  String get onboardingActTasksTitle => 'А потім знаходить, що треба зробити.';
-
-  @override
-  String get onboardingActTasksBody => 'Щоб нічого не загубилося.';
+  String get onboardingActIntro => 'Спробуймо Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi потрібен мікрофон';

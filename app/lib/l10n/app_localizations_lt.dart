@@ -13062,11 +13062,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi saugiai saugo jūsų pokalbius ir dirbtinio intelekto pagalba paverčia juos užrašais.';
+      'Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'DI apdorojimas: $providers';
+    return 'Apdorojama su $providers.';
   }
 
   @override
@@ -13077,19 +13077,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Jis klausosi ir įsimena jūsų pokalbius. Paspauskite kartą ir klauskite ko tik norite.';
 
   @override
-  String get onboardingActIntro => 'Pažiūrėkime, kaip veikia Omi.';
-
-  @override
-  String get onboardingActNotesTitle => 'Kalbėkite. Omi užsirašo.';
-
-  @override
-  String get onboardingActNotesBody => 'Santraukos, kuriose galite ieškoti ir apie kurias galite klausti.';
-
-  @override
-  String get onboardingActTasksTitle => 'Tada jis randa, ką reikia padaryti.';
-
-  @override
-  String get onboardingActTasksBody => 'Kad niekas nepraslystų.';
+  String get onboardingActIntro => 'Išbandykime Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi reikia mikrofono';

@@ -14,21 +14,26 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
+/// How far the microphone and dictation titles sit below the top of the safe area: low enough to
+/// feel centred, high enough to stay clear of the system permission prompt below them.
+const double _kPromptHeadingTop = 96;
+
 /// The stages of the first-run activation, in order. Some are skipped: [wear] without an Omi,
-/// [microphone] with one (or when already allowed), [tasks] when Omi found none.
-enum ActivationStage { wear, intro, notes, tasks, microphone, dictate, writing, summary, taskList, congrats }
+/// [microphone] with one (or when already allowed), [taskList] when Omi found no tasks.
+enum ActivationStage { wear, intro, microphone, dictate, writing, summary, taskList, congrats, rating }
 
 /// Shows people what Omi does with their own words, then hands over to the paywall and Home.
 ///
-/// Omi users first learn how to wear it; everyone sees "Let's see Omi at work.", two short animated
-/// slides, then says a few sentences. Omi turns them into notes and tasks (a real conversation, first
-/// on Home), then a congratulations screen. Skipping the dictation shows a welcome card on Home
-/// instead.
+/// Omi users first learn how to wear it; everyone sees "Let's see Omi at work." and then says a few
+/// sentences. Omi turns them into notes and tasks (a real conversation, first on Home), then come a
+/// congratulations screen, the rating ask and the paywall. Skipping the dictation shows a welcome
+/// card on Home instead.
 class ActivationFlow extends StatefulWidget {
   const ActivationFlow({
     super.key,
     required this.hasDevice,
     required this.onFinished,
+    this.showPaywall,
     this.capture,
     this.microphoneGranted,
     this.requestMicrophone,
@@ -38,8 +43,11 @@ class ActivationFlow extends StatefulWidget {
   /// The reader connected an Omi in onboarding: they get the wear instructions and dictate through it.
   final bool hasDevice;
 
-  /// Called once at the end (the paywall and Home follow).
+  /// Called once at the very end; Home follows.
   final VoidCallback onFinished;
+
+  /// Shows the paywall after the rating ask, last before Home; completes when it is closed.
+  final Future<void> Function()? showPaywall;
 
   /// Defaults to the app's capture pipeline; replaceable in tests.
   final ActivationCapture Function(BuildContext context)? capture;
@@ -68,7 +76,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
     setState(() => _stage = next);
   }
 
-  Future<void> _afterSlides() async {
+  Future<void> _afterIntro() async {
     if (widget.hasDevice) return _go(ActivationStage.dictate);
     final granted = await (widget.microphoneGranted ?? () => Permission.microphone.isGranted)();
     _go(granted ? ActivationStage.dictate : ActivationStage.microphone);
@@ -118,9 +126,10 @@ class _ActivationFlowState extends State<ActivationFlow> {
     return PipelineActivationCapture(context);
   }
 
-  void _finish() {
+  Future<void> _afterRating() async {
     if (_finished) return;
     _finished = true;
+    await widget.showPaywall?.call();
     widget.onFinished();
   }
 
@@ -138,21 +147,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
       ActivationStage.intro => _IntroLine(
           key: const ValueKey('intro'),
           text: l10n.onboardingActIntro,
-          onDone: () => _go(ActivationStage.notes),
-        ),
-      ActivationStage.notes => _Slide(
-          key: const ValueKey('notes'),
-          title: l10n.onboardingActNotesTitle,
-          body: l10n.onboardingActNotesBody,
-          visual: NotesIllustration(title: l10n.onboardingActDemoTitle, summary: l10n.onboardingActDemoSummary),
-          onContinue: () => _go(ActivationStage.tasks),
-        ),
-      ActivationStage.tasks => _Slide(
-          key: const ValueKey('tasks'),
-          title: l10n.onboardingActTasksTitle,
-          body: l10n.onboardingActTasksBody,
-          visual: TasksIllustration(tasks: [l10n.onboardingActDemoTask1, l10n.onboardingActDemoTask2]),
-          onContinue: _afterSlides,
+          onDone: _afterIntro,
         ),
       ActivationStage.microphone => _Slide(
           key: const ValueKey('microphone'),
@@ -160,6 +155,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
           body: l10n.onboardingActMicBody,
           visual: const _MicVisual(),
           actionLabel: l10n.onboardingActMicAllow,
+          headingTop: _kPromptHeadingTop,
           onContinue: _allowMicrophone,
         ),
       ActivationStage.dictate => _DictationStep(
@@ -181,10 +177,12 @@ class _ActivationFlowState extends State<ActivationFlow> {
           tasks: _result!.tasks,
           onContinue: () => _go(ActivationStage.congrats),
         ),
-      ActivationStage.congrats => _Congrats(
-          key: const ValueKey('congrats'),
+      ActivationStage.congrats =>
+        _Hooray(key: const ValueKey('congrats'), onContinue: () => _go(ActivationStage.rating)),
+      ActivationStage.rating => _RatingAsk(
+          key: const ValueKey('rating'),
           requestReview: widget.requestReview ?? InAppReview.instance.requestReview,
-          onContinue: _finish,
+          onDone: _afterRating,
         ),
     };
     final reduce = OmiMotion.of(context).emphasized == Duration.zero;
@@ -215,6 +213,7 @@ class _Slide extends StatelessWidget {
     required this.visual,
     required this.onContinue,
     this.actionLabel,
+    this.headingTop = 0,
   });
 
   final String title;
@@ -222,6 +221,7 @@ class _Slide extends StatelessWidget {
   final Widget visual;
   final VoidCallback onContinue;
   final String? actionLabel;
+  final double headingTop;
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +229,7 @@ class _Slide extends StatelessWidget {
       title: title,
       subtitle: body,
       centered: true,
+      headingTop: headingTop,
       body: visual,
       action: OmiButton(
         key: Key('activation_continue_${(key as ValueKey?)?.value}'),
@@ -408,14 +409,10 @@ class _DictationStepState extends State<_DictationStep> {
               children: [
                 Align(
                   alignment: Alignment.centerRight,
-                  child: OmiButton.tertiary(
-                    key: const Key('activation_dictation_skip'),
-                    label: l10n.skip,
-                    size: OmiButtonSize.compact,
-                    onPressed: _skip,
-                  ),
+                  child: _QuietSkip(label: l10n.skip, onTap: _skip),
                 ),
-                const SizedBox(height: OmiSpacing.md),
+                // Level with the microphone step's title (its step adds OmiSpacing.lg; Skip takes 44).
+                const SizedBox(height: _kPromptHeadingTop + OmiSpacing.lg - 44),
                 Semantics(
                   header: true,
                   child: Text(l10n.onboardingActDictateTitle, style: OmiType.title1, textAlign: TextAlign.center),
@@ -648,84 +645,238 @@ class _TasksReveal extends StatelessWidget {
   }
 }
 
-/// "You're all set": a check that draws itself, then the rating ask.
-class _Congrats extends StatefulWidget {
-  const _Congrats({super.key, required this.requestReview, required this.onContinue});
+/// "You're all set": a moment to celebrate. The title and line rise in above a check that pops in
+/// with a burst of confetti, and one Continue.
+class _Hooray extends StatefulWidget {
+  const _Hooray({super.key, required this.onContinue});
 
-  final Future<void> Function() requestReview;
   final VoidCallback onContinue;
 
   @override
-  State<_Congrats> createState() => _CongratsState();
+  State<_Hooray> createState() => _HoorayState();
 }
 
-class _CongratsState extends State<_Congrats> {
-  bool _rated = false;
+class _HoorayState extends State<_Hooray> {
+  Timer? _haptic;
+
+  @override
+  void dispose() {
+    _haptic?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
-    OmiHaptics.success();
-  }
-
-  Future<void> _rate() async {
-    if (_rated) return;
-    setState(() => _rated = true);
-    PlatformManager.instance.analytics.track('Onboarding Rating Asked', properties: {'answer': 'rate'});
-    try {
-      await widget.requestReview();
-    } catch (_) {}
+    // In step with the check popping in.
+    _haptic = Timer(const Duration(milliseconds: 620), OmiHaptics.success);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final name = SharedPreferencesUtil().givenName.trim();
-    return OnboardingPlainStep(
-      title: name.isEmpty ? l10n.youreAllSet : l10n.onboardingActCongratsTitle(name),
-      subtitle: l10n.onboardingActCongratsBody,
-      centered: true,
-      body: OneShot(
-        duration: const Duration(milliseconds: 1600),
-        builder: (context, t) => Column(
-          mainAxisSize: MainAxisSize.min,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Transform.scale(
-              scale: Curves.easeOutBack.transform(segment(t, 0, 0.4, Curves.linear)),
-              child: Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: Icon(Icons.check_rounded, size: 46, color: OmiColors.onAccent),
-              ),
-            ),
-            const SizedBox(height: OmiSpacing.xxl),
-            rise(
-              segment(t, 0.5, 0.9),
-              Container(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md),
-                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-                child: Row(
+            Expanded(
+              child: OneShot(
+                duration: const Duration(milliseconds: 2200),
+                builder: (context, t) => Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(child: Text(l10n.onboardingActRateTitle, style: OmiType.callout)),
-                    OmiButton.secondary(
-                      key: const Key('activation_rate'),
-                      label: l10n.onboardingActRateYes,
-                      size: OmiButtonSize.compact,
-                      onPressed: _rated ? null : _rate,
+                    rise(
+                      segment(t, 0, 0.3),
+                      Text(
+                        name.isEmpty ? l10n.youreAllSet : l10n.onboardingActCongratsTitle(name),
+                        style: OmiType.largeTitle,
+                        textAlign: TextAlign.center,
+                      ),
+                      distance: 14,
+                    ),
+                    const SizedBox(height: OmiSpacing.sm),
+                    rise(
+                      segment(t, 0.12, 0.42),
+                      Text(
+                        l10n.onboardingActCongratsBody,
+                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
+                        textAlign: TextAlign.center,
+                      ),
+                      distance: 10,
+                    ),
+                    const SizedBox(height: OmiSpacing.md),
+                    SizedBox(
+                      width: 280,
+                      height: 280,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned.fill(
+                              child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.32, 1, Curves.linear)))),
+                          Transform.scale(
+                            scale: Curves.elasticOut.transform(segment(t, 0.28, 0.7, Curves.linear)),
+                            child: Container(
+                              width: 104,
+                              height: 104,
+                              decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                              child: Icon(Icons.check_rounded, size: 56, color: OmiColors.onAccent),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
+            OmiButton(
+              key: const Key('activation_continue_congrats'),
+              label: l10n.continueButton,
+              expand: true,
+              onPressed: widget.onContinue,
+            ),
           ],
         ),
       ),
-      action: OmiButton(
-        key: const Key('activation_continue_congrats'),
-        label: l10n.continueButton,
-        expand: true,
-        onPressed: widget.onContinue,
+    );
+  }
+}
+
+/// After the celebration: "Enjoying Omi so far?" and five gold stars popping in one by one, placed
+/// above where the App Store rating pop-up opens by itself. The paywall follows once the pop-up is
+/// closed (or Continue, if it never showed).
+class _RatingAsk extends StatefulWidget {
+  const _RatingAsk({super.key, required this.requestReview, required this.onDone});
+
+  final Future<void> Function() requestReview;
+  final VoidCallback onDone;
+
+  @override
+  State<_RatingAsk> createState() => _RatingAskState();
+}
+
+class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
+  static const _gold = Color(0xFFFFC53D);
+  Timer? _ask;
+  bool _promptShowing = false;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _ask = Timer(const Duration(milliseconds: 1500), _requestReview);
+  }
+
+  @override
+  void dispose() {
+    _ask?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _requestReview() async {
+    PlatformManager.instance.analytics.track('Onboarding Rating Asked');
+    try {
+      await widget.requestReview();
+    } catch (_) {}
+  }
+
+  /// iOS gives no callback for its rating pop-up, but the app goes inactive while it is up and
+  /// becomes active again when it closes: that return is the cue to move on to Home.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive) _promptShowing = true;
+    if (state == AppLifecycleState.resumed && _promptShowing) _leave();
+  }
+
+  void _leave() {
+    if (_done || !mounted) return;
+    _done = true;
+    widget.onDone();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Title and stars sit in the top third: iOS opens its rating pop-up in the middle.
+            const Spacer(),
+            OneShot(
+              duration: const Duration(milliseconds: 1400),
+              builder: (context, t) => Column(
+                children: [
+                  rise(
+                    segment(t, 0, 0.35),
+                    Text(l10n.onboardingActRateTitle, style: OmiType.largeTitle, textAlign: TextAlign.center),
+                    distance: 12,
+                  ),
+                  const SizedBox(height: OmiSpacing.lg),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < 5; i++)
+                        Transform.scale(
+                          scale: Curves.elasticOut.transform(segment(t, 0.2 + i * 0.1, 0.6 + i * 0.1, Curves.linear)),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 3),
+                            child: Icon(Icons.star_rounded, size: 52, color: _gold),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(flex: 5),
+            OmiButton(
+              key: const Key('activation_continue_rating'),
+              label: l10n.continueButton,
+              expand: true,
+              onPressed: _leave,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Skip in the top right, in grey: there if needed, without competing with the dictation.
+class _QuietSkip extends StatelessWidget {
+  const _QuietSkip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const Key('activation_dictation_skip'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: Center(
+            widthFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
+              child: Text(label, style: OmiType.callout.copyWith(color: OmiColors.textTertiary)),
+            ),
+          ),
+        ),
       ),
     );
   }

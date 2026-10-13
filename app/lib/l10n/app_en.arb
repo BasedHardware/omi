@@ -15788,11 +15788,11 @@
     "@onboardingConnectOmi": {
         "description": "Onboarding connect step title; Omi is the brand name of the wearable"
     },
-    "consentShortMessage": "Omi stores your conversations securely and uses AI to turn them into notes.",
+    "consentShortMessage": "Omi uses AI to turn your conversations into notes. You can delete them anytime.",
     "@consentShortMessage": {
         "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
     },
-    "consentAiProviders": "AI processing: {providers}",
+    "consentAiProviders": "Processed with {providers}.",
     "@consentAiProviders": {
         "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
         "placeholders": {
@@ -15810,25 +15810,9 @@
     "@onboardingActWearBody": {
         "description": "Activation: how the device works, shown to device users"
     },
-    "onboardingActIntro": "Let's see Omi at work.",
+    "onboardingActIntro": "Let's try Omi.",
     "@onboardingActIntro": {
         "description": "Activation: animated line before the demo slides"
-    },
-    "onboardingActNotesTitle": "Talk. Omi takes notes.",
-    "@onboardingActNotesTitle": {
-        "description": "Activation slide 1 title"
-    },
-    "onboardingActNotesBody": "Summaries you can search and chat with.",
-    "@onboardingActNotesBody": {
-        "description": "Activation slide 1 line"
-    },
-    "onboardingActTasksTitle": "Then it finds what to do.",
-    "@onboardingActTasksTitle": {
-        "description": "Activation slide 2 title"
-    },
-    "onboardingActTasksBody": "So nothing slips.",
-    "@onboardingActTasksBody": {
-        "description": "Activation slide 2 line"
     },
     "onboardingActMicTitle": "Omi needs your microphone",
     "@onboardingActMicTitle": {

@@ -12833,11 +12833,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingConnectOmi => '连接 Omi';
 
   @override
-  String get consentShortMessage => 'Omi 会安全保存你的对话，并用 AI 整理成笔记。';
+  String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
 
   @override
   String consentAiProviders(String providers) {
-    return 'AI 处理方：$providers';
+    return '由 $providers 处理。';
   }
 
   @override
@@ -12847,19 +12847,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingActWearBody => '它会聆听并记住你的对话。按一下即可向它提问。';
 
   @override
-  String get onboardingActIntro => '来看看 Omi 如何工作。';
-
-  @override
-  String get onboardingActNotesTitle => '你来说，Omi 来记。';
-
-  @override
-  String get onboardingActNotesBody => '可搜索、可对话的摘要。';
-
-  @override
-  String get onboardingActTasksTitle => '然后找出要做的事。';
-
-  @override
-  String get onboardingActTasksBody => '不再遗漏任何事。';
+  String get onboardingActIntro => '来试试 Omi 吧。';
 
   @override
   String get onboardingActMicTitle => 'Omi 需要使用麦克风';

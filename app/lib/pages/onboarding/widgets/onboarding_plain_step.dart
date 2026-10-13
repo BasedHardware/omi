@@ -6,6 +6,9 @@ import 'package:omi/ui/ui.dart';
 /// step's [body] below, and the step's [action] pinned to the bottom, above the keyboard when it is
 /// up. The host's [MediaQuery] top padding already clears the progress line and back button.
 ///
+/// [headingTop] moves the title down from the top, e.g. to sit just above a system permission
+/// prompt that opens in the middle of the screen.
+///
 /// With [centered], the title stays at the top and the body sits in the middle of the space between
 /// the title and the action, staying centred as the keyboard opens and closes.
 class OnboardingPlainStep extends StatelessWidget {
@@ -16,6 +19,7 @@ class OnboardingPlainStep extends StatelessWidget {
     required this.body,
     this.action,
     this.centered = false,
+    this.headingTop = 0,
   });
 
   final String title;
@@ -23,6 +27,7 @@ class OnboardingPlainStep extends StatelessWidget {
   final Widget body;
   final Widget? action;
   final bool centered;
+  final double headingTop;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +41,7 @@ class OnboardingPlainStep extends StatelessWidget {
     final Widget content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (headingTop > 0) SizedBox(height: headingTop),
         ...heading,
         const SizedBox(height: OmiSpacing.xxl),
         Expanded(

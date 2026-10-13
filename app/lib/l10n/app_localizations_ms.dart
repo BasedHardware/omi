@@ -13069,11 +13069,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get consentShortMessage =>
-      'Omi menyimpan perbualan anda dengan selamat dan menggunakan AI untuk menjadikannya nota.';
+      'Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.';
 
   @override
   String consentAiProviders(String providers) {
-    return 'Pemprosesan AI: $providers';
+    return 'Diproses dengan $providers.';
   }
 
   @override
@@ -13084,19 +13084,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Ia mendengar dan mengingati perbualan anda. Tekan sekali untuk bertanya apa sahaja.';
 
   @override
-  String get onboardingActIntro => 'Mari lihat Omi bekerja.';
-
-  @override
-  String get onboardingActNotesTitle => 'Bercakap. Omi mencatat nota.';
-
-  @override
-  String get onboardingActNotesBody => 'Ringkasan yang boleh dicari dan disembangkan.';
-
-  @override
-  String get onboardingActTasksTitle => 'Kemudian ia mencari apa yang perlu dibuat.';
-
-  @override
-  String get onboardingActTasksBody => 'Supaya tiada yang terlepas.';
+  String get onboardingActIntro => 'Jom cuba Omi.';
 
   @override
   String get onboardingActMicTitle => 'Omi perlukan mikrofon anda';
