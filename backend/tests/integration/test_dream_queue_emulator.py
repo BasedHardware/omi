@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 from uuid import uuid4
 from unittest.mock import Mock
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
@@ -24,6 +25,44 @@ from utils.llm.shaped_agent import Turn
 from models.dream_agent import Triage, Cluster, Plan, Edit
 
 pytestmark = pytest.mark.integration
+
+
+def test_budget_settlement_user_isolation_and_duplicate_finish(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uids = ['synthetic-budget-' + str(uuid4()) for _ in range(2)]
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', ','.join(uids))
+    now = datetime.now(timezone.utc)
+    caps = Caps(context_mode='full', tokens=432768, samples=3, passes=24, daily_usd=250)
+    for uid in uids:
+        database.collection('users').document(uid).set({})
+        dream_store.mark_dirty(uid, [('conversations', 'synthetic')], firestore_client=database)
+    first = dream_store.acquire(uids[0], caps, now=now, firestore_client=database)
+    second = dream_store.acquire(uids[1], caps, now=now, firestore_client=database)
+
+    def finish_once():
+        try:
+            dream_store.finish(
+                uids[0], first, {'tokens': 820000, 'usage_unknown': False}, success=True, firestore_client=database
+            )
+            return 'finished'
+        except RuntimeError as exc:
+            assert str(exc) == 'dream_lease_lost'
+            return 'duplicate'
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: finish_once(), range(2)))
+    assert sorted(results) == ['duplicate', 'finished']
+    first_spend = dream_store.spend_ref(database, uids[0], first['day'])
+    second_spend = dream_store.spend_ref(database, uids[1], second['day'])
+    assert first_spend.get().to_dict()['reserved_usd'] == pytest.approx(8.2)
+    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert dream_store.own_state(uids[0], firestore_client=database)['lease'] is None
+    dream_store.finish(uids[1], second, {'tokens': 10, 'usage_unknown': True}, success=False, firestore_client=database)
+    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
 
 
 @pytest.fixture(autouse=True)
@@ -257,17 +296,13 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     )
     assert dream_store.dirty_count(uid, firestore_client=database) == 468
     assert state.get().to_dict()['passes'] == 1
-    assert database.collection('dream_spend').document(lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
-        0.24
-    )
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0.24)
 
     lease = dream_store.acquire(uid, Caps(), firestore_client=database)
     dream_store.finish(uid, lease, {'tokens': 0}, success=False, release=False, refund=True, firestore_client=database)
     data = state.get().to_dict()
     assert data['passes'] == 1 and data['lease']['run_id'] == lease['run_id']
-    assert database.collection('dream_spend').document(lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
-        0.24
-    )
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0.24)
     assert dream_store.acquire(uid, Caps(), firestore_client=database) is None
     runs = dream_store.own_runs(uid, limit=20, firestore_client=database)
     assert len(runs) >= 3

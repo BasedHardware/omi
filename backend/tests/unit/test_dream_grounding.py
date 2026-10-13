@@ -242,6 +242,8 @@ def test_capped_target_skips_hydration_and_reasoning_until_next_utc_day(monkeypa
         'watermark': dream_store.EPOCH,
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,
+        'reservation_usd': 0.24,
+        'spend_scope': 'user',
     }
     db = DreamFirestore()
     db.rows[('dream_users', uid)] = {'lease': lease, 'score': 1}

@@ -6,11 +6,13 @@ spend is reserved before inference; ambiguous failures retain their reservation.
 """
 
 import os
+import math
 import random
 from hashlib import sha256
 
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from typing import Any
 
 from google.cloud import firestore
 
@@ -34,6 +36,11 @@ def client(firestore_client=None):
 
 def state_ref(database, uid):
     return database.collection('dream_users').document(uid)
+
+
+def spend_ref(database, uid, day):
+    """Per-user UTC-day accounting, shared only by that user's passes and hosts."""
+    return state_ref(database, uid).collection('spend').document(day)
 
 
 # Bound retries of a consumed product version after billable reasoning failures.
@@ -134,9 +141,10 @@ class AdmissionDenied(Exception):
 def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=None, firestore_client=None):
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
+    now = now.astimezone(timezone.utc)
     day = now.date().isoformat()
     state = state_ref(database, uid)
-    spend = database.collection('dream_spend').document(day)
+    spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
     draw = (rng or random.SystemRandom()).random()
@@ -197,6 +205,10 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
             'dirty_dropped': int(data.get('dirty_dropped', 0)),
             'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
             'reservation_usd': caps.reservation_usd,
+            'budget_charge_usd': caps.reservation_usd,
+            'admission_refunded': False,
+            'max_usd_per_token': caps.max_usd_per_token,
+            'spend_scope': 'user',
             'score': data.get('score', 0),
             'cleanup_cursor': data.get('cleanup_cursor', {}),
             'cleanup_selected': cleanup_selected,
@@ -249,7 +261,13 @@ def finish(
     database = client(firestore_client)
     state = state_ref(database, uid)
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
-    spend = database.collection('dream_spend').document(lease['day'])
+    # Leases admitted before this change still belong to the old shared ledger.
+    # Never debit a new user ledger for a reservation it did not acquire.
+    spend = (
+        spend_ref(database, uid, lease['day'])
+        if lease.get('spend_scope') == 'user'
+        else database.collection('dream_spend').document(lease['day'])
+    )
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -261,9 +279,28 @@ def finish(
     @firestore.transactional
     def complete(tx):
         data = state.get(transaction=tx).to_dict() or {}
-        if (data.get('lease') or {}).get('run_id') != lease['run_id']:
+        current_lease = data.get('lease') or {}
+        if current_lease.get('run_id') != lease['run_id']:
             raise RuntimeError('dream_lease_lost')
-        budget = (spend.get(transaction=tx).to_dict() or {}) if refund else {}
+        budget = spend.get(transaction=tx).to_dict() or {}
+        reservation = float(current_lease['reservation_usd'])
+        previous_charge = float(current_lease.get('budget_charge_usd', reservation))
+        tokens = report.get('tokens')
+        rate = current_lease.get('max_usd_per_token')
+        known = report.get('usage_unknown') is not True and (
+            report.get('usage_unknown') is False or report.get('usage_complete') is True
+        )
+        zero_refund = refund and report.get('usage_unknown') is not True and report.get('tokens', 0) == 0
+        charge = reservation
+        actual_cost = None
+        if zero_refund:
+            charge = 0.0
+        elif known and type(tokens) is int and tokens >= 0 and isinstance(rate, (int, float)) and rate > 0:
+            actual_cost = tokens * rate
+            if math.isfinite(actual_cost):
+                charge = actual_cost
+            else:
+                actual_cost = None
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
@@ -318,7 +355,15 @@ def finish(
             'permanent_acknowledged': len(permanent),
             'transient_expired': len(expired),
         }
-        settled = {**report, 'records_queued_after': queued_after, 'poisoned': len(poisoned), 'dirty_counts': counts}
+        settled: dict[str, Any] = {
+            **report,
+            'records_queued_after': queued_after,
+            'poisoned': len(poisoned),
+            'dirty_counts': counts,
+        }
+        settled['budget_charge_usd'] = charge
+        if actual_cost is not None:
+            settled['cost_usd'] = actual_cost
         watermark = lease['watermark']
         if acknowledged:
             frontier = max(snapshot.to_dict()['last_changed_at'] for snapshot in acknowledged)
@@ -364,24 +409,36 @@ def finish(
                     'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
                     'records_queued_after': queued_after,
                     'tokens': int(report.get('tokens', 0)),
-                    'cost_usd': float(report.get('cost_usd', 0)),
+                    'cost_usd': float(settled.get('cost_usd', 0)),
                     'poisoned': len(poisoned),
                 },
             )
         patch = {
-            'lease': None if release else lease,
+            'lease': (
+                None
+                if release
+                else {
+                    **current_lease,
+                    'budget_charge_usd': charge,
+                    'admission_refunded': bool(zero_refund or current_lease.get('admission_refunded')),
+                }
+            ),
             # The dirty set is authoritative; never filter reads by this diagnostic
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
             'score': (max(0, data['score'] - lease['score']) if acknowledged and queued_after == 0 else data['score']),
         }
-        if refund:
+        if zero_refund and not current_lease.get('admission_refunded'):
             # A midnight completion must not decrement the new day's allowance.
             if data.get('day') == lease['day']:
                 counter = 'manual_runs' if lease.get('trigger') == 'manual' else 'passes'
                 patch[counter] = max(0, int(data.get(counter, 0)) - 1)
-            tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
+        # Read-modify-write with lease completion prevents duplicate settlement
+        # and preserves other charges already present in this user's UTC day.
+        tx.set(
+            spend, {**budget, 'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - previous_charge) + charge}
+        )
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -391,7 +448,7 @@ def finish(
         if success:
             if cleanup_cursor is not None:
                 patch['cleanup_cursor'] = cleanup_cursor
-            if not refund:
+            if not zero_refund:
                 patch['last_pass_at'] = lease['started_at']
                 for ref in sorted(set(reviewed) - deferred)[:8]:
                     tx.set(

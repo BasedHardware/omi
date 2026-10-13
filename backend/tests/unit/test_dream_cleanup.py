@@ -297,7 +297,7 @@ def test_idle_coin_and_empty_selection_stamp_attempt_without_run_history(monkeyp
     assert dream_store.acquire(uid, Caps(), now=NOW, rng=rng, firestore_client=db) is None
     assert db.rows[('dream_users', uid)]['last_attempt_at'] == NOW
     assert not any('dream_runs' in key for key in db.rows)
-    assert ('dream_spend', NOW.date().isoformat()) not in db.rows
+    assert ('dream_users', uid, 'spend', NOW.date().isoformat()) not in db.rows
     rng.random.return_value = 0
     assert dream_store.acquire(uid, Caps(), now=NOW + timedelta(minutes=30), rng=rng, firestore_client=db) is None
     lease = dream_store.acquire(uid, Caps(), now=NOW + timedelta(hours=1), rng=rng, firestore_client=db)
