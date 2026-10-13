@@ -115,3 +115,28 @@ def test_positive_assignment_supersedes_marker():
     assert db.ignored_voice_keys(store.rows[STATE]) == {'c2:2'}
     assert db.clear_ignored_voices('u', 'c1', [1], firestore_client=store) == 0
     assert db.clear_ignored_voices('u', 'c1', [], firestore_client=store) == 0
+
+
+def test_stale_generation_marker_is_not_recorded_after_a_newer_positive():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # A newer whole-voice positive (generation 3) already replaced the exclusion
+    # whose in-flight request is about to record its generation-1 marker.
+    store.rows[path] = {
+        'manual_speaker_assignments': {'generation': 3, 'speakers': {'1': {'generation': 3, 'person_id': 'p1'}}}
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    # The stale generation was fenced out entirely — no marker, no state doc.
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A range-only newer entry does not unseat the exclusion: record stands.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'segments': {'s1': {'generation': 3, 'person_id': 'p1', 'segment_only': True, 'speaker_id': 1}},
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+    # No fence applies without an assignment generation (legacy tag prompts).
+    db.record_ignored_voice('u', 'c3', 2, NOW, firestore_client=store)
+    assert 'c3:2' in db.ignored_voice_keys(store.rows[STATE])

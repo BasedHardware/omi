@@ -236,6 +236,49 @@ def ignored_voice_keys(state: Dict[str, Any]) -> set:
     return {ignored_voice_key(entry['conversation_id'], entry['speaker_id']) for entry in ignored_voices(state)}
 
 
+def _newer_positive_decision(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    generation: Optional[int],
+) -> bool:
+    """True when a newer whole-voice positive assignment already won the receipt.
+
+    Mirrors ``manual_rejected_speakers`` semantics: a speaker-scoped positive
+    or a non-``segment_only`` segment positive unseats a rejection; a
+    ``segment_only`` (range) entry does not.
+    """
+    if generation is None:
+        return False
+    from database import conversations as conversations_db
+
+    conversation_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_db.conversations_collection)
+        .document(conversation_id)
+    )
+    raw = conversation_ref.get(transaction=transaction).to_dict() or {}
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    entries: List[Dict[str, Any]] = []
+    speaker_entry = (receipt.get('speakers') or {}).get(str(speaker_id))
+    if isinstance(speaker_entry, dict):
+        entries.append(speaker_entry)
+    entries.extend(
+        entry
+        for entry in (receipt.get('segments') or {}).values()
+        if isinstance(entry, dict) and entry.get('speaker_id') == speaker_id
+    )
+    return any(
+        not entry.get('rejection') and not entry.get('segment_only') and entry.get('generation', 0) > generation
+        for entry in entries
+    )
+
+
 def record_ignored_voice(
     uid: str,
     conversation_id: str,
@@ -251,6 +294,11 @@ def record_ignored_voice(
 
     @firestore.transactional
     def record(transaction: Any) -> None:
+        if _newer_positive_decision(client, transaction, uid, conversation_id, speaker_id, assignment_generation):
+            # A newer positive assignment already replaced this exclusion;
+            # recording the stale-generation marker would re-ignore a voice the
+            # user reassigned while this request was in flight.
+            return
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}

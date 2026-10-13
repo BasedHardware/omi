@@ -50,6 +50,7 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         datetime=__import__('datetime').datetime,
         timezone=__import__('datetime').timezone,
         voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+        manual_rejected_speakers=manual_rejected_speakers,
         teaching_segment_ids=lambda segments, resolved: resolved,
         delete_speech_profile_blob=Mock(),
         run_authorized_person_learning=learning,
@@ -124,3 +125,147 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
     cleared.assert_has_calls([call('u', 'conversation', [4]), call('u', 'conversation', [4])])
     assert cleared.call_count == 2
     learning.assert_not_called()
+
+
+def test_range_reassignment_keeps_a_winning_whole_voice_rejection_restorable():
+    """A range-only positive entry (segment_only) does not unseat the whole-voice
+    not_a_person rejection, so it must not clear the ignored-voice marker."""
+    raw = {
+        'id': 'conversation',
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 4, 'is_user': False, 'person_id': None, 'start': 0, 'end': 2, 'text': 'TV'},
+            {'id': 's2', 'speaker_id': 4, 'is_user': False, 'person_id': None, 'start': 2, 'end': 4, 'text': 'movie'},
+        ],
+    }
+    cleared = Mock()
+    ignored = Mock()
+    namespace = dict(
+        Optional=Optional,
+        List=list,
+        Sequence=list,
+        Mapping=dict,
+        Any=object,
+        datetime=__import__('datetime').datetime,
+        timezone=__import__('datetime').timezone,
+        Depends=Depends,
+        HTTPException=HTTPException,
+        BackgroundTasks=BackgroundTasks,
+        BulkAssignSegmentsRequest=BulkAssignSegmentsRequest,
+        TranscriptSegment=TranscriptSegment,
+        auth=SimpleNamespace(get_current_user_uid=lambda: 'u'),
+        deserialize_conversation=lambda raw: SimpleNamespace(
+            transcript_segments=[TranscriptSegment(**s) for s in raw['transcript_segments']]
+        ),
+        _drop_display_projection=Mock(),
+        _emit_speaker_identity_confirmed=Mock(),
+        _speaker_assignment=lambda segment: str(segment.person_id),
+        voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+        manual_rejected_speakers=manual_rejected_speakers,
+        teaching_segment_ids=lambda segments, resolved: resolved,
+        delete_speech_profile_blob=Mock(),
+        run_authorized_person_learning=Mock(),
+        run_authorized_owner_learning=Mock(),
+    )
+
+    def assign(uid, conversation_id, **kwargs):
+        before = list(raw['transcript_segments'])
+        segments, receipt, resolved, previous = manual_assignment(raw, **kwargs)
+        raw.update(transcript_segments=segments, manual_speaker_assignments=receipt)
+        return raw, resolved, [], before
+
+    namespace['conversations_db'] = SimpleNamespace(assign_conversation_speaker=assign)
+    load_functions(
+        BACKEND / 'utils/speaker_assignment_teaching.py',
+        {'commit_manual_assignment', 'schedule_assignment_teaching'},
+        namespace,
+    )
+    load_functions(BACKEND / 'routers/conversations.py', {'_assign_manual_speaker', 'assign_segments_bulk'}, namespace)
+    # Whole-voice exclusion first (no segment ids: speaker-scoped path).
+    exclusion = BulkAssignSegmentsRequest(segment_ids=['s1', 's2'], assign_type='not_a_person')
+    namespace['assign_segments_bulk']('conversation', exclusion, BackgroundTasks(), uid='u')
+    assert 4 in manual_rejected_speakers(raw['manual_speaker_assignments'])
+    ignored.assert_called_once()
+    # Range-only positive reassignment: still rejected per the receipt, so the
+    # marker survives (restorable from Settings > Ignored Voices).
+    kwargs = dict(uid='u', background_tasks=BackgroundTasks(), speaker_id=4, time_range=(0.0, 2.0))
+    namespace['_assign_manual_speaker']('conversation', 'person_id', 'p1', **kwargs)
+    assert 4 in manual_rejected_speakers(raw['manual_speaker_assignments'])
+    cleared.assert_not_called()
+
+
+def test_marker_store_failure_after_commit_still_reports_the_exclusion_saved():
+    """A marker write/clear failure after the assignment committed must not
+    500 the endpoint: the exclusion (or positive assignment) is already durable,
+    so the response stays authoritative instead of reporting it unsaved."""
+    raw = {
+        'id': 'conversation',
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 4, 'is_user': True, 'person_id': None, 'start': 0, 'end': 2, 'text': 'TV'},
+        ],
+    }
+
+    def build_controller(ignored, cleared):
+        namespace = dict(
+            Optional=Optional,
+            List=list,
+            Sequence=list,
+            Mapping=dict,
+            Any=object,
+            datetime=__import__('datetime').datetime,
+            timezone=__import__('datetime').timezone,
+            logger=Mock(),
+            voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+            manual_rejected_speakers=manual_rejected_speakers,
+            teaching_segment_ids=lambda segments, resolved: resolved,
+            delete_speech_profile_blob=Mock(),
+            run_authorized_person_learning=Mock(),
+            run_authorized_owner_learning=Mock(),
+        )
+
+        def assign(uid, conversation_id, **kwargs):
+            before = list(raw['transcript_segments'])
+            segments, receipt, resolved, previous = manual_assignment(raw, **kwargs)
+            raw.update(transcript_segments=segments, manual_speaker_assignments=receipt)
+            return raw, resolved, [], before
+
+        namespace['conversations_db'] = SimpleNamespace(assign_conversation_speaker=assign)
+        load_functions(
+            BACKEND / 'utils/speaker_assignment_teaching.py',
+            {'commit_manual_assignment', 'schedule_assignment_teaching'},
+            namespace,
+        )
+        namespace.update(
+            HTTPException=HTTPException,
+            BackgroundTasks=BackgroundTasks,
+            BulkAssignSegmentsRequest=BulkAssignSegmentsRequest,
+            TranscriptSegment=TranscriptSegment,
+            Depends=Depends,
+            auth=SimpleNamespace(get_current_user_uid=lambda: 'u'),
+            deserialize_conversation=lambda raw: SimpleNamespace(
+                transcript_segments=[TranscriptSegment(**s) for s in raw['transcript_segments']]
+            ),
+            _drop_display_projection=Mock(),
+            _emit_speaker_identity_confirmed=Mock(),
+            _speaker_assignment=lambda segment: str(segment.person_id),
+        )
+        load_functions(
+            BACKEND / 'routers/conversations.py', {'_assign_manual_speaker', 'assign_segments_bulk'}, namespace
+        )
+        return namespace
+
+    def boom(*args, **kwargs):
+        raise RuntimeError('state store unavailable')
+
+    # Exclusion: the marker write fails after commit; the route must not raise.
+    namespace = build_controller(ignored=boom, cleared=Mock())
+    exclusion = BulkAssignSegmentsRequest(segment_ids=['s1'], assign_type='not_a_person')
+    response = namespace['assign_segments_bulk']('conversation', exclusion, BackgroundTasks(), uid='u')
+    assert response.transcript_segments[0].person_id is None
+    assert 4 in manual_rejected_speakers(raw['manual_speaker_assignments'])
+
+    # Positive reassignment: the marker clear fails after commit; still no raise.
+    namespace = build_controller(ignored=Mock(), cleared=boom)
+    positive = BulkAssignSegmentsRequest(segment_ids=['s1'], assign_type='person_id', value='p1')
+    response = namespace['assign_segments_bulk']('conversation', positive, BackgroundTasks(), uid='u')
+    assert response.transcript_segments[0].person_id == 'p1'
+    assert 4 not in manual_rejected_speakers(raw['manual_speaker_assignments'])

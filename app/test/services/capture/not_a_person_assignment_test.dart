@@ -161,4 +161,65 @@ void main() {
     controller.onMessageEventReceived(suggestion);
     expect(controller.suggestionsBySegmentId, isNotEmpty);
   });
+  test('a newer manual positive label from the server retires the local exclusion', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1'), _segment('s2')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    expect(controller.segments.every((s) => !s.isUser && s.personId == null), isTrue);
+
+    // Another client assigns the speaker while this capture stays active: the
+    // persisted manual positive label arrives on the incremental socket path.
+    controller.onSegmentReceived([
+      _segment('s2')
+        ..isUser = false
+        ..personId = 'p9'
+        ..speakerLabelSource = 'manual',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    // The newer manual positive survives: the local exclusion no longer blanks it.
+    final updated = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(updated.personId, 'p9');
+    expect(updated.isUser, isFalse);
+    expect(updated.speakerLabelSource, 'manual');
+
+    // The retired exclusion no longer suppresses suggestions for the speaker.
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isNotEmpty);
+
+    // An automatic label must not retire a fresh exclusion: only explicit
+    // manual positives are newer authoritative decisions.
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    controller.onSegmentReceived([
+      _segment('s2')
+        ..isUser = false
+        ..personId = 'p8'
+        ..speakerLabelSource = 'auto',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    final autoLabeled = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(autoLabeled.isUser, isFalse);
+    expect(autoLabeled.personId, isNull);
+  });
 }

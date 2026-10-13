@@ -4053,6 +4053,17 @@ class CaptureController extends ChangeNotifier
       }
     }
     segments.addAll(remainSegments);
+    for (final segment in newSegments) {
+      // A persisted manual positive label for an excluded speaker means a
+      // newer authoritative assignment (another surface replaced the
+      // exclusion; the receipt projects exclusions as unlabeled, never as
+      // manual). Retire the local exclusion instead of blanking it below.
+      if (_excludedSpeakers.contains(segment.speakerId) &&
+          segment.speakerLabelSource == 'manual' &&
+          (segment.isUser || (segment.personId?.isNotEmpty ?? false))) {
+        _excludedSpeakers.remove(segment.speakerId);
+      }
+    }
     for (final segment in segments) {
       if (_excludedSpeakers.contains(segment.speakerId)) {
         segment.isUser = false;
