@@ -922,9 +922,7 @@ class AuthService {
       final localSourceAtStart = SharedPreferencesUtil().foundOmiSource;
       final state = await getUserOnboardingState();
       if (state != null && isSessionSnapshotCurrent(session)) {
-        if (state['completed'] == true) {
-          SharedPreferencesUtil().onboardingCompleted = true;
-        }
+        SharedPreferencesUtil().onboardingCompleted = state['completed'] == true;
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
         // A GET started before an upload acknowledgement can carry the older
         // survey answer even after the outbox has cleared. Do not restore it.
