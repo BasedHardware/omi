@@ -18,7 +18,7 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from config.dream_agent import Caps
-from database import _client, conversations, dream_store, dream_history, review_store, dream_metrics
+from database import _client, conversations, dream_store, dream_history, review_store
 from utils import dream_reads, dream_agent, dream_cleanup, dream_context
 from utils.dream_diagnostics import path_count
 from utils.llm.shaped_agent import Turn
@@ -728,15 +728,19 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, cont
     )
     assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(0.001)
     pending = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
-    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
-    abandoned = dream_metrics.ABANDONED.labels('full' if legacy else context)
-    before_metrics = (failed._value.get(), abandoned._value.get())
+    reclaimed = [{}, {}]
     with ThreadPoolExecutor(max_workers=2) as pool:
-        leases = list(pool.map(lambda _: dream_store.acquire(uid, caps, now=now, firestore_client=database), range(2)))
+        leases = list(
+            pool.map(
+                lambda i: dream_store.acquire(uid, caps, now=now, firestore_client=database, reclaim_sink=reclaimed[i]),
+                range(2),
+            )
+        )
     winners = [lease for lease in leases if lease is not None]
     assert len(winners) == 1
     new = winners[0]
-    assert (failed._value.get(), abandoned._value.get()) == (before_metrics[0] + 1, before_metrics[1] + 1)
+    outcomes = [value for value in reclaimed if value]
+    assert outcomes == [{'age_s': int((now - old_time).total_seconds()), 'context_mode': 'full' if legacy else context}]
     current = state.get().to_dict()
     assert current['lease']['run_id'] == new['run_id'] and current['abandoned_passes'] == 1
     assert current['passes'] == 1  # New UTC day, one admission despite contention.

@@ -5,7 +5,9 @@ import json
 
 from prometheus_client import Counter
 from utils.dream_diagnostics import counts_only
-from database.dream_metrics import PASSES
+
+PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
+ABANDONED = Counter('omi_dream_abandoned_total', 'Dream abandoned leases reclaimed', ['context_mode'])
 
 POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
 
@@ -209,3 +211,9 @@ def record_pass(report):
         json.dumps(diagnostics['input_content_counts'], sort_keys=True),
         json.dumps(diagnostics['context_budget_counts'], sort_keys=True),
     )
+
+
+def record_reclaimed(age_s, context_mode):
+    PASSES.labels('failed', 'LeaseAbandoned').inc()
+    ABANDONED.labels(context_mode).inc()
+    logger.info('Dream lease reclaimed age_s=%d mode=%s', age_s, context_mode)

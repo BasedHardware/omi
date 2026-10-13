@@ -2,12 +2,11 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-import logging
 
 import pytest
 
 from config.dream_agent import Caps, FULL_DRAIN_SECONDS, DRAIN_TIMEOUT_SECONDS, LEASE_RECLAIM_MARGIN_SECONDS
-from database import dream_store, dream_metrics
+from database import dream_store
 from tests.support.dream_firestore import DreamFirestore
 
 UID = 'synthetic-abandoned-owner'
@@ -188,15 +187,39 @@ def test_idle_reclamation_preserves_watermark_and_score(db):
     assert old['run_id'] in {path[-1] for path in db.rows if 'dream_runs' in path}
 
 
-def test_failed_and_abandoned_metrics_and_log_emit_once_after_committed_claim(db, caplog):
-    old = acquire(db)
-    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
-    abandoned = dream_metrics.ABANDONED.labels('bounded')
-    before = (failed._value.get(), abandoned._value.get())
-    with caplog.at_level(logging.INFO, logger='database.dream_metrics'):
-        new = acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1))
-        assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 2)) is None
-    assert (failed._value.get(), abandoned._value.get()) == (before[0] + 1, before[1] + 1)
-    messages = [r.getMessage() for r in caplog.records if r.name == 'database.dream_metrics']
-    assert messages == ['Dream lease reclaimed age_s=301 mode=bounded']
-    assert UID not in messages[0] and old['run_id'] not in messages[0] and new['run_id'] not in messages[0]
+def test_reclaim_details_return_only_for_the_committed_claim(db):
+    acquire(db)
+    reclaimed = {}
+    acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1), reclaim_sink=reclaimed)
+    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+    next_reclaimed = {}
+    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 2), reclaim_sink=next_reclaimed) is None
+    assert next_reclaimed == {}
+
+
+def test_reclaim_details_return_even_when_manual_admission_is_denied(db):
+    acquire(db, trigger='manual')
+    state = db.rows[('dream_users', UID)]
+    state['manual_runs'] = caps().manual_runs
+    reclaimed = {}
+    with pytest.raises(dream_store.AdmissionDenied):
+        acquire(db, NOW + timedelta(seconds=301), trigger='manual', reclaim_sink=reclaimed)
+    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+    assert db.rows[('dream_users', UID)]['lease'] is None
+
+
+def test_failed_commit_does_not_publish_reclaim_details(db, monkeypatch):
+    acquire(db)
+    reclaimed = {}
+
+    def fail_commit(fn):
+        def claim_then_fail(transaction):
+            fn(transaction)
+            raise RuntimeError('synthetic commit failure')
+
+        return claim_then_fail
+
+    monkeypatch.setattr(dream_store.firestore, 'transactional', fail_commit)
+    with pytest.raises(RuntimeError, match='synthetic commit failure'):
+        acquire(db, NOW + timedelta(seconds=301), reclaim_sink=reclaimed)
+    assert reclaimed == {}

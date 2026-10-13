@@ -30,7 +30,6 @@ from config.dream_agent import (
 from config.plan_catalog import PAID_PLAN_IDS
 from database.dream_history import review_id
 from database._client import get_firestore_client
-from database.dream_metrics import record_reclaimed
 
 
 def _review_store():
@@ -157,7 +156,18 @@ class AdmissionDenied(Exception):
         super().__init__(reason)
 
 
-def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=None, firestore_client=None):
+def acquire(
+    uid,
+    caps: Caps,
+    *,
+    rng=None,
+    trigger='schedule',
+    canary=False,
+    now=None,
+    firestore_client=None,
+    reclaim_sink: dict[str, Any] | None = None,
+):
+    """Return admission and publish count-only reclaim details after commit, even on denial."""
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     now = now.astimezone(timezone.utc)
@@ -312,8 +322,8 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
         return lease, reclaimed, denial
 
     lease, reclaimed, denial = claim(database.transaction())
-    if reclaimed:
-        record_reclaimed(*reclaimed)
+    if reclaimed and reclaim_sink is not None:
+        reclaim_sink.update(age_s=reclaimed[0], context_mode=reclaimed[1])
     if denial:
         raise AdmissionDenied(denial)
     return lease
