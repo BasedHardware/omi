@@ -65,7 +65,8 @@ describe('Developers > MCP', () => {
 
   it('renders the hosted Streamable HTTP config as Claude Code ~/.claude.json, not the docker bridge', async () => {
     const { container } = render(<DevelopersPage />);
-    await screen.findAllByText('https://api.omi.me/v1/mcp');
+    // The Connect section shows the URL at once; wait for the MCP section itself.
+    await screen.findByText('Add to ~/.claude.json');
     const expected = hostedMcpConfigJson(hostedMcpUrl('https://api.omi.me/'));
     // The rendered <pre> is the exact same string the Copy button writes.
     expect(container.querySelector('#mcp pre')?.textContent).toBe(expected);
@@ -81,7 +82,8 @@ describe('Developers > MCP', () => {
 
   it('shows the Claude Desktop Connectors OAuth flow separately', async () => {
     render(<DevelopersPage />);
-    await screen.findAllByText('https://api.omi.me/v1/mcp');
+    // The Connect section shows the URL at once; wait for the MCP section itself.
+    await screen.findByText('Add to ~/.claude.json');
     expect(screen.getByText('Claude Desktop')).toBeTruthy();
     expect(
       screen.getAllByText(/Settings → Connectors → Add custom connector/).length,
@@ -90,7 +92,8 @@ describe('Developers > MCP', () => {
 
   it('explains the claude.ai OAuth connector flow with the prod client id', async () => {
     render(<DevelopersPage />);
-    await screen.findAllByText('https://api.omi.me/v1/mcp');
+    // The Connect section shows the URL at once; wait for the MCP section itself.
+    await screen.findByText('Add to ~/.claude.json');
     expect(screen.getAllByText('omi-claude-prod').length).toBeGreaterThan(0);
     expect(
       screen.getByText(/never use your MCP API key as an\s*OAuth secret/i),
