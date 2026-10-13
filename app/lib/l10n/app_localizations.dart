@@ -23288,6 +23288,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Plans'**
   String get paywallPlans;
+
+  /// No description provided for @firstCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How will you capture?'**
+  String get firstCaptureTitle;
+
+  /// No description provided for @firstCaptureDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how you want to capture your first conversation.'**
+  String get firstCaptureDescription;
+
+  /// No description provided for @firstCaptureOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'I Have an Omi'**
+  String get firstCaptureOmi;
+
+  /// No description provided for @firstCapturePhone.
+  ///
+  /// In en, this message translates to:
+  /// **'This Phone'**
+  String get firstCapturePhone;
+
+  /// No description provided for @firstCaptureWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch'**
+  String get firstCaptureWatch;
+
+  /// No description provided for @firstCaptureSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get firstCaptureSkip;
+
+  /// No description provided for @firstCapturePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.'**
+  String get firstCapturePrompt;
+
+  /// No description provided for @firstCaptureKeepGoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep going… 30 seconds is ideal.'**
+  String get firstCaptureKeepGoing;
+
+  /// No description provided for @firstCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'You can finish now, or keep talking.'**
+  String get firstCaptureReady;
+
+  /// No description provided for @firstCaptureStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Recording'**
+  String get firstCaptureStart;
+
+  /// No description provided for @firstCaptureFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish Recording'**
+  String get firstCaptureFinish;
+
+  /// No description provided for @firstCaptureListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… your words will appear here.'**
+  String get firstCaptureListening;
+
+  /// No description provided for @firstCaptureProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your first conversation…'**
+  String get firstCaptureProcessing;
+
+  /// No description provided for @firstCaptureResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Your first conversation'**
+  String get firstCaptureResult;
+
+  /// No description provided for @firstCaptureEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'I didn\'t catch enough speech, try again with a few sentences'**
+  String get firstCaptureEmpty;
+
+  /// No description provided for @firstCaptureWatchInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.'**
+  String get firstCaptureWatchInstructions;
+
+  /// No description provided for @firstCaptureWatchInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.'**
+  String get firstCaptureWatchInstall;
+
+  /// No description provided for @firstCaptureWatchPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.'**
+  String get firstCaptureWatchPair;
+
+  /// No description provided for @firstCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording could not start. Check microphone access and your connection, then try again.'**
+  String get firstCaptureUnavailable;
+
+  /// No description provided for @firstCaptureDelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording is taking longer to process. You can check your conversations on Home or try again.'**
+  String get firstCaptureDelayed;
+
+  /// No description provided for @firstCaptureEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try that again'**
+  String get firstCaptureEmptyTitle;
+
+  /// No description provided for @firstCaptureShortTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish This Recording?'**
+  String get firstCaptureShortTitle;
+
+  /// No description provided for @firstCaptureShortWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A few more sentences help Omi understand you. About 30 seconds is ideal.'**
+  String get firstCaptureShortWarning;
+
+  /// No description provided for @firstCaptureCancelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave This Recording?'**
+  String get firstCaptureCancelTitle;
+
+  /// No description provided for @firstCaptureCancelWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Going back stops this recording. Keep talking to give Omi a few more sentences.'**
+  String get firstCaptureCancelWarning;
+
+  /// No description provided for @firstCaptureSiriTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: Enable Omi in Shortcuts → Siri.'**
+  String get firstCaptureSiriTip;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
