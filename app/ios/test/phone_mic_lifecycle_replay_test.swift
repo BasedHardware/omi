@@ -686,7 +686,9 @@ struct Harness {
 
             world.monitorBox.monitor!.fire(.interruptionBegan)
             let beforeInterrupt = progressCount(world.sink)
-            drainMain(seconds: 3.0)
+            // Stay under the 3s resume ticker so this window observes the 1s
+            // snap and the explicit interruptionEnded below is what resumes.
+            drainMain(seconds: 2.0)
             precondition(progressCount(world.sink) > beforeInterrupt,
                 "interruption must snap the heartbeat back to 1s")
 
@@ -705,6 +707,25 @@ struct Harness {
             drainMain(seconds: 3.0)
             precondition(progressCount(world.sink) > afterResume,
                 "foreground must schedule one fast heartbeat")
+            stop(controller)
+        }
+
+        // Pins the native 5s constant itself: quiet through 4.3s (rejects 1s–4s),
+        // then a beat before the 500ms leeway can hide a 5s timer.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 11) else {
+                preconditionFailure("batch cadence: start failed")
+            }
+            let started = progressCount(world.sink)
+            drainMain(seconds: 4.3)
+            precondition(progressCount(world.sink) == started,
+                "healthy batch heartbeat is 5s; it must not tick within 4.3s")
+            drainMain(seconds: 2.2)
+            precondition(progressCount(world.sink) > started,
+                "healthy batch heartbeat must tick at 5s (none by ~6.5s)")
             stop(controller)
         }
 

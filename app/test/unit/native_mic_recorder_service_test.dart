@@ -634,6 +634,14 @@ void _iosHealthyWatchdogPacingTests() {
       );
     }
 
+    /// The one timer the paced batch watchdog has armed. Length and duration
+    /// are the pin: a 1s periodic poll or a different healthy interval fails.
+    Duration pacedDeadline(FakeAsync async) {
+      final timers = async.pendingTimers;
+      expect(timers, hasLength(1), reason: 'paced batch watchdog arms exactly one timer');
+      return timers.single.duration;
+    }
+
     test('stream stall still trips at the 3s deadline, not after a 5s poll', () {
       fakeAsync((async) {
         var now = DateTime(2026, 1, 1);
@@ -750,6 +758,56 @@ void _iosHealthyWatchdogPacingTests() {
         expect(cb.batchStalls, 1);
         elapse(const Duration(seconds: 1));
         expect(cb.batchStalls, 2);
+
+        service.stop();
+      });
+    });
+
+    test('batch healthy cadence is 5s until a beat goes stale', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        // A beat that arrives on the healthy cadence keeps the 5s poll.
+        elapse(const Duration(seconds: 5));
+        expect(cb.batchStalls, 0);
+        service.onBatchProgress(5, id);
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        // Silence through the healthy interval is a stale beat: snap to 1s,
+        // still short of the 10s stall deadline.
+        elapse(const Duration(seconds: 5));
+        expect(cb.batchStalls, 0);
+        expect(pacedDeadline(async), const Duration(seconds: 1));
+
+        service.stop();
+      });
+    });
+
+    test('batch rebuild snaps the poll from 5s back to 1s', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        service.onStateChanged(PhoneMicCaptureState.rebuilding, id);
+        expect(cb.batchStalls, 0);
+        expect(pacedDeadline(async), const Duration(seconds: 1),
+            reason: 'rebuild is an anomaly; the fast poll must be armed immediately');
 
         service.stop();
       });
