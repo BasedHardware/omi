@@ -1163,8 +1163,10 @@ async def whoop_callback(
     error: str = Query(None)
 ):
     """Handle Whoop OAuth2 callback."""
-    if error and isinstance(error, str):
-        safe_error = html.escape(error)
+    if error:
+        # Fail closed on non-string error values: a truthy non-string would
+        # otherwise be silently ignored and flow into token exchange.
+        safe_error = html.escape(error, quote=True) if isinstance(error, str) else "Invalid authorization error."
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>

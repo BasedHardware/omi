@@ -142,6 +142,21 @@ class TestWhoopSettingsPageEncoding(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;", body)
         self.assertNotIn('<script>alert("xss")</script>', body)
 
+    def test_callback_rejects_non_string_error(self):
+        # A truthy non-string error must fail closed rather than being ignored
+        # and allowed to reach token exchange because code/state are present.
+        with patch.object(main, "get_uid_from_oauth_state") as mock_uid, patch.object(
+            main.requests, "post"
+        ) as mock_post:
+            response = asyncio.run(
+                main.whoop_callback(code="code_123", state="state_123", error={"weird": True})
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid authorization error", response.body.decode())
+        mock_post.assert_not_called()
+        mock_uid.assert_not_called()
+
     def test_callback_success_escapes_continue_link(self):
         from unittest.mock import MagicMock
 
