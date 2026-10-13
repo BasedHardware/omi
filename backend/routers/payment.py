@@ -24,6 +24,7 @@ from utils.subscription_state_machine import (
     ResolvedStripeEvent,
     transition,
 )
+from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
@@ -1209,6 +1210,10 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     )
                 except Exception as e:
                     logger.error(f"Error updating subscription after scheduled upgrade: {e}")
+                    if webhook_ledger_enabled():
+                        raise HTTPException(
+                            status_code=503, detail="Subscription schedule update must be retried"
+                        ) from None
             elif schedule_obj.get('status') == 'canceled':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1251,6 +1256,10 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     )
                 except Exception as e:
                     logger.error(f"Error updating subscription after schedule cancellation: {e}")
+                    if webhook_ledger_enabled():
+                        raise HTTPException(
+                            status_code=503, detail="Subscription schedule update must be retried"
+                        ) from None
 
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']

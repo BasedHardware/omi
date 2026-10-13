@@ -20,13 +20,15 @@ acknowledged only after a durable completion receipt. Exceptions release the
 claim as failed; process death permits recovery when the lease expires. Tokens
 prevent an old worker completing a newer worker's receipt.
 
-The initial protected set is customer.subscription.created/updated/deleted and
-checkout.session.completed. Schedule and creator-app invoice handlers swallow
-storage/provider failures today: a returned 200 cannot prove success, so these
-remain **unprotected** and get best-effort `legacy_unprotected` observations.
-The separate named schedule-retry bug fix extends protection to schedules only
-after their transient failures become retryable. Creator-app renewal semantics
-remain outside this Omi subscription-state change.
+The protected set is customer.subscription.created/updated/deleted,
+checkout.session.completed, and subscription_schedule.completed/updated/canceled.
+The named schedule-retry fix makes transient schedule reads/writes return 503 when
+this gate is on; otherwise HTTP 200 could suppress a permanently failed update.
+Missing/deleted user NotFound still acknowledges without resurrection.
+Creator-app metadata is excluded from suppression on every event type.
+Creator-app invoice handlers still swallow provider/storage errors and therefore
+remain **unprotected**, with best-effort legacy_unprotected observations. Creator
+renewal semantics remain outside this Omi subscription-state change.
 
 Claim and completion failures return 503. This is required for idempotency:
 running without a durable claim could race another worker; acknowledging without

@@ -14,14 +14,17 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 LEDGER_RPC_WAIT_SECONDS = 2.0
 
-# Schedule and creator-app invoice handlers swallow persistence exceptions:
-# their HTTP 200 cannot certify completion. Do not suppress their re-deliveries.
+# Creator-app invoice handlers still swallow persistence exceptions;
+# their HTTP 200 cannot certify completion. Keep them observation-only.
 PROTECTED_EVENTS = frozenset(
     {
         'customer.subscription.created',
         'customer.subscription.updated',
         'customer.subscription.deleted',
         'checkout.session.completed',
+        'subscription_schedule.completed',
+        'subscription_schedule.updated',
+        'subscription_schedule.canceled',
     }
 )
 
@@ -38,7 +41,8 @@ async def dispatch_with_ledger(event: dict, handler: Callable[[], Awaitable[dict
         return await handler()
     from database import stripe_event_ledger as ledger
 
-    if event.get('type') not in PROTECTED_EVENTS:
+    creator_app = bool((event.get('data', {}).get('object', {}).get('metadata') or {}).get('app_id'))
+    if event.get('type') not in PROTECTED_EVENTS or creator_app:
         result = await handler()
         record_outcome('unprotected')
         try:

@@ -176,8 +176,8 @@ def test_success_records_out_of_order_as_observation_not_policy(dispatch):
 
 
 def test_swallowed_error_handlers_are_observed_but_never_suppressed(dispatch):
-    dispatch.run(event(kind='subscription_schedule.completed'))
-    dispatch.run(event(kind='subscription_schedule.completed'))
+    dispatch.run(event(kind='invoice.paid'))
+    dispatch.run(event(kind='invoice.paid'))
     assert dispatch.calls == ['handler', 'observe', 'handler', 'observe']
 
 
@@ -188,6 +188,13 @@ def test_auxiliary_observation_failure_does_not_change_handler_response(dispatch
     monkeypatch.setattr(ledger, 'observe_event', fail)
     assert dispatch.run(event(kind='invoice.paid')) == {'status': 'success'}
     assert dispatch.outcomes == ['unprotected', 'observe_error']
+
+
+def test_creator_app_checkout_keeps_its_separate_legacy_delivery_semantics(dispatch):
+    payload = event(kind='checkout.session.completed')
+    payload['data']['object']['metadata'] = {'app_id': 'fixture-creator-app'}
+    assert dispatch.run(payload) == {'status': 'success'}
+    assert dispatch.calls == ['handler', 'observe']
 
 
 def test_actual_verified_webhook_enters_the_dispatch_boundary(monkeypatch):
