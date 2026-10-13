@@ -116,7 +116,7 @@ from dependencies import (
 )
 
 _mock_get_conversations = MagicMock(return_value=[])
-conversations_db.get_conversations = _mock_get_conversations
+conversations_db.get_conversations_without_photos = _mock_get_conversations
 
 _mock_get_daily_summaries = MagicMock(return_value=[])
 _mock_get_daily_summary = MagicMock(return_value=None)
@@ -311,20 +311,15 @@ class TestDevGetConversationsFolderFilters:
         assert call_kwargs.get('starred') is True
 
     def test_dev_get_conversations_default_passes_none_for_folder_filters(self):
-        """When folder_id/starred are not specified via HTTP, DB receives None for both.
-
-        This test uses the HTTP layer (TestClient) so FastAPI resolves Query(None) -> None.
-        """
+        """Default list reads use the projected MCP page path without folder filters."""
         _, client = _build_test_app()
 
         client.get('/v1/dev/user/conversations')
 
-        call_kwargs = _mock_get_conversations.call_args[1]
-        assert call_kwargs.get('folder_id') is None
-        assert call_kwargs.get('starred') is None
+        _mock_get_conversations.assert_not_called()
 
     def test_dev_get_conversations_preserves_existing_params(self):
-        """Regression: all 8 params (6 existing + 2 new) are forwarded to DB."""
+        """Transcript and folder-filter reads preserve the existing DB parameters."""
         from routers.developer import get_conversations
         from datetime import datetime, timezone
 
@@ -349,7 +344,7 @@ class TestDevGetConversationsFolderFilters:
 
         # Positional args: uid, limit, offset
         assert call_positional[0] == 'uid1'
-        assert call_positional[1] == 10
+        assert call_positional[1] == 11  # one bounded lookahead row reports has_more
         assert call_positional[2] == 5
 
         # Keyword args: all existing + new params
@@ -652,7 +647,7 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
         memory_service.read.assert_called_once_with(
-            'uid1', limit=3, offset=7, include_pending_processing=True, budget=ANY
+            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY
         )
 
     def test_cleaner_memory_coerces_edge_values(self):
