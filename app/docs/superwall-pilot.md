@@ -1,6 +1,12 @@
-# Local Superwall pilot
+# Superwall paywall pilot
 
-This branch adds a test placement to the Flutter Usage page. It leaves Omi's existing Stripe checkout in place. The pilot runs only on **iOS** in a **debug** build with the `local_dev` profile, `SUPERWALL_TEST_MODE=true`, and a public Superwall iOS SDK key. Without all of those, Upgrade opens the existing plans sheet.
+Upgrade entry points (end of onboarding, locked conversations and memories, chat quota, Settings, Usage) show a **Superwall** paywall on **iOS debug builds**, using the pilot's own Superwall test project (public SDK key built in as the default). Store builds and Android always use Omi's existing plans sheet and Stripe checkout. Pass `--dart-define=SUPERWALL_TEST_MODE=false` to see the plans sheet in debug, or `--dart-define=SUPERWALL_API_KEY_IOS=<key>` to point at another project.
+
+## Before production
+
+- Omi sets up its own Superwall project (paywall design, campaigns for the placements below) and replaces the test key.
+- The plans are created as in-app purchase subscriptions in **App Store Connect** and attached to the paywall's product slots (the test project uses mock products, so prices show blank).
+- Purchases must be reconciled to Omi subscriptions on the backend (Superwall webhooks or StoreKit server notifications), with restore and manage-subscription paths, before the pilot gate is removed.
 
 ## Dashboard setup
 

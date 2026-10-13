@@ -5,8 +5,6 @@ import 'package:flutter/foundation.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:omi/env/env.dart';
-import 'package:omi/env/environment_profile.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:superwallkit_flutter/superwallkit_flutter.dart';
 
@@ -18,8 +16,13 @@ class SuperwallPilot {
 
   static final SuperwallPilot instance = SuperwallPilot._();
 
-  static const _testEnabled = bool.fromEnvironment('SUPERWALL_TEST_MODE');
-  static const _iosKey = String.fromEnvironment('SUPERWALL_API_KEY_IOS');
+  /// On by default in debug builds, so anyone trying the branch sees the paywall; pass
+  /// `--dart-define=SUPERWALL_TEST_MODE=false` to use the plans sheet instead.
+  static const _testEnabled = bool.fromEnvironment('SUPERWALL_TEST_MODE', defaultValue: true);
+
+  /// The pilot's own Superwall test project (public SDK key, meant to ship inside apps). Production
+  /// needs Omi's Superwall project and its App Store Connect in-app purchase products instead.
+  static const _iosKey = String.fromEnvironment('SUPERWALL_API_KEY_IOS', defaultValue: 'pk_EA03aegLVEAIuDfWT5zTB');
 
   bool _configured = false;
   String? _identifiedUid;
@@ -28,12 +31,7 @@ class SuperwallPilot {
   bool get isEnabled => _configured;
 
   void configure() {
-    if (_configured ||
-        !kDebugMode ||
-        !_testEnabled ||
-        Env.profile != AppEnvironmentProfile.localDev ||
-        !Platform.isIOS ||
-        _iosKey.isEmpty) {
+    if (_configured || !kDebugMode || !_testEnabled || !Platform.isIOS || _iosKey.isEmpty) {
       return;
     }
 

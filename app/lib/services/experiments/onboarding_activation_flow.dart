@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -61,6 +63,11 @@ abstract final class OnboardingActivationExperiment {
   static OnboardingEnding? get debugOverride =>
       kDebugMode || Env.profile == AppEnvironmentProfile.localDev ? OnboardingEnding.fromWire(_debugOverride) : null;
 
+  /// Debug builds (people trying the branch) show the activation unless told otherwise; store
+  /// builds follow the flag. Widget tests keep the flag behaviour.
+  static OnboardingEnding? get debugDefault =>
+      kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST') ? OnboardingEnding.activation : null;
+
   static const Duration _variantTimeout = Duration(seconds: 2);
 
   /// The arm for a flag value: `true` or a treatment variant is treatment, everything else
@@ -79,7 +86,7 @@ abstract final class OnboardingActivationExperiment {
     Future<bool> Function(String key)? readEnabled,
     Future<Object?> Function(String key)? readValue,
   }) async {
-    final override = debugOverride;
+    final override = debugOverride ?? debugDefault;
     if (override != null) return override;
     try {
       // The manager's read is the gate: it is false without a settled identity, with tracking
