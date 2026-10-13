@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-onboarding-consent.png",
+      "platform": "mobile-ios",
+      "description": "Data & Privacy consent card over the sign-in photo",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-onboarding-name.png",
+      "platform": "mobile-ios",
+      "description": "Name step",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-onboarding-permissions.png",
+      "platform": "mobile-ios",
+      "description": "Permissions: location and notifications allowed",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-onboarding-language.png",
+      "platform": "mobile-ios",
+      "description": "Language step",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-connect-omi.png",
+      "platform": "mobile-ios",
+      "description": "Connect Omi, with I've ordered mine / Not ordered yet",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-activation-intro.png",
+      "platform": "mobile-ios",
+      "description": "Activation intro: Let's try Omi.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-activation-microphone.png",
+      "platform": "mobile-ios",
+      "description": "Microphone ask before the dictation (phone path)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-activation-dictation-live.png",
+      "platform": "mobile-ios",
+      "description": "Dictation: words appear live as the user talks",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-activation-summarizing.png",
+      "platform": "mobile-ios",
+      "description": "Summarizing, with the user's words",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "010-mobile-ios-activation-summary.png",
+      "platform": "mobile-ios",
+      "description": "The first conversation's summary",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "011-mobile-ios-activation-todos.png",
+      "platform": "mobile-ios",
+      "description": "To-dos found in it, saved to Tasks",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "012-mobile-ios-activation-all-set.png",
+      "platform": "mobile-ios",
+      "description": "You're all set",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "013-mobile-ios-activation-rating.png",
+      "platform": "mobile-ios",
+      "description": "Rating ask with the App Store prompt",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "014-mobile-ios-superwall-paywall-end.png",
+      "platform": "mobile-ios",
+      "description": "Superwall paywall at the end of onboarding (iOS debug pilot, mock products so prices are blank)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "015-mobile-ios-home-after-onboarding.png",
+      "platform": "mobile-ios",
+      "description": "Home after onboarding: the conversation, and a dot on Tasks",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "016-mobile-ios-chat-welcome-message.png",
+      "platform": "mobile-ios",
+      "description": "Omi's first chat message in an empty chat",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
