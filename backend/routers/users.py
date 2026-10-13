@@ -1919,7 +1919,16 @@ def get_daily_summaries(
     Returns summaries in reverse chronological order.
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
-    return {'summaries': summaries}
+    valid_summaries = []
+    for s in summaries:
+        if not isinstance(s, dict) or not s.get('id'):
+            continue
+        try:
+            valid_summaries.append(DailySummaryResponse.model_validate(s))
+        except Exception as e:
+            logger.warning(f"Skipping malformed daily summary {s.get('id', 'unknown')}: {e}")
+            continue
+    return {'summaries': valid_summaries}
 
 
 @router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
@@ -2001,7 +2010,17 @@ def search_daily_summaries(
     Only the latest 365 summaries are scanned.
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
-    return {'summaries': filter_daily_summaries(summaries, query, limit)}
+    filtered = filter_daily_summaries(summaries, query, limit)
+    valid_summaries = []
+    for s in filtered:
+        if not isinstance(s, dict) or not s.get('id'):
+            continue
+        try:
+            valid_summaries.append(DailySummaryResponse.model_validate(s))
+        except Exception as e:
+            logger.warning(f"Skipping malformed daily summary in search {s.get('id', 'unknown')}: {e}")
+            continue
+    return {'summaries': valid_summaries}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2010,9 +2029,13 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     Get a single daily summary by ID.
     """
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
-    if not summary:
+    if not summary or not isinstance(summary, dict):
         raise HTTPException(status_code=404, detail='Daily summary not found')
-    return summary
+    try:
+        return DailySummaryResponse.model_validate(summary)
+    except Exception as e:
+        logger.warning(f"Daily summary {summary_id} failed response validation: {e}")
+        raise HTTPException(status_code=404, detail='Daily summary not found')
 
 
 @router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)

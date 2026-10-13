@@ -1290,9 +1290,21 @@ def get_developer_daily_summaries(
             start_date=start_date,
             end_date=end_date,
         )
-        returned_count = len(summaries)
+        # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
+        # with a 500. Mirrors the hardening already applied to action items, conversations, and memories.
+        valid_summaries = []
+        for s in summaries:
+            if not isinstance(s, dict) or not s.get('id'):
+                logger.warning('Skipping malformed daily summary in Developer API daily-summaries list')
+                continue
+            try:
+                valid_summaries.append(DailySummaryResponse.model_validate(s))
+            except Exception as e:
+                logger.warning('Skipping invalid daily summary %s in Developer API list: %s', s.get('id'), e)
+                continue
+        returned_count = len(valid_summaries)
         status = 200
-        return {'summaries': summaries}
+        return {'summaries': valid_summaries}
     finally:
         _audit_developer_read(
             request=request,
@@ -1321,12 +1333,19 @@ def get_developer_daily_summary(
     returned_count = 0
     try:
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
-        if not summary:
+        if not summary or not isinstance(summary, dict):
+            status = 404
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+        # A malformed/legacy doc in Firestore must read as not-found, not 500.
+        try:
+            validated = DailySummaryResponse.model_validate(summary)
+        except Exception as e:
+            logger.warning('Daily summary %s failed response validation: %s', summary_id, e)
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
