@@ -3,7 +3,7 @@
 import asyncio
 import json
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from unittest.mock import AsyncMock
@@ -385,3 +385,70 @@ def test_full_manual_json_retry_stays_in_one_lease_and_preserves_usage(store, cl
     assert gateway.post.await_count == samples + 1 and dream_store.dirty_count(UID) == 0
     assert stored['samples_returned'] == samples and stored['samples_failed'] == 0
     assert 'raw_plan' not in stored and 'admitted_records' not in stored
+
+
+def test_manual_endpoint_reclaims_abandoned_lease_and_completes_new_pass(store, client, monkeypatch, caplog):
+    dream_store.mark_dirty(UID, [('conversations', 'c1')])
+    stale = dream_store.acquire(UID, Caps(), trigger='manual', now=datetime.now(timezone.utc) - timedelta(hours=1))
+    pending = dream_store.dirty_refs(UID)[0].to_dict()
+    assert store.rows[('dream_users', UID)]['lease']['run_id'] == stale['run_id']
+
+    async def turn(uid, lane, mount, messages, **kwargs):
+        from models.dream_agent import Triage, Cluster
+
+        kwargs['usage_sink']['tokens'] += 10
+        kwargs['usage_sink']['usage_unknown'] = False
+        return Turn(
+            value=(
+                Triage(clusters=[Cluster(refs=['conversations/c1'], problem='spelling')])
+                if lane == dream_transport.TRIAGE_LANE
+                else Plan()
+            ),
+            tokens=10,
+        )
+
+    monkeypatch.setattr(dream_transport, 'model_turn', turn)
+    import logging
+    from utils import dream_metrics
+
+    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
+    abandoned = dream_metrics.ABANDONED.labels('bounded')
+    before = (failed._value.get(), abandoned._value.get())
+    with caplog.at_level(logging.INFO, logger='utils.dream_metrics'):
+        response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] == 'complete'
+    assert response.json()['run_id'] != stale['run_id']
+    assert (failed._value.get(), abandoned._value.get()) == (before[0] + 1, before[1] + 1)
+    messages = [r.getMessage() for r in caplog.records if r.getMessage().startswith('Dream lease reclaimed')]
+    assert len(messages) == 1 and messages[0].endswith(' mode=bounded')
+    assert UID not in messages[0] and stale['run_id'] not in messages[0]
+    assert store.rows[('dream_users', UID)]['abandoned_passes'] == 1
+    old = review_store.decode_doc(UID, dream_store.own_run(UID, stale['run_id'], firestore_client=store))
+    assert old['source']['usage_unknown'] and old['records_queued_after'] == 1
+    assert old['source']['budget_charge_usd'] == stale['reservation_usd']
+    assert store.rows[('dream_users', UID)]['lease'] is None
+    # The replacement pass read/settled the version; reclamation itself left it pending.
+    assert pending['version'] and response.json()['records_read'] == 1
+
+
+@pytest.mark.parametrize('denied', [False, True])
+def test_caller_records_committed_reclaim_when_new_admission_is_refused(monkeypatch, denied):
+    from utils import dream_agent, dream_metrics
+
+    def acquire(uid, caps, *, reclaim_sink, **kwargs):
+        reclaim_sink.update(age_s=301, context_mode='bounded')
+        if denied:
+            raise dream_store.AdmissionDenied('manual_cap')
+        return None
+
+    monkeypatch.setattr(dream_store, 'acquire', acquire)
+    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
+    abandoned = dream_metrics.ABANDONED.labels('bounded')
+    before = (failed._value.get(), abandoned._value.get())
+    if denied:
+        with pytest.raises(dream_store.AdmissionDenied):
+            asyncio.run(dream_agent._run_admitted_pass(UID))
+    else:
+        assert asyncio.run(dream_agent._run_admitted_pass(UID)) == {'status': 'not_admitted'}
+    assert (failed._value.get(), abandoned._value.get()) == (before[0] + 1, before[1] + 1)

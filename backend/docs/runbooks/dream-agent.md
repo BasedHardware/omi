@@ -584,12 +584,23 @@ At most 83 default admissions fit the daily reservation ceiling. Set the token
 cost ceiling at or above all admitted route rates before operating a different
 model policy.
 
-Leases are persistent and cannot be stolen. A timeout retains the lease because
-an offloaded storage operation may still be completing. For a crashed or timed
-out worker, an operator must prove the worker has exited and any write outcome
-has settled before clearing `dream_users/{uid}.lease`. Do not clear a live lease.
-This safety choice can strand a user until recovery; it prevents overlapping
-passes after expiry or process failure. No recovery automation is included.
+A timeout retains the lease while work may still be completing. Admission
+transactionally reclaims a lease only when its `started_at` is older than its
+context mode's drain timeout plus a 60-second margin: full **1740s** (1680 + 60),
+bounded **300s** (240 + 60). New leases persist `context_mode`; legacy leases
+without it use the conservative full fence even if today's cohort mode changed.
+Reclamation records a failed, abandoned run with unknown usage and keeps the
+full reservation on the admission day's ledger, including the old global
+`dream_spend/{day}` ledger for leases without `spend_scope=user`. Previously
+reduced charges return to the full reservation. It leaves all dirty versions,
+failure streaks, review metadata, score and watermark unchanged. The same
+transaction clears the old lease and performs normal admission, which may still
+be denied by the daily caps. A late finish is rejected by the run ID fence.
+State counts `abandoned_passes`; after commit, counters increment
+`omi_dream_pass_total{status=failed,error_type=LeaseAbandoned}` and
+`omi_dream_abandoned_total{context_mode=full|bounded}`. The content-free log is
+`Dream lease reclaimed age_s=<n> mode=<m>`. No operator account-data mutation is
+needed after this code is deployed and a later admission attempt runs.
 
 Live edits call the Review ledger/journal seams. Transcript name fixes retain
 storage encryption/compression and clear stale evidence references and
@@ -668,7 +679,7 @@ Unavailable per-user spend or invalid admission budgets return 503
 `dream_budget_unavailable`. The request has an 85-second application deadline
 and a 90-second middleware deadline, including admission/report reads; its worker
 has a 70-second planning bound. A deadline returns a `deadline` run and retains
-ambiguous leases/reservations for the existing operator recovery procedure.
+ambiguous leases/reservations until the stale-lease admission fence permits reclamation.
 When report settlement itself times out, its empty run ID indicates that no
 settled report could be retrieved; query GET after storage settles.
 

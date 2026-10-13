@@ -1,0 +1,4 @@
+{
+  "change": "Uses less battery while your Omi is out of range, and tries to reconnect right away when you open the app.",
+  "platforms": ["android"]
+}

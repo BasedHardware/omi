@@ -19,6 +19,9 @@ from config.dream_agent import (
     FULL_PASS_SECONDS,
     FULL_DRAIN_SECONDS,
     FULL_MODEL_SECONDS,
+    PASS_TIMEOUT_SECONDS,
+    FINISH_MARGIN_SECONDS,
+    DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
@@ -30,7 +33,7 @@ from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REA
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
-from utils.dream_metrics import record_pass, error_code
+from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from utils.dream_diagnostics import initialize, counts_only
 
 from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
@@ -393,7 +396,15 @@ async def _run_admitted_pass(
     uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None
 ):
     caps = caps or Caps.from_env()
-    lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
+    reclaimed: dict[str, Any] = {}
+    try:
+        lease = await run_blocking(
+            db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary, reclaim_sink=reclaimed
+        )
+    finally:
+        # Admission can be denied after a reclamation commits. Count that outcome too.
+        if reclaimed:
+            record_reclaimed(**reclaimed)
     if lease is None:
         report = {'status': 'not_admitted'}
         record_pass(report)
@@ -673,11 +684,6 @@ async def _run_admitted_pass(
         report.pop('run_id', None)
     record_pass(report)
     return report
-
-
-PASS_TIMEOUT_SECONDS = 180
-FINISH_MARGIN_SECONDS = 30
-DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
 
 
 async def drain(*, limit=100):

@@ -37,12 +37,14 @@ def admission(monkeypatch):
     return database
 
 
-def test_scheduler_refuses_overlapping_claim_even_next_day(admission):
+def test_scheduler_refuses_live_claim_and_reclaims_abandoned_claim_next_day(admission):
     first = dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission)
     assert first is not None
     assert dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission) is None
     later = NOW.replace(day=9)
-    assert dream_store.acquire(UID, Caps(), now=later, firestore_client=admission) is None
+    replacement = dream_store.acquire(UID, Caps(), now=later, firestore_client=admission)
+    assert replacement['run_id'] != first['run_id']
+    assert admission.rows[('dream_users', UID)]['abandoned_passes'] == 1
     assert admission.rows[('dream_users', UID)]['passes'] == 1
     assert admission.rows[('dream_users', UID, 'spend', NOW.date().isoformat())]['reserved_usd'] == pytest.approx(0.24)
 

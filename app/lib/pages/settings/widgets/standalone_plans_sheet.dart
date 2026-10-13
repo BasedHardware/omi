@@ -42,9 +42,12 @@ class _StandalonePlansSheetState extends State<StandalonePlansSheet> with Ticker
 }
 
 /// Opens the plans sheet over [context].
-Future<void> showStandalonePlansSheet(BuildContext context, {String analyticsSource = 'usage_page'}) {
+Future<void> showStandalonePlansSheet(BuildContext context, {String analyticsSource = 'usage_page'}) async {
+  final title = await plansSheetTitle(context);
+  if (!context.mounted) return;
   return showOmiSheet<void>(
     context: context,
+    title: title,
     padding: EdgeInsets.zero,
     builder: (_) => StandalonePlansSheet(analyticsSource: analyticsSource),
   );

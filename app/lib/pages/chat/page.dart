@@ -751,7 +751,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await provider.retryFailedReply(failed);
   }
 
-  void _showPlansSheetOnQuotaExceeded() {
+  Future<void> _showPlansSheetOnQuotaExceeded() async {
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();

@@ -300,6 +300,7 @@ def memories_page_core(
             position={"uml": resume_uml},
             filters=filters,
         )
+    result["effective_limit"] = limit
     return result
 
 
@@ -600,4 +601,13 @@ def search_memories(
             "memories.read permission, or reconnect the account."
         )
 
-    return {"memories": MemoryService(db_client=db).search_mcp(uid, query, limit=limit)}
+    return search_memories_core(uid, query, limit=limit)
+
+
+def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
+    """Shared authorized-by-caller search; eligibility remains in MemoryService."""
+    rows = MemoryService(db_client=db).search_mcp(uid, query, limit=limit)
+    result = {"memories": rows, "effective_limit": min(limit, 20), "search_coverage": "eligible_indexed_memories"}
+    if not rows:
+        result["message"] = "No eligible indexed matches. This does not establish absence; use the memory list."
+    return result
