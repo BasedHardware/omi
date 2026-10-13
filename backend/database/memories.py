@@ -1452,38 +1452,19 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Option
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
 
-    if limit is not None and not 1 <= limit <= 499:
-        raise ValueError('unlock limit must be between 1 and 499')
+    from database.locked_content import unlock_query_rows
 
-    def locked_docs(ref: Any, field: str) -> Any:
-        query = ref.where(filter=FieldFilter(field, '==', True))
-        if limit is not None:
-            query = query.select([]).limit(limit)
-        return query.stream()
-
-    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
-        batch = database.batch()
-        count = 0
-        total = 0
-        for doc in docs:
-            batch.update(doc.reference, update)
-            count += 1
-            total += 1
-            if count >= 499:  # Firestore batch limit is 500
-                batch.commit()
-                batch = database.batch()
-                count = 0
-        if count > 0:
-            batch.commit()
-        return total
-
-    legacy_count = commit_updates(
-        locked_docs(legacy_ref, 'is_locked'),
+    legacy_count = unlock_query_rows(
+        database,
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)),
         {'is_locked': False},
+        limit=limit,
     )
-    canonical_count = commit_updates(
-        locked_docs(canonical_ref, 'promotion.is_locked'),
+    canonical_count = unlock_query_rows(
+        database,
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)),
         {'promotion.is_locked': False},
+        limit=limit,
     )
     logger.info(
         "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",

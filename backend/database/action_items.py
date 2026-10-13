@@ -1417,24 +1417,14 @@ def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    if limit is not None:
-        if not 1 <= limit <= 499:
-            raise ValueError('unlock limit must be between 1 and 499')
-        locked_items_query = locked_items_query.select([]).limit(limit)
-    batch = db.batch()
-    docs = locked_items_query.stream()
-    count = 0
-    total = 0
-    for doc in docs:
-        batch.update(doc.reference, {'is_locked': False, 'updated_at': datetime.now(timezone.utc)})
-        count += 1
-        total += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
+    from database.locked_content import unlock_query_rows
+
+    total = unlock_query_rows(
+        db,
+        locked_items_query,
+        {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
+        limit=limit,
+    )
     bump_action_items_list_version(uid)
     logger.info(f"Unlocked all action items for user {uid}")
     return total
