@@ -89,20 +89,13 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
     if (widget.pairDevice != null) {
       paired = await widget.pairDevice!(context);
     } else {
-      var failed = false;
       final connected = await Navigator.of(context).push<bool>(omiPageRoute(
         builder: (routeContext) => ConnectDevicePage(
           onConnected: () => Navigator.of(routeContext).pop(true),
-          onConnectionFailed: () {
-            failed = true;
-            Navigator.of(routeContext).pop(false);
-          },
         ),
       ));
       if (!mounted) return;
-      if (failed) OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
       paired = connected == true &&
-          !failed &&
           context.read<OnboardingProvider>().isConnected &&
           context.read<OnboardingProvider>().deviceType == DeviceType.omi;
     }

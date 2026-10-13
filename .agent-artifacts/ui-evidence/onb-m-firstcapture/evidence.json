@@ -159,6 +159,20 @@
       "description": "021-mobile-android-first-capture-back-confirmation",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-first-capture-omi-failure.png",
+      "platform": "mobile-ios",
+      "description": "ios pairing failure retains Connect and How to Pair",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-first-capture-omi-failure.png",
+      "platform": "mobile-android",
+      "description": "android pairing failure retains Connect and How to Pair",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
   "review_revision": "Thumb-zone actions; terminal-only empty explanation; iOS App Shortcuts tip on result"

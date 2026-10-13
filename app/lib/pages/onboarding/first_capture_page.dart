@@ -47,12 +47,19 @@ class _FirstCapturePageState extends State<FirstCapturePage> {
   }
 
   Future<void> _finish() async {
+    if (_confirming) return;
     if (controller.seconds < 15) {
-      final confirmed = await showOmiConfirm(context,
-          title: context.l10n.firstCaptureShortTitle,
-          message: context.l10n.firstCaptureShortWarning,
-          confirmLabel: context.l10n.firstCaptureFinish,
-          cancelLabel: context.l10n.keepRecording);
+      _confirming = true;
+      final bool confirmed;
+      try {
+        confirmed = await showOmiConfirm(context,
+            title: context.l10n.firstCaptureShortTitle,
+            message: context.l10n.firstCaptureShortWarning,
+            confirmLabel: context.l10n.firstCaptureFinish,
+            cancelLabel: context.l10n.keepRecording);
+      } finally {
+        _confirming = false;
+      }
       if (!confirmed || !mounted) return;
     }
     await controller.finish();
@@ -196,7 +203,10 @@ class _FirstCapturePageState extends State<FirstCapturePage> {
                           : result
                               ? widget.onComplete
                               : recording
-                                  ? _finish
+                                  ? () {
+                                      // Confirmation is a decision, not a pending capture operation.
+                                      unawaited(_finish());
+                                    }
                                   : controller.start),
                 if (!recording && !busy && !result)
                   OmiButton(

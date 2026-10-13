@@ -25,11 +25,10 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
 }
 
 class ConnectDevicePage extends StatefulWidget {
-  const ConnectDevicePage({super.key, this.onConnected, this.onConnectionFailed});
+  const ConnectDevicePage({super.key, this.onConnected});
 
   /// Onboarding returns to its completion owner before Home can be entered.
   final VoidCallback? onConnected;
-  final VoidCallback? onConnectionFailed;
 
   @override
   State<ConnectDevicePage> createState() => _ConnectDevicePageState();
@@ -85,7 +84,6 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                 ],
               ),
               FindDevicesPage(
-                onConnectionFailed: widget.onConnectionFailed,
                 isFromOnboarding: widget.onConnected != null,
                 goNext: () {
                   Logger.debug('onConnected from FindDevicesPage');

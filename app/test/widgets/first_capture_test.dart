@@ -19,6 +19,7 @@ import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/pages/onboarding/onboarding_step_telemetry.dart';
 import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -33,6 +34,11 @@ Widget host(Widget child, {TargetPlatform platform = TargetPlatform.iOS}) => Mat
       debugShowCheckedModeBanner: false,
       theme: buildOmiTheme(brightness: Brightness.light).copyWith(
           platform: platform,
+          snackBarTheme: buildOmiTheme(brightness: Brightness.light).snackBarTheme.copyWith(
+              contentTextStyle: buildOmiTheme(brightness: Brightness.light)
+                  .snackBarTheme
+                  .contentTextStyle!
+                  .copyWith(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto')),
           appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
               titleTextStyle:
                   OmiType.headline.copyWith(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto')),
@@ -117,6 +123,10 @@ void main() {
     await tester.tap(find.byKey(const Key('first_capture_primary')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Finish This Recording?'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('first_capture_primary')), matching: find.byType(OmiSpinner)),
+        findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('first_capture_primary')), matching: find.text('Finish Recording')),
+        findsOneWidget);
     await tester.tap(find.text('Keep Recording'));
     await tester.pumpAndSettle();
     expect(io.finishes, 0);
@@ -166,6 +176,32 @@ void main() {
     flow.dispose();
   });
 
+  testWidgets('short Finish keeps its label during confirmation and processes only after confirm', (tester) async {
+    var now = DateTime(2026);
+    final io = FakeCaptureIO()..processing = Completer<ServerConversation?>();
+    final flow = FirstCaptureController(io, emit: (_) {}, now: () => now);
+    await tester.pumpWidget(host(FirstCapturePage(controller: flow, onComplete: () {}, onSkip: () {})));
+    await flow.start();
+    now = now.add(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.tap(find.byKey(const Key('first_capture_primary')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(OmiAlertDialog), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('first_capture_primary')), matching: find.byType(OmiSpinner)),
+        findsNothing);
+    expect(io.finishes, 0);
+    await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Finish Recording')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(io.finishes, 1);
+    expect(flow.phase, FirstCapturePhase.processing);
+    io.processing!.complete(exampleConversation());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    flow.dispose();
+  });
+
   testWidgets('pair cancel returns to choices; successful pair completes; skip emits properties', (tester) async {
     var paired = false, completed = 0;
     final events = <RegisteredEvent>[];
@@ -196,6 +232,40 @@ void main() {
         OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (key, value) => props[key] = value)));
     await tester.tap(find.byKey(const Key('onboarding_complete_start')));
     expect(props['has_omi_device'], isTrue);
+  });
+
+  testWidgets('pair failure stays on Connect with How to Pair; explicit Back returns to choices', (tester) async {
+    final pairing = _RenderPairingProvider();
+    var completed = 0;
+    await tester.pumpWidget(MultiProvider(providers: [
+      ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
+      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      ChangeNotifierProvider<HomeProvider>(create: (_) => _RenderHomeProvider()),
+    ], child: host(OnboardingCompleteScreen(onComplete: () => completed++, emit: (_) {}, setProperty: (_, value) {}))));
+    await tester.tap(find.byKey(const Key('first_capture_omi')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    pairing.notifyError('DEVICE_CONNECT_FAILED');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(ConnectDevicePage), findsOneWidget);
+    expect(find.text('An error occurred. Please try again.'), findsOneWidget);
+    expect(find.text('How to Pair'), findsOneWidget);
+    expect(completed, 0);
+    await tester.tap(find.text('How to Pair'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(ConnectionGuideSheet), findsOneWidget);
+    Navigator.of(tester.element(find.byType(ConnectionGuideSheet))).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(ConnectionGuideSheet), findsNothing);
+    await tester.tap(find.byType(OmiBackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConnectDevicePage), findsNothing);
+    expect(find.byKey(const Key('first_capture_phone')), findsOneWidget);
+    expect(completed, 0);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('Watch routes to instructions only on iOS; Back returns to choices', (tester) async {
@@ -554,7 +624,17 @@ void main() {
           await interact();
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 350));
-          expect(find.byType(OmiAlertDialog), findsOneWidget, reason: name);
+          if (name == 'omi-failure') {
+            // MessageListener publishes feedback after its notification frame.
+            await tester.pump(const Duration(milliseconds: 350));
+            expect(find.byType(ConnectDevicePage), findsOneWidget);
+            expect(find.text('How to Pair'), findsOneWidget);
+          } else {
+            expect(find.byType(OmiAlertDialog), findsOneWidget, reason: name);
+            expect(
+                find.descendant(of: find.byKey(const Key('first_capture_primary')), matching: find.byType(OmiSpinner)),
+                findsNothing);
+          }
         }
         expect(tester.takeException(), isNull, reason: name);
         await tester.runAsync(() async {
@@ -570,7 +650,7 @@ void main() {
             'omi-handoff',
             'watch-instructions'
           ];
-          const extra = {'delayed': 16, 'short-warning': 18, 'back-confirmation': 20};
+          const extra = {'delayed': 16, 'short-warning': 18, 'back-confirmation': 20, 'omi-failure': 22};
           final number = extra.containsKey(name)
               ? extra[name]! + (platform == TargetPlatform.android ? 1 : 0)
               : states.indexOf(name) + 1 + (platform == TargetPlatform.android ? 8 : 0);
@@ -623,9 +703,21 @@ void main() {
       await render('delayed', page());
       flow.phase = FirstCapturePhase.recording;
       flow.seconds = 5;
+      flow.transcript = '';
       await render('short-warning', page(), interact: () => tester.tap(find.byKey(const Key('first_capture_primary'))));
       await render('back-confirmation', page(), interact: () => tester.tap(find.byType(OmiBackButton)));
       flow.dispose();
+      final pairing = _RenderPairingProvider();
+      await render(
+          'omi-failure',
+          MultiProvider(providers: [
+            ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
+            ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+            ChangeNotifierProvider<HomeProvider>(create: (_) => _RenderHomeProvider()),
+          ], child: ConnectDevicePage(onConnected: () {})), interact: () async {
+        pairing.notifyError('DEVICE_CONNECT_FAILED');
+      });
+      await tester.pumpWidget(const SizedBox());
     }
     debugDefaultTargetPlatformOverride = null;
   });
