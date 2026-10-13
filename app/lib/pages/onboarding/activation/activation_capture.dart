@@ -83,6 +83,10 @@ class PipelineActivationCapture implements ActivationCapture {
   bool _phoneStarted = false;
   bool _listening = false;
 
+  /// Set by [cancel]. [start] checks it after each wait, so a Skip while it is still starting does
+  /// not leave the phone microphone recording behind the next screen.
+  bool _cancelled = false;
+
   @override
   bool get usesDevice => _device;
 
@@ -106,7 +110,9 @@ class PipelineActivationCapture implements ActivationCapture {
       // A just-connected Omi can take a moment to start streaming.
       for (var waited = 0; expectDevice && !_isDeviceRecording && waited < 5000; waited += 250) {
         await Future<void>.delayed(const Duration(milliseconds: 250));
+        if (_cancelled) return ActivationStart.failed;
       }
+      if (_cancelled) return ActivationStart.failed;
       _device = _isDeviceRecording;
       if (_device) {
         // The Omi has been listening since it connected (unboxing, the screens before this one).
@@ -114,9 +120,18 @@ class PipelineActivationCapture implements ActivationCapture {
         if (_capture.segments.isNotEmpty) await _capture.forceProcessingCurrentConversation();
       } else {
         if (!await Permission.microphone.isGranted) return ActivationStart.needsMicrophone;
-        await _capture.streamRecording();
+        if (_cancelled) return ActivationStart.failed;
         _phoneStarted = true;
+        await _capture.streamRecording();
+        // Skipped while the microphone was starting: cancel()'s stop may have run before it was on,
+        // so stop it again now that it is.
+        if (_cancelled) {
+          _phoneStarted = true;
+          await _stopPhone();
+          return ActivationStart.failed;
+        }
       }
+      if (_cancelled) return ActivationStart.failed;
       _startIndex = _capture.segments.length;
       _listening = true;
       _capture.addListener(_onCapture);
@@ -196,13 +211,17 @@ class PipelineActivationCapture implements ActivationCapture {
 
   @override
   Future<void> cancel() async {
+    _cancelled = true;
     _stopListening();
-    if (_phoneStarted) {
-      _phoneStarted = false;
-      try {
-        await _capture.stopStreamRecording(resumeHandedOffPendant: expectDevice);
-      } catch (_) {}
-    }
+    await _stopPhone();
+  }
+
+  Future<void> _stopPhone() async {
+    if (!_phoneStarted) return;
+    _phoneStarted = false;
+    try {
+      await _capture.stopStreamRecording(resumeHandedOffPendant: expectDevice);
+    } catch (_) {}
   }
 }
 

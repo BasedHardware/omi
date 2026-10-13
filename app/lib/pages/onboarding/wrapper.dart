@@ -471,7 +471,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return PopScope(
       // System back and the iOS swipe step back one step, like the on-screen back button. On the
       // first step (and Auth / consent) back leaves onboarding as usual.
-      canPop: previous == null && index != kConnectOmiPage,
+      canPop: previous == null && index != kConnectOmiPage && index != kActivationPage,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goBack();
       },

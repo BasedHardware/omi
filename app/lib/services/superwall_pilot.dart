@@ -116,7 +116,8 @@ class SuperwallPilot {
       Logger.debug('Superwall pilot placement failed: $error');
       return false;
     }
-    return closed.future;
+    // A paywall whose close is never reported must not hold onboarding: treat it as closed.
+    return closed.future.timeout(const Duration(minutes: 5), onTimeout: () => true);
   }
 
   /// [showPlacement] for the signed-in, non-anonymous Firebase user.
