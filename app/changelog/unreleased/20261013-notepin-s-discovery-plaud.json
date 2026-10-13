@@ -1,0 +1,1 @@
+{"change": "Fix discovery of PLAUD NotePin S devices advertising service UUID 1910 without cached local name on iOS"}
