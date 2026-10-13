@@ -12989,4 +12989,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatWelcomeMessage => 'こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omiに今日のことを聞いてみる';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omiで会話を録音する';
+
+  @override
+  String get onboardingStarterTaskCheck => 'このタスクにチェックして完了する';
 }

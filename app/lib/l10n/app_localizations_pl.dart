@@ -13218,4 +13218,13 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Zapytaj Omi o swój dzień';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Nagraj rozmowę z Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odhacz to zadanie, aby je ukończyć';
 }

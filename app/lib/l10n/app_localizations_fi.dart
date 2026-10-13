@@ -13184,4 +13184,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Kysy Omilta päivästäsi';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Tallenna keskustelu Omilla';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Merkitse tämä tehtävä tehdyksi';
 }

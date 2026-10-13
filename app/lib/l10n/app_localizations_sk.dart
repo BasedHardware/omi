@@ -13174,4 +13174,13 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Opýtaj sa Omi na svoj deň';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Nahraj rozhovor s Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odškrtni túto úlohu a dokonči ju';
 }

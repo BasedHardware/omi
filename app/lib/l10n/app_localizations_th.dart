@@ -13111,4 +13111,13 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'สวัสดี ฉันคือ Omi ถามอะไรก็ได้เกี่ยวกับสิ่งที่คุณคุยไว้ เช่น ใครพูดอะไร คุณสัญญาอะไรไว้ หรือสรุปวันของคุณ ฉันยังเพิ่มสิ่งที่ต้องทำและจำเรื่องต่าง ๆ ให้คุณได้ด้วย';
+
+  @override
+  String get onboardingStarterTaskAsk => 'ถาม Omi เกี่ยวกับวันของคุณ';
+
+  @override
+  String get onboardingStarterTaskRecord => 'บันทึกบทสนทนาด้วย Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'ติ๊กงานนี้เพื่อทำให้เสร็จ';
 }

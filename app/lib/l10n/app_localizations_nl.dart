@@ -13214,4 +13214,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Vraag Omi naar je dag';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Neem een gesprek op met Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Vink deze taak af om hem af te ronden';
 }

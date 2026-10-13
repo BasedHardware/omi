@@ -13209,4 +13209,13 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам\'ятовувати важливе за вас.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Запитайте Omi про свій день';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Запишіть розмову з Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Позначте це завдання, щоб завершити його';
 }

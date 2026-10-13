@@ -11483,5 +11483,8 @@
     "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
     "homeNewRecordingButton": "הקלטה חדשה",
     "onboardingActNotesLater": "Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית.",
-    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך."
+    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
+    "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
+    "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
+    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה"
 }

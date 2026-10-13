@@ -13230,4 +13230,13 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'హాయ్, నేను Omi. మీరు మాట్లాడిన దేని గురించైనా అడగండి: ఎవరు ఏమన్నారు, మీరు ఏమి మాట ఇచ్చారు లేదా మీ రోజు సారాంశం. నేను పనులను జోడించగలను, మీ కోసం విషయాలు గుర్తుంచుకోగలను.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'మీ రోజు గురించి Omi ని అడగండి';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi తో ఒక సంభాషణను రికార్డ్ చేయండి';
+
+  @override
+  String get onboardingStarterTaskCheck => 'పూర్తి చేయడానికి ఈ పనిని టిక్ చేయండి';
 }

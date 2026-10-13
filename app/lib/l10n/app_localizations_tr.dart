@@ -13192,4 +13192,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi\'ye gününü sor';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ile bir konuşma kaydet';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bu görevi tamamlamak için işaretle';
 }

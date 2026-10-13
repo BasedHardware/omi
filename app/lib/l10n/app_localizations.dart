@@ -23468,6 +23468,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Hi, I\'m Omi. Ask me anything you\'ve talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.'**
   String get chatWelcomeMessage;
+
+  /// Starter task added to an empty task list after onboarding: try chatting with Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi about your day'**
+  String get onboardingStarterTaskAsk;
+
+  /// Starter task added to an empty task list after onboarding: try recording
+  ///
+  /// In en, this message translates to:
+  /// **'Record a conversation with Omi'**
+  String get onboardingStarterTaskRecord;
+
+  /// Starter task added to an empty task list after onboarding: shows how completing a task works
+  ///
+  /// In en, this message translates to:
+  /// **'Check this off to finish a task'**
+  String get onboardingStarterTaskCheck;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

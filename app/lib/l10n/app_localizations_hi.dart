@@ -13161,4 +13161,13 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi से अपने दिन के बारे में पूछें';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi से एक बातचीत रिकॉर्ड करें';
+
+  @override
+  String get onboardingStarterTaskCheck => 'इस काम को पूरा करने के लिए टिक करें';
 }

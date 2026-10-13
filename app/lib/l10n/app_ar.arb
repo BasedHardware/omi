@@ -4046,5 +4046,8 @@
     "voiceProfileCardDismissed": "يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.",
     "homeNewRecordingButton": "تسجيل جديد",
     "onboardingActNotesLater": "لا يزال Omi يكتب ملاحظاتك. ستجدها في الصفحة الرئيسية.",
-    "chatWelcomeMessage": "مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك."
+    "chatWelcomeMessage": "مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك.",
+    "onboardingStarterTaskAsk": "اسأل Omi عن يومك",
+    "onboardingStarterTaskRecord": "سجّل محادثة مع Omi",
+    "onboardingStarterTaskCheck": "ضع علامة على هذه المهمة لإنهائها"
 }

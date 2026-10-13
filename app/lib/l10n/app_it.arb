@@ -4046,5 +4046,8 @@
     "voiceProfileCardDismissed": "Puoi configurare il profilo vocale in qualsiasi momento nelle Impostazioni.",
     "homeNewRecordingButton": "Nuova registrazione",
     "onboardingActNotesLater": "Omi sta ancora scrivendo le tue note. Le troverai nella Home.",
-    "chatWelcomeMessage": "Ciao, sono Omi. Chiedimi qualsiasi cosa di cui hai parlato: cosa ha detto qualcuno, cosa hai promesso o un riepilogo della tua giornata. Posso anche aggiungere attività e ricordare cose per te."
+    "chatWelcomeMessage": "Ciao, sono Omi. Chiedimi qualsiasi cosa di cui hai parlato: cosa ha detto qualcuno, cosa hai promesso o un riepilogo della tua giornata. Posso anche aggiungere attività e ricordare cose per te.",
+    "onboardingStarterTaskAsk": "Chiedi a Omi della tua giornata",
+    "onboardingStarterTaskRecord": "Registra una conversazione con Omi",
+    "onboardingStarterTaskCheck": "Spunta questa attività per completarla"
 }

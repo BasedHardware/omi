@@ -13210,4 +13210,13 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanya Omi tentang hari anda';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rakam perbualan dengan Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Tandakan tugasan ini untuk menyelesaikannya';
 }

@@ -4081,5 +4081,8 @@
     "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
     "homeNewRecordingButton": "Yeni Kayıt",
     "onboardingActNotesLater": "Omi notlarını hâlâ yazıyor. Onları Ana Sayfa'da bulacaksın.",
-    "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim."
+    "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.",
+    "onboardingStarterTaskAsk": "Omi'ye gününü sor",
+    "onboardingStarterTaskRecord": "Omi ile bir konuşma kaydet",
+    "onboardingStarterTaskCheck": "Bu görevi tamamlamak için işaretle"
 }

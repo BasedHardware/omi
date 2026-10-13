@@ -13231,4 +13231,13 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Kérdezd meg Omit a napodról';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rögzíts egy beszélgetést az Omival';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Pipáld ki ezt a feladatot';
 }

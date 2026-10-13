@@ -4046,5 +4046,8 @@
     "voiceProfileCardDismissed": "Hlasový profil můžete kdykoli nastavit v Nastavení.",
     "homeNewRecordingButton": "Nový záznam",
     "onboardingActNotesLater": "Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce.",
-    "chatWelcomeMessage": "Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe."
+    "chatWelcomeMessage": "Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe.",
+    "onboardingStarterTaskAsk": "Zeptej se Omi na svůj den",
+    "onboardingStarterTaskRecord": "Nahraj rozhovor s Omi",
+    "onboardingStarterTaskCheck": "Odškrtni tento úkol a dokonči ho"
 }

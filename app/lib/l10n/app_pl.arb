@@ -4081,5 +4081,8 @@
     "voiceProfileCardDismissed": "Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.",
     "homeNewRecordingButton": "Nowe nagranie",
     "onboardingActNotesLater": "Omi wciąż pisze Twoje notatki. Znajdziesz je na ekranie głównym.",
-    "chatWelcomeMessage": "Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie."
+    "chatWelcomeMessage": "Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie.",
+    "onboardingStarterTaskAsk": "Zapytaj Omi o swój dzień",
+    "onboardingStarterTaskRecord": "Nagraj rozmowę z Omi",
+    "onboardingStarterTaskCheck": "Odhacz to zadanie, aby je ukończyć"
 }

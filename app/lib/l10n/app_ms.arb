@@ -4046,5 +4046,8 @@
     "voiceProfileCardDismissed": "Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.",
     "homeNewRecordingButton": "Rakaman Baharu",
     "onboardingActNotesLater": "Omi masih menulis nota anda. Anda akan menemuinya di Laman Utama.",
-    "chatWelcomeMessage": "Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda."
+    "chatWelcomeMessage": "Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.",
+    "onboardingStarterTaskAsk": "Tanya Omi tentang hari anda",
+    "onboardingStarterTaskRecord": "Rakam perbualan dengan Omi",
+    "onboardingStarterTaskCheck": "Tandakan tugasan ini untuk menyelesaikannya"
 }

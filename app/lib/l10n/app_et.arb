@@ -4046,5 +4046,8 @@
     "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
     "homeNewRecordingButton": "Uus salvestus",
     "onboardingActNotesLater": "Omi kirjutab veel su märkmeid. Leiad need avalehelt.",
-    "chatWelcomeMessage": "Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada."
+    "chatWelcomeMessage": "Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.",
+    "onboardingStarterTaskAsk": "Küsi Omilt oma päeva kohta",
+    "onboardingStarterTaskRecord": "Salvesta Omiga üks vestlus",
+    "onboardingStarterTaskCheck": "Märgi see ülesanne tehtuks"
 }

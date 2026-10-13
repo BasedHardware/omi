@@ -13189,4 +13189,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanyakan harimu kepada Omi';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rekam percakapan dengan Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Centang tugas ini untuk menyelesaikannya';
 }
