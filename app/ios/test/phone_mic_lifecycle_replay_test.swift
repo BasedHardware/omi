@@ -777,6 +777,53 @@ struct Harness {
             stop(controller)
         }
 
+        // A second fault before the preserved 1s recovery beat must not push
+        // that deadline later. Interruption arms the 1s fire; recovering halfway
+        // through the window leaves it armed; a route rebuild that returns to
+        // .running before the fire used to fall through the healthy-only guard
+        // and re-anchor to now+1s. The beat must still land on the original
+        // deadline, then the healthy 4s cadence resumes.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 22) else {
+                preconditionFailure("repeated fault: start failed")
+            }
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "interrupted" }
+            }, "repeated fault: interrupted")
+            // Halfway through the fault window: the armed fire is ~0.5s out,
+            // enough for resume plus a second rebuild to land before it.
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "running" }
+            }, "repeated fault: resumed")
+            precondition(progressCount(world.sink) == 0,
+                "repeated fault: no beat expected before the second signal (timing drifted)")
+            let beforeRebuild = world.sink.deliveries.count
+            world.monitorBox.monitor!.fire(.routeChanged(reasonDescription: "3"))
+            waitUntil({
+                world.sink.deliveries.dropFirst(beforeRebuild).contains { $0.kind == .state && $0.state == "running" }
+            }, "repeated fault: rebuilt")
+            precondition(progressCount(world.sink) == 0,
+                "repeated fault: second signal must land before the preserved beat (timing drifted)")
+            // Original deadline is ~0.5s out from the interruption wait; the
+            // regression re-anchors to rebuild+1s. 0.75s covers the original
+            // fire and not the pushed one.
+            drainMain(seconds: 0.75)
+            precondition(progressCount(world.sink) > 0,
+                "a second fault must keep the already-armed fast fire, not push it to now+1s")
+            let repeatedBeatCount = progressCount(world.sink)
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == repeatedBeatCount,
+                "after the preserved beat the heartbeat must return to the healthy cadence")
+            stop(controller)
+        }
+
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")
     }
 }
