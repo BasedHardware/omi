@@ -962,6 +962,24 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
+  Future<CreateConversationResponse?>? _lastProcessRequest;
+  bool _firstCaptureProcess = false;
+
+  /// Finish through the coordinator and return that exact Process Now response.
+  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
+  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+    _lastProcessRequest = null;
+    _firstCaptureProcess = true;
+    try {
+      await finishCapture();
+      final request = _lastProcessRequest;
+      if (request == null) throw StateError('capture did not request live processing');
+      return await request;
+    } finally {
+      _firstCaptureProcess = false;
+    }
+  }
+
   // Force-processing requests share one optimistic row; only the newest may remove it.
   int _processingPlaceholderOwner = 0;
 
@@ -3626,6 +3644,7 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
 
     _resetStateVariables();
+    final confirmedProcessing = _firstCaptureProcess;
     final Future<InProgressProcessOutcome> request;
     if (_processInProgressOutcomeOverride != null) {
       request = _processInProgressOutcomeOverride!();
@@ -3638,6 +3657,9 @@ class CaptureController extends ChangeNotifier
       );
     } else {
       request = processInProgressConversationOutcome();
+    }
+    if (confirmedProcessing) {
+      _lastProcessRequest = request.then((outcome) => outcome.response);
     }
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
@@ -3656,6 +3678,9 @@ class CaptureController extends ChangeNotifier
         _autoSyncSessionWals();
       }
     }).catchError((Object error, StackTrace stack) {
+      if (confirmedProcessing && placeholderOwner == _processingPlaceholderOwner) {
+        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      }
       Logger.debug('Process Now result handling failed: ${error.runtimeType}');
       return _reportDetachedCaptureError('capture_process_now', error, stack);
     });
