@@ -648,6 +648,17 @@ def _release_attached_schedules(stripe_sub: dict) -> None:
                 logger.error(f"Error releasing subscription schedule {schedule.id}: {sanitize(str(e))}")
 
 
+def _unlock_paid_content(uid: str) -> None:
+    """Idempotent unlock for a paid plan that is already stored.
+
+    ``DestructiveOperationInProgress`` and data-plane read errors propagate.
+    Callers must not acknowledge the upgrade until this returns.
+    """
+    conversations_db.unlock_all_conversations(uid)
+    memories_db.unlock_all_memories(uid)
+    action_items_db.unlock_all_action_items(uid)
+
+
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
@@ -679,8 +690,12 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 
-        # Check if user is trying to upgrade to the same plan
+        # Check if user is trying to upgrade to the same plan. A previous
+        # attempt may already have stored this paid price and then failed the
+        # unlock fence. Run unlock before the 400 so a fence or data-plane
+        # rejection stays a 500 and the client can retry.
         if current_price_id == request.price_id:
+            _unlock_paid_content(uid)
             raise HTTPException(
                 status_code=400,
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
@@ -954,6 +969,10 @@ async def stripe_webhook(
                 # If user already has a Stripe subscription, verify it's not the same one
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                    # The paid plan is already stored. Stripe retries this
+                    # delivery when unlock raises, so do not acknowledge it
+                    # until an attempt runs after the gate clears.
+                    await run_blocking(db_executor, _unlock_paid_content, uid)
                     return {"status": "success", "message": "Subscription already processed."}
                 elif 'cancel_old_subscription' in checkout_decision.effects:
                     # Cancel the old subscription to prevent double-charging

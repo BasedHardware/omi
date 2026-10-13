@@ -189,8 +189,22 @@ def test_unlock_memories_bounds_each_legacy_and_canonical_page(monkeypatch):
         "users/u1/memory_items": [_UnlockDoc(f"canonical-{i}") for i in range(101)],
     }
     monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
-    assert memories.unlock_all_memories("u1", firestore_client=fake, limit=100) == 200
+    unlocked = memories.unlock_all_memories("u1", firestore_client=fake, limit=100)
+    assert unlocked == 200
+    assert unlocked.page_saturated is True
     assert len(fake.updates) == 200
+
+
+def test_unlock_memories_short_pages_are_not_saturated(monkeypatch):
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        "users/u1/memories": [_UnlockDoc(f"legacy-{i}") for i in range(60)],
+        "users/u1/memory_items": [_UnlockDoc(f"canonical-{i}") for i in range(60)],
+    }
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
+    unlocked = memories.unlock_all_memories("u1", firestore_client=fake, limit=100)
+    assert unlocked == 120
+    assert unlocked.page_saturated is False
 
 
 def _allow_unlocked_data_plane(monkeypatch):

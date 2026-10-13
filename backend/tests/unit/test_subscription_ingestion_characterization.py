@@ -11,7 +11,10 @@ from types import SimpleNamespace
 
 import pytest
 import stripe
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
+from database.legal_holds import DestructiveOperationInProgress
 from models.users import PlanLimits, PlanType, Subscription, SubscriptionStatus
 from routers import payment
 from utils.observability import billing_webhook
@@ -281,7 +284,7 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
     result = run(lane)
     if duplicate:
         assert result == {'status': 'success', 'message': 'Subscription already processed.'}
-        assert lane.calls == []
+        assert [name for name, _ in lane.calls] == ['conversations', 'memories', 'actions']
     else:
         assert lane.current.plan == PlanType.plus
         assert [name for name, _ in lane.calls] == (['stripe_cancel'] if stored_plan == PlanType.plus else []) + [
@@ -296,6 +299,193 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
             'stripe_metadata',
             'notification',
         ]
+
+
+def _checkout_event():
+    return {
+        'type': 'checkout.session.completed',
+        'data': {
+            'object': stripe.checkout.Session.construct_from(
+                {
+                    'id': 'cs-fixture',
+                    'client_reference_id': 'fixture-user',
+                    'metadata': {},
+                    'customer': 'cus-fixture',
+                    'subscription': 'sub-current',
+                },
+                'fixture',
+            )
+        },
+    }
+
+
+def _post_webhook():
+    app = FastAPI()
+    app.include_router(payment.router)
+    client = TestClient(app, raise_server_exceptions=False)
+    return client.post('/v1/stripe/webhook', content=b'{}', headers={'stripe-signature': 'fixture'})
+
+
+def _call_names(lane):
+    return [name for name, _ in lane.calls]
+
+
+def test_checkout_session_completed_normal_path_unchanged(lane):
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.event = _checkout_event()
+    response = _post_webhook()
+    assert response.status_code == 200
+    assert response.json()['status'] == 'success'
+    assert lane.current.plan == PlanType.plus
+    assert _call_names(lane) == [
+        'customer',
+        'write',
+        'credits',
+        'trial_cache',
+        'conversations',
+        'memories',
+        'actions',
+        'fair_use',
+        'stripe_metadata',
+        'notification',
+    ]
+
+
+@pytest.mark.parametrize('fence_type', ['deletion_gate', 'data_plane_read'])
+def test_checkout_session_completed_retries_unlock_after_fence_clears(lane, monkeypatch, fence_type):
+    blocked = {'on': True}
+
+    def conversations(uid):
+        lane.calls.append(('conversations', (uid,)))
+        if blocked['on']:
+            if fence_type == 'deletion_gate':
+                raise DestructiveOperationInProgress('live deletion marker')
+            raise RuntimeError('data-plane read failed')
+
+    monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.event = _checkout_event()
+
+    first = _post_webhook()
+    assert first.status_code == 500
+    assert 'success' not in first.text
+    assert lane.current.plan == PlanType.plus
+    assert lane.current.stripe_subscription_id == 'sub-current'
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('conversations') == 1
+    assert 'memories' not in _call_names(lane)
+
+    # Stripe retries while the gate is still closed. duplicate_checkout must not ack.
+    second = _post_webhook()
+    assert second.status_code == 500
+    assert 'success' not in second.text
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('conversations') == 2
+    assert 'memories' not in _call_names(lane)
+
+    blocked['on'] = False
+    third = _post_webhook()
+    assert third.status_code == 200
+    assert third.json()['status'] == 'success'
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('conversations') == 3
+    assert 'memories' in _call_names(lane)
+    assert 'actions' in _call_names(lane)
+
+
+def _arm_cross_plan_upgrade(lane, monkeypatch):
+    prices = {'current': 'price_plus'}
+
+    def stripe_sub(price_id):
+        return {
+            'id': 'sub-upgrade',
+            'status': 'active',
+            'cancel_at_period_end': False,
+            'current_period_start': NOW - 100,
+            'current_period_end': NOW + 100,
+            'items': {'data': [{'id': 'si_1', 'price': {'id': price_id, 'currency': 'usd', 'unit_amount': 1000}}]},
+        }
+
+    def retrieve(sub_id):
+        return stripe.Subscription.construct_from(stripe_sub(prices['current']), 'fixture')
+
+    def modify(sub_id, **params):
+        lane.calls.append(('modify', (sub_id,)))
+        prices['current'] = params['items'][0]['price']
+        return stripe.Subscription.construct_from(stripe_sub(prices['current']), 'fixture')
+
+    lane.current = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-upgrade')
+    monkeypatch.setattr(payment, 'is_purchasable_price_id', lambda price_id: True)
+    monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
+    monkeypatch.setattr(payment.stripe.Subscription, 'modify', modify)
+    monkeypatch.setattr(
+        payment.stripe.Price, 'retrieve', lambda price_id: SimpleNamespace(recurring=SimpleNamespace(interval='month'))
+    )
+    monkeypatch.setattr(payment, '_release_attached_schedules', lambda stripe_sub: None)
+
+
+def test_upgrade_subscription_normal_path_unchanged(lane, monkeypatch):
+    _arm_cross_plan_upgrade(lane, monkeypatch)
+    result = payment.upgrade_subscription_endpoint(
+        payment.UpgradeSubscriptionRequest(price_id='price_unlimited'), uid='fixture-user'
+    )
+    assert result['status'] == 'success'
+    assert 'upgraded' in result['message'].lower()
+    assert lane.current.plan == PlanType.unlimited
+    assert _call_names(lane) == [
+        'modify',
+        'write',
+        'credits',
+        'trial_cache',
+        'conversations',
+        'memories',
+        'actions',
+        'fair_use',
+    ]
+
+
+@pytest.mark.parametrize('fence_type', ['deletion_gate', 'data_plane_read'])
+def test_upgrade_subscription_retries_unlock_after_fence_clears(lane, monkeypatch, fence_type):
+    blocked = {'on': True}
+
+    def conversations(uid):
+        lane.calls.append(('conversations', (uid,)))
+        if blocked['on']:
+            if fence_type == 'deletion_gate':
+                raise DestructiveOperationInProgress('live deletion marker')
+            raise RuntimeError('data-plane read failed')
+
+    _arm_cross_plan_upgrade(lane, monkeypatch)
+    monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
+    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited')
+
+    with pytest.raises(HTTPException) as first:
+        payment.upgrade_subscription_endpoint(request, uid='fixture-user')
+    assert first.value.status_code == 500
+    assert lane.current.plan == PlanType.unlimited
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('modify') == 1
+    assert 'memories' not in _call_names(lane)
+
+    with pytest.raises(HTTPException) as second:
+        payment.upgrade_subscription_endpoint(request, uid='fixture-user')
+    assert second.value.status_code == 500
+    assert 'already subscribed' not in str(second.value.detail)
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('modify') == 1
+    assert _call_names(lane).count('conversations') == 2
+    assert 'memories' not in _call_names(lane)
+
+    blocked['on'] = False
+    with pytest.raises(HTTPException) as third:
+        payment.upgrade_subscription_endpoint(request, uid='fixture-user')
+    assert third.value.status_code == 400
+    assert 'already subscribed' in third.value.detail
+    assert _call_names(lane).count('write') == 1
+    assert _call_names(lane).count('modify') == 1
+    assert _call_names(lane).count('conversations') == 3
+    assert 'memories' in _call_names(lane)
+    assert 'actions' in _call_names(lane)
 
 
 def test_stale_guard_decision_is_not_rechecked_after_stripe_lookup(lane, monkeypatch):

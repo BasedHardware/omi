@@ -47,16 +47,25 @@ def env(monkeypatch):
     locks = {'memories': 0, 'canonical_memories': 0, 'actions': 0, 'conversations': 0}
     calls = []
 
+    class PageCount(int):
+        def __new__(cls, total, *, page_saturated):
+            value = int.__new__(cls, total)
+            value.page_saturated = page_saturated
+            return value
+
     def unlock(kind):
         def run(uid, *, limit):
             assert uid == 'test-user'
             calls.append(kind)
             collections = ('memories', 'canonical_memories') if kind == 'memories' else (kind,)
-            total = 0
+            counts = []
             for collection in collections:
                 count = min(locks[collection], limit)
                 locks[collection] -= count
-                total += count
+                counts.append(count)
+            total = sum(counts)
+            if kind == 'memories':
+                return PageCount(total, page_saturated=any(count >= limit for count in counts))
             return total
 
         return run
@@ -255,12 +264,19 @@ def test_allowance_recheck_repairs_caches_after_committed_pages(env, committed_c
     assert env.state_data['completed_period'] == '2026-11'
 
 
-@pytest.mark.parametrize('legacy,canonical', [(100, 0), (0, 100), (100, 100), (101, 0), (0, 101), (60, 60)])
-def test_memory_pages_require_conservative_completion_and_retry(env, legacy, canonical):
+@pytest.mark.parametrize(
+    'legacy,canonical,drained',
+    [(100, 0, False), (0, 100, False), (100, 100, False), (101, 0, False), (0, 101, False), (60, 60, True)],
+)
+def test_memory_pages_require_conservative_completion_and_retry(env, legacy, canonical, drained):
     env.locks.update(memories=legacy, canonical_memories=canonical)
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.locks['memories'] == max(0, legacy - env.module.PAGE_SIZE)
     assert env.locks['canonical_memories'] == max(0, canonical - env.module.PAGE_SIZE)
+    if drained:
+        assert not any(env.locks.values())
+        assert env.state_data['completed_period'] == '2026-11'
+        return
     assert not env.state_data
     assert not any(':done:' in key for key in env.redis.values)
     env.redis.next_request()
