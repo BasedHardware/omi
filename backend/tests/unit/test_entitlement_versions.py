@@ -6,6 +6,7 @@ ran through backend/test.sh; snapshot.py is the capture procedure.
 
 import json
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -135,3 +136,61 @@ def test_generated_exports_include_entitlement_constants():
     assert {'ENTITLEMENT_VERSIONS', 'LADDER_V1_STRIPE_PRICES', 'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS'} <= set(
         plan_catalog_generated.__all__
     )
+
+
+@pytest.mark.parametrize('price', ['price_1TuH6z1F8wnoWYvw7Siv61SX', None])
+def test_inactive_paid_subscription_keeps_entitlements_until_period_end(price):
+    result = resolve_subscription_entitlements(
+        {
+            'plan': 'plus',
+            'status': 'inactive',
+            'current_price_id': price,
+            'current_period_end': (datetime.now(timezone.utc) + timedelta(days=1)).timestamp(),
+        },
+        {},
+    )
+    assert result == get_entitlement_version('plus')
+
+
+@pytest.mark.parametrize('status', ['inactive', 'past_due', 'canceled', 'unpaid', 'incomplete'])
+def test_expired_inactive_or_stripe_nonpaying_status_demotes(status):
+    end = datetime.now(timezone.utc) + timedelta(days=-1 if status == 'inactive' else 1)
+    assert resolve_subscription_entitlements(
+        {
+            'plan': 'plus',
+            'status': status,
+            'current_price_id': 'price_1TuH6z1F8wnoWYvw7Siv61SX',
+            'current_period_end': end.timestamp(),
+        },
+        {},
+    ) == get_entitlement_version('basic')
+
+
+def test_raw_legacy_free_resolves_basic():
+    assert resolve_subscription_entitlements({'plan': 'free'}) == get_entitlement_version('basic')
+
+
+def test_compatibility_returns_error_for_missing_price_id():
+    baseline = load_catalog()
+    malformed = deepcopy(baseline)
+    malformed['recognized_stripe_prices'].append({'entitlement_version': 'ladder_v1', 'plan_id': 'plus'})
+    assert any('nonempty price_id' in e for e in validate_compatibility(baseline, malformed))
+
+
+def test_cli_check_with_base_ref_reports_missing_price_id(monkeypatch, capsys):
+    from argparse import Namespace
+    from scripts import generate_plan_catalog as generator
+
+    baseline = load_catalog()
+    malformed = deepcopy(baseline)
+    malformed['recognized_stripe_prices'].append({'entitlement_version': 'ladder_v1', 'plan_id': 'plus'})
+    monkeypatch.setattr(
+        generator,
+        'parse_args',
+        lambda: Namespace(check=True, base_ref='origin/main', skip_source_scan=False, require_publishable=False),
+    )
+    monkeypatch.setattr(generator, 'load_catalog', lambda: malformed)
+    monkeypatch.setattr(generator, 'load_catalog_from_git', lambda ref: baseline)
+    monkeypatch.setattr(generator, 'scan_embedded_stripe_ids', lambda catalog: [])
+    assert generator.main() == 1
+    assert 'nonempty price_id' in capsys.readouterr().err

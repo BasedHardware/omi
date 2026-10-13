@@ -59,9 +59,19 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
 
 def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
     errors = []
-    current_prices = {p['price_id']: p for p in current.get('recognized_stripe_prices', [])}
-    for price in previous.get('recognized_stripe_prices', []):
-        replacement = current_prices.get(price['price_id'])
+
+    def price_map(catalog: Mapping[str, Any]) -> dict[str, Any]:
+        prices = {}
+        for price in catalog.get('recognized_stripe_prices', []):
+            if not isinstance(price, dict) or not isinstance(price.get('price_id'), str) or not price['price_id']:
+                errors.append('compatibility: recognized price requires a nonempty price_id')
+                continue
+            prices[price['price_id']] = price
+        return prices
+
+    current_prices = price_map(current)
+    for price_id, price in price_map(previous).items():
+        replacement = current_prices.get(price_id)
         if replacement and replacement.get('entitlement_version', 'legacy') != price.get(
             'entitlement_version', 'legacy'
         ):
