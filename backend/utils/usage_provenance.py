@@ -17,5 +17,5 @@ def live_usage_metadata(runtime: Any) -> dict[str, str]:
     funding = 'byok' if provider == 'deepgram' and not self_hosted and get_byok_key('deepgram') else 'omi'
     # Self-hosted Deepgram has no evidenced per-provider compute card; keep the proxy explicit.
     if provider == 'deepgram' and self_hosted:
-        provider = 'unknown'
+        provider = 'deepgram_self_hosted'
     return {'funding': funding, 'provider': provider, 'source': 'listen'}

@@ -93,7 +93,7 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
         funding = 'unknown'
     raw_provider = metadata.get('provider', 'unknown')
     provider = str(getattr(raw_provider, 'value', raw_provider))
-    if provider not in {'deepgram', 'modulate', 'parakeet', 'soniox'}:
+    if provider not in {'deepgram', 'deepgram_self_hosted', 'modulate', 'parakeet', 'soniox'}:
         provider = 'unknown'
     source = str(metadata.get('source', 'unknown'))
     if source not in {'listen', 'sync_v1', 'sync_v2', 'parakeet_proxy', 'test'}:
@@ -105,6 +105,8 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
         funding=funding,
         accepted=accepted is not None,
     )
+    if provider == 'deepgram_self_hosted':
+        priced['reasons'] = ['provider_rate_unavailable' if r == 'provider_unknown' else r for r in priced['reasons']]
     if accepted is None and funding == 'omi':
         priced['reasons'].append('accepted_speech_unavailable')
         if source in {'sync_v1', 'sync_v2'}:

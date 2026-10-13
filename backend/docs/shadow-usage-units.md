@@ -54,7 +54,7 @@ IDs do not add units. Provider counters are never copied into request content.
 
 Live provenance follows the provider serving at flush time. A Deepgram BYOK
 key only excludes cloud Deepgram; Parakeet/Modulate remain Omi-funded, and
-self-hosted Deepgram uses the explicit unknown-provider compute proxy.
+self-hosted Deepgram retains its provider identity with the explicit unlisted-rate compute proxy.
 Custom STT is zero for transcription while funded downstream LLM calls still
 consume units. Current listen, sync and proxy counters are estimated as counter
 seconds × 0.32; no producer falsely declares these accepted speech. Sync's

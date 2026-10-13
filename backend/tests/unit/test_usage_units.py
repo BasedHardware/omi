@@ -217,7 +217,11 @@ def test_live_funding_follows_serving_provider_not_other_byok_keys(monkeypatch):
     host.use_custom_stt = False
     host.stt_service = 'deepgram'
     monkeypatch.setenv('DEEPGRAM_SELF_HOSTED_ENABLED', 'true')
-    assert source.live_usage_metadata(host) == {'funding': 'omi', 'provider': 'unknown', 'source': 'listen'}
+    assert source.live_usage_metadata(host) == {
+        'funding': 'omi',
+        'provider': 'deepgram_self_hosted',
+        'source': 'listen',
+    }
 
 
 def test_missing_history_and_shadow_price_failure_do_not_hide_gaps_or_break_legacy_write(units, monkeypatch):
