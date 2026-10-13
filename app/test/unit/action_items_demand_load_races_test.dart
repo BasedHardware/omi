@@ -43,6 +43,12 @@ class _HeldListApi extends api.ActionItemsApi {
       completer.complete(result);
     }
   }
+
+  /// Fulfills only the [index]-th still-pending request with [result].
+  void completeAt(int index, ApiResult<ActionItemsResponse> result) {
+    final completer = _pending.removeAt(index);
+    completer.complete(result);
+  }
 }
 
 ActionItemWithMetadata _row(String id) => ActionItemWithMetadata(
@@ -272,6 +278,211 @@ void main() {
 
       expect(typed.requestedOffsets.last, 101,
           reason: 'a server-observed preserved create must rejoin the pagination offset');
+      provider.dispose();
+    });
+
+    test('a load-more page observing the confirmed create retires it too', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
+            _row('server-11'),
+      );
+
+      // First page: empty but hasMore so loadMore is allowed.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: true));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+      final created = provider.createActionItem(description: 'load-more retire guard');
+      await created;
+      expect(provider.actionItems.map((item) => item.id), contains('server-11'));
+
+      // Server now has 101 rows: the created task (server-11, newest) + 100
+      // older ones. The initial page was fetched before the create existed, so
+      // the next loadMore page (offset 0 after 0 server-backed rows) observes
+      // the confirmed create and must retire it from the offset exclusion.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [_serverRow('server-11'), for (var i = 0; i < 49; i++) _serverRow('old-$i')],
+          hasMore: true,
+        ),
+      );
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more;
+      // sanity: rows landed
+      expect(provider.actionItems.any((row) => row.id == 'server-11'), isTrue);
+
+      // The next page's offset must now count the observed create as
+      // server-backed (50 rows: server-11 + 49 old), not 49.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more2 = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more2;
+
+      expect(typed.requestedOffsets.last, 50,
+          reason: 'a preserved create observed by a load-more page must rejoin the pagination offset');
+      provider.dispose();
+    });
+
+    test('a Home preview that loses the navigation race still releases its shadow threat', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-12');
+        },
+      );
+
+      // Home preview fetch starts and stays pending.
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+
+      // Quick-action create settles while the preview is in flight; the temp
+      // row is visible, so the settle registers a shadow for the preview's
+      // fetch ordinal.
+      final created = provider.createActionItem(description: 'preview abort shadow');
+      await Future<void>.delayed(Duration.zero);
+
+      // Tasks is visited before the preview resolves: the authoritative
+      // ensureLoaded starts (second held request) and its full first page —
+      // which already contains the committed server row — replaces the list.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [_serverRow('server-12')], hasMore: false),
+      );
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      // Fulfill ensureLoaded's request (index 1); the preview (index 0) stays
+      // pending and will abort on the navigation guard.
+      typed.completeAt(1, typed.result);
+      await load;
+      createResolved = true;
+      await created;
+
+      // Now resolve the stale preview; it aborts (Tasks already loaded).
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      typed.completeAt(0, typed.result);
+      await preview;
+
+      // The aborted preview's ordinal must have been pruned from the shadow:
+      // server-12 counts as server-backed now, so a later loadMore offsets by
+      // every visible row instead of skipping one forever.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [for (var i = 0; i < 50; i++) _serverRow('old-$i')], hasMore: true),
+      );
+      final refresh = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await refresh;
+      // (fetchActionItems replaces the list with old-* rows; server-12 is gone
+      // from the list but its shadow/pruning bookkeeping is what matters next.)
+
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more;
+
+      expect(typed.requestedOffsets.last, 50,
+          reason: 'the aborted preview must not keep a server-confirmed row out of the offset');
+      provider.dispose();
+    });
+
+    test('a staged delete of a temp row transfers to the confirmed server row, never resurrects it', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-13');
+        },
+        deleteActionItemRequest: (String id) async => true,
+      );
+
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // Create starts; the temp row appears.
+      final created = provider.createActionItem(description: 'delete race');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.first.id;
+      expect(tempId.startsWith('temp_'), isTrue);
+
+      // The user stages a delete of the temp row (D5 undo toast) while the
+      // create request is still in flight.
+      provider.stageDeleteActionItem(provider.actionItems.first);
+      expect(provider.actionItems, isEmpty);
+
+      // The create settles with the confirmed server row.
+      createResolved = true;
+      final item = await created;
+      expect(item?.id, 'server-13');
+      // The confirmed row must NOT be resurrected by the settle.
+      expect(provider.actionItems, isEmpty, reason: 'a staged delete must not be resurrected by the create settle');
+      expect(provider.isDeleteStaged('server-13'), isTrue, reason: 'the staged delete transfers to the server id');
+
+      // Undo, addressed through the temp id the toast captured, restores the
+      // confirmed row exactly once.
+      expect(await provider.undoStagedDelete(tempId), isTrue);
+      expect(provider.actionItems.map((row) => row.id), ['server-13']);
+
+      // A late second resolution (commit via the same temp id) must be a no-op.
+      expect(await provider.commitStagedDelete(tempId), isFalse);
+      expect(provider.actionItems.map((row) => row.id), ['server-13']);
+      provider.dispose();
+    });
+
+    test('commit after the transfer deletes the confirmed server row', () async {
+      final typed = _HeldListApi();
+      final deletedIds = <String>[];
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-14');
+        },
+        deleteActionItemRequest: (String id) async {
+          deletedIds.add(id);
+          return true;
+        },
+      );
+
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      final created = provider.createActionItem(description: 'commit race');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.first.id;
+      provider.stageDeleteActionItem(provider.actionItems.first);
+
+      createResolved = true;
+      await created;
+      expect(provider.actionItems, isEmpty);
+
+      // Commit addressed through the temp id must delete the confirmed id.
+      expect(await provider.commitStagedDelete(tempId), isTrue);
+      expect(deletedIds, ['server-14'], reason: 'the transferred staged delete must commit against the server id');
+      expect(provider.actionItems, isEmpty);
       provider.dispose();
     });
   });

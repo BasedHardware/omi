@@ -175,9 +175,26 @@ class ActionItemsProvider extends ChangeNotifier {
     return [...preserved, ...fetched];
   }
 
+  /// Drops [ordinal] from every shadow's threat set. An aborted wholesale
+  /// fetch (e.g. a Home preview that lost the navigation race) never runs its
+  /// `_withPendingCreates` replacement, so its ordinal must be pruned by the
+  /// aborting caller's `finally` — otherwise the shadow keeps excluding a
+  /// server-confirmed row from `_serverBackedRowCount` forever.
+  void _dropFetchShadowOrdinal(int ordinal) {
+    if (_fetchShadowedCreates.isEmpty) return;
+    _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
+    _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
+  }
+
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
   // from every list, not yet deleted on the server.
   final Map<String, ({ActionItemWithMetadata item, int index, int homeIndex})> _stagedDeletes = {};
+
+  // Temp-id → confirmed server id for staged deletes that were re-keyed when
+  // their optimistic create settled mid-toast: the Undo toast captured the temp
+  // id, so undo/commit resolve through this alias to reach the transferred
+  // staged delete.
+  final Map<String, String> _stagedDeleteAliasIds = {};
 
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
@@ -362,6 +379,11 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error fetching home widget task preview: $e');
     } finally {
       _wholesaleFetchesInFlight.remove(fetchOrdinal);
+      // This preview applied or aborted without replacing the list; either way
+      // it can no longer drop a shadowed row. An aborted preview never ran
+      // _withPendingCreates, so prune its ordinal here or the shadow keeps
+      // excluding a server-confirmed row from the pagination offset forever.
+      _dropFetchShadowOrdinal(fetchOrdinal);
     }
   }
 
@@ -626,6 +648,13 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null && generation == _sessionGeneration) {
         _loadedPageSetComplete =
             _loadedPageSetComplete && decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
+        // A load-more page observing a preserved create confirms it server-side;
+        // it now counts as server-backed for pagination. Retire from the full
+        // server response, not the deduped/filtered subset — mirroring
+        // _withPendingCreates retirement. Without this, a create ordered beyond
+        // the initial page stays excluded from the offset forever and can stall
+        // pagination on already-visible rows.
+        _preservedCreateIds.removeWhere(response.actionItems.map((item) => item.id).toSet().contains);
         // An optimistic delete shortens the visible list before the server removes the row.
         // Its length can therefore request an overlapping page; keep each server ID once.
         final seenIds = _actionItems.map((item) => item.id).toSet();
@@ -936,13 +965,15 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Restores a task hidden by [stageDeleteActionItem]. False when it was not staged (already
   /// committed or restored).
   Future<bool> undoStagedDelete(String id) async {
-    final staged = _stagedDeletes.remove(id);
+    final resolvedId = _stagedDeleteAliasIds[id] ?? id;
+    _stagedDeleteAliasIds.remove(id);
+    final staged = _stagedDeletes.remove(resolvedId);
     if (staged == null) return false;
-    _pendingDeletionIds.remove(id);
-    if (!_actionItems.any((i) => i.id == id)) {
+    _pendingDeletionIds.remove(resolvedId);
+    if (!_actionItems.any((i) => i.id == resolvedId)) {
       _actionItems.insert((staged.index == -1 ? 0 : staged.index).clamp(0, _actionItems.length), staged.item);
     }
-    if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
+    if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == resolvedId)) {
       _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
     }
     notifyListeners();
@@ -954,25 +985,27 @@ class ActionItemsProvider extends ChangeNotifier {
   /// back where it was. False when it was not staged.
   Future<bool> commitStagedDelete(String id) async {
     final generation = _sessionGeneration;
-    final staged = _stagedDeletes.remove(id);
+    final resolvedId = _stagedDeleteAliasIds[id] ?? id;
+    _stagedDeleteAliasIds.remove(id);
+    final staged = _stagedDeletes.remove(resolvedId);
     if (staged == null) return false;
     _deleteAppleReminderIfLinked(staged.item);
     var success = false;
     try {
-      success = await _deleteActionItemRequest(id);
+      success = await _deleteActionItemRequest(resolvedId);
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
     }
     if (generation != _sessionGeneration) return false;
     if (!success) {
-      _pendingDeletionIds.remove(id);
+      _pendingDeletionIds.remove(resolvedId);
       _restoreDeletedItem(staged.item, staged.index);
-      if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
+      if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == resolvedId)) {
         _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
         notifyListeners();
       }
     } else {
-      SiriIntegration.current.queueDelete('task', id);
+      SiriIntegration.current.queueDelete('task', resolvedId);
     }
     return success;
   }
@@ -1023,6 +1056,33 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (newItem != null) {
         _settlePendingCreate(optimisticItem.id, newItem);
+        // The user staged a delete of the temp row while the create was in
+        // flight (D5 undo toast). Do not resurrect what the user deleted:
+        // transfer the staged deletion to the confirmed server id so Undo
+        // restores the confirmed row and commit deletes it server-side,
+        // instead of reinserting it here and leaving the staged temp entry
+        // to later restore a duplicate.
+        final stagedDelete = _stagedDeletes.remove(optimisticItem.id);
+        if (stagedDelete != null) {
+          _pendingDeletionIds
+            ..remove(optimisticItem.id)
+            ..add(newItem.id);
+          _stagedDeletes[newItem.id] = (
+            item: newItem,
+            index: stagedDelete.index,
+            homeIndex: stagedDelete.homeIndex,
+          );
+          // The open toast still addresses the temp id; resolve it to the
+          // transferred staged delete.
+          _stagedDeleteAliasIds[optimisticItem.id] = newItem.id;
+          // Keep newItem.id in _preservedCreateIds: no server page has
+          // observed the created row yet, so it must not shift the pagination
+          // offset. If Undo restores it, the normal page-observed retirement
+          // applies; if commit deletes it, the stale id is inert (the row is
+          // no longer in _actionItems).
+          notifyListeners();
+          return newItem;
+        }
         // The server row replaces the temp row wherever it sits; if an
         // interleaved list response already dropped the temp row, re-insert
         // the confirmed row so the create is never lost from the UI. A
@@ -1044,6 +1104,11 @@ class ActionItemsProvider extends ChangeNotifier {
       } else {
         _settlePendingCreate(optimisticItem.id, null);
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
+        // The create never reached the server: the user's staged delete of the
+        // temp row has nothing to commit. Dissolve it (and its tombstone) so
+        // commitStagedDelete does not fire a server delete of an id that was
+        // never created, and Undo does not resurrect the dead temp row.
+        _dissolveStagedDeleteForFailedCreate(optimisticItem.id);
         notifyListeners();
         Logger.debug('Failed to create action item on server');
         return null;
@@ -1052,9 +1117,21 @@ class ActionItemsProvider extends ChangeNotifier {
       _settlePendingCreate(optimisticItem.id, null);
       if (generation != _sessionGeneration) return null;
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
+      _dissolveStagedDeleteForFailedCreate(optimisticItem.id);
       notifyListeners();
       Logger.debug('Error creating action item: $e');
       return null;
+    }
+  }
+
+  /// Removes a staged delete whose optimistic create failed: there is no
+  /// server row to delete or restore, so the staged entry and its tombstone
+  /// must go away entirely.
+  void _dissolveStagedDeleteForFailedCreate(String tempId) {
+    _stagedDeleteAliasIds.remove(tempId);
+    final staged = _stagedDeletes.remove(tempId);
+    if (staged != null) {
+      _pendingDeletionIds.remove(tempId);
     }
   }
 
@@ -1350,6 +1427,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _listViewState = const ApiViewState(phase: ApiViewPhase.data);
     _selectedItems = {};
     _stagedDeletes.clear();
+    _stagedDeleteAliasIds.clear();
     _pendingCreates.clear();
     _fetchShadowedCreates.clear();
     _preservedCreateIds.clear();
