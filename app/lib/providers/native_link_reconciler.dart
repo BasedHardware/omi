@@ -53,10 +53,10 @@ class NativeLinkReconciler {
     Logger.debug('NativeLinkReconciler: native holds $deviceId while disconnected; re-adopting');
     final deviceService = ServiceManager.instance().device;
     if (deviceService.connectionFor(deviceId)?.status == DeviceConnectionState.connected) {
-      // DeviceService holds the link but the provider never heard. Republish
-      // synchronously with the checks above: nothing can intervene, and no
-      // transport event will publish it.
-      _provider.onDeviceConnectionStateChanged(deviceId, DeviceConnectionState.connected);
+      // DeviceService holds the link but the provider never heard. Admission
+      // revalidates the persisted pairing when the debounced handler runs, so
+      // a pairing that moved on during the queue is not published.
+      _provider.readoptServiceLink(deviceId);
       return;
     }
     // Otherwise native replays device-ready into a fresh transport, whose own

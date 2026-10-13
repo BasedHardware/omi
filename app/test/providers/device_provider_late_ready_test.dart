@@ -256,6 +256,45 @@ void main() {
     });
   });
 
+  test('a readoption queued behind the connect debounce is dropped when pairing moves on', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      ServiceManager.instance().device.ensureConnection(_deviceId, force: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(ServiceManager.instance().device.connectionFor(_deviceId)?.status, DeviceConnectionState.connected);
+
+      final provider = DeviceProvider();
+      expect(provider.isConnected, isFalse);
+      final probe = Completer<bool>();
+      final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) => probe.future);
+
+      reconciler.reconcile();
+      probe.complete(true);
+      // Let the probe resolve and queue the readmission behind the 100 ms
+      // connect debounce, then move the pairing elsewhere before it fires.
+      async.flushMicrotasks();
+      expect(provider.isConnected, isFalse, reason: 'admission is still queued');
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
+      async.elapse(const Duration(seconds: 5));
+
+      expect(provider.isConnected, isFalse, reason: 'the old device must not publish over the newer pairing');
+      expect(provider.connectedDevice?.id, isNot(_deviceId));
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT',
+          reason: 'the stale admission must not rewrite pairing');
+      reconciler.dispose();
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
   test('foreground reconcile adopts only the device whose link it probed', () {
     fakeAsync((async) {
       pairPendant();

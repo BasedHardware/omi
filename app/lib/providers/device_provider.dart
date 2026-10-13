@@ -1177,12 +1177,20 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
-  void _handleDeviceConnected(String deviceId, int generation) async {
+  void _handleDeviceConnected(String deviceId, int generation, {bool requirePersistedPair = false}) async {
     if (!_isCurrent(generation)) return;
     _admittedConnectGeneration = generation;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (!_isCurrent(generation)) return;
     if (connection == null) {
+      return;
+    }
+    // A readoption authorized the persisted pairing at probe time, but this
+    // admission waited on DeviceService: pairing may have moved on (an input
+    // picker persisting a different microphone) and publishing the old device
+    // would overwrite that choice in preferences and start its side effects.
+    if (requirePersistedPair && SharedPreferencesUtil().btDevice.id != deviceId) {
+      Logger.debug('Discarding readoption of $deviceId: pairing moved on before admission');
       return;
     }
     // One admission per physical connect: overlapping connected events (a
@@ -1440,6 +1448,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     if (!_isCurrent(generation)) return;
     notifyListeners();
+  }
+
+  /// Readopts a service link native already holds while the mirror shows the
+  /// persisted pairing disconnected. The reconciler authorizes this at probe
+  /// time, but admission still queues behind the connect debouncer: pairing or
+  /// the mirror can move on in that window, so [_handleDeviceConnected]
+  /// revalidates the persisted pairing before publishing.
+  void readoptServiceLink(String deviceId) {
+    if (_isDisposed) return;
+    final generation = _sessionGeneration;
+    _disconnectDebouncer.cancel();
+    _connectDebouncer.run(() {
+      if (!_isCurrent(generation)) return;
+      _handleDeviceConnected(deviceId, generation, requirePersistedPair: true);
+    });
   }
 
   @override
