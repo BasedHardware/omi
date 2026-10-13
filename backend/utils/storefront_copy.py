@@ -85,11 +85,16 @@ def per_day_count(monthly_hours: int) -> int:
 
 
 def per_day_phrase(monthly_hours: int, locale: str | None = None) -> str:
-    """monthly ÷ 30. <6 → about N hours a day; 6–16 → all day; >16 → more than one device."""
+    """monthly ÷ 30. <6 → about N hour(s) a day; 6–16 → all day; >16 → more than one device.
+
+    Shipped cards use the per-tier hours_line templates, not this phrase.
+    """
     phrases = copy_for(locale)['per_day']
     daily = Decimal(monthly_hours) / Decimal(30)
     if daily < 6:
-        return phrases['under_6'].format(n=per_day_count(monthly_hours))
+        count = per_day_count(monthly_hours)
+        template = phrases['under_6_one'] if count == 1 else phrases['under_6']
+        return template.format(n=count)
     if daily <= 16:
         return phrases['all_day']
     return phrases['multi_device']
@@ -105,13 +110,16 @@ def hours_line(plan_id: str, locale: str | None = None) -> str:
 
 
 def recording_hours_left(plan_id: str, percent: float) -> int:
-    """Remaining wall-clock hours.
+    """Remaining wall-clock hours, never below zero.
 
     Paid plans reuse the recording-hours definition on the unused units
     (remaining × recording_share / units_per_recorded_hour, then floor_to_nice).
     Free has no unit budget; scale its fixed hours by the unused share.
+    A budget percent at or above 100 clamps to 0.
     """
     fraction = (Decimal(100) - Decimal(str(percent))) / Decimal(100)
+    if fraction <= 0:
+        return 0
     if plan_id == 'basic':
         remaining = Decimal(recording_hours('basic')) * fraction
         return int(remaining.quantize(Decimal('1'), rounding=ROUND_HALF_UP))

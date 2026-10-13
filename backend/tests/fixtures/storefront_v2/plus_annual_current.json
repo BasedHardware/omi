@@ -99,11 +99,7 @@
       "recommended": false,
       "is_current": true,
       "hours_line": "About 100 hours of recording a month, around 3 hours a day",
-      "bullets": [
-        "Everything in Free, with much more room",
-        "Use Omi on your Mac as well as your phone",
-        "500 MCP requests a day"
-      ],
+      "bullets": [],
       "action": "current",
       "cta_label": null,
       "blocked_line": null,

@@ -4,13 +4,13 @@
   "show_subscription_ui": true,
   "header": "Your plan",
   "current": {
-    "plan_id": "unlimited",
-    "name": "Neo",
-    "price_id": "price_legacy_unlimited",
+    "plan_id": "unlimited_v2",
+    "name": "Unlimited",
+    "price_id": "price_legacy_unlimited_v2",
     "interval": "month",
     "legacy": true,
     "cancel_at_period_end": false,
-    "line": "You're on Neo · $29.99/mo · renews Nov 1",
+    "line": "You're on Unlimited · $29.99/mo · renews Nov 1",
     "legacy_note": "We don't sell this plan anymore, but yours stays exactly as it is."
   },
   "usage": {
@@ -168,9 +168,9 @@
       ]
     },
     {
-      "tier_id": "unlimited:legacy",
-      "plan_id": "unlimited",
-      "name": "Neo",
+      "tier_id": "unlimited_v2:legacy",
+      "plan_id": "unlimited_v2",
+      "name": "Unlimited",
       "recommended": false,
       "is_current": true,
       "hours_line": "",
@@ -181,7 +181,7 @@
       "compact": true,
       "prices": [
         {
-          "price_id": "price_legacy_unlimited",
+          "price_id": "price_legacy_unlimited_v2",
           "interval": "month",
           "amount_minor": 2999,
           "currency": "usd",

@@ -99,25 +99,12 @@
       "recommended": false,
       "is_current": true,
       "hours_line": "About 280 hours of recording a month, enough to wear it all day",
-      "bullets": [
-        "Omi reminds you of things you said you'd do",
-        "On your Mac, Omi can see what you're working on and help with it",
-        "5,000 MCP requests a day"
-      ],
-      "action": "current",
+      "bullets": [],
+      "action": "checkout",
       "cta_label": null,
       "blocked_line": null,
       "compact": false,
       "prices": [
-        {
-          "price_id": "price_operator_month",
-          "interval": "month",
-          "amount_minor": 4999,
-          "currency": "usd",
-          "headline": "$49.99/month",
-          "subline": null,
-          "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
-        },
         {
           "price_id": "price_operator_year",
           "interval": "year",

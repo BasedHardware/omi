@@ -81,7 +81,11 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     assert pro.bullets[0] == "Omi reminds you of things you said you'd do"
     paid = build('operator', 'price_operator_month', rows, list(rows), recognized)
     assert [tier.plan_id for tier in paid.tiers] == ['basic', 'plus', 'operator', 'architect']
-    assert [tier.action for tier in paid.tiers] == ['none', 'none', 'current', 'checkout']
+    assert [tier.action for tier in paid.tiers] == ['none', 'none', 'checkout', 'checkout']
+    operator = next(tier for tier in paid.tiers if tier.plan_id == 'operator')
+    assert operator.cta_label is None and operator.bullets == []
+    assert [item.interval for item in operator.prices] == ['year']
+    assert operator.prices[0].cta_label == 'Switch to yearly · save $99.98'
     assert not any(tier.recommended for tier in paid.tiers)
     assert next(tier for tier in paid.tiers if tier.plan_id == 'architect').cta_label == 'Upgrade to Architect'
 

@@ -89,12 +89,32 @@ def recommended_plan_id(current_plan: str, trigger: str | None) -> str | None:
 
 
 def offered_intervals(
-    *, current_plan: str, tier_plan: str, current_interval: str | None, available: list[str]
+    *,
+    current_plan: str,
+    tier_plan: str,
+    current_interval: str | None,
+    available: list[str],
+    resubscribe_only: bool = False,
+    legacy: bool = False,
 ) -> list[str]:
-    """Same tier: annual → monthly is not offered; monthly → annual stays available."""
+    """Same tier: annual → monthly is never offered.
+
+    Monthly → annual is allowed, and that yearly price is the only one on the
+    switch card. Resubscribe offers only the current interval. When the current
+    price cannot be retrieved, the paid current card offers no interval, so a
+    yearly subscriber is not shown the monthly price.
+    """
     ordered = [interval for interval in ('month', 'year') if interval in available]
-    if tier_plan == current_plan and current_interval == 'year':
+    if tier_plan != current_plan or current_plan == 'basic':
+        return ordered
+    if current_interval is None:
+        return []
+    if resubscribe_only:
+        return [current_interval] if current_interval in ordered else []
+    if current_interval == 'year':
         return [interval for interval in ordered if interval != 'month']
+    if not legacy and 'year' in ordered:
+        return ['year']
     return ordered
 
 
@@ -150,7 +170,7 @@ def _prices_for(
 
 
 def _compact(*, is_current: bool, action: str, prices: list[StorefrontPrice]) -> bool:
-    """Current card with no button. The client drops bullets; a price CTA still counts as an action."""
+    """Current card with no purchase button. Current cards already send no bullets."""
     if not is_current or action == 'checkout':
         return False
     return not any(price.cta_label for price in prices)
@@ -250,19 +270,28 @@ def build_storefront(
         available = [row['recurring']['interval'] for row in _valid_price_rows(rows)]
         if plan == 'basic':
             available = ['month']
-        offered = offered_intervals(
-            current_plan=current_plan, tier_plan=plan, current_interval=current_interval, available=available
-        )
         is_current = plan == current_plan and not legacy
+        switch = False
         if plan == 'basic':
             prices = [_free_price(currency, locale)]
         else:
-            prices = _prices_for(
-                rows,
-                offered=offered,
-                locale=locale,
-                switch_yearly=is_current and current_interval == 'month' and not resubscribe_only,
+            resubscribe_this = resubscribe_only and is_current
+            offered = offered_intervals(
+                current_plan=current_plan,
+                tier_plan=plan,
+                current_interval=current_interval,
+                available=available,
+                resubscribe_only=resubscribe_this,
+                legacy=legacy,
             )
+            want_switch = is_current and current_interval == 'month' and not resubscribe_only and 'year' in offered
+            prices = _prices_for(rows, offered=offered, locale=locale, switch_yearly=want_switch)
+            if resubscribe_this and current_price_id:
+                prices = [item for item in prices if item.price_id == current_price_id]
+            switch = want_switch and any(item.cta_label for item in prices)
+            if want_switch and not switch:
+                month_offered = ['month'] if 'month' in available else []
+                prices = _prices_for(rows, offered=month_offered, locale=locale)
         if plan != 'basic' and not prices and plan != 'architect':
             continue
         action = tier_action(
@@ -273,6 +302,8 @@ def build_storefront(
         )
         if action == 'checkout' and not prices and plan != current_plan:
             action = 'none'
+        if switch:
+            action = 'checkout'
         tiers.append(
             StorefrontTier(
                 tier_id=f'{plan}:ladder_v1',
@@ -281,9 +312,13 @@ def build_storefront(
                 recommended=bool(badge) and plan == badge and is_higher_offer(current_plan, plan),
                 is_current=is_current,
                 hours_line=hours_line(plan, locale),
-                bullets=bullets(plan, trigger, locale),
+                bullets=[] if is_current else bullets(plan, trigger, locale),
                 action=action,
-                cta_label=cta_label(action=action, tier_plan=plan, current_plan=current_plan, locale=locale),
+                cta_label=(
+                    None
+                    if switch
+                    else cta_label(action=action, tier_plan=plan, current_plan=current_plan, locale=locale)
+                ),
                 blocked_line=None if is_current or blocked is None else blocked,
                 compact=_compact(is_current=is_current, action=action, prices=prices),
                 prices=prices,
@@ -297,15 +332,19 @@ def build_storefront(
             cancel=subscription.cancel_at_period_end,
         )
         current_prices: list[StorefrontPrice] = []
-        if current_row:
-            available = [current_interval] if current_interval else []
+        if current_row and current_interval:
+            available = [current_interval]
             offered = offered_intervals(
                 current_plan=current_plan,
                 tier_plan=current_plan,
                 current_interval=current_interval,
                 available=available,
+                resubscribe_only=resubscribe_only,
+                legacy=legacy,
             )
             current_prices = _prices_for([current_row], offered=offered, locale=locale, current=True)
+            if resubscribe_only and current_price_id:
+                current_prices = [item for item in current_prices if item.price_id == current_price_id]
         tiers.append(
             StorefrontTier(
                 tier_id=f'{current_plan}:{"legacy" if legacy else "ladder_v1"}',
@@ -314,7 +353,7 @@ def build_storefront(
                 recommended=False,
                 is_current=True,
                 hours_line='' if legacy or current_plan not in RANK else hours_line(current_plan, locale),
-                bullets=[] if legacy or current_plan not in RANK else bullets(current_plan, trigger, locale),
+                bullets=[],
                 action=action,
                 cta_label=cta_label(action=action, tier_plan=current_plan, current_plan=current_plan, locale=locale),
                 blocked_line=None,
@@ -360,5 +399,5 @@ def build_storefront(
             legacy_note=note,
         ),
         usage=usage,
-        yearly_toggle_label=yearly_toggle_label(_sheet_months_free(tiers), locale),
+        yearly_toggle_label=None if resubscribe_only else yearly_toggle_label(_sheet_months_free(tiers), locale),
     )

@@ -71,11 +71,7 @@
       "recommended": false,
       "is_current": true,
       "hours_line": "About 15 hours of recording a month",
-      "bullets": [
-        "100 MCP requests a day",
-        "Transcripts, summaries and memories of your conversations",
-        "Ask Omi anything about your day"
-      ],
+      "bullets": [],
       "action": "current",
       "cta_label": null,
       "blocked_line": null,

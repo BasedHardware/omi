@@ -136,7 +136,8 @@ def test_floor_to_nice_and_per_day_phrasing():
     assert floor_to_nice(Decimal('299.9')) == 290
     assert floor_to_nice(Decimal('300')) == 300
     assert floor_to_nice(Decimal('1238.796153846')) == 1200
-    assert per_day_phrase(15) == 'about 1 hours a day'
+    assert per_day_phrase(15) == 'about 1 hour a day'
+    assert per_day_phrase(60) == 'about 2 hours a day'
     assert per_day_phrase(100) == 'about 3 hours a day'
     assert per_day_phrase(179) == 'about 6 hours a day'
     assert per_day_phrase(180) == 'enough to wear it all day'
@@ -145,7 +146,10 @@ def test_floor_to_nice_and_per_day_phrasing():
     assert per_day_phrase(481) == 'for wearing it all day, every day, on more than one device'
     assert per_day_phrase(1200) == 'for wearing it all day, every day, on more than one device'
     assert recording_hours_left('plus', 80) == 20
+    assert recording_hours_left('plus', 100) == 0
+    assert recording_hours_left('plus', 150) == 0
     assert recording_hours_left('basic', 80) == 3
+    assert recording_hours_left('basic', 120) == 0
     assert months_free(4999, 49990) == 2
 
 
@@ -185,10 +189,18 @@ def expected_action(current, tier, legacy, cancel):
     return 'checkout'
 
 
-def expected_intervals(current, tier, interval, available):
+def expected_intervals(current, tier, interval, available, *, resubscribe_only=False, legacy=False):
     ordered = [item for item in ('month', 'year') if item in available]
-    if tier == current and interval == 'year':
+    if tier != current or current == 'basic':
+        return ordered
+    if interval is None:
+        return []
+    if resubscribe_only:
+        return [interval] if interval in ordered else []
+    if interval == 'year':
         return [item for item in ordered if item != 'month']
+    if not legacy and 'year' in ordered:
+        return ['year']
     return ordered
 
 
@@ -220,9 +232,15 @@ def test_policy_matrix(current, interval, cancel, legacy, tier):
         available = ['month', 'year']
     else:
         available = [interval]
+    resubscribe_only = cancel and not legacy and current in LADDER and current != 'basic'
     assert offered_intervals(
-        current_plan=current, tier_plan=tier, current_interval=interval, available=available
-    ) == expected_intervals(current, tier, interval, available)
+        current_plan=current,
+        tier_plan=tier,
+        current_interval=interval,
+        available=available,
+        resubscribe_only=resubscribe_only,
+        legacy=legacy,
+    ) == expected_intervals(current, tier, interval, available, resubscribe_only=resubscribe_only, legacy=legacy)
     assert cta_label(action=action, tier_plan=tier, current_plan=current) == expected_cta(current, tier, action)
     if legacy:
         assert action != 'checkout'
@@ -256,8 +274,15 @@ def test_built_sheets_match_the_policy_matrix():
         assert is_legacy_plan(plan, price_id, set(base_rows)) is legacy
         assert built.current.legacy is legacy
         assert not (legacy and any(tier.action == 'checkout' for tier in built.tiers))
+        resubscribe_only = cancel and not legacy and plan in LADDER and plan != 'basic'
+        switching = not legacy and not cancel and interval == 'month' and plan in LADDER and plan != 'basic'
         for tier in built.tiers:
-            assert tier.action == expected_action(plan, tier.plan_id, legacy, cancel)
+            expected = expected_action(plan, tier.plan_id, legacy, cancel)
+            if switching and tier.is_current:
+                expected = 'checkout'
+            assert tier.action == expected
+            if tier.is_current:
+                assert tier.bullets == []
             if not tier.is_current:
                 continue
             if plan == 'basic':
@@ -266,9 +291,11 @@ def test_built_sheets_match_the_policy_matrix():
                 available = [interval]
             else:
                 available = ['month', 'year']
-            assert [item.interval for item in tier.prices] == expected_intervals(plan, plan, interval, available)
-        resubscribe_only = cancel and not legacy and plan in LADDER and plan != 'basic'
+            assert [item.interval for item in tier.prices] == expected_intervals(
+                plan, plan, interval, available, resubscribe_only=resubscribe_only, legacy=legacy
+            )
         if resubscribe_only:
+            assert built.yearly_toggle_label is None
             assert built.header == f"Your {built.current.name} plan ends Nov 1"
             current_amount = next(item.amount_minor for item in built.tiers[0].prices if item.interval == interval)
             period = 'mo' if interval == 'month' else 'yr'
@@ -278,6 +305,8 @@ def test_built_sheets_match_the_policy_matrix():
             for tier in built.tiers:
                 if tier.is_current:
                     assert tier.action == 'checkout' and tier.cta_label == 'Resubscribe'
+                    assert [item.price_id for item in tier.prices] == [price_id]
+                    assert [item.interval for item in tier.prices] == [interval]
                     assert tier.blocked_line is None and tier.compact is False
                     assert all(item.cta_label is None for item in tier.prices)
                 else:
@@ -287,14 +316,50 @@ def test_built_sheets_match_the_policy_matrix():
         elif not legacy and plan in {'plus', 'operator', 'architect'}:
             current_tier = next(tier for tier in built.tiers if tier.is_current)
             if interval == 'month':
-                yearly = next(item for item in current_tier.prices if item.interval == 'year')
+                assert [item.interval for item in current_tier.prices] == ['year']
+                yearly = current_tier.prices[0]
                 assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save $')
+                assert current_tier.action == 'checkout'
                 assert current_tier.compact is False and current_tier.cta_label is None
             else:
+                assert [item.interval for item in current_tier.prices] == ['year']
+                assert current_tier.action == 'current'
                 assert current_tier.compact is True
                 assert all(item.cta_label is None for item in current_tier.prices)
         if plan == 'basic':
             assert next(tier for tier in built.tiers if tier.is_current).compact is True
+
+
+def test_yearly_subscriber_with_failed_price_retrieve_offers_no_prices():
+    rows, recognized = ladder_catalog()
+
+    def retrieve(key):
+        if key == 'price_plus_year':
+            raise RuntimeError('stripe down')
+        return rows[key]
+
+    built = build_storefront(
+        catalog_revision=catalog.CATALOG_REVISION,
+        ladder=load_ladder(),
+        bindings=list(rows),
+        recognized=recognized,
+        subscription=Subscription(
+            plan=PlanType.plus,
+            current_price_id='price_plus_year',
+            cancel_at_period_end=False,
+            current_period_end=PERIOD_END,
+        ),
+        retrieve_price=retrieve,
+        purchasable=lambda key: True,
+        usage=StorefrontUsage(),
+    )
+    current = next(tier for tier in built.tiers if tier.is_current)
+    assert built.current.interval is None
+    assert current.plan_id == 'plus'
+    assert current.action == 'current'
+    assert current.cta_label is None
+    assert current.prices == []
+    assert current.bullets == []
 
 
 def _scenario(name):
@@ -345,10 +410,22 @@ def _scenario(name):
         return sheet_for('architect', price_id='price_architect_month', source='settings', **common)
     if name == 'legacy_unlimited':
         rows = dict(rows)
-        rows['price_legacy_unlimited'] = price('price_legacy_unlimited', 2999)
+        rows['price_legacy_unlimited_v2'] = price('price_legacy_unlimited_v2', 2999)
+        return sheet_for(
+            'unlimited_v2',
+            price_id='price_legacy_unlimited_v2',
+            rows=rows,
+            bindings=list(recognized and common['bindings']),
+            recognized=recognized,
+            source='settings',
+            period_end=PERIOD_END,
+        )
+    if name == 'legacy_neo':
+        rows = dict(rows)
+        rows['price_legacy_neo'] = price('price_legacy_neo', 1999)
         return sheet_for(
             'unlimited',
-            price_id='price_legacy_unlimited',
+            price_id='price_legacy_neo',
             rows=rows,
             bindings=list(recognized and common['bindings']),
             recognized=recognized,
@@ -372,6 +449,7 @@ SCENARIOS = (
     'pro_settings',
     'architect_settings',
     'legacy_unlimited',
+    'legacy_neo',
     'cancel_scheduled_plus',
 )
 
@@ -386,7 +464,8 @@ def test_golden_storefront_scenarios():
     assert free.header == 'Choose your plan'
     assert free.current.line == "You're on Free"
     assert [tier.plan_id for tier in free.tiers] == ['plus', 'basic', 'operator', 'architect']
-    assert next(tier for tier in free.tiers if tier.is_current).compact is True
+    free_card = next(tier for tier in free.tiers if tier.is_current)
+    assert free_card.compact is True and free_card.bullets == []
     assert rendered['free_budget80'].header == "You've used 80% of this month's usage"
     assert rendered['free_budget80'].usage.meter_line == ('80% used · about 3 hours of recording left · resets Nov 1')
     assert rendered['free_budget80'].usage.nudge_line == ("You've used 80% of this month's usage · resets Nov 1")
@@ -397,7 +476,7 @@ def test_golden_storefront_scenarios():
     screen = next(tier for tier in rendered['free_pro_gate_screen'].tiers if tier.plan_id == 'operator')
     assert screen.bullets[0] == "On your Mac, Omi can see what you're working on and help with it"
     assert rendered['free_mcp_cap'].header == "You've used today's 100 MCP requests"
-    assert all('MCP requests' in tier.bullets[0] for tier in rendered['free_mcp_cap'].tiers)
+    assert all('MCP requests' in tier.bullets[0] for tier in rendered['free_mcp_cap'].tiers if not tier.is_current)
     plus80 = rendered['plus_budget80']
     assert plus80.current.line == "You're on Plus · $19.99/mo · renews Nov 1"
     assert plus80.usage.meter_line == '80% used · about 20 hours of recording left · resets Nov 1'
@@ -405,21 +484,22 @@ def test_golden_storefront_scenarios():
     assert annual.current.line == "You're on Plus · $199.90/yr · renews Nov 1"
     plus_card = next(tier for tier in annual.tiers if tier.plan_id == 'plus')
     assert [item.interval for item in plus_card.prices] == ['year']
-    assert plus_card.compact is True and plus_card.cta_label is None
+    assert plus_card.compact is True and plus_card.cta_label is None and plus_card.bullets == []
     assert all(item.cta_label is None for item in plus_card.prices)
     switched = rendered['plus_monthly_yearly_toggle']
     assert switched.header == 'Choose your plan'
     plus_month = next(tier for tier in switched.tiers if tier.plan_id == 'plus')
-    assert plus_month.action == 'current' and plus_month.cta_label is None and plus_month.compact is False
-    assert next(item for item in plus_month.prices if item.interval == 'month').cta_label is None
-    assert next(item for item in plus_month.prices if item.interval == 'year').cta_label == (
-        'Switch to yearly · save $39.98'
-    )
+    assert plus_month.action == 'checkout' and plus_month.cta_label is None and plus_month.compact is False
+    assert plus_month.bullets == []
+    assert [item.interval for item in plus_month.prices] == ['year']
+    assert plus_month.prices[0].cta_label == 'Switch to yearly · save $39.98'
     assert rendered['pro_settings'].current.line == "You're on Pro · $49.99/mo · renews Nov 1"
     assert rendered['architect_settings'].current.line == "You're on Architect · $199.00/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
     assert legacy.header == 'Your plan'
-    assert legacy.current.line == "You're on Neo · $29.99/mo · renews Nov 1"
+    assert legacy.current.plan_id == 'unlimited_v2'
+    assert legacy.current.name == 'Unlimited'
+    assert legacy.current.line == "You're on Unlimited · $29.99/mo · renews Nov 1"
     assert legacy.current.legacy_note == "We don't sell this plan anymore, but yours stays exactly as it is."
     assert not any(tier.action == 'checkout' for tier in legacy.tiers)
     assert {tier.plan_id for tier in legacy.tiers if tier.action == 'none'} >= {
@@ -428,6 +508,13 @@ def test_golden_storefront_scenarios():
         'basic',
         'plus',
     }
+    neo = rendered['legacy_neo']
+    assert neo.header == 'Your plan'
+    assert neo.current.plan_id == 'unlimited'
+    assert neo.current.name == 'Neo'
+    assert neo.current.line == "You're on Neo · $19.99/mo · renews Nov 1"
+    assert neo.current.legacy_note == legacy.current.legacy_note
+    assert not any(tier.action == 'checkout' for tier in neo.tiers)
     cancelled = rendered['cancel_scheduled_plus']
     assert cancelled.header == 'Your Plus plan ends Nov 1'
     assert cancelled.current.line == "You're on Plus · $19.99/mo"
@@ -435,14 +522,21 @@ def test_golden_storefront_scenarios():
     assert not any(tier.recommended for tier in cancelled.tiers)
     current_plus = next(tier for tier in cancelled.tiers if tier.is_current)
     assert current_plus.action == 'checkout' and current_plus.cta_label == 'Resubscribe'
-    assert current_plus.blocked_line is None and current_plus.compact is False
+    assert current_plus.blocked_line is None and current_plus.compact is False and current_plus.bullets == []
+    assert [item.price_id for item in current_plus.prices] == ['price_plus_month']
     assert all(item.cta_label is None for item in current_plus.prices)
+    assert cancelled.yearly_toggle_label is None
     assert all(
         tier.action == 'none' and tier.cta_label is None and tier.blocked_line == 'Resubscribe first to change plans'
         for tier in cancelled.tiers
         if not tier.is_current
     )
-    assert all(rendered[name].yearly_toggle_label == 'Yearly · 2 months free' for name in SCENARIOS)
+    assert all(tier.bullets == [] for sheet in rendered.values() for tier in sheet.tiers if tier.is_current)
+    assert all(
+        rendered[name].yearly_toggle_label == 'Yearly · 2 months free'
+        for name in SCENARIOS
+        if name != 'cancel_scheduled_plus'
+    )
     french = sheet_for('basic', locale='fr-FR', rows={}, bindings=[], recognized=[])
     assert french.header == 'Choose your plan'
 

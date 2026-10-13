@@ -45,6 +45,7 @@
         "architect": "About {hours} hours of recording a month, for all-day use on more than one device"
       },
       "per_day": {
+        "under_6_one": "about {n} hour a day",
         "under_6": "about {n} hours a day",
         "all_day": "enough to wear it all day",
         "multi_device": "for wearing it all day, every day, on more than one device"

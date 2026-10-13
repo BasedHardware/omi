@@ -14,7 +14,7 @@ class StorefrontPrice(BaseModel):
     subline: str | None = None
     renewal_line: str | None = None
     months_free: int | None = None
-    # Present only when this price overrides the tier CTA (switch to yearly).
+    # Present only when this price overrides the tier cta_label (switch to yearly).
     cta_label: str | None = None
 
     @model_serializer(mode='wrap')
@@ -38,7 +38,8 @@ class StorefrontTier(BaseModel):
     action: Literal['checkout', 'current', 'none']
     cta_label: str | None = None
     blocked_line: str | None = None
-    # True when this is the current plan and it has no button, so the client drops bullets.
+    # True when this is the current plan and it has no purchase button.
+    # Current cards send bullets: [] whether or not compact is true.
     compact: bool = False
     prices: list[StorefrontPrice]
 

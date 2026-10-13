@@ -54,26 +54,33 @@ rank or its stored price is not in `LADDER_V1_STRIPE_PRICES`.
 Legacy subscribers get no `checkout` on any card, including when cancellation
 is scheduled. Neo/Unlimited may see Pro and Architect as higher offers with
 `action: none`. Lower tiers are `none`. Each current plan id has one card.
-Legacy cards do not repeat ladder hours or bullets; the legacy sentence is
-`current.legacy_note`.
+Every `is_current` card sends `bullets: []`. The current line already says
+what they have, so clients do not use `compact` to drop bullets. Legacy cards
+do not repeat ladder hours; the legacy sentence is `current.legacy_note`.
 
-Same tier: an annual subscriber is not offered the monthly price. A monthly
-subscriber may still see the annual price. That yearly price carries
-`cta_label` `Switch to yearly · save {saving}` (`saving` is 12× the monthly
-amount minus the annual amount, formatted in the price currency). The tier
-button stays empty, so the current plan never says `Get {Plan}`. The current
-card sets `compact` when it has no tier button and no price CTA; the client
-drops bullets. A price CTA or Resubscribe leaves `compact` false and still
-sends no extra tagline.
+Same tier, monthly, and not cancel-scheduled: the current card is
+`action: checkout` with tier `cta_label: null`. Only its yearly price is
+offered, with price-level `cta_label` `Switch to yearly · save {saving}`
+(`saving` is 12× the monthly amount minus the annual amount, formatted in the
+price currency). A price-level `cta_label` overrides the tier label. The
+monthly price is not on that card. Same tier, annual: the monthly price is
+never offered, the card stays `action: current`, and there is no price CTA.
+`compact` is true only when the current card has no tier button and no price
+CTA.
 
 `cancel_at_period_end` on a non-legacy paid plan offers checkout only on the
-current tier, with tier `cta_label` `Resubscribe` on its current price. Every
-other tier is `action: none`, `cta_label: null`, and
-`blocked_line: "Resubscribe first to change plans"`. There is no switch-to-yearly
-label, no recommended badge, and the current tier is first. The header is
+current tier, with tier `cta_label` `Resubscribe` and only that tier's current
+`price_id`. `yearly_toggle_label` is null. There is no switch-to-yearly
+label, no recommended badge, and the current tier is first. Every other tier
+is `action: none`, `cta_label: null`, and
+`blocked_line: "Resubscribe first to change plans"`. The header is
 `Your {Plan} plan ends {date}` and the current line is
-`You're on {Plan} · {$price}/mo` (yearly: `{$price}/yr`). Free cancellation does
-not open checkout. Legacy cancellation still has no checkout anywhere.
+`You're on {Plan} · {$price}/mo` (yearly: `{$price}/yr`). Free cancellation
+does not open checkout. Legacy cancellation still has no checkout anywhere.
+
+If the current price cannot be retrieved, `current.interval` is null and the
+current card offers no prices, so a yearly subscriber is not shown a monthly
+price.
 
 `months_free` copy uses `1 month free` when the count is 1 and `{n} months free`
 otherwise, in both the yearly subline and `yearly_toggle_label`.
@@ -91,7 +98,8 @@ and Pro are hidden and Architect stays visible with `action: none`. Free is the
 zero monthly price. No amount is copied out of env or `proposed_prices`.
 
 `months_free` is `floor(12 − annual/monthly)` when that value is at least 1.
-`yearly_toggle_label` uses the smallest such value across tiers, or null.
+`yearly_toggle_label` uses the smallest such value across tiers, or null. It
+is also null while a non-legacy paid cancellation is scheduled.
 Yearly headlines are the annual amount divided by 12, half-up to cents.
 
 Recording hours are `floor_to_nice(budget × 0.85 / 130)`. Free is fixed at 15.
