@@ -320,10 +320,11 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert expected <= split.keys()
     assert expected <= combined.keys()
     reachability_expr = split["omi-llm-gateway-client-reachability"]["data"][0]["model"]["expr"]
-    assert "llm_gateway_chat_extraction_requests_total" in reachability_expr
-    assert "llm_gateway_circuit_open" in reachability_expr
-    assert 'outcome="success"' in reachability_expr
-    assert "llm_gateway_client_first_byte_seconds_bucket" in reachability_expr
+    # Only the initialized circuit gauge is a live client signal; the extraction and
+    # first-byte families had zero prod series for 10 days (2026-10-13 backtest).
+    assert reachability_expr == "max(llm_gateway_circuit_open) > bool 0"
+    assert "llm_gateway_chat_extraction_requests_total" not in reachability_expr
+    assert "llm_gateway_client_first_byte_seconds_bucket" not in reachability_expr
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
     assert endpoint_rule["noDataState"] == "Alerting"
     assert 'kube_endpoint_address{' in endpoint_rule["data"][0]["model"]["expr"]
@@ -683,12 +684,15 @@ STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
 STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session"}[6h]))'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable"}[6h]))'
 )
+# to_mode="unavailable" is the no-provider-left sentinel: it can never recover, so
+# including it made the rule fire on every evaluation (2026-10-13 replay).
 STT_FALLBACK_LEG_RECOVERED_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session",outcome="recovered"}[6h])) or sum by (to_mode) '
-    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session",'
+    'to_mode!="unavailable"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
     '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
