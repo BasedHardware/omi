@@ -275,7 +275,7 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
         # All reads, including admission's dirty count, precede settlement writes.
-        if reclaimed:
+        if old_spend is not None and isinstance(started, datetime):
             source = {
                 'status': 'failed',
                 'reason': 'abandoned',
