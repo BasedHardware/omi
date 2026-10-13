@@ -340,3 +340,48 @@ def test_search_files_tool_gateway_attachment_rejection_stays_soft(monkeypatch, 
         record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
         for record in caplog.records
     )
+
+
+def test_search_files_tool_gateway_nested_attachment_rejection_stays_soft(monkeypatch, caplog):
+    # The gateway preserves a bounded attachment-specific classification for
+    # nested attachment params (messages[...]....file.file_id): an unreadable
+    # user file must stay soft, not collapse into invalid_messages.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'invalid_attachment',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_gateway_injected_option_rejection_stays_a_server_error(monkeypatch, caplog):
+    # The gateway injects reasoning_effort on the file-chat lanes; a provider
+    # rejecting that option is a gateway-config fault and stays error-level.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'unsupported_reasoning_effort',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'gateway-injected option rejection must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'

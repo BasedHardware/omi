@@ -1162,6 +1162,16 @@ _PROVIDER_REJECTION_PARAMS = {
     'stream_options': 'stream',
 }
 
+# Attachment-shaped param suffixes under ``messages``: rejections naming them
+# are about the user's file, not the request the gateway constructed.
+_ATTACHMENT_PARAM_SUFFIXES = (
+    '.file.file_id',
+    '.file',
+    '.file_id',
+    '.image_url',
+    '.image_url.url',
+)
+
 
 def _provider_rejection(body: bytes) -> ProviderRejection:
     """Extract only allowlisted provider error semantics from a bounded body preview."""
@@ -1186,6 +1196,16 @@ def _provider_rejection(body: bytes) -> ProviderRejection:
         prefix = 'invalid'
     if prefix is not None:
         raw_param = error.get('param')
+        if isinstance(raw_param, str) and raw_param.endswith(_ATTACHMENT_PARAM_SUFFIXES):
+            # Attachment-shaped params (stale file id, unreadable image) live
+            # under ``messages`` but are about the user's file, not our request
+            # shape. Keep them distinguishable so composition boundaries do
+            # not report unreadable input as a server fault.
+            return (
+                ProviderRejection.INVALID_ATTACHMENT
+                if prefix == 'invalid'
+                else ProviderRejection.UNSUPPORTED_ATTACHMENT
+            )
         root_param = raw_param.split('[', 1)[0].split('.', 1)[0] if isinstance(raw_param, str) else ''
         bounded_param = _PROVIDER_REJECTION_PARAMS.get(root_param, 'other')
         return ProviderRejection(f'{prefix}_{bounded_param}')
