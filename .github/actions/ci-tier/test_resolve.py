@@ -62,7 +62,7 @@ class CITierTests(unittest.TestCase):
             if fail:
                 self.assertIn("could not be read", result.stderr)
 
-    def test_mobile_aggregate_defers_only_affected_forks(self):
+    def test_mobile_aggregate_requires_selected_dart_on_forks(self):
         lines = MOBILE_WORKFLOW.read_text().splitlines()
         start = lines.index("      - name: Aggregate conditional mobile checks")
         body_start = lines.index("        run: |", start) + 1
@@ -79,6 +79,7 @@ class CITierTests(unittest.TestCase):
                 FULL_CI="false",
                 HAS_GENERATED="false",
                 HAS_DART="false",
+                DART_EXPECTED="false",
                 HAS_JOURNEYS="false",
                 HAS_ANDROID="false",
                 HAS_IOS="false",
@@ -97,15 +98,28 @@ class CITierTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("no mobile heavy checks selected", result.stdout)
             env["HAS_DART"] = "true"
+            for full_ci in ("false", "true"):
+                env["FULL_CI"] = full_ci
+                for conclusion in ("skipped", "failure", "cancelled", ""):
+                    with self.subTest(full_ci=full_ci, conclusion=conclusion):
+                        env["ANALYZE_AND_TEST_RESULT"] = conclusion
+                        result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn("Required Dart Analyze & Tests did not pass", result.stderr)
+                env["ANALYZE_AND_TEST_RESULT"] = "success"
+                result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            # A cheap-tier fork can still defer expensive jobs after Dart passes.
+            env.update(FULL_CI="false", HAS_IOS="true")
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("::notice title=Heavy CI deferred::", result.stdout)
             self.assertIn("a maintainer adds label ci:full, then Re-run all jobs", result.stdout)
             self.assertIn("Heavy CI deferred:", Path(env["GITHUB_STEP_SUMMARY"]).read_text())
-            env["ANALYZE_AND_TEST_RESULT"] = "success"
+            # Nightly Dart is required even when the latest commit is unrelated.
+            env.update(FULL_CI="true", HAS_IOS="false", HAS_DART="false", DART_EXPECTED="true", ANALYZE_AND_TEST_RESULT="skipped")
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 1)
-            self.assertIn("must be skipped", result.stderr)
 
 
 if __name__ == "__main__":
