@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:quick_actions/quick_actions.dart';
 
@@ -26,14 +27,23 @@ const _kDeviceSettings = 'device_settings';
 
 class QuickActionsService {
   static final QuickActionsService _instance = QuickActionsService._();
-  QuickActionsService._();
+  QuickActionsService._()
+      : _quickActions = const QuickActions(),
+        _isSupported = Platform.isIOS;
+
+  @visibleForTesting
+  QuickActionsService.forTesting({required QuickActions quickActions})
+      : _quickActions = quickActions,
+        _isSupported = true;
   static QuickActionsService get instance => _instance;
 
-  final QuickActions _quickActions = const QuickActions();
+  final QuickActions _quickActions;
+  final bool _isSupported;
   bool _initialized = false;
+  List<(String, String)>? _publishedShortcuts;
 
   void initialize(BuildContext context) {
-    if (!Platform.isIOS || _initialized) return;
+    if (!_isSupported || _initialized) return;
     _initialized = true;
 
     _quickActions.initialize((shortcutType) {
@@ -46,10 +56,11 @@ class QuickActionsService {
   // Called from HomePage.dispose() so a rebuilt HomePage can re-register the callback.
   void reset() {
     _initialized = false;
+    _publishedShortcuts = null;
   }
 
   void updateShortcuts(BuildContext context) {
-    if (!Platform.isIOS) return;
+    if (!_isSupported) return;
     _updateShortcuts(context);
   }
 
@@ -79,7 +90,14 @@ class QuickActionsService {
       ShortcutItem(type: _kAddTask, localizedTitle: l10n.addTask),
     ];
 
-    _quickActions.setShortcutItems(items);
+    final projection = items.map((item) => (item.type, item.localizedTitle)).toList();
+    if (listEquals(projection, _publishedShortcuts)) return;
+    _publishedShortcuts = projection;
+    _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
+      // Retry failed publication without invalidating a newer request.
+      if (identical(_publishedShortcuts, projection)) _publishedShortcuts = null;
+      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+    });
   }
 
   void _handleShortcut(String shortcutType) {

@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -102,8 +103,39 @@ class _NoopBle implements CaptureBleListeners {
   void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
 }
 
+class _MutableExternalActions extends NoopCaptureExternalActions {
+  bool credits = false;
+  String? top;
+  @override
+  bool get isOutOfCredits => credits;
+  @override
+  String? get topConversationId => top;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('dependency binding is quiet while real mutable capture projections propagate', () {
+    final provider = composeCaptureProvider(_deps());
+    addTearDown(provider.dispose);
+    final actions = _MutableExternalActions();
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    for (var i = 0; i < 4; i++) {
+      provider.updateExternalActions(actions);
+    }
+    expect(notifications, 0);
+    actions.credits = true;
+    provider.updateExternalActions(actions);
+    expect(notifications, 1);
+    actions.top = 'conversation-1';
+    provider.updateExternalActions(actions);
+    expect(notifications, 2);
+    provider.updateExternalActions(actions);
+    expect(notifications, 2);
+    provider.updateExternalActions(null);
+    expect(notifications, 3);
+  });
 
   test('composeCaptureProvider routes wal/mic/auth/clock/scheduling/connectivity/prefs/ble/socket', () {
     final source = File('lib/services/capture/capture_composition.dart').readAsStringSync();

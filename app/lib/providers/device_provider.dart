@@ -295,7 +295,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
     captureProvider = provider;
     localRecordingsProvider = recordingsProvider;
-    notifyListeners();
+    // Action targets only: device read models do not derive from these dependencies.
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {

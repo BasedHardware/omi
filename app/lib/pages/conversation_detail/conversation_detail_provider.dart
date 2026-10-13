@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -882,9 +883,23 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  String _boundDetailProjection = '[[],null,false]';
+
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
+    // Avoid catalog/transcript work until a route consumes detail.
+    if (!hasListeners) return;
+    // Models mutate in place; identity equality would miss real edits. Include
+    // the catalog used by appsList/findApp and only the selected conversation.
+    final selected = conversationOrNull;
+    final projection = jsonEncode([
+      appsList.map((app) => app.toJson()).toList(),
+      selected?.toJson(),
+      selected == null ? false : _speakerConversationDeleted(selected.id),
+    ]);
+    if (projection == _boundDetailProjection) return;
+    _boundDetailProjection = projection;
     notifyListeners();
   }
 
@@ -1096,7 +1111,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return true;
     } catch (err, stacktrace) {
-      print(err);
+      Logger.debug('Conversation reprocess failed: $err');
       var conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(conversation);
       await PlatformManager.instance.crashReporter.reportCrash(
         err,
