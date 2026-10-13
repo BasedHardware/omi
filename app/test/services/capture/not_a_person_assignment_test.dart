@@ -33,8 +33,8 @@ class _Ble implements CaptureBleListeners {
   void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
 }
 
-TranscriptSegment _segment(String id) =>
-    TranscriptSegment(id: id, text: 'TV', speaker: 'SPEAKER_04', isUser: true, start: 0, end: 2, translations: []);
+TranscriptSegment _segment(String id) => TranscriptSegment(
+    id: id, text: 'TV', speaker: 'SPEAKER_04', isUser: true, personId: null, start: 0, end: 2, translations: []);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
