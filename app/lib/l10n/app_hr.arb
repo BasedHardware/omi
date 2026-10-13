@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "Upravo sam ručao sa Sam, u lipnju se seli u Lisabon! Podsjeti me da pošaljem prezentaciju timu do petka i da kupim mlijeko na putu kući.",
     "onboardingActDictateHint": "Dodirnite kvačicu kad završite",
     "onboardingActPhoneMic": "Mikrofon telefona",
-    "onboardingActWriting": "Pišem vaše bilješke…",
-    "onboardingActNotesLabel": "Vaše bilješke",
-    "onboardingActTasksLabel": "Vaši zadaci",
+    "onboardingActWriting": "Sažimamo…",
+    "onboardingActNotesLabel": "Vaš dan, ukratko",
+    "onboardingActTasksLabel": "Omi je uhvatio vaše zadatke",
     "onboardingActYourWords": "Evo što ste rekli",
     "onboardingActCongratsTitle": "Sve je spremno, {name}",
     "onboardingActCongratsBody": "Nosite Omi tijekom dana. Vaši razgovori pojavit će se na početnom zaslonu.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Dobro došli u Omi",
     "onboardingWelcomeCardBody": "Nosite Omi i pričajte kao i inače. Svaki razgovor ovdje postaje bilješke, zadaci i sjećanja.",
     "onboardingActDemoTitle": "Ručak sa Sam",
-    "onboardingActDemoSummary": "Sam se u lipnju seli u Lisabon.",
+    "onboardingActDemoSummary": "Ručak sa Sam, koja se u lipnju seli u Lisabon. Želite poslati prezentaciju timu do petka i kupiti mlijeko na putu kući.",
     "onboardingActDemoTask1": "Poslati prezentaciju timu do petka",
-    "onboardingActDemoTask2": "Kupiti mlijeko na putu kući"
+    "onboardingActDemoTask2": "Kupiti mlijeko na putu kući",
+    "onboardingActJustNow": "Upravo sada",
+    "onboardingActSavedToTasks": "Spremljeno u vaše zadatke"
 }

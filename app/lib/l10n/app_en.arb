@@ -15846,15 +15846,15 @@
     "@onboardingActPhoneMic": {
         "description": "Activation: which microphone is listening (phone)"
     },
-    "onboardingActWriting": "Writing your notes…",
+    "onboardingActWriting": "Summarizing…",
     "@onboardingActWriting": {
         "description": "Activation: shown while Omi processes the dictation"
     },
-    "onboardingActNotesLabel": "Your notes",
+    "onboardingActNotesLabel": "Your day, summarized",
     "@onboardingActNotesLabel": {
         "description": "Activation: small label above the generated summary"
     },
-    "onboardingActTasksLabel": "Your tasks",
+    "onboardingActTasksLabel": "Omi caught your to-dos",
     "@onboardingActTasksLabel": {
         "description": "Activation: small label above the generated tasks"
     },
@@ -15896,7 +15896,7 @@
     "@onboardingActDemoTitle": {
         "description": "Activation slide illustration: example note title"
     },
-    "onboardingActDemoSummary": "Sam is moving to Lisbon in June.",
+    "onboardingActDemoSummary": "Lunch with Sam, who's moving to Lisbon in June. You want to send the deck to your team by Friday and grab milk on the way home.",
     "@onboardingActDemoSummary": {
         "description": "Activation slide illustration: example summary line"
     },
@@ -15907,5 +15907,13 @@
     "onboardingActDemoTask2": "Grab milk on the way home",
     "@onboardingActDemoTask2": {
         "description": "Activation slide illustration: example task"
+    },
+    "onboardingActJustNow": "Just now",
+    "@onboardingActJustNow": {
+        "description": "Time label on the first note Omi wrote in onboarding"
+    },
+    "onboardingActSavedToTasks": "Saved to your tasks",
+    "@onboardingActSavedToTasks": {
+        "description": "Confirmation under the to-dos Omi found in onboarding"
     }
 }

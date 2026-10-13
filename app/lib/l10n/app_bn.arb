@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "এইমাত্র স্যামের সাথে লাঞ্চ করলাম, ও জুনে লিসবনে চলে যাচ্ছে! মনে করিয়ে দিও শুক্রবারের মধ্যে টিমকে ডেকটা পাঠাতে, আর ফেরার পথে দুধ কিনতে।",
     "onboardingActDictateHint": "শেষ হলে টিক চিহ্নে ট্যাপ করুন",
     "onboardingActPhoneMic": "ফোনের মাইক্রোফোন",
-    "onboardingActWriting": "আপনার নোট লেখা হচ্ছে…",
-    "onboardingActNotesLabel": "আপনার নোট",
-    "onboardingActTasksLabel": "আপনার কাজ",
+    "onboardingActWriting": "সারাংশ তৈরি হচ্ছে…",
+    "onboardingActNotesLabel": "আপনার দিন, সংক্ষেপে",
+    "onboardingActTasksLabel": "Omi আপনার কাজগুলো ধরে ফেলেছে",
     "onboardingActYourWords": "আপনি যা বললেন",
     "onboardingActCongratsTitle": "সব তৈরি, {name}",
     "onboardingActCongratsBody": "সারাদিন Omi পরে থাকুন। আপনার কথোপকথন হোমে দেখা যাবে।",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Omi-তে স্বাগতম",
     "onboardingWelcomeCardBody": "Omi পরে স্বাভাবিকভাবে কথা বলুন। প্রতিটি কথোপকথন এখানেই নোট, কাজ আর স্মৃতিতে পরিণত হবে।",
     "onboardingActDemoTitle": "স্যামের সাথে লাঞ্চ",
-    "onboardingActDemoSummary": "স্যাম জুনে লিসবনে চলে যাচ্ছে।",
+    "onboardingActDemoSummary": "স্যামের সঙ্গে দুপুরের খাবার, যিনি জুনে লিসবনে চলে যাচ্ছেন। শুক্রবারের মধ্যে টিমকে ডেক পাঠাতে আর বাড়ি ফেরার পথে দুধ কিনতে হবে।",
     "onboardingActDemoTask1": "শুক্রবারের মধ্যে টিমকে ডেক পাঠানো",
-    "onboardingActDemoTask2": "ফেরার পথে দুধ কেনা"
+    "onboardingActDemoTask2": "ফেরার পথে দুধ কেনা",
+    "onboardingActJustNow": "এইমাত্র",
+    "onboardingActSavedToTasks": "আপনার কাজের তালিকায় সংরক্ষিত"
 }

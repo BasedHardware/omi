@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "방금 샘이랑 점심 먹었어. 6월에 리스본으로 이사 간대! 금요일까지 팀에 발표 자료 보내는 거랑, 집에 가는 길에 우유 사는 거 알려 줘.",
     "onboardingActDictateHint": "다 말했으면 체크를 누르세요",
     "onboardingActPhoneMic": "휴대폰 마이크",
-    "onboardingActWriting": "노트를 작성하는 중…",
-    "onboardingActNotesLabel": "내 노트",
-    "onboardingActTasksLabel": "할 일",
+    "onboardingActWriting": "요약하는 중…",
+    "onboardingActNotesLabel": "오늘 하루 요약",
+    "onboardingActTasksLabel": "Omi가 할 일을 찾았어요",
     "onboardingActYourWords": "이렇게 말했어요",
     "onboardingActCongratsTitle": "{name}님, 준비가 끝났어요",
     "onboardingActCongratsBody": "하루 종일 Omi를 착용하세요. 대화는 홈에 표시돼요.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Omi에 오신 것을 환영해요",
     "onboardingWelcomeCardBody": "Omi를 착용하고 평소처럼 대화하세요. 모든 대화가 여기서 노트, 할 일, 기억이 돼요.",
     "onboardingActDemoTitle": "샘과 점심",
-    "onboardingActDemoSummary": "샘은 6월에 리스본으로 이사해요.",
+    "onboardingActDemoSummary": "6월에 리스본으로 이사하는 샘과 점심. 금요일까지 팀에 자료를 보내고, 집에 가는 길에 우유를 사야 해요.",
     "onboardingActDemoTask1": "금요일까지 팀에 발표 자료 보내기",
-    "onboardingActDemoTask2": "집에 가는 길에 우유 사기"
+    "onboardingActDemoTask2": "집에 가는 길에 우유 사기",
+    "onboardingActJustNow": "방금",
+    "onboardingActSavedToTasks": "할 일에 저장됨"
 }

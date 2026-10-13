@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "เพิ่งกินข้าวกลางวันกับแซม เธอจะย้ายไปลิสบอนเดือนมิถุนายน! เตือนฉันส่งสไลด์ให้ทีมภายในวันศุกร์ แล้วก็ซื้อนมตอนกลับบ้านด้วย",
     "onboardingActDictateHint": "แตะเครื่องหมายถูกเมื่อพูดเสร็จ",
     "onboardingActPhoneMic": "ไมโครโฟนโทรศัพท์",
-    "onboardingActWriting": "กำลังเขียนโน้ตของคุณ…",
-    "onboardingActNotesLabel": "โน้ตของคุณ",
-    "onboardingActTasksLabel": "งานของคุณ",
+    "onboardingActWriting": "กำลังสรุป…",
+    "onboardingActNotesLabel": "สรุปวันของคุณ",
+    "onboardingActTasksLabel": "Omi จับสิ่งที่ต้องทำให้แล้ว",
     "onboardingActYourWords": "สิ่งที่คุณพูด",
     "onboardingActCongratsTitle": "พร้อมแล้ว {name}",
     "onboardingActCongratsBody": "สวม Omi ตลอดวัน บทสนทนาของคุณจะแสดงที่หน้าหลัก",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "ยินดีต้อนรับสู่ Omi",
     "onboardingWelcomeCardBody": "สวม Omi แล้วคุยตามปกติ ทุกบทสนทนาจะกลายเป็นโน้ต งาน และความทรงจำตรงนี้",
     "onboardingActDemoTitle": "มื้อกลางวันกับแซม",
-    "onboardingActDemoSummary": "แซมจะย้ายไปลิสบอนเดือนมิถุนายน",
+    "onboardingActDemoSummary": "ทานข้าวกลางวันกับแซมที่จะย้ายไปลิสบอนเดือนมิถุนายน คุณต้องส่งสไลด์ให้ทีมภายในวันศุกร์ และซื้อนมระหว่างทางกลับบ้าน",
     "onboardingActDemoTask1": "ส่งสไลด์ให้ทีมภายในวันศุกร์",
-    "onboardingActDemoTask2": "ซื้อนมตอนกลับบ้าน"
+    "onboardingActDemoTask2": "ซื้อนมตอนกลับบ้าน",
+    "onboardingActJustNow": "เมื่อสักครู่",
+    "onboardingActSavedToTasks": "บันทึกไว้ในงานของคุณแล้ว"
 }

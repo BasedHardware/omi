@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Tocmai am luat prânzul cu Sam, se mută la Lisabona în iunie! Amintește-mi să trimit prezentarea echipei până vineri și să iau lapte în drum spre casă.",
     "onboardingActDictateHint": "Atinge bifa când ai terminat",
     "onboardingActPhoneMic": "Microfonul telefonului",
-    "onboardingActWriting": "Îți scriu notițele…",
-    "onboardingActNotesLabel": "Notițele tale",
-    "onboardingActTasksLabel": "Sarcinile tale",
+    "onboardingActWriting": "Rezumăm…",
+    "onboardingActNotesLabel": "Ziua ta, pe scurt",
+    "onboardingActTasksLabel": "Omi ți-a prins sarcinile",
     "onboardingActYourWords": "Iată ce ai spus",
     "onboardingActCongratsTitle": "Totul e gata, {name}",
     "onboardingActCongratsBody": "Poartă Omi toată ziua. Conversațiile tale apar pe ecranul principal.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Bun venit în Omi",
     "onboardingWelcomeCardBody": "Poartă Omi și vorbește ca de obicei. Fiecare conversație devine aici notițe, sarcini și amintiri.",
     "onboardingActDemoTitle": "Prânz cu Sam",
-    "onboardingActDemoSummary": "Sam se mută la Lisabona în iunie.",
+    "onboardingActDemoSummary": "Prânz cu Sam, care se mută la Lisabona în iunie. Vrei să trimiți prezentarea echipei până vineri și să iei lapte în drum spre casă.",
     "onboardingActDemoTask1": "Trimite prezentarea echipei până vineri",
-    "onboardingActDemoTask2": "Ia lapte în drum spre casă"
+    "onboardingActDemoTask2": "Ia lapte în drum spre casă",
+    "onboardingActJustNow": "Chiar acum",
+    "onboardingActSavedToTasks": "Salvat în sarcinile tale"
 }

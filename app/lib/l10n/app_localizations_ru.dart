@@ -13127,13 +13127,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingActPhoneMic => 'Микрофон телефона';
 
   @override
-  String get onboardingActWriting => 'Пишу ваши заметки…';
+  String get onboardingActWriting => 'Подводим итоги…';
 
   @override
-  String get onboardingActNotesLabel => 'Ваши заметки';
+  String get onboardingActNotesLabel => 'Ваш день вкратце';
 
   @override
-  String get onboardingActTasksLabel => 'Ваши задачи';
+  String get onboardingActTasksLabel => 'Omi нашёл ваши дела';
 
   @override
   String get onboardingActYourWords => 'Вот что вы сказали';
@@ -13163,11 +13163,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingActDemoTitle => 'Обед с Сэм';
 
   @override
-  String get onboardingActDemoSummary => 'Сэм в июне переезжает в Лиссабон.';
+  String get onboardingActDemoSummary =>
+      'Обед с Сэм, которая в июне переезжает в Лиссабон. Нужно отправить презентацию команде до пятницы и купить молоко по дороге домой.';
 
   @override
   String get onboardingActDemoTask1 => 'Отправить презентацию команде до пятницы';
 
   @override
   String get onboardingActDemoTask2 => 'Купить молоко по дороге домой';
+
+  @override
+  String get onboardingActJustNow => 'Только что';
+
+  @override
+  String get onboardingActSavedToTasks => 'Сохранено в ваши задачи';
 }

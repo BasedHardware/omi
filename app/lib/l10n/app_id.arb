@@ -4058,9 +4058,9 @@
     "onboardingActDictateExample": "Baru makan siang sama Sam, dia pindah ke Lisbon bulan Juni! Ingatkan aku kirim deck ke tim sebelum Jumat, dan beli susu di jalan pulang.",
     "onboardingActDictateHint": "Ketuk centang jika sudah selesai",
     "onboardingActPhoneMic": "Mikrofon ponsel",
-    "onboardingActWriting": "Menulis catatan Anda…",
-    "onboardingActNotesLabel": "Catatan Anda",
-    "onboardingActTasksLabel": "Tugas Anda",
+    "onboardingActWriting": "Merangkum…",
+    "onboardingActNotesLabel": "Harimu, dirangkum",
+    "onboardingActTasksLabel": "Omi menangkap tugasmu",
     "onboardingActYourWords": "Ini yang Anda katakan",
     "onboardingActCongratsTitle": "Semua siap, {name}",
     "onboardingActCongratsBody": "Pakai Omi sepanjang hari. Percakapan Anda muncul di Beranda.",
@@ -4069,7 +4069,9 @@
     "onboardingWelcomeCardTitle": "Selamat datang di Omi",
     "onboardingWelcomeCardBody": "Pakai Omi dan bicara seperti biasa. Setiap percakapan menjadi catatan, tugas, dan kenangan di sini.",
     "onboardingActDemoTitle": "Makan siang dengan Sam",
-    "onboardingActDemoSummary": "Sam pindah ke Lisbon bulan Juni.",
+    "onboardingActDemoSummary": "Makan siang dengan Sam, yang pindah ke Lisbon bulan Juni. Kamu mau kirim deck ke tim sebelum Jumat dan beli susu di jalan pulang.",
     "onboardingActDemoTask1": "Kirim deck ke tim sebelum Jumat",
-    "onboardingActDemoTask2": "Beli susu di jalan pulang"
+    "onboardingActDemoTask2": "Beli susu di jalan pulang",
+    "onboardingActJustNow": "Baru saja",
+    "onboardingActSavedToTasks": "Disimpan ke tugasmu"
 }

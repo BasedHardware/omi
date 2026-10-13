@@ -13136,13 +13136,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingActPhoneMic => 'Microfonul telefonului';
 
   @override
-  String get onboardingActWriting => 'Îți scriu notițele…';
+  String get onboardingActWriting => 'Rezumăm…';
 
   @override
-  String get onboardingActNotesLabel => 'Notițele tale';
+  String get onboardingActNotesLabel => 'Ziua ta, pe scurt';
 
   @override
-  String get onboardingActTasksLabel => 'Sarcinile tale';
+  String get onboardingActTasksLabel => 'Omi ți-a prins sarcinile';
 
   @override
   String get onboardingActYourWords => 'Iată ce ai spus';
@@ -13172,11 +13172,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingActDemoTitle => 'Prânz cu Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Sam se mută la Lisabona în iunie.';
+  String get onboardingActDemoSummary =>
+      'Prânz cu Sam, care se mută la Lisabona în iunie. Vrei să trimiți prezentarea echipei până vineri și să iei lapte în drum spre casă.';
 
   @override
   String get onboardingActDemoTask1 => 'Trimite prezentarea echipei până vineri';
 
   @override
   String get onboardingActDemoTask2 => 'Ia lapte în drum spre casă';
+
+  @override
+  String get onboardingActJustNow => 'Chiar acum';
+
+  @override
+  String get onboardingActSavedToTasks => 'Salvat în sarcinile tale';
 }

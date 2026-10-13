@@ -13013,13 +13013,13 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingActPhoneMic => 'ไมโครโฟนโทรศัพท์';
 
   @override
-  String get onboardingActWriting => 'กำลังเขียนโน้ตของคุณ…';
+  String get onboardingActWriting => 'กำลังสรุป…';
 
   @override
-  String get onboardingActNotesLabel => 'โน้ตของคุณ';
+  String get onboardingActNotesLabel => 'สรุปวันของคุณ';
 
   @override
-  String get onboardingActTasksLabel => 'งานของคุณ';
+  String get onboardingActTasksLabel => 'Omi จับสิ่งที่ต้องทำให้แล้ว';
 
   @override
   String get onboardingActYourWords => 'สิ่งที่คุณพูด';
@@ -13048,11 +13048,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingActDemoTitle => 'มื้อกลางวันกับแซม';
 
   @override
-  String get onboardingActDemoSummary => 'แซมจะย้ายไปลิสบอนเดือนมิถุนายน';
+  String get onboardingActDemoSummary =>
+      'ทานข้าวกลางวันกับแซมที่จะย้ายไปลิสบอนเดือนมิถุนายน คุณต้องส่งสไลด์ให้ทีมภายในวันศุกร์ และซื้อนมระหว่างทางกลับบ้าน';
 
   @override
   String get onboardingActDemoTask1 => 'ส่งสไลด์ให้ทีมภายในวันศุกร์';
 
   @override
   String get onboardingActDemoTask2 => 'ซื้อนมตอนกลับบ้าน';
+
+  @override
+  String get onboardingActJustNow => 'เมื่อสักครู่';
+
+  @override
+  String get onboardingActSavedToTasks => 'บันทึกไว้ในงานของคุณแล้ว';
 }

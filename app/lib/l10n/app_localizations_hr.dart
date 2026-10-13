@@ -13114,13 +13114,13 @@ class AppLocalizationsHr extends AppLocalizations {
   String get onboardingActPhoneMic => 'Mikrofon telefona';
 
   @override
-  String get onboardingActWriting => 'Pišem vaše bilješke…';
+  String get onboardingActWriting => 'Sažimamo…';
 
   @override
-  String get onboardingActNotesLabel => 'Vaše bilješke';
+  String get onboardingActNotesLabel => 'Vaš dan, ukratko';
 
   @override
-  String get onboardingActTasksLabel => 'Vaši zadaci';
+  String get onboardingActTasksLabel => 'Omi je uhvatio vaše zadatke';
 
   @override
   String get onboardingActYourWords => 'Evo što ste rekli';
@@ -13150,11 +13150,18 @@ class AppLocalizationsHr extends AppLocalizations {
   String get onboardingActDemoTitle => 'Ručak sa Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Sam se u lipnju seli u Lisabon.';
+  String get onboardingActDemoSummary =>
+      'Ručak sa Sam, koja se u lipnju seli u Lisabon. Želite poslati prezentaciju timu do petka i kupiti mlijeko na putu kući.';
 
   @override
   String get onboardingActDemoTask1 => 'Poslati prezentaciju timu do petka';
 
   @override
   String get onboardingActDemoTask2 => 'Kupiti mlijeko na putu kući';
+
+  @override
+  String get onboardingActJustNow => 'Upravo sada';
+
+  @override
+  String get onboardingActSavedToTasks => 'Spremljeno u vaše zadatke';
 }

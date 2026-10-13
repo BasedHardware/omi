@@ -12874,13 +12874,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingActPhoneMic => '手机麦克风';
 
   @override
-  String get onboardingActWriting => '正在整理你的笔记…';
+  String get onboardingActWriting => '正在总结…';
 
   @override
-  String get onboardingActNotesLabel => '你的笔记';
+  String get onboardingActNotesLabel => '你的一天，总结好了';
 
   @override
-  String get onboardingActTasksLabel => '你的待办';
+  String get onboardingActTasksLabel => 'Omi 记下了你的待办';
 
   @override
   String get onboardingActYourWords => '你说的内容';
@@ -12909,11 +12909,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingActDemoTitle => '和 Sam 吃午饭';
 
   @override
-  String get onboardingActDemoSummary => 'Sam 六月要搬去里斯本。';
+  String get onboardingActDemoSummary => '和 Sam 吃了午饭，她六月要搬去里斯本。你打算周五前把演示稿发给团队，回家路上买牛奶。';
 
   @override
   String get onboardingActDemoTask1 => '周五前把演示文稿发给团队';
 
   @override
   String get onboardingActDemoTask2 => '回家路上买牛奶';
+
+  @override
+  String get onboardingActJustNow => '刚刚';
+
+  @override
+  String get onboardingActSavedToTasks => '已保存到你的任务';
 }

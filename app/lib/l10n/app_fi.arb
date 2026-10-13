@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Söin juuri lounasta Samin kanssa, hän muuttaa kesäkuussa Lissaboniin! Muistuta minua lähettämään esitys tiimille perjantaihin mennessä ja hakemaan maitoa kotimatkalla.",
     "onboardingActDictateHint": "Napauta valintamerkkiä, kun olet valmis",
     "onboardingActPhoneMic": "Puhelimen mikrofoni",
-    "onboardingActWriting": "Kirjoitetaan muistiinpanojasi…",
-    "onboardingActNotesLabel": "Muistiinpanosi",
-    "onboardingActTasksLabel": "Tehtäväsi",
+    "onboardingActWriting": "Tiivistetään…",
+    "onboardingActNotesLabel": "Päiväsi tiivistettynä",
+    "onboardingActTasksLabel": "Omi poimi tehtäväsi",
     "onboardingActYourWords": "Tämän sanoit",
     "onboardingActCongratsTitle": "Kaikki valmista, {name}",
     "onboardingActCongratsBody": "Pidä Omia päivän ajan. Keskustelusi näkyvät etusivulla.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Tervetuloa Omiin",
     "onboardingWelcomeCardBody": "Pidä Omia ja puhu kuten tavallisesti. Jokaisesta keskustelusta tulee tänne muistiinpanoja, tehtäviä ja muistoja.",
     "onboardingActDemoTitle": "Lounas Samin kanssa",
-    "onboardingActDemoSummary": "Sam muuttaa kesäkuussa Lissaboniin.",
+    "onboardingActDemoSummary": "Lounas Samin kanssa, joka muuttaa kesäkuussa Lissaboniin. Haluat lähettää esityksen tiimille perjantaihin mennessä ja ostaa maitoa kotimatkalla.",
     "onboardingActDemoTask1": "Lähetä esitys tiimille perjantaihin mennessä",
-    "onboardingActDemoTask2": "Hae maitoa kotimatkalla"
+    "onboardingActDemoTask2": "Hae maitoa kotimatkalla",
+    "onboardingActJustNow": "Juuri nyt",
+    "onboardingActSavedToTasks": "Tallennettu tehtäviisi"
 }

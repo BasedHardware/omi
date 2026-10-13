@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "さっきサムとランチしたよ。6月にリスボンへ引っ越すんだって！金曜までにチームへ資料を送るのと、帰りに牛乳を買うのをリマインドして。",
     "onboardingActDictateHint": "話し終えたらチェックをタップ",
     "onboardingActPhoneMic": "スマホのマイク",
-    "onboardingActWriting": "メモを作成中…",
-    "onboardingActNotesLabel": "あなたのメモ",
-    "onboardingActTasksLabel": "あなたのタスク",
+    "onboardingActWriting": "要約しています…",
+    "onboardingActNotesLabel": "今日のまとめ",
+    "onboardingActTasksLabel": "Omiがやることを見つけました",
     "onboardingActYourWords": "あなたが話した内容",
     "onboardingActCongratsTitle": "準備完了です、{name}さん",
     "onboardingActCongratsBody": "一日中Omiを身につけてください。会話はホームに表示されます。",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Omiへようこそ",
     "onboardingWelcomeCardBody": "Omiを身につけて普段どおり話すだけ。会話はここでメモ、タスク、記憶になります。",
     "onboardingActDemoTitle": "サムとランチ",
-    "onboardingActDemoSummary": "サムは6月にリスボンへ引っ越す。",
+    "onboardingActDemoSummary": "6月にリスボンへ引っ越すサムとランチ。金曜までにチームへ資料を送り、帰りに牛乳を買う予定。",
     "onboardingActDemoTask1": "金曜までにチームへ資料を送る",
-    "onboardingActDemoTask2": "帰りに牛乳を買う"
+    "onboardingActDemoTask2": "帰りに牛乳を買う",
+    "onboardingActJustNow": "たった今",
+    "onboardingActSavedToTasks": "タスクに保存しました"
 }

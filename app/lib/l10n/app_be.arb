@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "Толькі што паабедаў з Сэм, яна пераязджае ў Лісабон у чэрвені! Нагадай мне адправіць прэзентацыю камандзе да пятніцы і купіць малако па дарозе дадому.",
     "onboardingActDictateHint": "Націсніце галачку, калі скончыце",
     "onboardingActPhoneMic": "Мікрафон тэлефона",
-    "onboardingActWriting": "Пішам вашы нататкі…",
-    "onboardingActNotesLabel": "Вашы нататкі",
-    "onboardingActTasksLabel": "Вашы задачы",
+    "onboardingActWriting": "Падсумоўваем…",
+    "onboardingActNotesLabel": "Ваш дзень коратка",
+    "onboardingActTasksLabel": "Omi заўважыў вашы справы",
     "onboardingActYourWords": "Вось што вы сказалі",
     "onboardingActCongratsTitle": "Усё гатова, {name}",
     "onboardingActCongratsBody": "Насіце Omi цэлы дзень. Вашы размовы з'явяцца на галоўнай.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Вітаем у Omi",
     "onboardingWelcomeCardBody": "Насіце Omi і размаўляйце як звычайна. Кожная размова ператворыцца тут у нататкі, задачы і ўспаміны.",
     "onboardingActDemoTitle": "Абед з Сэм",
-    "onboardingActDemoSummary": "Сэм пераязджае ў Лісабон у чэрвені.",
+    "onboardingActDemoSummary": "Абед з Сэм, якая ў чэрвені пераязджае ў Лісабон. Вы хочаце адправіць прэзентацыю камандзе да пятніцы і купіць малако па дарозе дадому.",
     "onboardingActDemoTask1": "Адправіць прэзентацыю камандзе да пятніцы",
-    "onboardingActDemoTask2": "Купіць малако па дарозе дадому"
+    "onboardingActDemoTask2": "Купіць малако па дарозе дадому",
+    "onboardingActJustNow": "Толькі што",
+    "onboardingActSavedToTasks": "Захавана ў вашыя справы"
 }

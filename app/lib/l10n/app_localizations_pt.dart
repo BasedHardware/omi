@@ -13105,13 +13105,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get onboardingActPhoneMic => 'Microfone do celular';
 
   @override
-  String get onboardingActWriting => 'Escrevendo suas notas…';
+  String get onboardingActWriting => 'Resumindo…';
 
   @override
-  String get onboardingActNotesLabel => 'Suas notas';
+  String get onboardingActNotesLabel => 'Seu dia, resumido';
 
   @override
-  String get onboardingActTasksLabel => 'Suas tarefas';
+  String get onboardingActTasksLabel => 'O Omi pegou suas tarefas';
 
   @override
   String get onboardingActYourWords => 'Veja o que você disse';
@@ -13141,11 +13141,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get onboardingActDemoTitle => 'Almoço com a Sam';
 
   @override
-  String get onboardingActDemoSummary => 'A Sam vai se mudar para Lisboa em junho.';
+  String get onboardingActDemoSummary =>
+      'Almoço com o Sam, que vai se mudar para Lisboa em junho. Você quer enviar a apresentação para a equipe até sexta e comprar leite no caminho de casa.';
 
   @override
   String get onboardingActDemoTask1 => 'Mandar a apresentação para o time até sexta';
 
   @override
   String get onboardingActDemoTask2 => 'Comprar leite na volta para casa';
+
+  @override
+  String get onboardingActJustNow => 'Agora mesmo';
+
+  @override
+  String get onboardingActSavedToTasks => 'Salvo nas suas tarefas';
 }

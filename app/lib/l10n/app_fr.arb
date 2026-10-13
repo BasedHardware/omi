@@ -4058,9 +4058,9 @@
     "onboardingActDictateExample": "Je viens de déjeuner avec Sam, elle déménage à Lisbonne en juin ! Rappelle-moi d'envoyer la présentation à l'équipe d'ici vendredi et de prendre du lait en rentrant.",
     "onboardingActDictateHint": "Touchez la coche quand vous avez fini",
     "onboardingActPhoneMic": "Micro du téléphone",
-    "onboardingActWriting": "Rédaction de vos notes…",
-    "onboardingActNotesLabel": "Vos notes",
-    "onboardingActTasksLabel": "Vos tâches",
+    "onboardingActWriting": "Résumé en cours…",
+    "onboardingActNotesLabel": "Votre journée, résumée",
+    "onboardingActTasksLabel": "Omi a repéré vos tâches",
     "onboardingActYourWords": "Voici ce que vous avez dit",
     "onboardingActCongratsTitle": "Tout est prêt, {name}",
     "onboardingActCongratsBody": "Portez Omi au fil de la journée. Vos conversations s'affichent dans l'Accueil.",
@@ -4069,7 +4069,9 @@
     "onboardingWelcomeCardTitle": "Bienvenue dans Omi",
     "onboardingWelcomeCardBody": "Portez Omi et parlez normalement. Chaque conversation devient ici des notes, des tâches et des souvenirs.",
     "onboardingActDemoTitle": "Déjeuner avec Sam",
-    "onboardingActDemoSummary": "Sam déménage à Lisbonne en juin.",
+    "onboardingActDemoSummary": "Déjeuner avec Sam, qui part vivre à Lisbonne en juin. Vous voulez envoyer la présentation à l'équipe d'ici vendredi et prendre du lait en rentrant.",
     "onboardingActDemoTask1": "Envoyer la présentation à l'équipe d'ici vendredi",
-    "onboardingActDemoTask2": "Prendre du lait en rentrant"
+    "onboardingActDemoTask2": "Prendre du lait en rentrant",
+    "onboardingActJustNow": "À l'instant",
+    "onboardingActSavedToTasks": "Enregistré dans vos tâches"
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Hatte gerade Mittagessen mit Sam, sie zieht im Juni nach Lissabon! Erinnere mich, die Präsentation bis Freitag ans Team zu schicken und auf dem Heimweg Milch zu holen.",
     "onboardingActDictateHint": "Tippe auf den Haken, wenn du fertig bist",
     "onboardingActPhoneMic": "Handymikrofon",
-    "onboardingActWriting": "Schreibe deine Notizen…",
-    "onboardingActNotesLabel": "Deine Notizen",
-    "onboardingActTasksLabel": "Deine Aufgaben",
+    "onboardingActWriting": "Wird zusammengefasst…",
+    "onboardingActNotesLabel": "Dein Tag, zusammengefasst",
+    "onboardingActTasksLabel": "Omi hat deine To-dos erkannt",
     "onboardingActYourWords": "Das hast du gesagt",
     "onboardingActCongratsTitle": "Alles bereit, {name}",
     "onboardingActCongratsBody": "Trag Omi den ganzen Tag. Deine Gespräche erscheinen auf der Startseite.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Willkommen bei Omi",
     "onboardingWelcomeCardBody": "Trag Omi und sprich wie gewohnt. Jedes Gespräch wird hier zu Notizen, Aufgaben und Erinnerungen.",
     "onboardingActDemoTitle": "Mittagessen mit Sam",
-    "onboardingActDemoSummary": "Sam zieht im Juni nach Lissabon.",
+    "onboardingActDemoSummary": "Mittagessen mit Sam, der im Juni nach Lissabon zieht. Du willst die Präsentation bis Freitag ans Team schicken und auf dem Heimweg Milch holen.",
     "onboardingActDemoTask1": "Präsentation bis Freitag ans Team schicken",
-    "onboardingActDemoTask2": "Auf dem Heimweg Milch holen"
+    "onboardingActDemoTask2": "Auf dem Heimweg Milch holen",
+    "onboardingActJustNow": "Gerade eben",
+    "onboardingActSavedToTasks": "In deinen Aufgaben gespeichert"
 }

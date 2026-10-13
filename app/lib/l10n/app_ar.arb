@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "تغدّيت للتو مع سام، ستنتقل إلى لشبونة في يونيو! ذكّرني بإرسال العرض إلى فريقي قبل الجمعة، وبشراء الحليب في طريق العودة.",
     "onboardingActDictateHint": "اضغط على علامة الصح عند الانتهاء",
     "onboardingActPhoneMic": "ميكروفون الهاتف",
-    "onboardingActWriting": "جارٍ كتابة ملاحظاتك…",
-    "onboardingActNotesLabel": "ملاحظاتك",
-    "onboardingActTasksLabel": "مهامك",
+    "onboardingActWriting": "جارٍ التلخيص…",
+    "onboardingActNotesLabel": "يومك، باختصار",
+    "onboardingActTasksLabel": "التقط Omi مهامك",
     "onboardingActYourWords": "هذا ما قلته",
     "onboardingActCongratsTitle": "كل شيء جاهز يا {name}",
     "onboardingActCongratsBody": "ارتدِ Omi طوال يومك. ستظهر محادثاتك في الصفحة الرئيسية.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "مرحبًا بك في Omi",
     "onboardingWelcomeCardBody": "ارتدِ Omi وتحدّث كعادتك. تتحول كل محادثة إلى ملاحظات ومهام وذكريات هنا.",
     "onboardingActDemoTitle": "غداء مع سام",
-    "onboardingActDemoSummary": "سام ستنتقل إلى لشبونة في يونيو.",
+    "onboardingActDemoSummary": "غداء مع سام التي ستنتقل إلى لشبونة في يونيو. تريد إرسال العرض التقديمي إلى فريقك بحلول الجمعة وشراء الحليب في طريق العودة.",
     "onboardingActDemoTask1": "إرسال العرض إلى الفريق قبل الجمعة",
-    "onboardingActDemoTask2": "شراء الحليب في طريق العودة"
+    "onboardingActDemoTask2": "شراء الحليب في طريق العودة",
+    "onboardingActJustNow": "الآن",
+    "onboardingActSavedToTasks": "تم الحفظ في مهامك"
 }

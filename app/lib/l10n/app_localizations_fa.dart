@@ -13076,13 +13076,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingActPhoneMic => 'میکروفون گوشی';
 
   @override
-  String get onboardingActWriting => 'در حال نوشتن یادداشت‌هایتان…';
+  String get onboardingActWriting => 'در حال خلاصه‌سازی…';
 
   @override
-  String get onboardingActNotesLabel => 'یادداشت‌های شما';
+  String get onboardingActNotesLabel => 'روز شما، خلاصه‌شده';
 
   @override
-  String get onboardingActTasksLabel => 'کارهای شما';
+  String get onboardingActTasksLabel => 'Omi کارهای شما را پیدا کرد';
 
   @override
   String get onboardingActYourWords => 'این چیزی است که گفتید';
@@ -13112,11 +13112,18 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingActDemoTitle => 'ناهار با سم';
 
   @override
-  String get onboardingActDemoSummary => 'سم خرداد به لیسبون می‌رود.';
+  String get onboardingActDemoSummary =>
+      'ناهار با سم که خرداد به لیسبون می‌رود. می‌خواهید تا جمعه ارائه را برای تیم بفرستید و سر راه خانه شیر بخرید.';
 
   @override
   String get onboardingActDemoTask1 => 'فرستادن ارائه برای تیم تا جمعه';
 
   @override
   String get onboardingActDemoTask2 => 'خریدن شیر سر راه خانه';
+
+  @override
+  String get onboardingActJustNow => 'همین الان';
+
+  @override
+  String get onboardingActSavedToTasks => 'در کارهای شما ذخیره شد';
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Baru makan tengah hari dengan Sam, dia akan pindah ke Lisbon bulan Jun! Ingatkan saya hantar deck kepada pasukan sebelum Jumaat, dan beli susu dalam perjalanan pulang.",
     "onboardingActDictateHint": "Ketik tanda semak apabila selesai",
     "onboardingActPhoneMic": "Mikrofon telefon",
-    "onboardingActWriting": "Menulis nota anda…",
-    "onboardingActNotesLabel": "Nota anda",
-    "onboardingActTasksLabel": "Tugasan anda",
+    "onboardingActWriting": "Meringkaskan…",
+    "onboardingActNotesLabel": "Hari anda, diringkaskan",
+    "onboardingActTasksLabel": "Omi menangkap tugasan anda",
     "onboardingActYourWords": "Ini yang anda katakan",
     "onboardingActCongratsTitle": "Semua sudah sedia, {name}",
     "onboardingActCongratsBody": "Pakai Omi sepanjang hari. Perbualan anda akan muncul di Laman Utama.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Selamat datang ke Omi",
     "onboardingWelcomeCardBody": "Pakai Omi dan bercakap seperti biasa. Setiap perbualan menjadi nota, tugasan dan kenangan di sini.",
     "onboardingActDemoTitle": "Makan tengah hari dengan Sam",
-    "onboardingActDemoSummary": "Sam akan berpindah ke Lisbon pada bulan Jun.",
+    "onboardingActDemoSummary": "Makan tengah hari dengan Sam, yang berpindah ke Lisbon pada Jun. Anda mahu hantar dek kepada pasukan sebelum Jumaat dan beli susu dalam perjalanan pulang.",
     "onboardingActDemoTask1": "Hantar deck kepada pasukan sebelum Jumaat",
-    "onboardingActDemoTask2": "Beli susu dalam perjalanan pulang"
+    "onboardingActDemoTask2": "Beli susu dalam perjalanan pulang",
+    "onboardingActJustNow": "Baru sahaja",
+    "onboardingActSavedToTasks": "Disimpan ke tugasan anda"
 }

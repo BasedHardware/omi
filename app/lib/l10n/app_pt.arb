@@ -4058,9 +4058,9 @@
     "onboardingActDictateExample": "Acabei de almoçar com a Sam, ela vai se mudar para Lisboa em junho! Me lembra de mandar a apresentação para o time até sexta e de comprar leite na volta para casa.",
     "onboardingActDictateHint": "Toque no check quando terminar",
     "onboardingActPhoneMic": "Microfone do celular",
-    "onboardingActWriting": "Escrevendo suas notas…",
-    "onboardingActNotesLabel": "Suas notas",
-    "onboardingActTasksLabel": "Suas tarefas",
+    "onboardingActWriting": "Resumindo…",
+    "onboardingActNotesLabel": "Seu dia, resumido",
+    "onboardingActTasksLabel": "O Omi pegou suas tarefas",
     "onboardingActYourWords": "Veja o que você disse",
     "onboardingActCongratsTitle": "Tudo pronto, {name}",
     "onboardingActCongratsBody": "Use o Omi durante o dia. Suas conversas aparecem no Início.",
@@ -4069,7 +4069,9 @@
     "onboardingWelcomeCardTitle": "Boas-vindas ao Omi",
     "onboardingWelcomeCardBody": "Use o Omi e converse normalmente. Cada conversa vira notas, tarefas e memórias bem aqui.",
     "onboardingActDemoTitle": "Almoço com a Sam",
-    "onboardingActDemoSummary": "A Sam vai se mudar para Lisboa em junho.",
+    "onboardingActDemoSummary": "Almoço com o Sam, que vai se mudar para Lisboa em junho. Você quer enviar a apresentação para a equipe até sexta e comprar leite no caminho de casa.",
     "onboardingActDemoTask1": "Mandar a apresentação para o time até sexta",
-    "onboardingActDemoTask2": "Comprar leite na volta para casa"
+    "onboardingActDemoTask2": "Comprar leite na volta para casa",
+    "onboardingActJustNow": "Agora mesmo",
+    "onboardingActSavedToTasks": "Salvo nas suas tarefas"
 }

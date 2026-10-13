@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Vừa ăn trưa với Sam, tháng Sáu cô ấy chuyển đến Lisbon! Nhắc mình gửi slide cho nhóm trước thứ Sáu, và mua sữa trên đường về nhà.",
     "onboardingActDictateHint": "Nhấn dấu tích khi bạn nói xong",
     "onboardingActPhoneMic": "Micrô điện thoại",
-    "onboardingActWriting": "Đang viết ghi chú…",
-    "onboardingActNotesLabel": "Ghi chú của bạn",
-    "onboardingActTasksLabel": "Việc cần làm",
+    "onboardingActWriting": "Đang tóm tắt…",
+    "onboardingActNotesLabel": "Ngày của bạn, tóm tắt",
+    "onboardingActTasksLabel": "Omi đã nắm được việc cần làm",
     "onboardingActYourWords": "Đây là những gì bạn nói",
     "onboardingActCongratsTitle": "Mọi thứ đã sẵn sàng, {name}",
     "onboardingActCongratsBody": "Đeo Omi suốt ngày. Cuộc trò chuyện sẽ hiện ở Trang chủ.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Chào mừng đến với Omi",
     "onboardingWelcomeCardBody": "Đeo Omi và nói chuyện như bình thường. Mỗi cuộc trò chuyện sẽ thành ghi chú, việc cần làm và ký ức ngay tại đây.",
     "onboardingActDemoTitle": "Ăn trưa với Sam",
-    "onboardingActDemoSummary": "Sam chuyển đến Lisbon vào tháng Sáu.",
+    "onboardingActDemoSummary": "Ăn trưa với Sam, người sẽ chuyển đến Lisbon vào tháng Sáu. Bạn muốn gửi bản trình bày cho nhóm trước thứ Sáu và mua sữa trên đường về.",
     "onboardingActDemoTask1": "Gửi slide cho nhóm trước thứ Sáu",
-    "onboardingActDemoTask2": "Mua sữa trên đường về nhà"
+    "onboardingActDemoTask2": "Mua sữa trên đường về nhà",
+    "onboardingActJustNow": "Vừa xong",
+    "onboardingActSavedToTasks": "Đã lưu vào việc cần làm"
 }

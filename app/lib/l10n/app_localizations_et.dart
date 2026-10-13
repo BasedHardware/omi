@@ -13074,13 +13074,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingActPhoneMic => 'Telefoni mikrofon';
 
   @override
-  String get onboardingActWriting => 'Kirjutan su märkmeid…';
+  String get onboardingActWriting => 'Teeme kokkuvõtet…';
 
   @override
-  String get onboardingActNotesLabel => 'Sinu märkmed';
+  String get onboardingActNotesLabel => 'Sinu päev lühidalt';
 
   @override
-  String get onboardingActTasksLabel => 'Sinu ülesanded';
+  String get onboardingActTasksLabel => 'Omi märkas sinu ülesandeid';
 
   @override
   String get onboardingActYourWords => 'Seda sa ütlesid';
@@ -13110,11 +13110,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingActDemoTitle => 'Lõuna Samiga';
 
   @override
-  String get onboardingActDemoSummary => 'Sam kolib juunis Lissaboni.';
+  String get onboardingActDemoSummary =>
+      'Lõuna Samiga, kes kolib juunis Lissaboni. Tahad reedeks esitluse meeskonnale saata ja koduteel piima osta.';
 
   @override
   String get onboardingActDemoTask1 => 'Saata esitlus reedeks tiimile';
 
   @override
   String get onboardingActDemoTask2 => 'Osta koduteel piima';
+
+  @override
+  String get onboardingActJustNow => 'Just praegu';
+
+  @override
+  String get onboardingActSavedToTasks => 'Salvestatud sinu ülesannetesse';
 }

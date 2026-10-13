@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "ಈಗಷ್ಟೇ ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ ಮಾಡಿದೆ, ಅವಳು ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿದ್ದಾಳೆ! ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸಲು ಮತ್ತು ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರಲು ನೆನಪಿಸು.",
     "onboardingActDictateHint": "ಮುಗಿದ ನಂತರ ಟಿಕ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
     "onboardingActPhoneMic": "ಫೋನ್ ಮೈಕ್ರೊಫೋನ್",
-    "onboardingActWriting": "ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
-    "onboardingActNotesLabel": "ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳು",
-    "onboardingActTasksLabel": "ನಿಮ್ಮ ಕಾರ್ಯಗಳು",
+    "onboardingActWriting": "ಸಾರಾಂಶ ಮಾಡುತ್ತಿದೆ…",
+    "onboardingActNotesLabel": "ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ",
+    "onboardingActTasksLabel": "Omi ನಿಮ್ಮ ಕೆಲಸಗಳನ್ನು ಗುರುತಿಸಿದೆ",
     "onboardingActYourWords": "ನೀವು ಹೇಳಿದ್ದು ಇದು",
     "onboardingActCongratsTitle": "ಎಲ್ಲವೂ ಸಿದ್ಧ, {name}",
     "onboardingActCongratsBody": "ದಿನವಿಡೀ Omi ಧರಿಸಿ. ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Omi ಗೆ ಸ್ವಾಗತ",
     "onboardingWelcomeCardBody": "Omi ಧರಿಸಿ ಎಂದಿನಂತೆ ಮಾತನಾಡಿ. ಪ್ರತಿಯೊಂದು ಸಂಭಾಷಣೆ ಇಲ್ಲೇ ಟಿಪ್ಪಣಿ, ಕಾರ್ಯ ಮತ್ತು ನೆನಪುಗಳಾಗುತ್ತದೆ.",
     "onboardingActDemoTitle": "ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ",
-    "onboardingActDemoSummary": "ಸ್ಯಾಮ್ ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿದ್ದಾಳೆ.",
+    "onboardingActDemoSummary": "ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿರುವ ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ. ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸಬೇಕು, ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರಬೇಕು.",
     "onboardingActDemoTask1": "ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸುವುದು",
-    "onboardingActDemoTask2": "ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರುವುದು"
+    "onboardingActDemoTask2": "ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರುವುದು",
+    "onboardingActJustNow": "ಈಗಷ್ಟೇ",
+    "onboardingActSavedToTasks": "ನಿಮ್ಮ ಕೆಲಸಗಳಿಗೆ ಉಳಿಸಲಾಗಿದೆ"
 }

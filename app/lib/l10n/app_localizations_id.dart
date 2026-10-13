@@ -13091,13 +13091,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get onboardingActPhoneMic => 'Mikrofon ponsel';
 
   @override
-  String get onboardingActWriting => 'Menulis catatan Anda…';
+  String get onboardingActWriting => 'Merangkum…';
 
   @override
-  String get onboardingActNotesLabel => 'Catatan Anda';
+  String get onboardingActNotesLabel => 'Harimu, dirangkum';
 
   @override
-  String get onboardingActTasksLabel => 'Tugas Anda';
+  String get onboardingActTasksLabel => 'Omi menangkap tugasmu';
 
   @override
   String get onboardingActYourWords => 'Ini yang Anda katakan';
@@ -13127,11 +13127,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get onboardingActDemoTitle => 'Makan siang dengan Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Sam pindah ke Lisbon bulan Juni.';
+  String get onboardingActDemoSummary =>
+      'Makan siang dengan Sam, yang pindah ke Lisbon bulan Juni. Kamu mau kirim deck ke tim sebelum Jumat dan beli susu di jalan pulang.';
 
   @override
   String get onboardingActDemoTask1 => 'Kirim deck ke tim sebelum Jumat';
 
   @override
   String get onboardingActDemoTask2 => 'Beli susu di jalan pulang';
+
+  @override
+  String get onboardingActJustNow => 'Baru saja';
+
+  @override
+  String get onboardingActSavedToTasks => 'Disimpan ke tugasmu';
 }

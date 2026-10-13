@@ -13094,13 +13094,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onboardingActPhoneMic => 'فون کا مائیکروفون';
 
   @override
-  String get onboardingActWriting => 'آپ کے نوٹس لکھے جا رہے ہیں…';
+  String get onboardingActWriting => 'خلاصہ بن رہا ہے…';
 
   @override
-  String get onboardingActNotesLabel => 'آپ کے نوٹس';
+  String get onboardingActNotesLabel => 'آپ کا دن، مختصراً';
 
   @override
-  String get onboardingActTasksLabel => 'آپ کے کام';
+  String get onboardingActTasksLabel => 'Omi نے آپ کے کام پکڑ لیے';
 
   @override
   String get onboardingActYourWords => 'آپ نے یہ کہا';
@@ -13130,11 +13130,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onboardingActDemoTitle => 'سیم کے ساتھ لنچ';
 
   @override
-  String get onboardingActDemoSummary => 'سیم جون میں لزبن جا رہی ہے۔';
+  String get onboardingActDemoSummary =>
+      'سام کے ساتھ لنچ، جو جون میں لزبن جا رہی ہے۔ آپ کو جمعہ تک ٹیم کو ڈیک بھیجنا ہے اور گھر جاتے ہوئے دودھ لینا ہے۔';
 
   @override
   String get onboardingActDemoTask1 => 'جمعہ تک ٹیم کو ڈیک بھیجنا';
 
   @override
   String get onboardingActDemoTask2 => 'گھر جاتے ہوئے دودھ لینا';
+
+  @override
+  String get onboardingActJustNow => 'ابھی ابھی';
+
+  @override
+  String get onboardingActSavedToTasks => 'آپ کے کاموں میں محفوظ';
 }

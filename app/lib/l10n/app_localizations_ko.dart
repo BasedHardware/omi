@@ -12899,13 +12899,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingActPhoneMic => '휴대폰 마이크';
 
   @override
-  String get onboardingActWriting => '노트를 작성하는 중…';
+  String get onboardingActWriting => '요약하는 중…';
 
   @override
-  String get onboardingActNotesLabel => '내 노트';
+  String get onboardingActNotesLabel => '오늘 하루 요약';
 
   @override
-  String get onboardingActTasksLabel => '할 일';
+  String get onboardingActTasksLabel => 'Omi가 할 일을 찾았어요';
 
   @override
   String get onboardingActYourWords => '이렇게 말했어요';
@@ -12934,11 +12934,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingActDemoTitle => '샘과 점심';
 
   @override
-  String get onboardingActDemoSummary => '샘은 6월에 리스본으로 이사해요.';
+  String get onboardingActDemoSummary => '6월에 리스본으로 이사하는 샘과 점심. 금요일까지 팀에 자료를 보내고, 집에 가는 길에 우유를 사야 해요.';
 
   @override
   String get onboardingActDemoTask1 => '금요일까지 팀에 발표 자료 보내기';
 
   @override
   String get onboardingActDemoTask2 => '집에 가는 길에 우유 사기';
+
+  @override
+  String get onboardingActJustNow => '방금';
+
+  @override
+  String get onboardingActSavedToTasks => '할 일에 저장됨';
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Щойно пообідав із Сем, у червні вона переїжджає до Лісабона! Нагадай надіслати презентацію команді до п'ятниці й купити молоко дорогою додому.",
     "onboardingActDictateHint": "Торкніться галочки, коли закінчите",
     "onboardingActPhoneMic": "Мікрофон телефона",
-    "onboardingActWriting": "Пишу ваші нотатки…",
-    "onboardingActNotesLabel": "Ваші нотатки",
-    "onboardingActTasksLabel": "Ваші завдання",
+    "onboardingActWriting": "Підсумовуємо…",
+    "onboardingActNotesLabel": "Ваш день коротко",
+    "onboardingActTasksLabel": "Omi помітив ваші справи",
     "onboardingActYourWords": "Ось що ви сказали",
     "onboardingActCongratsTitle": "Усе готово, {name}",
     "onboardingActCongratsBody": "Носіть Omi протягом дня. Ваші розмови з'являться на головній.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Вітаємо в Omi",
     "onboardingWelcomeCardBody": "Носіть Omi й говоріть як завжди. Кожна розмова стане тут нотатками, завданнями й спогадами.",
     "onboardingActDemoTitle": "Обід із Сем",
-    "onboardingActDemoSummary": "Сем у червні переїжджає до Лісабона.",
+    "onboardingActDemoSummary": "Обід із Сем, яка в червні переїжджає до Лісабона. Треба надіслати презентацію команді до пʼятниці й купити молоко дорогою додому.",
     "onboardingActDemoTask1": "Надіслати презентацію команді до п'ятниці",
-    "onboardingActDemoTask2": "Купити молоко дорогою додому"
+    "onboardingActDemoTask2": "Купити молоко дорогою додому",
+    "onboardingActJustNow": "Щойно",
+    "onboardingActSavedToTasks": "Збережено у ваші завдання"
 }

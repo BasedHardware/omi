@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Ho appena pranzato con Sam, a giugno si trasferisce a Lisbona! Ricordami di mandare la presentazione al team entro venerdì e di prendere il latte tornando a casa.",
     "onboardingActDictateHint": "Tocca la spunta quando hai finito",
     "onboardingActPhoneMic": "Microfono del telefono",
-    "onboardingActWriting": "Sto scrivendo i tuoi appunti…",
-    "onboardingActNotesLabel": "I tuoi appunti",
-    "onboardingActTasksLabel": "Le tue attività",
+    "onboardingActWriting": "Riassumendo…",
+    "onboardingActNotesLabel": "La tua giornata, in sintesi",
+    "onboardingActTasksLabel": "Omi ha colto le tue cose da fare",
     "onboardingActYourWords": "Ecco cosa hai detto",
     "onboardingActCongratsTitle": "Tutto pronto, {name}",
     "onboardingActCongratsBody": "Indossa Omi durante la giornata. Le tue conversazioni compaiono nella Home.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Benvenuto in Omi",
     "onboardingWelcomeCardBody": "Indossa Omi e parla come sempre. Ogni conversazione diventa qui appunti, attività e ricordi.",
     "onboardingActDemoTitle": "Pranzo con Sam",
-    "onboardingActDemoSummary": "Sam si trasferisce a Lisbona a giugno.",
+    "onboardingActDemoSummary": "Pranzo con Sam, che a giugno si trasferisce a Lisbona. Vuoi mandare la presentazione al team entro venerdì e prendere il latte tornando a casa.",
     "onboardingActDemoTask1": "Mandare la presentazione al team entro venerdì",
-    "onboardingActDemoTask2": "Prendere il latte tornando a casa"
+    "onboardingActDemoTask2": "Prendere il latte tornando a casa",
+    "onboardingActJustNow": "Proprio ora",
+    "onboardingActSavedToTasks": "Salvato nelle tue attività"
 }

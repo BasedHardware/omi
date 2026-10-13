@@ -4058,9 +4058,9 @@
     "onboardingActDictateExample": "Właśnie zjadłem lunch z Sam, w czerwcu przeprowadza się do Lizbony! Przypomnij mi, żeby wysłać prezentację zespołowi do piątku i kupić mleko w drodze do domu.",
     "onboardingActDictateHint": "Gdy skończysz, dotknij znacznika",
     "onboardingActPhoneMic": "Mikrofon telefonu",
-    "onboardingActWriting": "Piszę Twoje notatki…",
-    "onboardingActNotesLabel": "Twoje notatki",
-    "onboardingActTasksLabel": "Twoje zadania",
+    "onboardingActWriting": "Podsumowujemy…",
+    "onboardingActNotesLabel": "Twój dzień w skrócie",
+    "onboardingActTasksLabel": "Omi wyłapał Twoje zadania",
     "onboardingActYourWords": "Oto, co powiedziałeś",
     "onboardingActCongratsTitle": "Wszystko gotowe, {name}",
     "onboardingActCongratsBody": "Noś Omi przez cały dzień. Twoje rozmowy pojawią się na ekranie głównym.",
@@ -4069,7 +4069,9 @@
     "onboardingWelcomeCardTitle": "Witaj w Omi",
     "onboardingWelcomeCardBody": "Noś Omi i rozmawiaj jak zwykle. Każda rozmowa zamienia się tutaj w notatki, zadania i wspomnienia.",
     "onboardingActDemoTitle": "Lunch z Sam",
-    "onboardingActDemoSummary": "Sam w czerwcu przeprowadza się do Lizbony.",
+    "onboardingActDemoSummary": "Lunch z Sam, która w czerwcu przeprowadza się do Lizbony. Chcesz do piątku wysłać zespołowi prezentację i kupić mleko w drodze do domu.",
     "onboardingActDemoTask1": "Wysłać prezentację zespołowi do piątku",
-    "onboardingActDemoTask2": "Kupić mleko w drodze do domu"
+    "onboardingActDemoTask2": "Kupić mleko w drodze do domu",
+    "onboardingActJustNow": "Przed chwilą",
+    "onboardingActSavedToTasks": "Zapisano w Twoich zadaniach"
 }

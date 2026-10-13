@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Právě jsem obědval se Sam, v červnu se stěhuje do Lisabonu! Připomeň mi poslat prezentaci týmu do pátku a koupit cestou domů mléko.",
     "onboardingActDictateHint": "Až budete hotovi, klepněte na fajfku",
     "onboardingActPhoneMic": "Mikrofon telefonu",
-    "onboardingActWriting": "Píšu vaše poznámky…",
-    "onboardingActNotesLabel": "Vaše poznámky",
-    "onboardingActTasksLabel": "Vaše úkoly",
+    "onboardingActWriting": "Shrnujeme…",
+    "onboardingActNotesLabel": "Váš den ve zkratce",
+    "onboardingActTasksLabel": "Omi zachytil vaše úkoly",
     "onboardingActYourWords": "Tohle jste řekli",
     "onboardingActCongratsTitle": "Vše je připraveno, {name}",
     "onboardingActCongratsBody": "Noste Omi celý den. Vaše konverzace se objeví na domovské obrazovce.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Vítejte v Omi",
     "onboardingWelcomeCardBody": "Noste Omi a mluvte jako obvykle. Každá konverzace se tu promění v poznámky, úkoly a vzpomínky.",
     "onboardingActDemoTitle": "Oběd se Sam",
-    "onboardingActDemoSummary": "Sam se v červnu stěhuje do Lisabonu.",
+    "onboardingActDemoSummary": "Oběd se Sam, která se v červnu stěhuje do Lisabonu. Chcete do pátku poslat týmu prezentaci a cestou domů koupit mléko.",
     "onboardingActDemoTask1": "Poslat prezentaci týmu do pátku",
-    "onboardingActDemoTask2": "Koupit cestou domů mléko"
+    "onboardingActDemoTask2": "Koupit cestou domů mléko",
+    "onboardingActJustNow": "Právě teď",
+    "onboardingActSavedToTasks": "Uloženo do vašich úkolů"
 }

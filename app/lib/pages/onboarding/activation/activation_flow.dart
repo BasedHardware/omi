@@ -6,17 +6,24 @@ import 'package:in_app_review/in_app_review.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/activation/activation_visuals.dart';
-import 'package:omi/pages/onboarding/widgets/onboarding_plain_step.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
-/// How far the microphone and dictation titles sit below the top of the safe area: low enough to
-/// feel centred, high enough to stay clear of the system permission prompt below them.
-const double _kPromptHeadingTop = 96;
+/// Height of the row above every title: Skip sits in it on the dictation step.
+const double _kTopRowHeight = 44;
+
+/// Space between that row and every title: low enough to feel centred, high enough that the title
+/// stays clear of the system prompts (microphone, App Store rating) that open mid-screen.
+const double _kHeadingGap = 76;
+
+/// The area under the card on dictation, "Summarizing…", the summary and the tasks. One height
+/// for all four, so the card stays in the same place while the words turn into notes.
+const double _kControlHeight = 172;
 
 /// The stages of the first-run activation, in order. Some are skipped: [wear] without an Omi,
 /// [microphone] with one (or when already allowed), [taskList] when Omi found no tasks.
@@ -24,10 +31,10 @@ enum ActivationStage { wear, intro, microphone, dictate, writing, summary, taskL
 
 /// Shows people what Omi does with their own words, then hands over to the paywall and Home.
 ///
-/// Omi users first learn how to wear it; everyone sees "Let's see Omi at work." and then says a few
-/// sentences. Omi turns them into notes and tasks (a real conversation, first on Home), then come a
-/// congratulations screen, the rating ask and the paywall. Skipping the dictation shows a welcome
-/// card on Home instead.
+/// Omi users first learn how to wear it; everyone sees "Let's try Omi." and then says a few
+/// sentences. Omi turns them into a summary and to-dos (a real conversation, first on Home), then
+/// come a congratulations screen, the rating ask and the paywall. Skipping the dictation shows a
+/// welcome card on Home instead.
 class ActivationFlow extends StatefulWidget {
   const ActivationFlow({
     super.key,
@@ -64,6 +71,7 @@ class ActivationFlow extends StatefulWidget {
 
 class _ActivationFlowState extends State<ActivationFlow> {
   late ActivationStage _stage = widget.hasDevice ? ActivationStage.wear : ActivationStage.intro;
+  String _heard = '';
   ActivationResult? _result;
   bool _finished = false;
 
@@ -83,7 +91,6 @@ class _ActivationFlowState extends State<ActivationFlow> {
   }
 
   Future<void> _allowMicrophone() async {
-    OmiHaptics.selection();
     final granted = await (widget.requestMicrophone ?? () async => (await Permission.microphone.request()).isGranted)();
     if (granted) {
       _go(ActivationStage.dictate);
@@ -98,11 +105,12 @@ class _ActivationFlowState extends State<ActivationFlow> {
     _go(ActivationStage.congrats);
   }
 
-  void _dictated(Future<ActivationResult> result) {
+  void _dictated(String heard, Future<ActivationResult> result) {
     SharedPreferencesUtil().saveBool(ActivationFlow.welcomeCardKey, false);
+    _heard = heard;
     _go(ActivationStage.writing);
-    // Keep "Writing your notes…" up long enough to read, even when Omi is quick.
-    Future.wait([result, Future<void>.delayed(const Duration(milliseconds: 1600))]).then((values) {
+    // Keep "Summarizing…" up long enough to see the words being read, even when Omi is quick.
+    Future.wait([result, Future<void>.delayed(const Duration(milliseconds: 1800))]).then((values) {
       _result = values.first as ActivationResult;
       _go(ActivationStage.summary);
     });
@@ -137,26 +145,28 @@ class _ActivationFlowState extends State<ActivationFlow> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final Widget child = switch (_stage) {
-      ActivationStage.wear => _Slide(
+      ActivationStage.wear => _Stage(
           key: const ValueKey('wear'),
           title: l10n.onboardingActWearTitle,
-          body: l10n.onboardingActWearBody,
-          visual: const _WearVisual(),
-          onContinue: () => _go(ActivationStage.intro),
+          subtitle: l10n.onboardingActWearBody,
+          body: const _RoundVisual(icon: Icons.graphic_eq_rounded, size: 160),
+          bottom: _ContinueButton(stage: 'wear', onPressed: () => _go(ActivationStage.intro)),
         ),
       ActivationStage.intro => _IntroLine(
           key: const ValueKey('intro'),
           text: l10n.onboardingActIntro,
           onDone: _afterIntro,
         ),
-      ActivationStage.microphone => _Slide(
+      ActivationStage.microphone => _Stage(
           key: const ValueKey('microphone'),
           title: l10n.onboardingActMicTitle,
-          body: l10n.onboardingActMicBody,
-          visual: const _MicVisual(),
-          actionLabel: l10n.onboardingActMicAllow,
-          headingTop: _kPromptHeadingTop,
-          onContinue: _allowMicrophone,
+          subtitle: l10n.onboardingActMicBody,
+          body: const _RoundVisual(icon: Icons.mic_none_rounded, size: 120),
+          bottom: _ContinueButton(
+            stage: 'microphone',
+            label: l10n.onboardingActMicAllow,
+            onPressed: _allowMicrophone,
+          ),
         ),
       ActivationStage.dictate => _DictationStep(
           key: const ValueKey('dictate'),
@@ -164,18 +174,31 @@ class _ActivationFlowState extends State<ActivationFlow> {
           onDone: _dictated,
           onSkip: _skipped,
         ),
-      ActivationStage.writing => _Writing(key: const ValueKey('writing'), label: l10n.onboardingActWriting),
-      ActivationStage.summary => _SummaryReveal(
-          key: const ValueKey('summary'),
-          result: _result!,
-          onContinue: () => _go(
-            _result!.hasNotes && _result!.tasks.isNotEmpty ? ActivationStage.taskList : ActivationStage.congrats,
-          ),
+      ActivationStage.writing => _Stage(
+          key: const ValueKey('writing'),
+          title: l10n.onboardingActWriting,
+          body: _ReadingCard(text: _heard),
+          bottom: const _WorkingControl(),
+          bottomHeight: _kControlHeight,
         ),
-      ActivationStage.taskList => _TasksReveal(
+      ActivationStage.summary => _Stage(
+          key: const ValueKey('summary'),
+          title: _result!.hasNotes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
+          body: _SummaryCard(result: _result!, heard: _heard),
+          bottom: _ContinueButton(
+            stage: 'summary',
+            onPressed: () => _go(
+              _result!.hasNotes && _result!.tasks.isNotEmpty ? ActivationStage.taskList : ActivationStage.congrats,
+            ),
+          ),
+          bottomHeight: _kControlHeight,
+        ),
+      ActivationStage.taskList => _Stage(
           key: const ValueKey('taskList'),
-          tasks: _result!.tasks,
-          onContinue: () => _go(ActivationStage.congrats),
+          title: l10n.onboardingActTasksLabel,
+          body: _TasksCard(tasks: _result!.tasks),
+          bottom: _ContinueButton(stage: 'tasks', onPressed: () => _go(ActivationStage.congrats)),
+          bottomHeight: _kControlHeight,
         ),
       ActivationStage.congrats =>
         _Hooray(key: const ValueKey('congrats'), onContinue: () => _go(ActivationStage.rating)),
@@ -192,59 +215,106 @@ class _ActivationFlowState extends State<ActivationFlow> {
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (current, previous) =>
           Stack(fit: StackFit.expand, children: [...previous, if (current != null) current]),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.03), end: Offset.zero).animate(animation),
-          child: child,
-        ),
-      ),
+      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
       child: child,
     );
   }
 }
 
-/// A title, a line, a visual in the middle and one button in the thumb spot.
-class _Slide extends StatelessWidget {
-  const _Slide({
+/// Every titled activation screen. The title has one size and one height throughout, so moving from
+/// step to step only changes what is under it. [bottomHeight] fixes the area under the body (so the
+/// body sits in the same place on screens that share it); [bodyAtTop] puts the body right under
+/// the title instead of in the middle.
+class _Stage extends StatelessWidget {
+  const _Stage({
     super.key,
     required this.title,
+    this.subtitle,
     required this.body,
-    required this.visual,
-    required this.onContinue,
-    this.actionLabel,
-    this.headingTop = 0,
+    this.bottom,
+    this.topRight,
+    this.bottomHeight,
+    this.bodyAtTop = false,
   });
 
   final String title;
-  final String body;
-  final Widget visual;
-  final VoidCallback onContinue;
-  final String? actionLabel;
-  final double headingTop;
+  final String? subtitle;
+  final Widget body;
+  final Widget? bottom;
+  final Widget? topRight;
+  final double? bottomHeight;
+  final bool bodyAtTop;
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingPlainStep(
-      title: title,
-      subtitle: body,
-      centered: true,
-      headingTop: headingTop,
-      body: visual,
-      action: OmiButton(
-        key: Key('activation_continue_${(key as ValueKey?)?.value}'),
-        label: actionLabel ?? context.l10n.continueButton,
-        expand: true,
-        onPressed: () {
-          OmiHaptics.selection();
-          onContinue();
-        },
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: _kTopRowHeight,
+              child: Align(alignment: Alignment.centerRight, child: topRight),
+            ),
+            const SizedBox(height: _kHeadingGap),
+            Semantics(header: true, child: Text(title, style: OmiType.title1, textAlign: TextAlign.center)),
+            if (subtitle != null) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                subtitle!,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            Expanded(
+              child: bodyAtTop
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: OmiSpacing.md),
+                      child: Align(alignment: Alignment.topCenter, child: body),
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Center(child: body),
+                        ),
+                      ),
+                    ),
+            ),
+            if (bottom != null)
+              bottomHeight == null
+                  ? Padding(padding: const EdgeInsets.only(top: OmiSpacing.md), child: bottom)
+                  : SizedBox(height: bottomHeight, child: Align(alignment: Alignment.bottomCenter, child: bottom)),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// "Let's see Omi at work." Word by word, then moves on by itself. Nothing to tap.
+class _ContinueButton extends StatelessWidget {
+  const _ContinueButton({required this.stage, required this.onPressed, this.label});
+
+  final String stage;
+  final String? label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OmiButton(
+      key: Key('activation_continue_$stage'),
+      label: label ?? context.l10n.continueButton,
+      expand: true,
+      onPressed: () {
+        OmiHaptics.selection();
+        onPressed();
+      },
+    );
+  }
+}
+
+/// "Let's try Omi." Word by word, then moves on by itself. Nothing to tap.
 class _IntroLine extends StatefulWidget {
   const _IntroLine({super.key, required this.text, required this.onDone});
 
@@ -261,7 +331,7 @@ class _IntroLineState extends State<_IntroLine> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer(const Duration(milliseconds: 3600), widget.onDone);
+    _timer = Timer(const Duration(milliseconds: 3000), widget.onDone);
   }
 
   @override
@@ -277,7 +347,7 @@ class _IntroLineState extends State<_IntroLine> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
         child: OneShot(
-          duration: const Duration(milliseconds: 1800),
+          duration: const Duration(milliseconds: 1400),
           builder: (context, t) => Wrap(
             alignment: WrapAlignment.center,
             children: [
@@ -295,8 +365,12 @@ class _IntroLineState extends State<_IntroLine> {
   }
 }
 
-class _WearVisual extends StatelessWidget {
-  const _WearVisual();
+/// A large icon in a soft circle, rising in.
+class _RoundVisual extends StatelessWidget {
+  const _RoundVisual({required this.icon, required this.size});
+
+  final IconData icon;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -304,13 +378,11 @@ class _WearVisual extends StatelessWidget {
       duration: const Duration(milliseconds: 900),
       builder: (context, t) => rise(
         t,
-        Center(
-          child: Container(
-            width: 160,
-            height: 160,
-            decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
-            child: Center(child: Icon(Icons.graphic_eq_rounded, size: 64, color: OmiColors.textPrimary)),
-          ),
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
+          child: Icon(icon, size: size * 0.42, color: OmiColors.textPrimary),
         ),
         distance: 16,
       ),
@@ -318,36 +390,26 @@ class _WearVisual extends StatelessWidget {
   }
 }
 
-class _MicVisual extends StatelessWidget {
-  const _MicVisual();
+/// The card that holds the reader's words, the same on the dictation and "Summarizing…" screens so
+/// it reads as one card.
+class _WordsCard extends StatelessWidget {
+  const _WordsCard({super.key, required this.child});
+
+  final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return OneShot(
-      duration: const Duration(milliseconds: 900),
-      builder: (context, t) => rise(
-        t,
-        Center(
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
-            child: Center(child: Icon(Icons.mic_none_rounded, size: 52, color: OmiColors.textPrimary)),
-          ),
-        ),
-        distance: 16,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => NoteCard(minHeight: 150, child: child);
 }
 
-/// "Tell Omi about your day": a note card that fills with the reader's words, and a bar with ×
-/// (skip), the hint and ✓ (done, enabled once Omi has heard something).
+TextStyle get _wordsStyle => OmiType.body.copyWith(height: 1.45);
+
+/// "Tell Omi about your day": a card that fills with the reader's words, Skip (grey, top right) and
+/// a round ✓ (done, enabled once Omi has heard something).
 class _DictationStep extends StatefulWidget {
   const _DictationStep({super.key, required this.capture, required this.onDone, required this.onSkip});
 
   final ActivationCapture capture;
-  final void Function(Future<ActivationResult> result) onDone;
+  final void Function(String heard, Future<ActivationResult> result) onDone;
   final VoidCallback onSkip;
 
   @override
@@ -381,8 +443,8 @@ class _DictationStepState extends State<_DictationStep> {
   void _done() {
     if (_leaving) return;
     _leaving = true;
-    OmiHaptics.selection();
-    widget.onDone(widget.capture.finish());
+    OmiHaptics.medium();
+    widget.onDone(widget.capture.liveText.value, widget.capture.finish());
   }
 
   Future<void> _skip() async {
@@ -397,68 +459,38 @@ class _DictationStepState extends State<_DictationStep> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final source = widget.capture.usesDevice ? 'Omi' : l10n.onboardingActPhoneMic;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
-        child: ValueListenableBuilder<String>(
-          valueListenable: widget.capture.liveText,
-          builder: (context, text, _) {
-            final heard = text.trim().isNotEmpty;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _QuietSkip(label: l10n.skip, onTap: _skip),
-                ),
-                // Level with the microphone step's title (its step adds OmiSpacing.lg; Skip takes 44).
-                const SizedBox(height: _kPromptHeadingTop + OmiSpacing.lg - 44),
-                Semantics(
-                  header: true,
-                  child: Text(l10n.onboardingActDictateTitle, style: OmiType.title1, textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(
-                  l10n.onboardingActDictateBody,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        child: NoteCard(
-                          key: const Key('activation_dictation_card'),
-                          minHeight: 150,
-                          child: Text(
-                            heard ? text : l10n.onboardingActDictateExample,
-                            style: OmiType.body.copyWith(
-                              height: 1.45,
-                              color: heard ? OmiColors.textPrimary : OmiColors.textTertiary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                _ListeningControl(
-                  heard: heard,
-                  listening: _started,
-                  failed: _failed,
-                  status: _failed
-                      ? l10n.somethingWentWrong
-                      : heard
-                          ? l10n.onboardingActDictateHint
-                          : '${l10n.listening} · $source',
-                  onDone: _done,
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+    return ValueListenableBuilder<String>(
+      valueListenable: widget.capture.liveText,
+      builder: (context, text, _) {
+        final heard = text.trim().isNotEmpty;
+        return _Stage(
+          title: l10n.onboardingActDictateTitle,
+          subtitle: l10n.onboardingActDictateBody,
+          topRight: _QuietSkip(label: l10n.skip, onTap: _skip),
+          body: AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            child: _WordsCard(
+              key: const Key('activation_dictation_card'),
+              child: Text(
+                heard ? text : l10n.onboardingActDictateExample,
+                style: _wordsStyle.copyWith(color: heard ? OmiColors.textPrimary : OmiColors.textTertiary),
+              ),
+            ),
+          ),
+          bottom: _ListeningControl(
+            heard: heard,
+            listening: _started,
+            failed: _failed,
+            status: _failed
+                ? l10n.somethingWentWrong
+                : heard
+                    ? l10n.onboardingActDictateHint
+                    : '${l10n.listening} · $source',
+            onDone: _done,
+          ),
+          bottomHeight: _kControlHeight,
+        );
+      },
     );
   }
 }
@@ -537,116 +569,410 @@ class _ListeningControl extends StatelessWidget {
   }
 }
 
-class _Writing extends StatelessWidget {
-  const _Writing({super.key, required this.label});
-
-  final String label;
+/// Where the ✓ was: the same circle, now a sparkle that breathes while Omi reads the words.
+class _WorkingControl extends StatefulWidget {
+  const _WorkingControl();
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const OmiSpinner(),
-          const SizedBox(height: OmiSpacing.lg),
-          Text(label, style: OmiType.title3, textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
+  State<_WorkingControl> createState() => _WorkingControlState();
 }
 
-/// Omi's notes from the dictation: title, then the summary writing itself in.
-class _SummaryReveal extends StatelessWidget {
-  const _SummaryReveal({super.key, required this.result, required this.onContinue});
-
-  final ActivationResult result;
-  final VoidCallback onContinue;
+class _WorkingControlState extends State<_WorkingControl> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
+    ..repeat(reverse: true);
 
   @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final notes = result.hasNotes;
-    final body = notes ? (result.overview.isEmpty ? result.transcript : result.overview) : result.transcript;
-    return OnboardingPlainStep(
-      title: notes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
-      centered: true,
-      body: OneShot(
-        duration: Duration(milliseconds: 600 + 40 * body.split(' ').length.clamp(10, 60)),
-        builder: (context, t) => rise(
-          segment(t, 0, 0.25),
-          NoteCard(
-            key: const Key('activation_summary_card'),
-            emoji: notes ? result.emoji : null,
-            title: notes && result.title.isNotEmpty ? result.title : null,
-            child: WordReveal(
-              text: body,
-              t: segment(t, 0.2, 1, Curves.linear),
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.45),
-            ),
-          ),
-          distance: 18,
-        ),
-      ),
-      action: OmiButton(
-        key: const Key('activation_continue_summary'),
-        label: l10n.continueButton,
-        expand: true,
-        onPressed: () {
-          OmiHaptics.selection();
-          onContinue();
-        },
-      ),
-    );
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
   }
-}
-
-/// The tasks Omi found, dropping in and ticking one by one.
-class _TasksReveal extends StatelessWidget {
-  const _TasksReveal({super.key, required this.tasks, required this.onContinue});
-
-  final List<String> tasks;
-  final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final step = 1 / (tasks.length + 1);
-    return OnboardingPlainStep(
-      title: l10n.onboardingActTasksLabel,
-      centered: true,
-      body: OneShot(
-        duration: Duration(milliseconds: 700 + 450 * tasks.length),
-        builder: (context, t) => NoteCard(
-          key: const Key('activation_tasks_card'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 140,
+          height: 140,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              for (var i = 0; i < tasks.length; i++)
-                rise(
-                  segment(t, i * step * 0.8, i * step * 0.8 + step),
-                  TaskRow(text: tasks[i], check: segment(t, (i + 1) * step * 0.8, (i + 1) * step * 0.8 + step * 0.6)),
+              ScanningRippleWidget(isScanning: true, size: 140, color: OmiColors.textTertiary),
+              AnimatedBuilder(
+                animation: _pulse,
+                builder: (context, child) => Transform.scale(
+                  scale: reduce ? 1 : 1 + 0.06 * Curves.easeInOut.transform(_pulse.value),
+                  child: child,
                 ),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                  child: Icon(Icons.auto_awesome_rounded, size: 30, color: OmiColors.onAccent),
+                ),
+              ),
             ],
           ),
         ),
-      ),
-      action: OmiButton(
-        key: const Key('activation_continue_tasks'),
-        label: l10n.continueButton,
-        expand: true,
-        onPressed: () {
-          OmiHaptics.selection();
-          onContinue();
-        },
+        // Keeps the circle level with the ✓ it replaces (which has a status line under it).
+        const SizedBox(height: OmiSpacing.xs + 20),
+      ],
+    );
+  }
+}
+
+/// The reader's words in their card, with a light sweeping across them: Omi reading.
+class _ReadingCard extends StatefulWidget {
+  const _ReadingCard({required this.text});
+
+  final String text;
+
+  @override
+  State<_ReadingCard> createState() => _ReadingCardState();
+}
+
+class _ReadingCardState extends State<_ReadingCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _sweep = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
+    final text = Text(widget.text, style: _wordsStyle.copyWith(color: Colors.white));
+    return _WordsCard(
+      child: reduce
+          ? Text(widget.text, style: _wordsStyle.copyWith(color: OmiColors.textSecondary))
+          : AnimatedBuilder(
+              animation: _sweep,
+              builder: (context, child) {
+                final x = -1.0 + 3.0 * _sweep.value;
+                return ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) => LinearGradient(
+                    begin: Alignment(x - 1, -0.3),
+                    end: Alignment(x + 1, 0.3),
+                    colors: [OmiColors.textTertiary, OmiColors.textPrimary, OmiColors.textTertiary],
+                    stops: const [0.3, 0.5, 0.7],
+                  ).createShader(bounds),
+                  child: child,
+                );
+              },
+              child: text,
+            ),
+    );
+  }
+}
+
+/// What Omi made of the words, built in front of the reader the way it appears on Home: the emoji
+/// pops in, the title and "Just now" rise, a line draws across, the summary writes itself, and the
+/// reader's own words wait underneath behind "Transcript".
+///
+/// When Omi could not make notes, the card holds the reader's words alone.
+class _SummaryCard extends StatefulWidget {
+  const _SummaryCard({required this.result, required this.heard});
+
+  final ActivationResult result;
+  final String heard;
+
+  @override
+  State<_SummaryCard> createState() => _SummaryCardState();
+}
+
+class _SummaryCardState extends State<_SummaryCard> {
+  final List<Timer> _beats = [];
+  bool _showTranscript = false;
+
+  ActivationResult get _r => widget.result;
+  String get _words => _r.transcript.isNotEmpty ? _r.transcript : widget.heard;
+  String get _summary => _r.overview.isNotEmpty ? _r.overview : _words;
+
+  Duration get _duration => Duration(milliseconds: (900 + 55 * _summary.split(' ').length).clamp(1600, 4600));
+
+  @override
+  void initState() {
+    super.initState();
+    // A light tap as the emoji lands.
+    if (_r.hasNotes) {
+      _beats.add(Timer(Duration(milliseconds: (_duration.inMilliseconds * 0.12).round()), OmiHaptics.light));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final beat in _beats) {
+      beat.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final bodyStyle = OmiType.body.copyWith(color: OmiColors.textPrimary, height: 1.45);
+    return OneShot(
+      duration: _duration,
+      builder: (context, t) {
+        if (!_r.hasNotes) {
+          return _WordsCard(
+            key: const Key('activation_summary_card'),
+            child: WordReveal(text: _words, t: segment(t, 0, 1, Curves.linear), style: _wordsStyle),
+          );
+        }
+        return NoteCard(
+          key: const Key('activation_summary_card'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Transform.scale(
+                    scale: Curves.elasticOut.transform(segment(t, 0.02, 0.3, Curves.linear)),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                      child: Text(_r.emoji, style: const TextStyle(fontSize: 22)),
+                    ),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        rise(segment(t, 0.08, 0.26), Text(_r.title, style: OmiType.headline), distance: 8),
+                        const SizedBox(height: 2),
+                        rise(
+                          segment(t, 0.14, 0.32),
+                          Text(l10n.onboardingActJustNow,
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                          distance: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: OmiSpacing.md),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: segment(t, 0.2, 0.4),
+                  child: Container(height: 1, color: OmiColors.border),
+                ),
+              ),
+              const SizedBox(height: OmiSpacing.md),
+              WordReveal(text: _summary, t: segment(t, 0.3, 0.9, Curves.linear), style: bodyStyle),
+              if (_words.isNotEmpty) ...[
+                const SizedBox(height: OmiSpacing.md),
+                rise(segment(t, 0.88, 1), _transcriptToggle(l10n), distance: 6),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _transcriptToggle(AppLocalizations l10n) {
+    final quiet = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          button: true,
+          expanded: _showTranscript,
+          child: GestureDetector(
+            key: const Key('activation_summary_transcript'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              OmiHaptics.selection();
+              setState(() => _showTranscript = !_showTranscript);
+            },
+            child: SizedBox(
+              height: 32,
+              child: Row(
+                children: [
+                  Icon(Icons.graphic_eq_rounded, size: 16, color: OmiColors.textTertiary),
+                  const SizedBox(width: OmiSpacing.xs),
+                  Expanded(child: Text(l10n.transcript, style: quiet)),
+                  AnimatedRotation(
+                    turns: _showTranscript ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.expand_more_rounded, size: 18, color: OmiColors.textTertiary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _showTranscript
+              ? Padding(
+                  padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                  child: Text(_words, style: quiet.copyWith(color: OmiColors.textTertiary, height: 1.4)),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+}
+
+/// The to-dos Omi caught, sliding in one by one with a tap each, then "Saved to your tasks".
+class _TasksCard extends StatefulWidget {
+  const _TasksCard({required this.tasks});
+
+  final List<String> tasks;
+
+  @override
+  State<_TasksCard> createState() => _TasksCardState();
+}
+
+class _TasksCardState extends State<_TasksCard> {
+  final List<Timer> _beats = [];
+  static const _first = 300;
+  static const _gap = 520;
+
+  int get _n => widget.tasks.length;
+  Duration get _duration => Duration(milliseconds: _first + _gap * _n + 900);
+
+  /// When task [i] arrives, as a share of [_duration].
+  double _at(int i) => (_first + _gap * i) / _duration.inMilliseconds;
+
+  @override
+  void initState() {
+    super.initState();
+    for (var i = 0; i < _n; i++) {
+      _beats.add(Timer(Duration(milliseconds: _first + _gap * i + 120), OmiHaptics.light));
+    }
+    _beats.add(Timer(Duration(milliseconds: _first + _gap * _n + 200), OmiHaptics.success));
+  }
+
+  @override
+  void dispose() {
+    for (final beat in _beats) {
+      beat.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final span = _gap / _duration.inMilliseconds;
+    return OneShot(
+      duration: _duration,
+      builder: (context, t) {
+        final saved = segment(t, _at(_n), _at(_n) + span);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            NoteCard(
+              key: const Key('activation_tasks_card'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < _n; i++) ...[
+                    if (i > 0) Container(height: 1, color: OmiColors.border),
+                    _arriving(segment(t, _at(i), _at(i) + span * 1.4, Curves.linear), widget.tasks[i]),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: OmiSpacing.md),
+            Opacity(
+              opacity: saved,
+              child: Transform.scale(
+                scale: 0.9 + 0.1 * Curves.easeOutBack.transform(saved),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+                  decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 16, color: OmiColors.success),
+                      const SizedBox(width: OmiSpacing.xs),
+                      Text(l10n.onboardingActSavedToTasks,
+                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One task sliding in from the right with a brief highlight behind it as it lands.
+  Widget _arriving(double p, String text) {
+    final move = Curves.easeOutBack.transform(p.clamp(0.0, 1.0));
+    final glow = p <= 0 ? 0.0 : (1 - p).clamp(0.0, 1.0);
+    return Opacity(
+      opacity: segment(p, 0, 0.4),
+      child: Transform.translate(
+        offset: Offset((1 - move) * 36, 0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: OmiColors.accent.withValues(alpha: 0.06 * glow),
+            borderRadius: OmiRadius.smAll,
+          ),
+          padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxs),
+          child: TaskRow(text: text),
+        ),
       ),
     );
   }
 }
 
-/// "You're all set": a moment to celebrate. The title and line rise in above a check that pops in
-/// with a burst of confetti, and one Continue.
+/// Skip in the top right, in grey: there if needed, without competing with the dictation.
+class _QuietSkip extends StatelessWidget {
+  const _QuietSkip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const Key('activation_dictation_skip'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: Center(
+            widthFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
+              child: Text(label, style: OmiType.callout.copyWith(color: OmiColors.textTertiary)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "You're all set": the title in its usual place, and under it a check that pops in with a burst
+/// of confetti. One Continue.
 class _Hooray extends StatefulWidget {
   const _Hooray({super.key, required this.onContinue});
 
@@ -660,94 +986,55 @@ class _HoorayState extends State<_Hooray> {
   Timer? _haptic;
 
   @override
+  void initState() {
+    super.initState();
+    // In step with the check popping in.
+    _haptic = Timer(const Duration(milliseconds: 380), OmiHaptics.success);
+  }
+
+  @override
   void dispose() {
     _haptic?.cancel();
     super.dispose();
   }
 
   @override
-  void initState() {
-    super.initState();
-    // In step with the check popping in.
-    _haptic = Timer(const Duration(milliseconds: 620), OmiHaptics.success);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final name = SharedPreferencesUtil().givenName.trim();
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: OneShot(
-                duration: const Duration(milliseconds: 2200),
-                builder: (context, t) => Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    rise(
-                      segment(t, 0, 0.3),
-                      Text(
-                        name.isEmpty ? l10n.youreAllSet : l10n.onboardingActCongratsTitle(name),
-                        style: OmiType.largeTitle,
-                        textAlign: TextAlign.center,
-                      ),
-                      distance: 14,
-                    ),
-                    const SizedBox(height: OmiSpacing.sm),
-                    rise(
-                      segment(t, 0.12, 0.42),
-                      Text(
-                        l10n.onboardingActCongratsBody,
-                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                        textAlign: TextAlign.center,
-                      ),
-                      distance: 10,
-                    ),
-                    const SizedBox(height: OmiSpacing.md),
-                    SizedBox(
-                      width: 280,
-                      height: 280,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Positioned.fill(
-                              child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.32, 1, Curves.linear)))),
-                          Transform.scale(
-                            scale: Curves.elasticOut.transform(segment(t, 0.28, 0.7, Curves.linear)),
-                            child: Container(
-                              width: 104,
-                              height: 104,
-                              decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                              child: Icon(Icons.check_rounded, size: 56, color: OmiColors.onAccent),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+    return _Stage(
+      title: name.isEmpty ? l10n.youreAllSet : l10n.onboardingActCongratsTitle(name),
+      subtitle: l10n.onboardingActCongratsBody,
+      body: OneShot(
+        duration: const Duration(milliseconds: 2000),
+        builder: (context, t) => SizedBox(
+          width: 280,
+          height: 280,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.2, 1, Curves.linear)))),
+              Transform.scale(
+                scale: Curves.elasticOut.transform(segment(t, 0.12, 0.55, Curves.linear)),
+                child: Container(
+                  width: 104,
+                  height: 104,
+                  decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                  child: Icon(Icons.check_rounded, size: 56, color: OmiColors.onAccent),
                 ),
               ),
-            ),
-            OmiButton(
-              key: const Key('activation_continue_congrats'),
-              label: l10n.continueButton,
-              expand: true,
-              onPressed: widget.onContinue,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+      bottom: _ContinueButton(stage: 'congrats', onPressed: widget.onContinue),
     );
   }
 }
 
-/// After the celebration: "Enjoying Omi so far?" and five gold stars popping in one by one, placed
-/// above where the App Store rating pop-up opens by itself. The paywall follows once the pop-up is
-/// closed (or Continue, if it never showed).
+/// After the celebration: "Enjoying Omi so far?" with five gold stars popping in one by one under
+/// it, both above where the App Store rating pop-up opens by itself. The paywall follows once the
+/// pop-up is closed (or Continue, if it never showed).
 class _RatingAsk extends StatefulWidget {
   const _RatingAsk({super.key, required this.requestReview, required this.onDone});
 
@@ -786,7 +1073,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   }
 
   /// iOS gives no callback for its rating pop-up, but the app goes inactive while it is up and
-  /// becomes active again when it closes: that return is the cue to move on to Home.
+  /// becomes active again when it closes: that return is the cue to move on.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive) _promptShowing = true;
@@ -801,82 +1088,30 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return _Stage(
+      title: context.l10n.onboardingActRateTitle,
+      bodyAtTop: true,
+      body: OneShot(
+        duration: const Duration(milliseconds: 1200),
+        builder: (context, t) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Title and stars sit in the top third: iOS opens its rating pop-up in the middle.
-            const Spacer(),
-            OneShot(
-              duration: const Duration(milliseconds: 1400),
-              builder: (context, t) => Column(
-                children: [
-                  rise(
-                    segment(t, 0, 0.35),
-                    Text(l10n.onboardingActRateTitle, style: OmiType.largeTitle, textAlign: TextAlign.center),
-                    distance: 12,
-                  ),
-                  const SizedBox(height: OmiSpacing.lg),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (var i = 0; i < 5; i++)
-                        Transform.scale(
-                          scale: Curves.elasticOut.transform(segment(t, 0.2 + i * 0.1, 0.6 + i * 0.1, Curves.linear)),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 3),
-                            child: Icon(Icons.star_rounded, size: 52, color: _gold),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
+            for (var i = 0; i < 5; i++)
+              Transform.scale(
+                scale: Curves.elasticOut.transform(segment(t, i * 0.1, 0.45 + i * 0.1, Curves.linear)),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 3),
+                  child: Icon(Icons.star_rounded, size: 46, color: _gold),
+                ),
               ),
-            ),
-            const Spacer(flex: 5),
-            OmiButton(
-              key: const Key('activation_continue_rating'),
-              label: l10n.continueButton,
-              expand: true,
-              onPressed: _leave,
-            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Skip in the top right, in grey: there if needed, without competing with the dictation.
-class _QuietSkip extends StatelessWidget {
-  const _QuietSkip({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: GestureDetector(
-        key: const Key('activation_dictation_skip'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-          child: Center(
-            widthFactor: 1,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
-              child: Text(label, style: OmiType.callout.copyWith(color: OmiColors.textTertiary)),
-            ),
-          ),
-        ),
+      bottom: OmiButton(
+        key: const Key('activation_continue_rating'),
+        label: context.l10n.continueButton,
+        expand: true,
+        onPressed: _leave,
       ),
     );
   }

@@ -13082,13 +13082,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingActPhoneMic => 'Mikrofon telefonu';
 
   @override
-  String get onboardingActWriting => 'Píšu vaše poznámky…';
+  String get onboardingActWriting => 'Shrnujeme…';
 
   @override
-  String get onboardingActNotesLabel => 'Vaše poznámky';
+  String get onboardingActNotesLabel => 'Váš den ve zkratce';
 
   @override
-  String get onboardingActTasksLabel => 'Vaše úkoly';
+  String get onboardingActTasksLabel => 'Omi zachytil vaše úkoly';
 
   @override
   String get onboardingActYourWords => 'Tohle jste řekli';
@@ -13118,11 +13118,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingActDemoTitle => 'Oběd se Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Sam se v červnu stěhuje do Lisabonu.';
+  String get onboardingActDemoSummary =>
+      'Oběd se Sam, která se v červnu stěhuje do Lisabonu. Chcete do pátku poslat týmu prezentaci a cestou domů koupit mléko.';
 
   @override
   String get onboardingActDemoTask1 => 'Poslat prezentaci týmu do pátku';
 
   @override
   String get onboardingActDemoTask2 => 'Koupit cestou domů mléko';
+
+  @override
+  String get onboardingActJustNow => 'Právě teď';
+
+  @override
+  String get onboardingActSavedToTasks => 'Uloženo do vašich úkolů';
 }

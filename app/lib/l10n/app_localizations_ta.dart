@@ -13171,13 +13171,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onboardingActPhoneMic => 'தொலைபேசி மைக்ரோஃபோன்';
 
   @override
-  String get onboardingActWriting => 'உங்கள் குறிப்புகள் எழுதப்படுகின்றன…';
+  String get onboardingActWriting => 'சுருக்கப்படுகிறது…';
 
   @override
-  String get onboardingActNotesLabel => 'உங்கள் குறிப்புகள்';
+  String get onboardingActNotesLabel => 'உங்கள் நாள், சுருக்கமாக';
 
   @override
-  String get onboardingActTasksLabel => 'உங்கள் பணிகள்';
+  String get onboardingActTasksLabel => 'Omi உங்கள் வேலைகளைக் கண்டறிந்தது';
 
   @override
   String get onboardingActYourWords => 'நீங்கள் சொன்னது இது';
@@ -13207,11 +13207,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onboardingActDemoTitle => 'சாமுடன் மதிய உணவு';
 
   @override
-  String get onboardingActDemoSummary => 'சாம் ஜூனில் லிஸ்பனுக்குப் போகிறாள்.';
+  String get onboardingActDemoSummary =>
+      'ஜூனில் லிஸ்பனுக்குச் செல்லும் சாமுடன் மதிய உணவு. வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்பவும், வீட்டுக்குப் போகும் வழியில் பால் வாங்கவும் வேண்டும்.';
 
   @override
   String get onboardingActDemoTask1 => 'வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்புவது';
 
   @override
   String get onboardingActDemoTask2 => 'வீட்டுக்குப் போகும் வழியில் பால் வாங்குவது';
+
+  @override
+  String get onboardingActJustNow => 'இப்போதுதான்';
+
+  @override
+  String get onboardingActSavedToTasks => 'உங்கள் பணிகளில் சேமிக்கப்பட்டது';
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Tikko paēdu pusdienas ar Semu, jūnijā viņa pārceļas uz Lisabonu! Atgādini man līdz piektdienai nosūtīt prezentāciju komandai un pa ceļam mājās nopirkt pienu.",
     "onboardingActDictateHint": "Kad esat pabeidzis, pieskarieties ķeksītim",
     "onboardingActPhoneMic": "Tālruņa mikrofons",
-    "onboardingActWriting": "Rakstu jūsu piezīmes…",
-    "onboardingActNotesLabel": "Jūsu piezīmes",
-    "onboardingActTasksLabel": "Jūsu uzdevumi",
+    "onboardingActWriting": "Apkopojam…",
+    "onboardingActNotesLabel": "Jūsu diena īsumā",
+    "onboardingActTasksLabel": "Omi pamanīja jūsu darāmo",
     "onboardingActYourWords": "Lūk, ko jūs teicāt",
     "onboardingActCongratsTitle": "Viss gatavs, {name}",
     "onboardingActCongratsBody": "Valkājiet Omi visu dienu. Jūsu sarunas parādīsies sākumlapā.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Laipni lūgti Omi",
     "onboardingWelcomeCardBody": "Valkājiet Omi un runājiet kā parasti. Katra saruna šeit kļūst par piezīmēm, uzdevumiem un atmiņām.",
     "onboardingActDemoTitle": "Pusdienas ar Semu",
-    "onboardingActDemoSummary": "Sema jūnijā pārceļas uz Lisabonu.",
+    "onboardingActDemoSummary": "Pusdienas ar Semu, kura jūnijā pārceļas uz Lisabonu. Līdz piektdienai jānosūta prezentācija komandai un mājupceļā jānopērk piens.",
     "onboardingActDemoTask1": "Līdz piektdienai nosūtīt prezentāciju komandai",
-    "onboardingActDemoTask2": "Pa ceļam mājās nopirkt pienu"
+    "onboardingActDemoTask2": "Pa ceļam mājās nopirkt pienu",
+    "onboardingActJustNow": "Tikko",
+    "onboardingActSavedToTasks": "Saglabāts jūsu uzdevumos"
 }

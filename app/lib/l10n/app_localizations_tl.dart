@@ -13186,13 +13186,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingActPhoneMic => 'Mikropono ng phone';
 
   @override
-  String get onboardingActWriting => 'Isinusulat ang mga tala mo…';
+  String get onboardingActWriting => 'Binubuod…';
 
   @override
-  String get onboardingActNotesLabel => 'Mga tala mo';
+  String get onboardingActNotesLabel => 'Ang araw mo, buod';
 
   @override
-  String get onboardingActTasksLabel => 'Mga gawain mo';
+  String get onboardingActTasksLabel => 'Nahuli ng Omi ang mga gagawin mo';
 
   @override
   String get onboardingActYourWords => 'Ito ang sinabi mo';
@@ -13222,11 +13222,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingActDemoTitle => 'Lunch kasama si Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Lilipat si Sam sa Lisbon sa Hunyo.';
+  String get onboardingActDemoSummary =>
+      'Tanghalian kasama si Sam, na lilipat sa Lisbon sa Hunyo. Gusto mong ipadala ang deck sa team bago mag-Biyernes at bumili ng gatas pauwi.';
 
   @override
   String get onboardingActDemoTask1 => 'Ipadala ang deck sa team bago mag-Biyernes';
 
   @override
   String get onboardingActDemoTask2 => 'Bumili ng gatas pauwi';
+
+  @override
+  String get onboardingActJustNow => 'Ngayon lang';
+
+  @override
+  String get onboardingActSavedToTasks => 'Na-save sa mga gawain mo';
 }

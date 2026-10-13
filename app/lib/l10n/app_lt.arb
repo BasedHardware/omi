@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Ką tik pietavau su Sem, birželį ji kraustosi į Lisaboną! Primink man iki penktadienio nusiųsti pristatymą komandai ir grįžtant namo nupirkti pieno.",
     "onboardingActDictateHint": "Baigę bakstelėkite varnelę",
     "onboardingActPhoneMic": "Telefono mikrofonas",
-    "onboardingActWriting": "Rašomi jūsų užrašai…",
-    "onboardingActNotesLabel": "Jūsų užrašai",
-    "onboardingActTasksLabel": "Jūsų užduotys",
+    "onboardingActWriting": "Apibendriname…",
+    "onboardingActNotesLabel": "Jūsų diena trumpai",
+    "onboardingActTasksLabel": "Omi pastebėjo jūsų darbus",
     "onboardingActYourWords": "Štai ką pasakėte",
     "onboardingActCongratsTitle": "Viskas paruošta, {name}",
     "onboardingActCongratsBody": "Nešiokite Omi visą dieną. Jūsų pokalbiai atsiras pradžios ekrane.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Sveiki atvykę į Omi",
     "onboardingWelcomeCardBody": "Nešiokite Omi ir kalbėkite kaip įprasta. Kiekvienas pokalbis čia virsta užrašais, užduotimis ir prisiminimais.",
     "onboardingActDemoTitle": "Pietūs su Sem",
-    "onboardingActDemoSummary": "Sem birželį kraustosi į Lisaboną.",
+    "onboardingActDemoSummary": "Pietūs su Sem, kuri birželį persikelia į Lisaboną. Iki penktadienio norite išsiųsti komandai pristatymą ir grįžtant nupirkti pieno.",
     "onboardingActDemoTask1": "Iki penktadienio nusiųsti pristatymą komandai",
-    "onboardingActDemoTask2": "Grįžtant namo nupirkti pieno"
+    "onboardingActDemoTask2": "Grįžtant namo nupirkti pieno",
+    "onboardingActJustNow": "Ką tik",
+    "onboardingActSavedToTasks": "Išsaugota jūsų užduotyse"
 }

@@ -13141,13 +13141,13 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onboardingActPhoneMic => 'Микрофон на телефонот';
 
   @override
-  String get onboardingActWriting => 'Ги пишувам вашите белешки…';
+  String get onboardingActWriting => 'Сумираме…';
 
   @override
-  String get onboardingActNotesLabel => 'Ваши белешки';
+  String get onboardingActNotesLabel => 'Вашиот ден, накратко';
 
   @override
-  String get onboardingActTasksLabel => 'Ваши задачи';
+  String get onboardingActTasksLabel => 'Omi ги фати вашите задачи';
 
   @override
   String get onboardingActYourWords => 'Еве што рековте';
@@ -13178,11 +13178,18 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onboardingActDemoTitle => 'Ручек со Сем';
 
   @override
-  String get onboardingActDemoSummary => 'Сем се сели во Лисабон во јуни.';
+  String get onboardingActDemoSummary =>
+      'Ручек со Сем, која во јуни се сели во Лисабон. Сакате да ја испратите презентацијата до тимот до петок и да купите млеко на пат кон дома.';
 
   @override
   String get onboardingActDemoTask1 => 'Да ја пратам презентацијата на тимот до петок';
 
   @override
   String get onboardingActDemoTask2 => 'Да купам млеко на пат кон дома';
+
+  @override
+  String get onboardingActJustNow => 'Токму сега';
+
+  @override
+  String get onboardingActSavedToTasks => 'Зачувано во вашите задачи';
 }

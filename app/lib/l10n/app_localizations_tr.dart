@@ -13093,13 +13093,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingActPhoneMic => 'Telefon mikrofonu';
 
   @override
-  String get onboardingActWriting => 'Notların yazılıyor…';
+  String get onboardingActWriting => 'Özetleniyor…';
 
   @override
-  String get onboardingActNotesLabel => 'Notların';
+  String get onboardingActNotesLabel => 'Günün, özetle';
 
   @override
-  String get onboardingActTasksLabel => 'Görevlerin';
+  String get onboardingActTasksLabel => 'Omi yapılacaklarını yakaladı';
 
   @override
   String get onboardingActYourWords => 'Söylediklerin';
@@ -13129,11 +13129,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingActDemoTitle => 'Sam\'le öğle yemeği';
 
   @override
-  String get onboardingActDemoSummary => 'Sam haziranda Lizbon\'a taşınıyor.';
+  String get onboardingActDemoSummary =>
+      'Haziranda Lizbon\'a taşınan Sam\'le öğle yemeği. Cumaya kadar sunumu ekibine göndermek ve eve dönerken süt almak istiyorsun.';
 
   @override
   String get onboardingActDemoTask1 => 'Cumaya kadar sunumu ekibe gönder';
 
   @override
   String get onboardingActDemoTask2 => 'Eve dönerken süt al';
+
+  @override
+  String get onboardingActJustNow => 'Az önce';
+
+  @override
+  String get onboardingActSavedToTasks => 'Görevlerine kaydedildi';
 }

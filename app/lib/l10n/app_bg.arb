@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Току-що обядвах със Сам, мести се в Лисабон през юни! Напомни ми да пратя презентацията на екипа до петък и да купя мляко на връщане.",
     "onboardingActDictateHint": "Докоснете отметката, когато сте готови",
     "onboardingActPhoneMic": "Микрофон на телефона",
-    "onboardingActWriting": "Пиша бележките ви…",
-    "onboardingActNotesLabel": "Вашите бележки",
-    "onboardingActTasksLabel": "Вашите задачи",
+    "onboardingActWriting": "Обобщаваме…",
+    "onboardingActNotesLabel": "Денят ви накратко",
+    "onboardingActTasksLabel": "Omi улови задачите ви",
     "onboardingActYourWords": "Ето какво казахте",
     "onboardingActCongratsTitle": "Всичко е готово, {name}",
     "onboardingActCongratsBody": "Носете Omi през деня. Разговорите ви ще се появяват на началния екран.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Добре дошли в Omi",
     "onboardingWelcomeCardBody": "Носете Omi и говорете както обикновено. Всеки разговор се превръща тук в бележки, задачи и спомени.",
     "onboardingActDemoTitle": "Обяд със Сам",
-    "onboardingActDemoSummary": "Сам се мести в Лисабон през юни.",
+    "onboardingActDemoSummary": "Обяд със Сам, която се мести в Лисабон през юни. Искате да изпратите презентацията на екипа до петък и да вземете мляко на път за вкъщи.",
     "onboardingActDemoTask1": "Да пратя презентацията на екипа до петък",
-    "onboardingActDemoTask2": "Да купя мляко на връщане"
+    "onboardingActDemoTask2": "Да купя мляко на връщане",
+    "onboardingActJustNow": "Току-що",
+    "onboardingActSavedToTasks": "Запазено в задачите ви"
 }

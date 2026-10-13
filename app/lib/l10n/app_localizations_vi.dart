@@ -13079,13 +13079,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingActPhoneMic => 'Micrô điện thoại';
 
   @override
-  String get onboardingActWriting => 'Đang viết ghi chú…';
+  String get onboardingActWriting => 'Đang tóm tắt…';
 
   @override
-  String get onboardingActNotesLabel => 'Ghi chú của bạn';
+  String get onboardingActNotesLabel => 'Ngày của bạn, tóm tắt';
 
   @override
-  String get onboardingActTasksLabel => 'Việc cần làm';
+  String get onboardingActTasksLabel => 'Omi đã nắm được việc cần làm';
 
   @override
   String get onboardingActYourWords => 'Đây là những gì bạn nói';
@@ -13115,11 +13115,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingActDemoTitle => 'Ăn trưa với Sam';
 
   @override
-  String get onboardingActDemoSummary => 'Sam chuyển đến Lisbon vào tháng Sáu.';
+  String get onboardingActDemoSummary =>
+      'Ăn trưa với Sam, người sẽ chuyển đến Lisbon vào tháng Sáu. Bạn muốn gửi bản trình bày cho nhóm trước thứ Sáu và mua sữa trên đường về.';
 
   @override
   String get onboardingActDemoTask1 => 'Gửi slide cho nhóm trước thứ Sáu';
 
   @override
   String get onboardingActDemoTask2 => 'Mua sữa trên đường về nhà';
+
+  @override
+  String get onboardingActJustNow => 'Vừa xong';
+
+  @override
+  String get onboardingActSavedToTasks => 'Đã lưu vào việc cần làm';
 }

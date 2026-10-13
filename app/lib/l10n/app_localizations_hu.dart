@@ -13133,13 +13133,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingActPhoneMic => 'Telefon mikrofonja';
 
   @override
-  String get onboardingActWriting => 'Jegyzetek írása…';
+  String get onboardingActWriting => 'Összefoglalás…';
 
   @override
-  String get onboardingActNotesLabel => 'Jegyzeteid';
+  String get onboardingActNotesLabel => 'A napod röviden';
 
   @override
-  String get onboardingActTasksLabel => 'Teendőid';
+  String get onboardingActTasksLabel => 'Az Omi kiszúrta a teendőidet';
 
   @override
   String get onboardingActYourWords => 'Ezt mondtad';
@@ -13169,11 +13169,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingActDemoTitle => 'Ebéd Sammel';
 
   @override
-  String get onboardingActDemoSummary => 'Sam júniusban Lisszabonba költözik.';
+  String get onboardingActDemoSummary =>
+      'Ebéd Sammel, aki júniusban Lisszabonba költözik. Péntekig el akarod küldeni a prezentációt a csapatnak, és hazafelé tejet venni.';
 
   @override
   String get onboardingActDemoTask1 => 'Péntekig elküldeni a prezentációt a csapatnak';
 
   @override
   String get onboardingActDemoTask2 => 'Hazafelé tejet venni';
+
+  @override
+  String get onboardingActJustNow => 'Épp most';
+
+  @override
+  String get onboardingActSavedToTasks => 'Mentve a teendőid közé';
 }

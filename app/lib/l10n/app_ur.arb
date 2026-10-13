@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "ابھی سیم کے ساتھ لنچ کیا، وہ جون میں لزبن جا رہی ہے! مجھے یاد دلانا کہ جمعہ تک ٹیم کو ڈیک بھیجنا ہے، اور گھر جاتے ہوئے دودھ لینا ہے۔",
     "onboardingActDictateHint": "ختم ہونے پر ٹک پر ٹیپ کریں",
     "onboardingActPhoneMic": "فون کا مائیکروفون",
-    "onboardingActWriting": "آپ کے نوٹس لکھے جا رہے ہیں…",
-    "onboardingActNotesLabel": "آپ کے نوٹس",
-    "onboardingActTasksLabel": "آپ کے کام",
+    "onboardingActWriting": "خلاصہ بن رہا ہے…",
+    "onboardingActNotesLabel": "آپ کا دن، مختصراً",
+    "onboardingActTasksLabel": "Omi نے آپ کے کام پکڑ لیے",
     "onboardingActYourWords": "آپ نے یہ کہا",
     "onboardingActCongratsTitle": "سب تیار ہے، {name}",
     "onboardingActCongratsBody": "دن بھر Omi پہنیں۔ آپ کی گفتگو ہوم پر نظر آئے گی۔",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Omi میں خوش آمدید",
     "onboardingWelcomeCardBody": "Omi پہنیں اور معمول کے مطابق بات کریں۔ ہر گفتگو یہیں نوٹس، کاموں اور یادوں میں بدل جاتی ہے۔",
     "onboardingActDemoTitle": "سیم کے ساتھ لنچ",
-    "onboardingActDemoSummary": "سیم جون میں لزبن جا رہی ہے۔",
+    "onboardingActDemoSummary": "سام کے ساتھ لنچ، جو جون میں لزبن جا رہی ہے۔ آپ کو جمعہ تک ٹیم کو ڈیک بھیجنا ہے اور گھر جاتے ہوئے دودھ لینا ہے۔",
     "onboardingActDemoTask1": "جمعہ تک ٹیم کو ڈیک بھیجنا",
-    "onboardingActDemoTask2": "گھر جاتے ہوئے دودھ لینا"
+    "onboardingActDemoTask2": "گھر جاتے ہوئے دودھ لینا",
+    "onboardingActJustNow": "ابھی ابھی",
+    "onboardingActSavedToTasks": "آپ کے کاموں میں محفوظ"
 }

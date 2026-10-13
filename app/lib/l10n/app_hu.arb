@@ -4119,9 +4119,9 @@
     "onboardingActDictateExample": "Most ebédeltem Sammel, júniusban Lisszabonba költözik! Emlékeztess, hogy péntekig küldjem el a prezentációt a csapatnak, és hazafelé vegyek tejet.",
     "onboardingActDictateHint": "Ha végeztél, koppints a pipára",
     "onboardingActPhoneMic": "Telefon mikrofonja",
-    "onboardingActWriting": "Jegyzetek írása…",
-    "onboardingActNotesLabel": "Jegyzeteid",
-    "onboardingActTasksLabel": "Teendőid",
+    "onboardingActWriting": "Összefoglalás…",
+    "onboardingActNotesLabel": "A napod röviden",
+    "onboardingActTasksLabel": "Az Omi kiszúrta a teendőidet",
     "onboardingActYourWords": "Ezt mondtad",
     "onboardingActCongratsTitle": "Minden kész, {name}",
     "onboardingActCongratsBody": "Viseld az Omit egész nap. A beszélgetéseid a kezdőlapon jelennek meg.",
@@ -4130,7 +4130,9 @@
     "onboardingWelcomeCardTitle": "Üdvözöl az Omi",
     "onboardingWelcomeCardBody": "Viseld az Omit, és beszélj, ahogy szoktál. Minden beszélgetésből itt jegyzet, teendő és emlék lesz.",
     "onboardingActDemoTitle": "Ebéd Sammel",
-    "onboardingActDemoSummary": "Sam júniusban Lisszabonba költözik.",
+    "onboardingActDemoSummary": "Ebéd Sammel, aki júniusban Lisszabonba költözik. Péntekig el akarod küldeni a prezentációt a csapatnak, és hazafelé tejet venni.",
     "onboardingActDemoTask1": "Péntekig elküldeni a prezentációt a csapatnak",
-    "onboardingActDemoTask2": "Hazafelé tejet venni"
+    "onboardingActDemoTask2": "Hazafelé tejet venni",
+    "onboardingActJustNow": "Épp most",
+    "onboardingActSavedToTasks": "Mentve a teendőid közé"
 }

@@ -13006,13 +13006,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingActPhoneMic => 'ميكروفون الهاتف';
 
   @override
-  String get onboardingActWriting => 'جارٍ كتابة ملاحظاتك…';
+  String get onboardingActWriting => 'جارٍ التلخيص…';
 
   @override
-  String get onboardingActNotesLabel => 'ملاحظاتك';
+  String get onboardingActNotesLabel => 'يومك، باختصار';
 
   @override
-  String get onboardingActTasksLabel => 'مهامك';
+  String get onboardingActTasksLabel => 'التقط Omi مهامك';
 
   @override
   String get onboardingActYourWords => 'هذا ما قلته';
@@ -13041,11 +13041,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingActDemoTitle => 'غداء مع سام';
 
   @override
-  String get onboardingActDemoSummary => 'سام ستنتقل إلى لشبونة في يونيو.';
+  String get onboardingActDemoSummary =>
+      'غداء مع سام التي ستنتقل إلى لشبونة في يونيو. تريد إرسال العرض التقديمي إلى فريقك بحلول الجمعة وشراء الحليب في طريق العودة.';
 
   @override
   String get onboardingActDemoTask1 => 'إرسال العرض إلى الفريق قبل الجمعة';
 
   @override
   String get onboardingActDemoTask2 => 'شراء الحليب في طريق العودة';
+
+  @override
+  String get onboardingActJustNow => 'الآن';
+
+  @override
+  String get onboardingActSavedToTasks => 'تم الحفظ في مهامك';
 }

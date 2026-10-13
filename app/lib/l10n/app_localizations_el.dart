@@ -13165,13 +13165,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingActPhoneMic => 'Μικρόφωνο τηλεφώνου';
 
   @override
-  String get onboardingActWriting => 'Γράφονται οι σημειώσεις σας…';
+  String get onboardingActWriting => 'Γίνεται σύνοψη…';
 
   @override
-  String get onboardingActNotesLabel => 'Οι σημειώσεις σας';
+  String get onboardingActNotesLabel => 'Η μέρα σου, σε σύνοψη';
 
   @override
-  String get onboardingActTasksLabel => 'Οι εργασίες σας';
+  String get onboardingActTasksLabel => 'Το Omi εντόπισε τις εκκρεμότητές σου';
 
   @override
   String get onboardingActYourWords => 'Αυτά είπατε';
@@ -13201,11 +13201,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingActDemoTitle => 'Γεύμα με τη Σαμ';
 
   @override
-  String get onboardingActDemoSummary => 'Η Σαμ μετακομίζει στη Λισαβόνα τον Ιούνιο.';
+  String get onboardingActDemoSummary =>
+      'Μεσημεριανό με τον Σαμ, που μετακομίζει στη Λισαβόνα τον Ιούνιο. Θέλεις να στείλεις την παρουσίαση στην ομάδα ως την Παρασκευή και να πάρεις γάλα στον δρόμο για το σπίτι.';
 
   @override
   String get onboardingActDemoTask1 => 'Αποστολή της παρουσίασης στην ομάδα ως την Παρασκευή';
 
   @override
   String get onboardingActDemoTask2 => 'Γάλα στον δρόμο για το σπίτι';
+
+  @override
+  String get onboardingActJustNow => 'Μόλις τώρα';
+
+  @override
+  String get onboardingActSavedToTasks => 'Αποθηκεύτηκε στις εργασίες σου';
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Acabo de dinar amb la Sam, se'n va a viure a Lisboa al juny! Recorda'm d'enviar la presentació a l'equip abans de divendres i de comprar llet de tornada a casa.",
     "onboardingActDictateHint": "Toca la marca quan acabis",
     "onboardingActPhoneMic": "Micròfon del telèfon",
-    "onboardingActWriting": "Escrivint les teves notes…",
-    "onboardingActNotesLabel": "Les teves notes",
-    "onboardingActTasksLabel": "Les teves tasques",
+    "onboardingActWriting": "Resumint…",
+    "onboardingActNotesLabel": "El teu dia, resumit",
+    "onboardingActTasksLabel": "Omi ha trobat les teves tasques",
     "onboardingActYourWords": "Això és el que has dit",
     "onboardingActCongratsTitle": "Tot a punt, {name}",
     "onboardingActCongratsBody": "Porta l'Omi durant el dia. Les teves converses apareixeran a l'inici.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Et donem la benvinguda a Omi",
     "onboardingWelcomeCardBody": "Porta l'Omi i parla com sempre. Cada conversa es converteix aquí en notes, tasques i records.",
     "onboardingActDemoTitle": "Dinar amb la Sam",
-    "onboardingActDemoSummary": "La Sam es muda a Lisboa al juny.",
+    "onboardingActDemoSummary": "Dinar amb en Sam, que es trasllada a Lisboa al juny. Vols enviar la presentació a l'equip abans de divendres i comprar llet de camí a casa.",
     "onboardingActDemoTask1": "Enviar la presentació a l'equip abans de divendres",
-    "onboardingActDemoTask2": "Comprar llet de tornada a casa"
+    "onboardingActDemoTask2": "Comprar llet de tornada a casa",
+    "onboardingActJustNow": "Ara mateix",
+    "onboardingActSavedToTasks": "Desat a les teves tasques"
 }

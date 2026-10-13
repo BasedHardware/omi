@@ -98,12 +98,14 @@ void main() {
     await tester.pump();
     await tapKey(tester, 'activation_dictation_done');
 
-    expect(find.text('Your notes'), findsOneWidget);
-    expect(find.text('🥗  Lunch with Sam'), findsOneWidget);
+    expect(find.text('Your day, summarized'), findsOneWidget);
+    expect(find.text('Lunch with Sam'), findsOneWidget);
+    expect(find.text('Just now'), findsOneWidget);
     await tapKey(tester, 'activation_continue_summary');
 
-    expect(find.text('Your tasks'), findsOneWidget);
+    expect(find.text('Omi caught your to-dos'), findsOneWidget);
     expect(find.text('Grab milk on the way home'), findsOneWidget);
+    expect(find.text('Saved to your tasks'), findsOneWidget);
     await tapKey(tester, 'activation_continue_tasks');
 
     // Hooray, then the rating ask, then the paywall.
@@ -113,6 +115,10 @@ void main() {
     await tester.pump(const Duration(seconds: 2)); // The pop-up waits for the stars.
     expect(find.text('Enjoying Omi so far?'), findsOneWidget);
     expect(run.events, ['review'], reason: 'the App Store pop-up opens by itself');
+    // The stars sit right under the title, above where the pop-up opens.
+    final titleBottom = tester.getBottomLeft(find.text('Enjoying Omi so far?')).dy;
+    final starsTop = tester.getTopLeft(find.byIcon(Icons.star_rounded).first).dy;
+    expect(starsTop - titleBottom, lessThan(40));
 
     // The pop-up makes the app inactive; its closing opens the paywall, and closing that goes Home.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

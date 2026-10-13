@@ -13149,13 +13149,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingActPhoneMic => 'Micròfon del telèfon';
 
   @override
-  String get onboardingActWriting => 'Escrivint les teves notes…';
+  String get onboardingActWriting => 'Resumint…';
 
   @override
-  String get onboardingActNotesLabel => 'Les teves notes';
+  String get onboardingActNotesLabel => 'El teu dia, resumit';
 
   @override
-  String get onboardingActTasksLabel => 'Les teves tasques';
+  String get onboardingActTasksLabel => 'Omi ha trobat les teves tasques';
 
   @override
   String get onboardingActYourWords => 'Això és el que has dit';
@@ -13185,11 +13185,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingActDemoTitle => 'Dinar amb la Sam';
 
   @override
-  String get onboardingActDemoSummary => 'La Sam es muda a Lisboa al juny.';
+  String get onboardingActDemoSummary =>
+      'Dinar amb en Sam, que es trasllada a Lisboa al juny. Vols enviar la presentació a l\'equip abans de divendres i comprar llet de camí a casa.';
 
   @override
   String get onboardingActDemoTask1 => 'Enviar la presentació a l\'equip abans de divendres';
 
   @override
   String get onboardingActDemoTask2 => 'Comprar llet de tornada a casa';
+
+  @override
+  String get onboardingActJustNow => 'Ara mateix';
+
+  @override
+  String get onboardingActSavedToTasks => 'Desat a les teves tasques';
 }

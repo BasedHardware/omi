@@ -13118,13 +13118,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingActPhoneMic => 'ಫೋನ್ ಮೈಕ್ರೊಫೋನ್';
 
   @override
-  String get onboardingActWriting => 'ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
+  String get onboardingActWriting => 'ಸಾರಾಂಶ ಮಾಡುತ್ತಿದೆ…';
 
   @override
-  String get onboardingActNotesLabel => 'ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳು';
+  String get onboardingActNotesLabel => 'ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ';
 
   @override
-  String get onboardingActTasksLabel => 'ನಿಮ್ಮ ಕಾರ್ಯಗಳು';
+  String get onboardingActTasksLabel => 'Omi ನಿಮ್ಮ ಕೆಲಸಗಳನ್ನು ಗುರುತಿಸಿದೆ';
 
   @override
   String get onboardingActYourWords => 'ನೀವು ಹೇಳಿದ್ದು ಇದು';
@@ -13154,11 +13154,18 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingActDemoTitle => 'ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ';
 
   @override
-  String get onboardingActDemoSummary => 'ಸ್ಯಾಮ್ ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿದ್ದಾಳೆ.';
+  String get onboardingActDemoSummary =>
+      'ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿರುವ ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ. ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸಬೇಕು, ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರಬೇಕು.';
 
   @override
   String get onboardingActDemoTask1 => 'ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸುವುದು';
 
   @override
   String get onboardingActDemoTask2 => 'ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರುವುದು';
+
+  @override
+  String get onboardingActJustNow => 'ಈಗಷ್ಟೇ';
+
+  @override
+  String get onboardingActSavedToTasks => 'ನಿಮ್ಮ ಕೆಲಸಗಳಿಗೆ ಉಳಿಸಲಾಗಿದೆ';
 }

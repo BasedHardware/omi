@@ -23328,19 +23328,19 @@ abstract class AppLocalizations {
   /// Activation: shown while Omi processes the dictation
   ///
   /// In en, this message translates to:
-  /// **'Writing your notes…'**
+  /// **'Summarizing…'**
   String get onboardingActWriting;
 
   /// Activation: small label above the generated summary
   ///
   /// In en, this message translates to:
-  /// **'Your notes'**
+  /// **'Your day, summarized'**
   String get onboardingActNotesLabel;
 
   /// Activation: small label above the generated tasks
   ///
   /// In en, this message translates to:
-  /// **'Your tasks'**
+  /// **'Omi caught your to-dos'**
   String get onboardingActTasksLabel;
 
   /// Activation: fallback label when no summary could be made
@@ -23394,7 +23394,7 @@ abstract class AppLocalizations {
   /// Activation slide illustration: example summary line
   ///
   /// In en, this message translates to:
-  /// **'Sam is moving to Lisbon in June.'**
+  /// **'Lunch with Sam, who\'s moving to Lisbon in June. You want to send the deck to your team by Friday and grab milk on the way home.'**
   String get onboardingActDemoSummary;
 
   /// Activation slide illustration: example task
@@ -23408,6 +23408,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Grab milk on the way home'**
   String get onboardingActDemoTask2;
+
+  /// Time label on the first note Omi wrote in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get onboardingActJustNow;
+
+  /// Confirmation under the to-dos Omi found in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to your tasks'**
+  String get onboardingActSavedToTasks;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -13105,13 +13105,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onboardingActPhoneMic => 'Telefono mikrofonas';
 
   @override
-  String get onboardingActWriting => 'Rašomi jūsų užrašai…';
+  String get onboardingActWriting => 'Apibendriname…';
 
   @override
-  String get onboardingActNotesLabel => 'Jūsų užrašai';
+  String get onboardingActNotesLabel => 'Jūsų diena trumpai';
 
   @override
-  String get onboardingActTasksLabel => 'Jūsų užduotys';
+  String get onboardingActTasksLabel => 'Omi pastebėjo jūsų darbus';
 
   @override
   String get onboardingActYourWords => 'Štai ką pasakėte';
@@ -13141,11 +13141,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onboardingActDemoTitle => 'Pietūs su Sem';
 
   @override
-  String get onboardingActDemoSummary => 'Sem birželį kraustosi į Lisaboną.';
+  String get onboardingActDemoSummary =>
+      'Pietūs su Sem, kuri birželį persikelia į Lisaboną. Iki penktadienio norite išsiųsti komandai pristatymą ir grįžtant nupirkti pieno.';
 
   @override
   String get onboardingActDemoTask1 => 'Iki penktadienio nusiųsti pristatymą komandai';
 
   @override
   String get onboardingActDemoTask2 => 'Grįžtant namo nupirkti pieno';
+
+  @override
+  String get onboardingActJustNow => 'Ką tik';
+
+  @override
+  String get onboardingActSavedToTasks => 'Išsaugota jūsų užduotyse';
 }

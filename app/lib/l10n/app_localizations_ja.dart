@@ -12893,13 +12893,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingActPhoneMic => 'スマホのマイク';
 
   @override
-  String get onboardingActWriting => 'メモを作成中…';
+  String get onboardingActWriting => '要約しています…';
 
   @override
-  String get onboardingActNotesLabel => 'あなたのメモ';
+  String get onboardingActNotesLabel => '今日のまとめ';
 
   @override
-  String get onboardingActTasksLabel => 'あなたのタスク';
+  String get onboardingActTasksLabel => 'Omiがやることを見つけました';
 
   @override
   String get onboardingActYourWords => 'あなたが話した内容';
@@ -12928,11 +12928,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingActDemoTitle => 'サムとランチ';
 
   @override
-  String get onboardingActDemoSummary => 'サムは6月にリスボンへ引っ越す。';
+  String get onboardingActDemoSummary => '6月にリスボンへ引っ越すサムとランチ。金曜までにチームへ資料を送り、帰りに牛乳を買う予定。';
 
   @override
   String get onboardingActDemoTask1 => '金曜までにチームへ資料を送る';
 
   @override
   String get onboardingActDemoTask2 => '帰りに牛乳を買う';
+
+  @override
+  String get onboardingActJustNow => 'たった今';
+
+  @override
+  String get onboardingActSavedToTasks => 'タスクに保存しました';
 }

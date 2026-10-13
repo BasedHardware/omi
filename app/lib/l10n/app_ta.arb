@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "இப்போதுதான் சாமுடன் மதிய உணவு சாப்பிட்டேன், அவள் ஜூனில் லிஸ்பனுக்குப் போகிறாள்! வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்பவும், வீட்டுக்குப் போகும் வழியில் பால் வாங்கவும் நினைவூட்டு.",
     "onboardingActDictateHint": "முடிந்ததும் டிக்கைத் தட்டவும்",
     "onboardingActPhoneMic": "தொலைபேசி மைக்ரோஃபோன்",
-    "onboardingActWriting": "உங்கள் குறிப்புகள் எழுதப்படுகின்றன…",
-    "onboardingActNotesLabel": "உங்கள் குறிப்புகள்",
-    "onboardingActTasksLabel": "உங்கள் பணிகள்",
+    "onboardingActWriting": "சுருக்கப்படுகிறது…",
+    "onboardingActNotesLabel": "உங்கள் நாள், சுருக்கமாக",
+    "onboardingActTasksLabel": "Omi உங்கள் வேலைகளைக் கண்டறிந்தது",
     "onboardingActYourWords": "நீங்கள் சொன்னது இது",
     "onboardingActCongratsTitle": "எல்லாம் தயார், {name}",
     "onboardingActCongratsBody": "நாள் முழுவதும் Omi-ஐ அணியுங்கள். உங்கள் உரையாடல்கள் முகப்பில் தோன்றும்.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Omi-க்கு வரவேற்கிறோம்",
     "onboardingWelcomeCardBody": "Omi-ஐ அணிந்து வழக்கம்போல் பேசுங்கள். ஒவ்வொரு உரையாடலும் இங்கேயே குறிப்புகள், பணிகள், நினைவுகளாகும்.",
     "onboardingActDemoTitle": "சாமுடன் மதிய உணவு",
-    "onboardingActDemoSummary": "சாம் ஜூனில் லிஸ்பனுக்குப் போகிறாள்.",
+    "onboardingActDemoSummary": "ஜூனில் லிஸ்பனுக்குச் செல்லும் சாமுடன் மதிய உணவு. வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்பவும், வீட்டுக்குப் போகும் வழியில் பால் வாங்கவும் வேண்டும்.",
     "onboardingActDemoTask1": "வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்புவது",
-    "onboardingActDemoTask2": "வீட்டுக்குப் போகும் வழியில் பால் வாங்குவது"
+    "onboardingActDemoTask2": "வீட்டுக்குப் போகும் வழியில் பால் வாங்குவது",
+    "onboardingActJustNow": "இப்போதுதான்",
+    "onboardingActSavedToTasks": "உங்கள் பணிகளில் சேமிக்கப்பட்டது"
 }

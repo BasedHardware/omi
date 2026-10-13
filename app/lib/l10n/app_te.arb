@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "ఇప్పుడే సామ్‌తో లంచ్ చేశా, తను జూన్‌లో లిస్బన్‌కి వెళ్తోంది! శుక్రవారంలోగా టీమ్‌కి డెక్ పంపాలని, ఇంటికి వెళ్లేటప్పుడు పాలు తీసుకోవాలని గుర్తు చేయి.",
     "onboardingActDictateHint": "అయ్యాక టిక్ నొక్కండి",
     "onboardingActPhoneMic": "ఫోన్ మైక్రోఫోన్",
-    "onboardingActWriting": "మీ నోట్స్ రాస్తోంది…",
-    "onboardingActNotesLabel": "మీ నోట్స్",
-    "onboardingActTasksLabel": "మీ పనులు",
+    "onboardingActWriting": "సారాంశం తయారవుతోంది…",
+    "onboardingActNotesLabel": "మీ రోజు, సంక్షిప్తంగా",
+    "onboardingActTasksLabel": "Omi మీ పనులను గుర్తించింది",
     "onboardingActYourWords": "మీరు చెప్పింది ఇది",
     "onboardingActCongratsTitle": "అంతా సిద్ధం, {name}",
     "onboardingActCongratsBody": "రోజంతా Omi ధరించండి. మీ సంభాషణలు హోమ్‌లో కనిపిస్తాయి.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "Omiకి స్వాగతం",
     "onboardingWelcomeCardBody": "Omi ధరించి మామూలుగా మాట్లాడండి. ప్రతి సంభాషణ ఇక్కడే నోట్స్, పనులు, జ్ఞాపకాలుగా మారుతుంది.",
     "onboardingActDemoTitle": "సామ్‌తో లంచ్",
-    "onboardingActDemoSummary": "సామ్ జూన్‌లో లిస్బన్‌కి వెళ్తోంది.",
+    "onboardingActDemoSummary": "జూన్‌లో లిస్బన్‌కు వెళ్తున్న సామ్‌తో లంచ్. శుక్రవారం లోపు టీమ్‌కు డెక్ పంపాలి, ఇంటికి వెళ్తూ పాలు కొనాలి.",
     "onboardingActDemoTask1": "శుక్రవారంలోగా టీమ్‌కి డెక్ పంపడం",
-    "onboardingActDemoTask2": "ఇంటికి వెళ్లేటప్పుడు పాలు తీసుకోవడం"
+    "onboardingActDemoTask2": "ఇంటికి వెళ్లేటప్పుడు పాలు తీసుకోవడం",
+    "onboardingActJustNow": "ఇప్పుడే",
+    "onboardingActSavedToTasks": "మీ పనుల్లో సేవ్ అయింది"
 }

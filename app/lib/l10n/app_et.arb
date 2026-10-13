@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Sõin just Samiga lõunat, ta kolib juunis Lissaboni! Tuleta mulle meelde saata esitlus reedeks tiimile ja osta koduteel piima.",
     "onboardingActDictateHint": "Kui oled valmis, puuduta linnukest",
     "onboardingActPhoneMic": "Telefoni mikrofon",
-    "onboardingActWriting": "Kirjutan su märkmeid…",
-    "onboardingActNotesLabel": "Sinu märkmed",
-    "onboardingActTasksLabel": "Sinu ülesanded",
+    "onboardingActWriting": "Teeme kokkuvõtet…",
+    "onboardingActNotesLabel": "Sinu päev lühidalt",
+    "onboardingActTasksLabel": "Omi märkas sinu ülesandeid",
     "onboardingActYourWords": "Seda sa ütlesid",
     "onboardingActCongratsTitle": "Kõik on valmis, {name}",
     "onboardingActCongratsBody": "Kanna Omit terve päeva. Su vestlused ilmuvad avalehele.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Tere tulemast Omisse",
     "onboardingWelcomeCardBody": "Kanna Omit ja räägi nagu ikka. Iga vestlus muutub siin märkmeteks, ülesanneteks ja mälestusteks.",
     "onboardingActDemoTitle": "Lõuna Samiga",
-    "onboardingActDemoSummary": "Sam kolib juunis Lissaboni.",
+    "onboardingActDemoSummary": "Lõuna Samiga, kes kolib juunis Lissaboni. Tahad reedeks esitluse meeskonnale saata ja koduteel piima osta.",
     "onboardingActDemoTask1": "Saata esitlus reedeks tiimile",
-    "onboardingActDemoTask2": "Osta koduteel piima"
+    "onboardingActDemoTask2": "Osta koduteel piima",
+    "onboardingActJustNow": "Just praegu",
+    "onboardingActSavedToTasks": "Salvestatud sinu ülesannetesse"
 }

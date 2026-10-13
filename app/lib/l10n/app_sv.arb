@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Åt precis lunch med Sam, hon flyttar till Lissabon i juni! Påminn mig om att skicka presentationen till teamet senast fredag och att köpa mjölk på vägen hem.",
     "onboardingActDictateHint": "Tryck på bocken när du är klar",
     "onboardingActPhoneMic": "Telefonens mikrofon",
-    "onboardingActWriting": "Skriver dina anteckningar…",
-    "onboardingActNotesLabel": "Dina anteckningar",
-    "onboardingActTasksLabel": "Dina uppgifter",
+    "onboardingActWriting": "Sammanfattar…",
+    "onboardingActNotesLabel": "Din dag, sammanfattad",
+    "onboardingActTasksLabel": "Omi fångade dina att-göra",
     "onboardingActYourWords": "Det här sa du",
     "onboardingActCongratsTitle": "Allt är klart, {name}",
     "onboardingActCongratsBody": "Bär Omi under dagen. Dina samtal visas på Hem.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Välkommen till Omi",
     "onboardingWelcomeCardBody": "Bär Omi och prata som vanligt. Varje samtal blir här till anteckningar, uppgifter och minnen.",
     "onboardingActDemoTitle": "Lunch med Sam",
-    "onboardingActDemoSummary": "Sam flyttar till Lissabon i juni.",
+    "onboardingActDemoSummary": "Lunch med Sam, som flyttar till Lissabon i juni. Du vill skicka presentationen till teamet senast fredag och köpa mjölk på vägen hem.",
     "onboardingActDemoTask1": "Skicka presentationen till teamet senast fredag",
-    "onboardingActDemoTask2": "Köp mjölk på vägen hem"
+    "onboardingActDemoTask2": "Köp mjölk på vägen hem",
+    "onboardingActJustNow": "Precis nu",
+    "onboardingActSavedToTasks": "Sparat i dina uppgifter"
 }

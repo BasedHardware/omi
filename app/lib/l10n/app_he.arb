@@ -11460,9 +11460,9 @@
     "onboardingActDictateExample": "הרגע אכלתי צהריים עם סאם, היא עוברת לליסבון ביוני! תזכיר לי לשלוח את המצגת לצוות עד שישי, ולקנות חלב בדרך הביתה.",
     "onboardingActDictateHint": "הקישו על ה-V כשתסיימו",
     "onboardingActPhoneMic": "מיקרופון הטלפון",
-    "onboardingActWriting": "כותב את ההערות שלך…",
-    "onboardingActNotesLabel": "ההערות שלך",
-    "onboardingActTasksLabel": "המשימות שלך",
+    "onboardingActWriting": "מסכם…",
+    "onboardingActNotesLabel": "היום שלך, בתמצית",
+    "onboardingActTasksLabel": "Omi תפס את המשימות שלך",
     "onboardingActYourWords": "זה מה שאמרת",
     "onboardingActCongratsTitle": "הכול מוכן, {name}",
     "onboardingActCongratsBody": "ענדו את Omi לאורך היום. השיחות שלכם יופיעו בדף הבית.",
@@ -11471,7 +11471,9 @@
     "onboardingWelcomeCardTitle": "ברוכים הבאים ל-Omi",
     "onboardingWelcomeCardBody": "ענדו את Omi ודברו כרגיל. כל שיחה הופכת כאן להערות, משימות וזיכרונות.",
     "onboardingActDemoTitle": "צהריים עם סאם",
-    "onboardingActDemoSummary": "סאם עוברת לליסבון ביוני.",
+    "onboardingActDemoSummary": "ארוחת צהריים עם סם, שעוברת ללישבון ביוני. אתה רוצה לשלוח את המצגת לצוות עד יום שישי ולקנות חלב בדרך הביתה.",
     "onboardingActDemoTask1": "לשלוח את המצגת לצוות עד שישי",
-    "onboardingActDemoTask2": "לקנות חלב בדרך הביתה"
+    "onboardingActDemoTask2": "לקנות חלב בדרך הביתה",
+    "onboardingActJustNow": "עכשיו",
+    "onboardingActSavedToTasks": "נשמר במשימות שלך"
 }

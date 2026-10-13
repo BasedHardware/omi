@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Μόλις έφαγα με τη Σαμ, μετακομίζει στη Λισαβόνα τον Ιούνιο! Θύμισέ μου να στείλω την παρουσίαση στην ομάδα ως την Παρασκευή και να πάρω γάλα στον δρόμο.",
     "onboardingActDictateHint": "Πατήστε το τικ όταν τελειώσετε",
     "onboardingActPhoneMic": "Μικρόφωνο τηλεφώνου",
-    "onboardingActWriting": "Γράφονται οι σημειώσεις σας…",
-    "onboardingActNotesLabel": "Οι σημειώσεις σας",
-    "onboardingActTasksLabel": "Οι εργασίες σας",
+    "onboardingActWriting": "Γίνεται σύνοψη…",
+    "onboardingActNotesLabel": "Η μέρα σου, σε σύνοψη",
+    "onboardingActTasksLabel": "Το Omi εντόπισε τις εκκρεμότητές σου",
     "onboardingActYourWords": "Αυτά είπατε",
     "onboardingActCongratsTitle": "Όλα έτοιμα, {name}",
     "onboardingActCongratsBody": "Φορέστε το Omi όλη μέρα. Οι συνομιλίες σας εμφανίζονται στην Αρχική.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Καλώς ήρθατε στο Omi",
     "onboardingWelcomeCardBody": "Φορέστε το Omi και μιλήστε όπως πάντα. Κάθε συνομιλία γίνεται εδώ σημειώσεις, εργασίες και αναμνήσεις.",
     "onboardingActDemoTitle": "Γεύμα με τη Σαμ",
-    "onboardingActDemoSummary": "Η Σαμ μετακομίζει στη Λισαβόνα τον Ιούνιο.",
+    "onboardingActDemoSummary": "Μεσημεριανό με τον Σαμ, που μετακομίζει στη Λισαβόνα τον Ιούνιο. Θέλεις να στείλεις την παρουσίαση στην ομάδα ως την Παρασκευή και να πάρεις γάλα στον δρόμο για το σπίτι.",
     "onboardingActDemoTask1": "Αποστολή της παρουσίασης στην ομάδα ως την Παρασκευή",
-    "onboardingActDemoTask2": "Γάλα στον δρόμο για το σπίτι"
+    "onboardingActDemoTask2": "Γάλα στον δρόμο για το σπίτι",
+    "onboardingActJustNow": "Μόλις τώρα",
+    "onboardingActSavedToTasks": "Αποθηκεύτηκε στις εργασίες σου"
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "अभी सैम के साथ लंच किया, वो जून में लिस्बन जा रही है! याद दिलाना कि शुक्रवार तक टीम को डेक भेजना है, और घर लौटते हुए दूध लेना है।",
     "onboardingActDictateHint": "हो जाने पर टिक पर टैप करें",
     "onboardingActPhoneMic": "फ़ोन माइक्रोफ़ोन",
-    "onboardingActWriting": "आपके नोट्स लिखे जा रहे हैं…",
-    "onboardingActNotesLabel": "आपके नोट्स",
-    "onboardingActTasksLabel": "आपके काम",
+    "onboardingActWriting": "सारांश बन रहा है…",
+    "onboardingActNotesLabel": "आपका दिन, संक्षेप में",
+    "onboardingActTasksLabel": "Omi ने आपके काम पकड़ लिए",
     "onboardingActYourWords": "आपने यह कहा",
     "onboardingActCongratsTitle": "सब तैयार है, {name}",
     "onboardingActCongratsBody": "दिनभर Omi पहनें। आपकी बातचीत होम पर दिखेगी।",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Omi में आपका स्वागत है",
     "onboardingWelcomeCardBody": "Omi पहनें और हमेशा की तरह बात करें। हर बातचीत यहीं नोट्स, कामों और यादों में बदल जाएगी।",
     "onboardingActDemoTitle": "सैम के साथ लंच",
-    "onboardingActDemoSummary": "सैम जून में लिस्बन जा रही है।",
+    "onboardingActDemoSummary": "सैम के साथ लंच, जो जून में लिस्बन जा रही है। आपको शुक्रवार तक टीम को डेक भेजना है और घर लौटते हुए दूध लेना है।",
     "onboardingActDemoTask1": "शुक्रवार तक टीम को डेक भेजना",
-    "onboardingActDemoTask2": "घर लौटते हुए दूध लेना"
+    "onboardingActDemoTask2": "घर लौटते हुए दूध लेना",
+    "onboardingActJustNow": "अभी-अभी",
+    "onboardingActSavedToTasks": "आपके कामों में सहेजा गया"
 }

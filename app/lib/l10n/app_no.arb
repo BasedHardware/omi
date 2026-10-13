@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "Spiste nettopp lunsj med Sam, hun flytter til Lisboa i juni! Minn meg på å sende presentasjonen til teamet innen fredag og kjøpe melk på vei hjem.",
     "onboardingActDictateHint": "Trykk på haken når du er ferdig",
     "onboardingActPhoneMic": "Telefonmikrofon",
-    "onboardingActWriting": "Skriver notatene dine…",
-    "onboardingActNotesLabel": "Notatene dine",
-    "onboardingActTasksLabel": "Oppgavene dine",
+    "onboardingActWriting": "Oppsummerer…",
+    "onboardingActNotesLabel": "Dagen din, oppsummert",
+    "onboardingActTasksLabel": "Omi fanget opp gjøremålene dine",
     "onboardingActYourWords": "Dette sa du",
     "onboardingActCongratsTitle": "Alt er klart, {name}",
     "onboardingActCongratsBody": "Bruk Omi gjennom dagen. Samtalene dine vises på Hjem.",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "Velkommen til Omi",
     "onboardingWelcomeCardBody": "Bruk Omi og snakk som vanlig. Hver samtale blir til notater, oppgaver og minner her.",
     "onboardingActDemoTitle": "Lunsj med Sam",
-    "onboardingActDemoSummary": "Sam flytter til Lisboa i juni.",
+    "onboardingActDemoSummary": "Lunsj med Sam, som flytter til Lisboa i juni. Du vil sende presentasjonen til teamet innen fredag og kjøpe melk på vei hjem.",
     "onboardingActDemoTask1": "Send presentasjonen til teamet innen fredag",
-    "onboardingActDemoTask2": "Kjøp melk på vei hjem"
+    "onboardingActDemoTask2": "Kjøp melk på vei hjem",
+    "onboardingActJustNow": "Akkurat nå",
+    "onboardingActSavedToTasks": "Lagret i oppgavene dine"
 }

@@ -4023,9 +4023,9 @@
     "onboardingActDictateExample": "刚和 Sam 吃完午饭，她六月要搬去里斯本！提醒我周五前把演示文稿发给团队，回家路上顺便买牛奶。",
     "onboardingActDictateHint": "说完后点对勾",
     "onboardingActPhoneMic": "手机麦克风",
-    "onboardingActWriting": "正在整理你的笔记…",
-    "onboardingActNotesLabel": "你的笔记",
-    "onboardingActTasksLabel": "你的待办",
+    "onboardingActWriting": "正在总结…",
+    "onboardingActNotesLabel": "你的一天，总结好了",
+    "onboardingActTasksLabel": "Omi 记下了你的待办",
     "onboardingActYourWords": "你说的内容",
     "onboardingActCongratsTitle": "一切就绪，{name}",
     "onboardingActCongratsBody": "整天戴着 Omi，你的对话会显示在首页。",
@@ -4034,7 +4034,9 @@
     "onboardingWelcomeCardTitle": "欢迎使用 Omi",
     "onboardingWelcomeCardBody": "戴上 Omi，照常说话。每段对话都会在这里变成笔记、待办和记忆。",
     "onboardingActDemoTitle": "和 Sam 吃午饭",
-    "onboardingActDemoSummary": "Sam 六月要搬去里斯本。",
+    "onboardingActDemoSummary": "和 Sam 吃了午饭，她六月要搬去里斯本。你打算周五前把演示稿发给团队，回家路上买牛奶。",
     "onboardingActDemoTask1": "周五前把演示文稿发给团队",
-    "onboardingActDemoTask2": "回家路上买牛奶"
+    "onboardingActDemoTask2": "回家路上买牛奶",
+    "onboardingActJustNow": "刚刚",
+    "onboardingActSavedToTasks": "已保存到你的任务"
 }
