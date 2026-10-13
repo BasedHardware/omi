@@ -8,6 +8,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
+import '../providers/guided_voice_experience_test.dart' show ExperienceIO;
 
 Future<void> pump(
   WidgetTester tester,
@@ -104,6 +105,57 @@ void main() {
     expect(find.byType(TextFormField), findsOneWidget);
     expect(find.text('Voice profile saved'), findsNothing);
     expect(io.remembered, isEmpty);
+  });
+
+  testWidgets('typed recovery saves through review and payoff Continue stays enabled during chat', (tester) async {
+    final io = ExperienceIO()..transcriptionFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak();
+    await flow.next();
+    await pump(tester, flow);
+    expect(find.byKey(const Key('introduction_type')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('introduction_type')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('introduction_typed_0')), 'I build bicycles.');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('introduction_save_typed')));
+    await tester.pumpAndSettle();
+    expect(flow.answers.single.text, 'I build bicycles.');
+    expect(io.remembered, isEmpty, reason: 'typed text still needs final review');
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    io.pendingChat = Completer<String>();
+    var exits = 0;
+    await pump(tester, flow, next: () => exits++);
+    await tester.tap(find.byKey(const Key('introduction_save_all')));
+    await tester.pumpAndSettle();
+    expect(io.remembered, ['I build bicycles.']);
+    expect(flow.payoffLoading, isTrue);
+    expect(find.byKey(const Key('payoff_answer')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('payoff_continue')));
+    expect(exits, 1);
+    io.pendingChat!.complete('Late answer');
+    await tester.pumpAndSettle();
+    expect(flow.payoffSource, 'fallback');
+  });
+
+  testWidgets('typed prompt stays scrollable with a keyboard on a small phone at large text', (tester) async {
+    final flow = GuidedVoiceController(ExperienceIO());
+    addTearDown(flow.dispose);
+    await flow.typeInstead();
+    await pump(tester, flow, scale: 1.8, size: const Size(320, 568));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 250);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.enterText(find.byKey(const Key('introduction_typed_0')), 'I build bicycles.');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('introduction_save_typed')));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('introduction_save_typed')));
+    await tester.pumpAndSettle();
+    expect(flow.answers.single.text, 'I build bicycles.');
   });
 
   testWidgets('the silence hint shows only while the microphone hears nothing', (tester) async {
