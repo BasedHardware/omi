@@ -163,3 +163,61 @@ def test_memory_correction_key_survives_undo_tail_and_tool_kind_changes():
     assert original.startswith('dream:memory:')
     changed = dict(row, content='Alise now prefers Robots')
     assert original != dream_tools.edit_key(tail, {tail.target: changed})
+
+
+@pytest.mark.parametrize('fragment', ['s1', '12.5', '00:00:12.5'])
+def test_fragment_spelling_only_changes_selected_segment_and_journals_scope(monkeypatch, fragment):
+    uid = 'synthetic'
+    row = {
+        'id': 'c1',
+        'data_protection_level': 'enhanced',
+        'user_title': 'Alise meeting',
+        'structured': {'title': 'Alise meeting'},
+        'transcript_segments': [
+            {'id': 's1', 'start': 12.5, 'end': 15, 'text': 'Alise met Alise.'},
+            {'id': 's2', 'start': 20, 'end': 22, 'text': 'Alise elsewhere.'},
+        ],
+    }
+    stored = dream_tools.conversations.encode_conversation_for_write(uid, row, 'enhanced')
+    seen_ids = []
+    ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: deepcopy(stored)))
+
+    def document(key):
+        seen_ids.append(key)
+        return ref
+
+    monkeypatch.setattr(
+        review_store, 'user', lambda uid: SimpleNamespace(collection=lambda name: SimpleNamespace(document=document))
+    )
+    monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: True)
+    captured = []
+    monkeypatch.setattr(review_changes, 'record_agent_change', lambda *a, **kw: captured.append((a, kw)))
+    edit = spelling('conversations/c1#' + fragment)
+    records = {'conversations/c1': deepcopy(row)}
+    assert dream_tools.apply_edit(uid, edit, records) == 'applied'
+    args, kwargs = captured[0]
+    assert seen_ids == ['c1'] and args[2][0].document_id == 'c1'
+    assert args[1].refs[0].id == 'c1' and args[1].refs[0].label == 'Conversation #' + fragment
+    patch = args[2][0].patch
+    assert set(patch) == {'transcript_segments'}
+    decoded = dream_tools.conversations.prepare_conversation_for_read({**stored, **patch}, uid)
+    assert decoded['transcript_segments'][0]['text'] == 'Alice met Alice.'
+    assert decoded['transcript_segments'][1] == row['transcript_segments'][1]
+    assert decoded['structured'] == row['structured'] and decoded['user_title'] == row['user_title']
+    assert kwargs['expected_documents'] == {'c1': stored}
+    alias = edit.model_copy(update={'target': 'conversations/c1#s1'})
+    assert dream_tools.edit_key(edit, records) == dream_tools.edit_key(alias, records)
+
+
+@pytest.mark.parametrize('fragment', ['unknown', '', '20'])
+def test_invalid_or_wrong_segment_spelling_cannot_widen_target(fragment):
+    records = {
+        'conversations/c1': {
+            'transcript_segments': [
+                {'id': 's1', 'start': 12.5, 'text': 'Alise here.'},
+                {'id': 's2', 'start': 20, 'text': 'Different name.'},
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match='dream_invalid_target'):
+        dream_tools.validate_edit(spelling('conversations/c1#' + fragment), records)
