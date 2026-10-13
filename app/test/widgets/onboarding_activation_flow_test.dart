@@ -264,4 +264,28 @@ void main() {
     expect(find.byKey(const Key('activation_continue_congrats')), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('when listening cannot start, Continue moves on instead of a dead end', (tester) async {
+    await pump(tester, capture: () => _FakeCapture(notes, startsAs: ActivationStart.failed));
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(find.byKey(const Key('activation_dictation_status')), findsOneWidget);
+    await tapKey(tester, 'activation_continue_dictation');
+    expect(find.byKey(const Key('activation_continue_congrats')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('when nothing is heard for a while, Continue appears; late words bring the check back',
+      (tester) async {
+    final run = await pump(tester);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byKey(const Key('activation_continue_dictation')), findsNothing);
+    await tester.pump(const Duration(seconds: 26));
+    expect(find.byKey(const Key('activation_continue_dictation')), findsOneWidget);
+
+    run.capture.live.value = 'Finally some words';
+    await tester.pump();
+    expect(find.byKey(const Key('activation_continue_dictation')), findsNothing);
+    expect(find.byKey(const Key('activation_dictation_done')), findsOneWidget);
+  });
 }

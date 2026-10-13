@@ -466,6 +466,11 @@ class _DictationStepState extends State<_DictationStep> {
   bool _quiet = false;
   Timer? _quietTimer;
 
+  /// Still nothing heard well after the hint: offer a plain way on instead of a grey ✓ and a corner
+  /// Skip (the microphone, the Omi or transcription may simply not be working right now).
+  bool _stuck = false;
+  Timer? _stuckTimer;
+
   @override
   void initState() {
     super.initState();
@@ -485,6 +490,9 @@ class _DictationStepState extends State<_DictationStep> {
         _quietTimer = Timer(const Duration(seconds: 12), () {
           if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _quiet = true);
         });
+        _stuckTimer = Timer(const Duration(seconds: 25), () {
+          if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _stuck = true);
+        });
       }
     });
   }
@@ -492,6 +500,7 @@ class _DictationStepState extends State<_DictationStep> {
   @override
   void dispose() {
     _quietTimer?.cancel();
+    _stuckTimer?.cancel();
     if (!_leaving) unawaited(widget.capture.cancel());
     super.dispose();
   }
@@ -533,26 +542,60 @@ class _DictationStepState extends State<_DictationStep> {
               ),
             ),
           ),
-          bottom: _ListeningControl(
-            heard: heard,
-            listening: _started,
-            failed: _failed,
-            status: _failed
-                ? l10n.somethingWentWrong
-                : heard
-                    ? l10n.onboardingActDictateHint
-                    : !_started
-                        ? l10n.listening
-                        : _quiet
-                            ? (widget.capture.usesDevice
-                                ? l10n.onboardingActNoAudioOmi
-                                : l10n.onboardingActNoAudioPhone)
-                            : '${l10n.listening} · $source',
-            onDone: _done,
-          ),
+          // Words that arrive late still bring the ✓ back.
+          bottom: !heard && (_failed || _stuck)
+              ? _WayOn(
+                  status: _failed
+                      ? l10n.somethingWentWrong
+                      : (widget.capture.usesDevice ? l10n.onboardingActNoAudioOmi : l10n.onboardingActNoAudioPhone),
+                  onContinue: _skip,
+                )
+              : _ListeningControl(
+                  heard: heard,
+                  listening: _started,
+                  failed: _failed,
+                  status: _failed
+                      ? l10n.somethingWentWrong
+                      : heard
+                          ? l10n.onboardingActDictateHint
+                          : !_started
+                              ? l10n.listening
+                              : _quiet
+                                  ? (widget.capture.usesDevice
+                                      ? l10n.onboardingActNoAudioOmi
+                                      : l10n.onboardingActNoAudioPhone)
+                                  : '${l10n.listening} · $source',
+                  onDone: _done,
+                ),
           bottomHeight: _kControlHeight,
         );
       },
+    );
+  }
+}
+
+/// The dictation's bottom when listening failed or nothing came through: what went wrong, in one
+/// quiet line, and Continue (the same as Skip: the hooray, with a welcome card left for Home).
+class _WayOn extends StatelessWidget {
+  const _WayOn({required this.status, required this.onContinue});
+
+  final String status;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          status,
+          key: const Key('activation_dictation_status'),
+          textAlign: TextAlign.center,
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: OmiSpacing.md),
+        _ContinueButton(stage: 'dictation', onPressed: onContinue),
+      ],
     );
   }
 }
