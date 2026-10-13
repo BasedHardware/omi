@@ -4,6 +4,8 @@ import pytest
 
 from database import conversations as db
 from models.transcript_segment import TranscriptSegment
+from models.conversation import Conversation
+from utils.conversations import speaker_resolution as resolution
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 
@@ -66,8 +68,6 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
 
 
 def test_authoritative_turns_bypass_legacy_rediarization_but_apply_manual_overlay(monkeypatch):
-    from models.conversation import Conversation
-    from utils.conversations import speaker_resolution as resolution
 
     monkeypatch.setattr(resolution, 'authoritative_for', lambda _uid: True)
     monkeypatch.setattr(resolution, 'resolution_enabled', lambda: True)

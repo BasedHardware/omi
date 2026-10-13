@@ -40,7 +40,7 @@ def embedding_v2(file: UploadFile = File(...)) -> List[float]:
 
 
 @app.get('/health')
-def health_check() -> Dict[str, str]:
+async def health_check() -> Dict[str, str]:
     return {"status": "healthy"}
 
 
@@ -54,5 +54,5 @@ app.include_router(create_router(run_v2))
 
 
 @app.get('/metrics')
-def metrics():
+async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
