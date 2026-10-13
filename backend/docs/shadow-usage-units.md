@@ -23,7 +23,7 @@ reasoning exactly once (missing inclusion metadata defaults to extra reasoning).
 Gemini audio without a modality price, and Gemini tool-use prompt tokens, remain
 estimated with explicit missing-rate reasons, including realtime tool tokens. Flex and reserved capacity do not discount shadow units.
 Realtime modality rates and image output rates are pinned separately. Missing
-modality counts can use an exact matching pinned legacy realtime card amount,
+or empty modality counts can use an exact matching pinned legacy realtime card amount,
 with estimated completeness. Unknown models/rates or funding are incomplete,
 never a complete zero. BYOK, custom and on-device provider usage is zero; Omi-paid
 extraction of a customer-funded transcript still draws LLM units independently.
@@ -75,6 +75,12 @@ seconds × 0.32; no producer falsely declares these accepted speech. Sync's
 counter is already initial VAD duration, so its mandated ratio proxy can
 particularly underestimate accepted speech; that basis is recorded. The
 optional accepted-speech hook preserves fractional quantities when available.
+Invalid or nonfinite accepted quantities fail open inside pricing: the legacy
+write proceeds and the shadow leaf records missing coverage.
+Sync v1 currently stamps Omi-funded/unknown-provider estimates without successful
+segment funding provenance. Deepgram BYOK work can therefore be overstated in
+shadow units; do not use that projection for admission or billing. Correcting
+this requires carrying successful segment provider/funding through aggregation.
 On-device/PTT/import paths without these writers remain coverage gaps.
 
 Firestore write counts are unchanged: ordinary hourly writes 1→1, sync content

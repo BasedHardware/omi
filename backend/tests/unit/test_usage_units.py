@@ -96,7 +96,10 @@ def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
         uid,
         month,
         firestore_client=store,
-        entitlements={'budget': {'kind': 'rate_card_mix'}, 'entitlement_version': 'ladder_v1'},
+        entitlements={
+            'budget': {'kind': 'rate_card_mix', 'speech_seconds': 18000, 'chat_messages': 30, 'chat_tier': 'standard'},
+            'entitlement_version': 'ladder_v1',
+        },
     )
     assert planned['budget_units'] == 4853
 
@@ -336,3 +339,106 @@ def test_mixed_old_and_new_hour_and_day_documents_report_unprojected_residuals(u
     assert completeness['unprojected_hourly_docs'] == 1
     assert completeness['unprojected_gateway_attempts'] == 5
     assert completeness['unprojected_gateway_days'] == 1
+
+
+@pytest.mark.parametrize('accepted', ['invalid', 'NaN', 'Infinity', '1e1000'])
+@pytest.mark.parametrize('price_accepts', [False, True])
+def test_invalid_accepted_speech_never_suppresses_legacy_hourly_write(units, monkeypatch, accepted, price_accepts):
+    from database import user_usage
+
+    monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
+    if price_accepts:
+        # Even a price result that did not reject the quantity cannot escape the conversion boundary.
+        monkeypatch.setattr(
+            units, 'price_transcription', lambda *a, **k: {'micro_units': 1, 'status': 'complete', 'reasons': []}
+        )
+    store = Store()
+    user_usage.update_hourly_usage(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        {'transcription_seconds': 5},
+        firestore_client=store,
+        usage_metadata={
+            'funding': 'omi',
+            'provider': 'parakeet',
+            'source': 'test',
+            'accepted_speech_seconds': accepted,
+        },
+    )
+    assert store.writes == 1
+    data = store.docs['users/u/hourly_usage/2026-10-01-00']
+    assert data['transcription_seconds'] == 5
+    leaf = data['shadow_v1']['features']['transcription']['funding']['omi']
+    assert leaf['status_counts'] == {'missing': 1}
+    assert 'shadow_pricing_failed' in leaf['reasons']
+    assert 'accepted_speech_seconds' not in leaf
+
+
+@pytest.mark.parametrize(
+    'raw, expected',
+    [
+        ('desktop_chat_realtime', 'chat'),
+        ('desktop_chat_screen', 'chat'),
+        ('public_shared_conversation_chat', 'chat'),
+        ('file_chat_summary', 'chat'),
+        ('chat_agent', 'chat'),
+        ('persona_chat', 'chat'),
+        ('realtime_voice', 'realtime_voice'),
+        ('screen_analysis', 'screen'),
+        ('web_search', 'web_search'),
+        ('conv_summary', 'conversation_extraction'),
+    ],
+)
+def test_feature_class_keeps_chat_prefixes_ahead_of_modalities(units, raw, expected):
+    assert units.feature_class(raw) == expected
+
+
+def test_hourly_deepgram_runtime_alias_uses_canonical_cloud_rate(units):
+    data = {}
+    merge(
+        data,
+        units.hourly_shadow(
+            {'transcription_seconds': 100}, {'provider': 'dg-nova-3', 'funding': 'omi', 'source': 'listen'}
+        ),
+    )
+    leaf = data['shadow_v1']['features']['transcription']['funding']['omi']
+    assert leaf['providers'] == ['deepgram']
+    assert 'provider_unknown' not in leaf['reasons']
+
+
+def test_gateway_pricing_failure_preserves_attempt_and_day_writes(units, monkeypatch):
+    from database import llm_gateway_accounting as ledger
+
+    monkeypatch.setattr(ledger, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
+
+    def broken(*a, **k):
+        raise ValueError('test pricing failure')
+
+    monkeypatch.setattr(units, 'price_llm_attempt', broken)
+    store = Store({'users/u': {'subscription': {'plan': 'plus'}}})
+    event = {
+        'attempt_id': 'pricing-failed',
+        'user_uid': 'u',
+        'payer': 'omi',
+        'provider': 'openai',
+        'configured_model': 'gpt-6-luna',
+        'feature': 'desktop_chat_realtime',
+        'usage_status': 'confirmed',
+        'uncached_input_tokens': 100,
+        'output_tokens': 10,
+        'occurred_at': '2026-10-01T08:00:00+00:00',
+        'date': '2026-10-01',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+    assert ledger.record_llm_gateway_attempt(event, firestore_client=store)
+    assert store.writes == 2
+    attempt = store.docs['llm_gateway_attempts/pricing-failed']
+    assert attempt['estimated_cost_micro_usd'] == 100
+    assert attempt['usage_units_v1']['status'] == 'missing'
+    assert attempt['usage_units_v1']['reasons'] == ['shadow_pricing_failed']
+    day = next(doc for path, doc in store.docs.items() if path.startswith('llm_gateway_user_days/'))
+    assert day['attempts'] == 1
+    assert day['shadow_v1']['hours']['08']['features']['chat']['funding']['omi']['status_counts'] == {'missing': 1}
+    assert not ledger.record_llm_gateway_attempt(event, firestore_client=store)
+    assert store.writes == 2

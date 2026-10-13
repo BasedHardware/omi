@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -11,7 +12,13 @@ from typing import Any, Mapping
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from config.plan_catalog import resolve_subscription_entitlements
-from config.rate_card import budget_units, price_llm_attempt, price_request, price_transcription
+from config.rate_card import (
+    budget_units,
+    normalize_transcription_provider,
+    price_llm_attempt,
+    price_request,
+    price_transcription,
+)
 from database._client import get_customer_firestore_client
 from utils.observability.fallback import record_fallback
 
@@ -38,6 +45,8 @@ COVERAGE_GAPS = (
 
 def feature_class(raw: Any) -> str:
     raw = str(raw or '')
+    if raw.startswith(('chat', 'persona', 'desktop_chat', 'public_shared_conversation_chat', 'file_chat')):
+        return 'chat'
     if 'realtime' in raw or 'voice' in raw:
         return 'realtime_voice'
     if 'web_search' in raw:
@@ -46,8 +55,6 @@ def feature_class(raw: Any) -> str:
         return 'proactive'
     if any(s in raw for s in ('screen', 'desktop_proactivity', 'livenotes')):
         return 'screen'
-    if raw.startswith(('chat', 'persona', 'desktop_chat')):
-        return 'chat'
     if raw.startswith(('conv_', 'memories', 'memory', 'external_structure')):
         return 'conversation_extraction'
     return 'other_llm'
@@ -66,6 +73,16 @@ def _safe_price(fn: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
             outcome='degraded',
         )
         return {'micro_units': 0, 'status': 'missing', 'reasons': ['shadow_pricing_failed']}
+
+
+def _price_hourly_transcription(seconds: Any, *, provider: str, funding: str, accepted: bool) -> dict[str, Any]:
+    priced = price_transcription(seconds, provider=provider, funding=funding, accepted=accepted)
+    if accepted and funding == 'omi' and priced['status'] != 'missing':
+        value = float(seconds)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError('accepted speech must be finite and nonnegative')
+        priced['accepted_speech_seconds'] = value
+    return priced
 
 
 def _leaf(priced: Mapping[str, Any], *, provider: str = 'unknown', source: str = 'unknown') -> dict[str, Any]:
@@ -92,14 +109,14 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
     if funding not in {'omi', 'byok', 'custom', 'on_device'}:
         funding = 'unknown'
     raw_provider = metadata.get('provider', 'unknown')
-    provider = str(getattr(raw_provider, 'value', raw_provider))
+    provider = normalize_transcription_provider(raw_provider)
     if provider not in {'deepgram', 'deepgram_self_hosted', 'modulate', 'parakeet', 'soniox'}:
         provider = 'unknown'
     source = str(metadata.get('source', 'unknown'))
     if source not in {'listen', 'sync_v1', 'sync_v2', 'parakeet_proxy', 'test'}:
         source = 'unknown'
     priced = _safe_price(
-        price_transcription,
+        _price_hourly_transcription,
         accepted if accepted is not None else elapsed,
         provider=provider,
         funding=funding,
@@ -113,8 +130,8 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
             priced['reasons'].append('initial_vad_counter_ratio_estimate')
     leaf = _leaf(priced, provider=provider, source=source)
     leaf['legacy_counter_seconds'] = firestore.Increment(elapsed or 0)
-    if accepted is not None and funding == 'omi' and priced['status'] != 'missing':
-        leaf['accepted_speech_seconds'] = firestore.Increment(float(accepted))
+    if 'accepted_speech_seconds' in priced:
+        leaf['accepted_speech_seconds'] = firestore.Increment(priced['accepted_speech_seconds'])
     return {'shadow_v1': {'rate_card': 'v1', 'features': {'transcription': {'funding': {funding: leaf}}}}}
 
 
