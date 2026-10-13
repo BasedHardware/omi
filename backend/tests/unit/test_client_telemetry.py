@@ -522,7 +522,10 @@ def test_http_auth_size_and_admin_gate(monkeypatch):
     monkeypatch.setattr(store, "get_firestore_client", lambda: db)
     monkeypatch.setenv("ADMIN_KEY", "test-admin-key-value-0123456789")
     authed = TestClient(_app(OWNER))
+    # Route uses the real wall clock; stamp the fixture within MAX_EVENT_AGE.
+    fresh = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = _batch(_upload(E1, "started"))
+    payload["observations"][0]["occurred_at"] = fresh
     created = authed.post("/v1/telemetry/client/batches", json=payload)
     assert created.status_code == 200
     body = created.json()

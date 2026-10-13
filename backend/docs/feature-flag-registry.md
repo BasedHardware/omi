@@ -261,9 +261,18 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
+<<<<<<< HEAD
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
+=======
+| `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | pending | 2026-10-15 | unowned |
+| `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Canonical memory lifecycle response header retained for older clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `chat_first_ui` | Universal chat-first capability sent for older clients and sampled by macOS | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `client_telemetry_transport_shadow` | Default-off shadow transport mirroring client reliability telemetry to the frozen backend collector; PostHog stays the source of record until parity | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
+| `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
+>>>>>>> 2d113d6dc77 (feat(finops): register client telemetry flags in the feature-flag registry)
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
 | `mobile-contextual-upsells` | Mobile 80% budget banner and backend-decided Pro gate entry; default off; legacy access unchanged; requires mobile-plan-storefront | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
@@ -323,6 +332,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (gke/pusher, pusher (chart)) | — | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | keep | — | dazheng |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
+| `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | — | dazheng |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `exp-002-desktop-identity-kill-v1` | EXP-002 desktop identity arm emergency stop | backend, macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | backend | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
