@@ -515,10 +515,6 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
-          # Billing-only alias: never supply the shared key to unrelated capture/rollout clients.
-          POSTHOG_BILLING_API_KEY:
-            secret: POSTHOG_PROJECT_API_KEY
-            version: latest
           TELEGRAM_BOT_TOKEN:
             secret: TELEGRAM_BOT_TOKEN
             version: latest
@@ -573,6 +569,10 @@ overlay:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          # Public project token for billing capture only. Not a secret mount.
+          POSTHOG_BILLING_API_KEY:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: telemetry
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry

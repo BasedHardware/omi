@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 _posthog_client: Optional[Any] = None
 _posthog_disabled = False
 _billing_client: Optional[Any] = None
+_billing_invalid_key_logged = False
+
+_BILLING_KEY_ENV_VARS = ('POSTHOG_BILLING_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'POSTHOG_API_KEY')
 
 
 BILLING_EVENTS = frozenset(
@@ -63,19 +66,35 @@ def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -
         )
 
 
+def _billing_project_key() -> Optional[str]:
+    """First public project token. Non-``phc_`` values are skipped and never logged."""
+    global _billing_invalid_key_logged
+    saw_invalid = False
+    for name in _BILLING_KEY_ENV_VARS:
+        raw = os.getenv(name)
+        key = raw.strip() if isinstance(raw, str) else ''
+        if not key:
+            continue
+        if key.startswith('phc_'):
+            return key
+        saw_invalid = True
+    if saw_invalid and not _billing_invalid_key_logged:
+        _billing_invalid_key_logged = True
+        logger.warning('billing telemetry disabled: invalid project key')
+    return None
+
+
 def _get_billing_client() -> Optional[Any]:
     """Dedicated synchronous capture; the webhook runs this after its response.
 
-    The alias binds the existing project secret without supplying a key to any
-    other capture or rollout client on this service. Other services may continue
-    to use their existing shared project key for billing.
+    Only this client reads ``POSTHOG_BILLING_API_KEY``. Other capture and rollout
+    clients keep their own keys. A placeholder such as ``disabled`` is ignored
+    so it cannot be sent. Other services may still use their shared project key.
     """
     global _billing_client
     if _billing_client is not None:
         return _billing_client
-    api_key = (
-        os.getenv('POSTHOG_BILLING_API_KEY') or os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
-    )
+    api_key = _billing_project_key()
     if not api_key:
         return None
     try:
@@ -116,7 +135,8 @@ def _get_posthog_client() -> Optional[Any]:
 
 
 def set_product_telemetry_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _posthog_disabled, _billing_client
+    global _posthog_client, _posthog_disabled, _billing_client, _billing_invalid_key_logged
     _billing_client = client
+    _billing_invalid_key_logged = False
     _posthog_client = client
     _posthog_disabled = client is None
