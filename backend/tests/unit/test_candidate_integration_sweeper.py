@@ -144,11 +144,23 @@ def _put(store, candidate_id, **fields):
     return ('users', 'user-1', 'candidate_integration_outbox', candidate_id)
 
 
+def _dispatch(result):
+    """Adapt a public sync dict to the internal (result, outcome, external id) channel."""
+    public = dict(result)
+    outcome = public.pop('provider_attempt_outcome', None)
+    if outcome not in {'not_sent', 'definite_error', 'in_doubt', 'accepted'}:
+        outcome = 'accepted' if public.get('synced') else 'in_doubt'
+    external = public.get('external_task_id')
+    if not isinstance(external, str) or not external:
+        external = None
+    return public, outcome, external
+
+
 def _forbid_provider(monkeypatch):
     async def explode(*args, **kwargs):
         raise AssertionError('provider called')
 
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', explode)
+    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', explode)
     monkeypatch.setattr(
         candidate_service.action_items_db,
         'get_action_item',
@@ -161,10 +173,10 @@ def _allow_sync(monkeypatch, result):
 
     async def sync(uid, task, **kwargs):
         calls.append(task['id'])
-        return result
+        return _dispatch(result)
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
     return calls
 
 
@@ -322,10 +334,10 @@ def _schedule_inline_job(store, monkeypatch):
                 'lease_token': store.rows[path]['lease_token'],
             }
         )
-        return {'synced': True}
+        return _dispatch({'synced': True})
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
 
     def capture(executor, function):
         scheduled.append(function)
@@ -382,10 +394,10 @@ def test_blocking_dispatch_skips_the_provider_when_the_lease_is_lost_before_the_
 
     async def sync(uid, task, **kwargs):
         calls.append(task['id'])
-        return {'synced': True}
+        return _dispatch({'synced': True})
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', steal_before_provider)
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
 
     recorded = candidate_service.dispatch_task_integration_blocking('user-1', 'due', 'task-1', account_generation=3)
 

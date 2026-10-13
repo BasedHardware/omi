@@ -23,7 +23,7 @@ from models.candidate import (
 from utils.executors import postprocess_executor, submit_with_context
 from utils.notifications import sync_action_item_reminder
 from utils.observability.fallback import record_fallback
-from utils.task_sync import auto_sync_action_item
+from utils.task_sync import _auto_sync_action_item_with_outcome
 from utils.task_intelligence import task_links
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
@@ -45,8 +45,7 @@ def provider_dispatch_blocked_by_account_deletion(uid: str) -> bool:
     return account_deletion_blocks_access(status)
 
 
-def _classified_provider_outcome(result: dict, *, succeeded: bool) -> str:
-    outcome = result.get('provider_attempt_outcome')
+def _classified_provider_outcome(outcome: str, *, succeeded: bool) -> str:
     if outcome in _PROVIDER_ATTEMPT_OUTCOMES:
         return outcome
     if succeeded:
@@ -136,7 +135,9 @@ def _record_integration_result(
     if not noted:
         return False
     try:
-        result = asyncio.run(auto_sync_action_item(uid, task, skip_apple_reminders=False))
+        result, outcome, external_task_id = asyncio.run(
+            _auto_sync_action_item_with_outcome(uid, task, skip_apple_reminders=False)
+        )
     except Exception:
         integration_outbox_db.complete_candidate_integration_dispatch(
             uid,
@@ -162,6 +163,8 @@ def _record_integration_result(
         'client_handles_sync',
     }
     succeeded = bool(result.get('synced')) or terminal_noop
+    if external_task_id is None:
+        external_task_id = _recorded_external_task_id(result)
     integration_outbox_db.complete_candidate_integration_dispatch(
         uid,
         candidate_id,
@@ -169,8 +172,8 @@ def _record_integration_result(
         lease_token=lease_token,
         succeeded=succeeded,
         error_text=None if succeeded else 'integration_not_synced',
-        provider_attempt_outcome=_classified_provider_outcome(result, succeeded=succeeded),
-        external_task_id=_recorded_external_task_id(result),
+        provider_attempt_outcome=_classified_provider_outcome(outcome, succeeded=succeeded),
+        external_task_id=external_task_id,
     )
     if not succeeded:
         record_fallback(
