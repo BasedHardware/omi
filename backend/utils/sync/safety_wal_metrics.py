@@ -3,13 +3,19 @@
 import io
 import wave
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
-WAL_SECONDS_SKIPPED = Counter('sync_safety_wal_seconds_skipped', 'WAL seconds covered by live audio', ['reason'])
-AUDIO_BYTES_NOT_STORED = Counter('sync_safety_wal_audio_bytes_not_stored', 'Decoded PCM bytes suppressed', ['reason'])
-SEGMENTS_DEDUPED = Counter(
-    'sync_safety_wal_segments_deduped', 'Sync segments already represented by live text', ['reason']
-)
+
+def _counter(name: str, description: str) -> Counter:
+    try:
+        return Counter(name, description, ['reason'])
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+
+
+WAL_SECONDS_SKIPPED = _counter('sync_safety_wal_seconds_skipped', 'WAL seconds covered by live audio')
+AUDIO_BYTES_NOT_STORED = _counter('sync_safety_wal_audio_bytes_not_stored', 'Decoded PCM bytes suppressed')
+SEGMENTS_DEDUPED = _counter('sync_safety_wal_segments_deduped', 'Sync segments already represented by live text')
 
 
 def suppressed_pcm_bytes(audio_bytes: bytes, survivors: list) -> int:
