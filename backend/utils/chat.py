@@ -16,7 +16,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
-from utils.conversations.factory import deserialize_conversation
+from utils.chat_citations import resolve_conversation_citations
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
@@ -510,16 +510,8 @@ async def process_voice_message_segment_stream(
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
-        memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    converted_memories.append(deserialize_conversation(m))
-                else:
-                    converted_memories.append(m)
-            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
+        response, memories = resolve_conversation_citations(response, memories)
+        memories_id = extract_memory_ids(memories)
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,

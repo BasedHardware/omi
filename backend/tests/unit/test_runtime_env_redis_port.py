@@ -63,6 +63,17 @@ def test_repo_redis_bindings_validate(manifest, environment):
     assert _validate_manifest_shape(manifest['environments'][environment], environment) == []
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_dream_runtime_has_lexical_provider_bindings(manifest, environment):
+    config = manifest['environments'][environment]['cloud_run']['services']['backend-sync']
+    assert config['secrets']['TYPESENSE_HOST']['secret'] == 'TYPESENSE_HOST'
+    assert config['secrets']['TYPESENSE_API_KEY']['secret'] == 'TYPESENSE_API_KEY'
+    assert (
+        'TYPESENSE_HOST_PORT=443'
+        in _render_env_vars({'TYPESENSE_HOST_PORT': config['env']['TYPESENSE_HOST_PORT']}).splitlines()
+    )
+
+
 def test_gke_declared_host_requires_port_in_helm_values(monkeypatch):
     config = {
         'gke': {

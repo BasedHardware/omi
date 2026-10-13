@@ -36,7 +36,7 @@
       "memoryReviewAction": 2,
       "onboardingStepCompleted": 11,
       "pageOpened": 31,
-      "paywallOpened": 4,
+      "paywallOpened": 9,
       "permissionChanged": 5,
       "permissionsSettingsOpened": 2,
       "phoneMicRecordingStarted": 4,
@@ -52,7 +52,8 @@
       "track": 29,
       "transcriptionSourceSelected": 4,
       "uncheckedActionItem": 2,
-      "upgradeSucceeded": 2,
+      "upgradeCancelled": 2,
+      "upgradeSucceeded": 3,
       "whatsNewOpened": 2,
       "wrappedGenerationFailed": 2,
       "wrappedShareFailed": 3
@@ -77,6 +78,7 @@
       "memoryAssistantAnalysisRun": 2,
       "memoryListItemClicked": 2,
       "menuBarActionClicked": 8,
+      "paywallOpened": 3,
       "notificationClicked": 3,
       "notificationDismissed": 3,
       "notificationRepairTriggered": 2,
@@ -99,10 +101,12 @@
       "suggestionAssistantDeliveryOutcome": 2,
       "suggestionAssistantGateOutcome": 3,
       "tabChanged": 6,
+      "upgradeSucceeded": 4,
       "taskIntelligenceAttribution": 4
     },
     "windows": {
-      "trackEvent": 22
+      "trackEvent": 22,
+      "trackPaywallOpened": 2
     }
   },
   "private_orphans": {

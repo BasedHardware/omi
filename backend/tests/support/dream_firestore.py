@@ -40,7 +40,7 @@ class Document(StrictFirestoreDocument):
 
     def get(self, transaction=None, **kwargs):
         self._database.reads.append(self.path)
-        result = super().get(transaction=transaction, **kwargs)
+        result = super().get(transaction=transaction)
         result.reference = self
         result.id = self.id
         return result
@@ -136,3 +136,11 @@ class DreamFirestore(StrictFirestore):
 
     def batch(self):
         return Batch(self)
+
+    def get_all(self, references, *, transaction=None, timeout=None, field_paths=None):
+        assert len(references) <= 100
+        if field_paths is not None:
+            return super().get_all(references, transaction=transaction, field_paths=field_paths)
+        if timeout is not None:
+            assert 0 < timeout <= 3
+        return [reference.get(transaction=transaction) for reference in references]

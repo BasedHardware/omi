@@ -137,6 +137,8 @@ export function planDisplayName(plan: PlanIdentity): string {
   switch (plan.id) {
     case 'basic':
       return 'Free';
+    case 'operator':
+      return 'Pro';
     case 'unlimited':
       return 'Neo';
     case 'unlimited_v2':

@@ -136,6 +136,9 @@ def _load_memory_service(monkeypatch):
     monkeypatch.setattr(service_mod.memories_db, "get_memory_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", lambda *args, **kwargs: None)
     monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *args, **kwargs: [])
+    from utils.memory import read_resilience
+
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
     return service_mod
 
 
@@ -298,3 +301,77 @@ def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
         assert backend.write("uid-test", {"id": "mem-1", "content": "x"}) == "mem-1"
         backend.delete("uid-test", "mem-1")
         backend.delete_all("uid-test")
+
+
+def test_memory_service_search_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.search = MagicMock(return_value=[])
+    assert service.search('uid-test', 'query') == []
+    assert service._canonical.search.call_count == 2
+
+
+def test_memory_service_search_permanent_provider_still_503(service_mod):
+    from fastapi import HTTPException
+    from google.api_core.exceptions import FailedPrecondition
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=FailedPrecondition('missing index'))
+    with pytest.raises(HTTPException) as exc:
+        service.search('uid-test', 'query')
+    assert exc.value.status_code == 503
+    assert service._canonical.search.call_count == 1
+
+
+def test_memory_service_list_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.read = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.read = MagicMock(return_value=[])
+    assert service.read('uid-test') == []
+    assert service._canonical.read.call_count == 2
+
+
+def test_memory_service_malformed_probe_stays_open_and_real_scan_success_closes(service_mod, monkeypatch):
+    from fastapi import HTTPException
+    from google.api_core.exceptions import ServiceUnavailable
+    from utils.memory import read_resilience
+
+    now = [10.0]
+    clock = lambda: now[0]
+    policy = read_resilience.MemoryReadResilience(
+        clock=clock, sleep=lambda _: None, jitter=lambda *_: 0, allowance=read_resilience.RetryAllowance(clock=clock)
+    )
+    monkeypatch.setattr(read_resilience, 'MemoryReadResilience', lambda: policy)
+    monkeypatch.setattr(
+        service_mod.MemoryService,
+        'read_page',
+        read_resilience.resilient_memory_read(service_mod.MemoryService.read_page.__wrapped__),
+    )
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-secret')
+    scans = MagicMock(side_effect=ServiceUnavailable('temporary'))
+    monkeypatch.setattr(service_mod, 'read_canonical_scan_page', scans)
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    monkeypatch.setattr(service.history, 'read_updated_scan_page', lambda *a, **k: ([], True))
+    monkeypatch.setattr(service.history, 'read_created_scan_page', lambda *a, **k: ([], True))
+    for _ in range(3):
+        with pytest.raises(HTTPException):
+            service.read_page('uid-test')
+    assert scans.call_count == 6
+    now[0] += 5
+    with pytest.raises(HTTPException) as error:
+        service.read_page('uid-test', cursor='malformed')
+    assert error.value.status_code == 400
+    assert scans.call_count == 6  # malformed probe never reached Firestore
+    with pytest.raises(read_resilience.MemoryReadCircuitOpen):
+        service.read_page('uid-test')
+    now[0] += 5
+    scans.side_effect = lambda *args, **kwargs: ([], True)
+    monkeypatch.setattr(service.history, 'read_updated_scan_page', lambda *a, **k: ([], True))
+    monkeypatch.setattr(service.history, 'read_created_scan_page', lambda *a, **k: ([], True))
+    assert service.read_page('uid-test').memories == []
+    assert service.read_page('uid-test').memories == []
+    assert scans.call_count == 8  # store-backed probe and next normal request
