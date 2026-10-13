@@ -330,6 +330,11 @@ def test_chat_critical_receipt_intervals_stay_within_bound():
 def test_page_replay_stays_within_the_baseline_page_budget():
     evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
     replay = evidence['page_replay']
+    rules = {r['uid']: r for r in json.loads((MONITORING / 'alerts' / 'journey-slos.json').read_text())}
+    assert replay['end_unix'] == evidence['end_unix']
+    assert set(replay['expressions']) == set(replay['rules'])
+    for uid, expr in replay['expressions'].items():
+        assert expr == rules[uid]['data'][0]['model']['expr'], uid
     assert replay['step_seconds'] <= 900
     assert replay['days'] >= 10
     for uid in ('omi-slo-live-critical', 'omi-slo-chat-critical', 'omi-slo-pusher-critical'):

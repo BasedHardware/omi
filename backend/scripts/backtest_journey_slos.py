@@ -193,8 +193,18 @@ def main():
             evidence['limitations'] += [
                 note for note in previous.get('limitations', []) if note not in evidence['limitations']
             ]
-            if 'page_replay' in previous:
-                evidence['page_replay'] = previous['page_replay']
+            replay = previous.get('page_replay')
+            current = {
+                r['uid']: r['data'][0]['model']['expr']
+                for r in json.loads((MONITORING / 'alerts/journey-slos.json').read_text())
+            }
+            # Carry the replay only while it still describes this window and these expressions.
+            if (
+                replay
+                and replay.get('end_unix') == end
+                and all(current.get(uid) == expr for uid, expr in replay.get('expressions', {}).items())
+            ):
+                evidence['page_replay'] = replay
         for journey, (bad_template, valid_template, presence_selector) in SLIS.items():
             bad_query = bad_template.replace('WINDOW', '10d')
             valid_query = valid_template.replace('WINDOW', '10d')
