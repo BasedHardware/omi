@@ -33,6 +33,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/services/superwall_pilot.dart';
 
 /// Top-level transcription source the user picks from the single dropdown.
 enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
@@ -883,7 +884,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             PlatformManager.instance.analytics.paywallOpened('transcription_settings', currentPlan: plan);
             routeToPage(
               context,
-              const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'),
+              const UsagePage(
+                showUpgradeDialog: true,
+                upgradePlacement: SuperwallPilot.transcriptionSettingsPlacement,
+                paywallSource: 'transcription_settings',
+              ),
             );
           },
           child: ConstrainedBox(

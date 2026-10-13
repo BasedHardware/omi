@@ -21,12 +21,13 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -34,9 +35,13 @@ import 'package:omi/utils/other/temp.dart';
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
 
-  /// Surface id used when [showUpgradeDialog] opens the plans sheet.
+  /// Surface id used when [showUpgradeDialog] opens the offer on arrival.
   /// The usage-page upgrade button always reports `usage_page`.
   final String paywallSource;
+
+  /// Superwall placement for the offer [showUpgradeDialog] opens on arrival. The page's own Upgrade
+  /// button always uses `usage_upgrade`.
+  final String upgradePlacement;
   @visibleForTesting
   final bool debugSkipFetch;
   @visibleForTesting
@@ -47,6 +52,7 @@ class UsagePage extends StatefulWidget {
     super.key,
     this.showUpgradeDialog = false,
     this.paywallSource = 'usage_page',
+    this.upgradePlacement = SuperwallPilot.usageUpgradePlacement,
     this.debugSkipFetch = false,
     this.debugNow,
     this.debugTooltipIndex,
@@ -61,10 +67,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
   UsageMetric _selectedMetric = UsageMetric.words;
-  late AnimationController _waveController;
-  late AnimationController _notesController;
-  late AnimationController _arrowController;
-  late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
   Map<String, dynamic>? _fairUseStatus;
 
@@ -312,17 +314,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
-    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
-    _notesController = AnimationController(duration: const Duration(milliseconds: 36000), vsync: this)..repeat();
-
-    _arrowController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)
-      ..repeat(reverse: true);
-
-    _arrowAnimation = Tween<double>(
-      begin: 0,
-      end: 4,
-    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.debugSkipFetch) return;
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
@@ -331,7 +322,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       _loadFairUseStatus();
       if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
         // The opener already emitted Paywall Opened with this source.
-        _showPlansSheet(source: widget.paywallSource, trackOpen: false);
+        _showPlansSheet(placement: widget.upgradePlacement, source: widget.paywallSource, trackOpen: false);
       }
     });
   }
@@ -341,9 +332,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
-    _waveController.dispose();
-    _notesController.dispose();
-    _arrowController.dispose();
     super.dispose();
   }
 
@@ -541,24 +529,19 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet({required String source, required bool trackOpen}) {
-    if (!context.read<UsageProvider>().showSubscriptionUI) {
-      return;
-    }
-    if (trackOpen) {
-      final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-      PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
-    }
-    showOmiSheet(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (context) => PlansSheet(
-        waveController: _waveController,
-        notesController: _notesController,
-        arrowController: _arrowController,
-        arrowAnimation: _arrowAnimation,
-        analyticsSource: source,
-      ),
+  void _showPlansSheet({
+    String placement = SuperwallPilot.usageUpgradePlacement,
+    required String source,
+    required bool trackOpen,
+  }) {
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return;
+    openUpgradePaywall(
+      context,
+      placement: placement,
+      source: source,
+      trackOpen: trackOpen,
+      freeUser: usage.subscription?.subscription.plan.isPaid == false,
     );
   }
 

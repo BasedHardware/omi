@@ -21,7 +21,6 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -44,6 +43,8 @@ import 'package:omi/pages/chat/widgets/chat_chrome.dart';
 import 'package:omi/pages/chat/widgets/chat_entrance.dart';
 import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/superwall_pilot.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -739,18 +740,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
-    final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
-    usage.fetchSubscription();
-    PlatformManager.instance.analytics.paywallOpened(
-      'chat_quota_exceeded',
-      currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
-    );
-    showOmiSheet<void>(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
-    );
+    context.read<UsageProvider>().fetchSubscription();
+    openUpgradePaywall(context, placement: SuperwallPilot.chatQuotaPlacement, source: 'chat_quota_exceeded');
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1143,53 +1135,6 @@ class _SelectedTextChip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper({this.analyticsSource = 'chat_quota_exceeded'});
-
-  final String analyticsSource;
-
-  @override
-  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
-}
-
-class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
-  late AnimationController _waveController;
-  late AnimationController _arrowController;
-  late AnimationController _notesController;
-  late Animation<double> _arrowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
-    _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation = Tween<double>(
-      begin: 0,
-      end: 10,
-    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    _arrowController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _waveController,
-      notesController: _notesController,
-      arrowController: _arrowController,
-      arrowAnimation: _arrowAnimation,
-      analyticsSource: widget.analyticsSource,
     );
   }
 }

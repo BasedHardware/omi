@@ -8,7 +8,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -139,16 +138,14 @@ void main() {
     expect(find.text(_upgrade), findsNothing);
   });
 
-  testWidgets('the upgrade action keeps the existing paywall destination', (tester) async {
+  testWidgets('the upgrade action opens the plans sheet over the list, not the usage page', (tester) async {
     final routes = _Routes();
     await pumpRow(tester, observer: routes);
     await tester.tap(find.byKey(const Key('locked_preview_action')));
     expect(routes.pushed, hasLength(2));
-    final route = routes.pushed.last as MaterialPageRoute;
-    final destination = route.builder(tester.element(find.byType(ConversationListItem)));
-    expect(destination, isA<UsagePage>());
-    expect((destination as UsagePage).showUpgradeDialog, isTrue);
-    // Check navigation without building the network-backed usage screen.
+    // The locked_content paywall (or its plans-sheet fallback) opens in place; no page push.
+    expect(routes.pushed.last, isA<OmiSheetRoute>());
+    // Check navigation without building the network-backed plans sheet.
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -191,10 +188,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('locked_preview_action')));
     expect(routes.pushed, hasLength(2));
-    expect(
-      (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
-      isA<UsagePage>(),
-    );
+    expect(routes.pushed.last, isA<OmiSheetRoute>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -12,7 +11,8 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/services/client_device_service.dart';
-import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -186,12 +186,11 @@ class MemoryItem extends StatelessWidget {
                           showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
                           return;
                         }
-                        PlatformManager.instance.analytics.paywallOpened(
-                          'locked_memory',
-                          currentPlan:
-                              context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+                        openUpgradePaywall(
+                          context,
+                          placement: SuperwallPilot.lockedContentPlacement,
+                          source: 'locked_memory',
                         );
-                        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_memory'));
                         return;
                       },
                       child: Container(

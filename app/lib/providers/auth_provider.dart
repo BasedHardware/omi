@@ -16,6 +16,7 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
@@ -74,6 +75,7 @@ class AuthenticationProvider extends BaseProvider {
     Future.microtask(() {
       _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(SuperwallPilot.instance.syncUser(user != null && !user.isAnonymous ? user.uid : null));
         unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(

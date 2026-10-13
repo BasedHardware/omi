@@ -19,6 +19,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/superwall_pilot.dart';
 
 /// "Chat apps" on Integrations: one row opening [ChatAppsPage]. Hidden unless the surface is on
 /// for this account or a link already exists (so Disconnect stays reachable).
@@ -95,7 +96,13 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
       'chat_apps',
       currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
     );
-    routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'chat_apps'));
+    routeToPage(
+        context,
+        const UsagePage(
+          showUpgradeDialog: true,
+          upgradePlacement: SuperwallPilot.chatAppsPlacement,
+          paywallSource: 'chat_apps',
+        ));
   }
 
   Future<void> _connect(ChatChannel channel) async {
