@@ -1838,13 +1838,6 @@ _add(DriverEntry('database.phone_calls.get_phone_numbers', base={'uid': UID}))
 _add(DriverEntry('database.phone_calls.get_primary_phone_number', base={'uid': UID}))
 _add(
     DriverEntry(
-        'database.projection_repair.process_projection_repairs',
-        base={'uid': UID, 'fact_loader': noop, 'repair_func': noop},
-        neutrals={'limit': _LIMIT, 'max_attempts': (3, 'retry bound; not filter-affecting')},
-    )
-)
-_add(
-    DriverEntry(
         'database.recurrence_inbox.list_pending_recurrence_receipts',
         base={'uid': UID, 'account_generation': 1},
         neutrals={'limit': _LIMIT},

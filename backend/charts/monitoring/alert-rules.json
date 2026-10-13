@@ -8311,7 +8311,7 @@
       "component": "ai-chat",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -8339,7 +8339,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "expr": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8552,7 +8552,7 @@
       "component": "live-transcription",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -9523,7 +9523,7 @@
       "component": "llm-gateway",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -9664,7 +9664,7 @@
       "component": "llm-gateway",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -11778,47 +11778,6 @@
     "record": null
   },
   {
-    "uid": "omi-chat-first-proactive-stalled",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Resilience",
-    "title": "Chat-first proactive delivery - ready queue stalled",
-    "condition": "C",
-    "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
-    ],
-    "updated": "2026-09-01T00:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "A Chat-first proactive queue with an intent older than 24 hours was fetched during the last hour",
-      "threshold": "non-zero stalled event rate over 1h for 5m",
-      "user_impact": "Meeting notes and daily opener cards may be delayed behind an intent that is not reaching a terminal state.",
-      "scope": "The account-scoped Chat-first proactive fetch and acknowledgement path.",
-      "verification": "Break down chat_first_proactive_total by source and reason, then compare fetch, rejected, reconciled, and dead-letter events.",
-      "safe_next_action": "Inspect recent backend and desktop kernel errors; verify poison intents are reaching reconciled or dead-letter state before changing any retry budget.",
-      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
-    },
-    "labels": {
-      "severity": "critical",
-      "instatus_component": "ai-chat",
-      "alert_identity": "omi-chat-first-proactive-stalled",
-      "component": "ai-chat",
-      "impact": "user-experience"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
-    },
-    "record": null
-  },
-  {
     "uid": "omi-queue-oldest-ready",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -11852,7 +11811,7 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -12281,7 +12240,7 @@
       "severity": "warning",
       "instatus_component": "live-transcription"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -12589,7 +12548,7 @@
       "severity": "warning",
       "instatus_component": "speech-processing"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -17131,7 +17090,7 @@
       "severity": "warning",
       "instatus_component": "api"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"

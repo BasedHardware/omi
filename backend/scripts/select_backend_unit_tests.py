@@ -117,6 +117,8 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/diarizer/',
     'backend/charts/nllb-translation/',
     'backend/charts/deepgram-self-hosted/nova-3/',
+    'backend/scripts/alert_backtest.py',
+    'backend/charts/monitoring/metric-inventory.prod.json',
     'backend/charts/monitoring/expected-targets.prod.yaml',
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
