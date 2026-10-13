@@ -1089,7 +1089,7 @@ async def stripe_webhook(
                             f"a different active paid sub {active_paid.stripe_subscription_id} exists."
                         )
                 decision = transition(
-                    current_subscription,
+                    None,
                     ResolvedStripeEvent(
                         event['type'],
                         subscription_obj.get('id'),
