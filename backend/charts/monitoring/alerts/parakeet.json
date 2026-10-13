@@ -1137,7 +1137,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "3714dbfa-114b-47a0-99ca-1a26354e792a",
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "summary": "A Parakeet worker hit a CUDA out-of-memory error while transcribing.",
       "user_impact": "Requests on the affected replica may fail or fall back to another STT provider until it recovers.",
       "scope": "One production Parakeet GPU pod (grouped by pod).",
@@ -1236,7 +1236,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "3714dbfa-114b-47a0-99ca-1a26354e792a",
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "summary": "A GPU has used more than 90% of its framebuffer memory for 10 minutes.",
       "user_impact": "No user impact yet; the next allocation spike on this GPU may OOM and fail transcription requests.",
       "scope": "One GPU on one GKE node (DCGM exporter, grouped by Hostname and gpu).",

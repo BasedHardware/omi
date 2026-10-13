@@ -108,6 +108,19 @@ def test_plain_text_is_safe_and_actionable(render):
     assert render(payload('ticket')).startswith('⚠️ DIGEST')
 
 
+def test_real_grafana_silence_url_is_kept(render):
+    # Grafana silence URLs carry the rule UID plus every label matcher; measured 256-341 chars for our rules.
+    data = payload()
+    silence = 'https://monitor.omi.me/alerting/silence/new?alertmanager=grafana&' + '&'.join(
+        f'matcher=label{i}%3D%22value-{i:02d}%22' for i in range(10)
+    )
+    assert 300 < len(silence) < 600
+    data['Alerts']['Firing'][0]['SilenceURL'] = silence
+    message = render(data)
+    assert f'Silence: {silence}' in message
+    assert len(message.encode('utf-16-le')) // 2 < 4096
+
+
 def test_storm_unicode_links_and_resolved_stay_bounded(render):
     data = payload(count=500)
     data['Alerts']['Firing'][0] = payload(text='🔥' * 10000)['Alerts']['Firing'][0]

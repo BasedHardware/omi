@@ -1,5 +1,5 @@
 {{ define "omi.telegram.link" -}}
-{{- if and . (le (len .) 200) }}{{ . }}{{ else }}See rule in Grafana (link unavailable/oversized){{ end -}}
+{{- if and . (le (len .) 600) }}{{ . }}{{ else }}See rule in Grafana (link unavailable/oversized){{ end -}}
 {{- end }}
 {{ define "omi.telegram.message" -}}
 {{- $alerts := .Alerts.Firing -}}
