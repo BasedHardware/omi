@@ -356,7 +356,20 @@ void main() {
         await tester.runAsync(() async {
           final image = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
           final png = await (await image.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
-          final file = File('../.agent-artifacts/ui-evidence/onb-m-firstcapture/${platform.name}-$name.png');
+          const states = [
+            'choice',
+            'recording-5s',
+            'recording-30s',
+            'processing',
+            'result',
+            'empty',
+            'omi-handoff',
+            'watch-instructions'
+          ];
+          final ordinal =
+              (states.indexOf(name) + 1 + (platform == TargetPlatform.android ? 8 : 0)).toString().padLeft(3, '0');
+          final tag = platform == TargetPlatform.iOS ? 'mobile-ios' : 'mobile-android';
+          final file = File('../.agent-artifacts/ui-evidence/onb-m-firstcapture/$ordinal-$tag-first-capture-$name.png');
           file.parent.createSync(recursive: true);
           file.writeAsBytesSync(png!.buffer.asUint8List());
         });
