@@ -190,6 +190,13 @@ def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
     )
 
 
+def _recover_locked_content_if_request(uid: str, request: Request | None) -> None:
+    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
+        from utils.locked_content_recovery import recover_locked_content
+
+        recover_locked_content(uid)
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
@@ -197,14 +204,11 @@ def get_current_user_uid(
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ) -> str:
-    """FastAPI dependency for HTTP endpoints with Authorization header.
+    """Authenticate, fence deleted/cutover accounts, and validate BYOK enrollment.
 
-    Side-effect: records the signup/last-active platform for the user via
-    `record_user_platform`, which is throttled via Redis to one Firestore
-    write per (uid, platform) every 10 minutes. Failures here never fail the
-    request — it's telemetry, not auth.
-
-    Also validates BYOK headers against Firestore enrollment (if applicable).
+    Platform/device telemetry is best-effort; platform writes are throttled
+    to one per ten minutes. Default-off reset recovery drains bounded pages
+    after all access checks on eligible HTTP requests.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
@@ -256,6 +260,8 @@ def get_current_user_uid(
     # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
     # headers are present.
     validate_byok_request(uid)
+
+    _recover_locked_content_if_request(uid, request)
 
     return uid
 

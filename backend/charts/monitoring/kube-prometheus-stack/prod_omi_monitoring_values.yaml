@@ -10,6 +10,24 @@ kubeScheduler:
 kubeControllerManager:
   enabled: false
 
+# 2026-10-13 cost audit: no committed consumer or live recording/alert rule
+# reads feature inventories, REST-client byte sizes, or probe duration histograms.
+# Keep probe result counters and all kubelet latency/error signals in use.
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      # Preserve chart 75.15.1's default: Helm replaces this entire list.
+      - action: drop
+        sourceLabels: [__name__, le]
+        regex: (csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\.0)?
+      - action: drop
+        sourceLabels: [__name__]
+        regex: kubernetes_feature_enabled|rest_client_(request|response)_size_bytes_(bucket|sum|count)
+    probesMetricRelabelings:
+      - action: drop
+        sourceLabels: [__name__]
+        regex: prober_probe_duration_seconds_(bucket|sum|count)
+
 grafana:
   enabled: true
   serviceAccount:
