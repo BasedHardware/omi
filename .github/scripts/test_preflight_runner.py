@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import collections
 import ctypes
 import importlib.util
 import json
@@ -701,6 +702,42 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn("SELECTED unicode-fixture", completed.stdout)
         self.assertIn("PR preflight:", completed.stdout)
         self.assertIn(f"head={unicode_branch}", completed.stdout)
+
+
+class PythonFloorTests(unittest.TestCase):
+    """The runner must explain a below-floor interpreter instead of crashing later.
+
+    The check scripts import `git_bash`, whose module-scope PEP 604 unions need
+    Python >= 3.10; on hosts where PATH resolves `python3` to Xcode CLT 3.9 the
+    child would otherwise die with a bare TypeError.
+    """
+
+    def test_floor_ok_tracks_the_running_interpreter(self) -> None:
+        self.assertEqual(runner.python_floor_ok(), sys.version_info >= (3, 10))
+
+    def test_main_rejects_a_below_floor_runner_without_spawning_children(self) -> None:
+        env = os.environ.copy()
+        env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        fake_version = collections.namedtuple("version_info", "major minor micro releaselevel serial")(3, 9, 6, "final", 0)
+        with (
+            mock.patch.object(runner.sys, "version_info", fake_version),
+            mock.patch.object(
+                runner.subprocess, "Popen", side_effect=AssertionError("children must not spawn below the floor")
+            ),
+        ):
+            with mock.patch.object(runner.sys, "argv", ["preflight_runner.py", "--", "scripts/pre-push"]):
+                exit_code = runner.main()
+        self.assertEqual(exit_code, 2)
+
+    def test_main_floor_gate_accepts_a_modern_interpreter(self) -> None:
+        if sys.version_info < (3, 10):
+            self.skipTest("the running interpreter itself is below the floor")
+        env = os.environ.copy()
+        env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        with mock.patch.object(runner.sys, "argv", ["preflight_runner.py"]):
+            exit_code = runner.main()
+        # No command after `--` is its own guard, reached only past the floor gate.
+        self.assertEqual(exit_code, 2)
 
 
 if __name__ == "__main__":

@@ -116,15 +116,18 @@ def _write_logged_python(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch, path: str | None = None) -> str:
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(RESOLVER, resolver)
     monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    if path is not None:
+        env["PATH"] = path
     result = subprocess.run(
         [_bash_command(), "-c", 'source "$1"; dev_harness_python', "bash", _as_bash_path(resolver)],
         cwd=repo,
-        env=_shell_env(),
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -133,6 +136,29 @@ def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
+
+
+def _write_stub_python(directory: Path, name: str, *, meets_floor: bool) -> Path:
+    """Stub a PATH interpreter whose floor probe result is scripted.
+
+    The resolver probes each fallback candidate with
+    `python -c '... sys.version_info >= (3, 10) ...'`, so a stub that exits 0
+    represents a >= 3.10 interpreter and exit 1 represents a below-floor one.
+    Stubbing every fallback name keeps the resolution outcome deterministic on
+    any host, regardless of which real interpreters are installed.
+    """
+    stub = directory / name
+    stub.parent.mkdir(parents=True, exist_ok=True)
+    stub.write_text("#!/bin/sh\n" f"exit {0 if meets_floor else 1}\n", encoding="utf-8")
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    return stub
+
+
+def _stubbed_path(tmp_path: Path, meets_floor: dict[str, bool]) -> str:
+    directory = tmp_path / "stub-bin"
+    for name, floor_ok in meets_floor.items():
+        _write_stub_python(directory, name, meets_floor=floor_ok)
+    return os.pathsep.join((str(directory), os.environ.get("PATH", "")))
 
 
 def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
@@ -151,7 +177,84 @@ def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
     assert _resolve_python(repo, monkeypatch) == _as_bash_path(legacy)
 
     legacy.unlink()
-    assert _resolve_python(repo, monkeypatch) == "python3"
+    # Without a repo venv the resolver probes PATH candidates; a PATH whose
+    # `python3` is below the 3.10 floor (macOS Xcode CLT 3.9) and has no
+    # versioned fallback still ends at the bare `python3` name.
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": False,
+            "python3.10": False,
+            "python3": False,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
+
+
+def test_resolver_skips_below_floor_python3_for_versioned_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare `python3` is often macOS Xcode CLT 3.9, which cannot run the gate.
+
+    The pre-push check scripts use PEP 604 unions at module scope, so the
+    fallback chain must prefer a versioned interpreter that meets the 3.10
+    floor instead of crashing at import time.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": True,
+            "python3.10": False,
+            "python3": False,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.11"
+
+
+def test_resolver_prefers_newest_meeting_floor_among_versioned_fallbacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": True,
+            "python3.13": True,
+            "python3.12": True,
+            "python3.11": True,
+            "python3.10": True,
+            "python3": True,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.14"
+
+
+def test_resolver_keeps_bare_python3_when_it_meets_the_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": False,
+            "python3.10": False,
+            "python3": True,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
 
 
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
@@ -177,7 +280,20 @@ def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
     assert python.is_file()
     probe = subprocess.run([str(python), "-c", "import dotenv, yaml"], capture_output=True, check=False)
     assert probe.returncode != 0
-    resolved = _resolve_python(repo, monkeypatch)
+    # The skipped venv must fall through to the PATH probes; stub every
+    # candidate as below the floor so the expected end state is deterministic.
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": False,
+            "python3.10": False,
+            "python3": False,
+        },
+    )
+    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
     assert resolved == "python3"
 
 

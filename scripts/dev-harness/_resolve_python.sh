@@ -10,6 +10,19 @@ dev_harness_venv_covers_cheap_gates() {
   "$python_bin" -c 'import dotenv, yaml' >/dev/null 2>&1
 }
 
+# The pre-push gate's check scripts use PEP 604 unions and `match` statements at
+# module scope, so the selected interpreter must support Python >= 3.10 syntax.
+# macOS ships Xcode CLT `python3` 3.9 where bare `python3` would otherwise crash
+# the gate regardless of the diff being pushed.
+DEV_HARNESS_MIN_PYTHON_MAJOR=3
+DEV_HARNESS_MIN_PYTHON_MINOR=10
+
+dev_harness_python_floor_ok() {
+  local python_bin="$1"
+  [ -n "$python_bin" ] || return 1
+  "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1
+}
+
 # Print the canonical locked backend interpreter when setup has created it.
 dev_harness_canonical_python() {
   local repo_root candidate
@@ -58,7 +71,33 @@ dev_harness_python() {
     fi
   done
 
+  # PATH fallback: bare `python3` is often macOS system Python 3.9 (Xcode CLT),
+  # which cannot import the pre-push check scripts (PEP 604 unions at module
+  # scope). Prefer an explicit versioned interpreter first; keep bare `python3`
+  # only when it actually satisfies the floor.
+  local fallback
+  for fallback in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+    if dev_harness_python_floor_ok "$fallback"; then
+      printf '%s\n' "$fallback"
+      return
+    fi
+  done
+
   printf '%s\n' "python3"
+}
+
+# Advise callers who received a below-floor interpreter name (not a path). The
+# gate cannot verify a name from a different interpreter, so pr_preflight.py
+# re-checks the floor from inside Python and reports this guidance on failure.
+dev_harness_python_floor_advisory() {
+  cat <<'ADVISORY'
+The dev harness selected bare `python3`, but it reports a version below the
+3.10 floor the pre-push check scripts require (PEP 604 unions at module scope).
+On macOS the PATH `python3` is often Xcode CLT Python 3.9.
+Fix: run `make lane-bootstrap` to create backend/.venv (the canonical
+interpreter), or install Python >= 3.10 (e.g. `brew install python@3.12`) and
+put it on PATH, or select one explicitly with `PYTHON=/path/to/python3.12`.
+ADVISORY
 }
 
 dev_harness_python_uses_windows_paths() {
