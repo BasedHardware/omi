@@ -18,12 +18,17 @@ class OnboardingCard extends StatelessWidget {
     this.footer = const [],
     this.padding = const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xs),
     this.crossAxisAlignment = CrossAxisAlignment.center,
+    this.reserveBottomInset = true,
   });
 
   final List<Widget> content;
   final List<Widget> footer;
   final EdgeInsets padding;
   final CrossAxisAlignment crossAxisAlignment;
+
+  /// False when the footer lays out the home-indicator area itself (e.g. a fine-print line under
+  /// the button that sits in the space the other steps leave below theirs).
+  final bool reserveBottomInset;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +41,7 @@ class OnboardingCard extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
+        bottom: reserveBottomInset,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
