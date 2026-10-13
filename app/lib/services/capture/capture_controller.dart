@@ -16,6 +16,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -158,6 +159,7 @@ class CaptureController extends ChangeNotifier
   }
 
   CaptureExternalActions externalActions;
+  final Future<bool> Function(String, List<String>)? _excludeSpeaker;
   DeviceOnboardingProvider? deviceOnboardingProvider;
 
   // Cache refresh for backend-created persons
@@ -286,6 +288,7 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({
     CaptureExternalActions? externalActions,
+    Future<bool> Function(String, List<String>)? excludeSpeaker,
     ConversationLocationCapture? conversationLocationCapture,
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
@@ -310,7 +313,8 @@ class CaptureController extends ChangeNotifier
     CaptureNativeWriterGate? nativeWriterGate,
     CaptureWedgeMonitor? captureWedgeMonitor,
     CalendarCaptureGapMonitor? calendarGapMonitor,
-  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+  })  : _excludeSpeaker = excludeSpeaker,
+        externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader,
@@ -874,6 +878,7 @@ class CaptureController extends ChangeNotifier
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
   final Map<int, String> _manualSpeakerDefaults = {};
+  final Set<int> _excludedSpeakers = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -1146,6 +1151,7 @@ class CaptureController extends ChangeNotifier
     hasTranscripts = false;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
@@ -2500,6 +2506,7 @@ class CaptureController extends ChangeNotifier
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -3431,6 +3438,7 @@ class CaptureController extends ChangeNotifier
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
+      _excludedSpeakers.clear();
     }
     _conversation = nextConversation;
     if (_conversation != null) {
@@ -3860,6 +3868,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    if (_excludedSpeakers.contains(event.speakerId)) return;
     switch (reconcileSpeakerSuggestion(event, segments, taggingSegmentIds, suggestionsBySegmentId)) {
       case SpeakerSuggestionDisposition.ignored:
         return;
@@ -3906,33 +3915,53 @@ class CaptureController extends ChangeNotifier
     String personName,
     List<String> segmentIds, {
     bool applyToSpeaker = false,
+    bool notAPerson = false,
   }) async {
     final conversationId = _conversation?.id;
     final sessionId = activeCaptureSessionId;
     if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
-    final targets = List<String>.of(segmentIds);
+    final targets = notAPerson
+        ? [
+            for (final segment in segments)
+              if (segment.speakerId == speakerId) segment.id,
+          ]
+        : List<String>.of(segmentIds);
+    if (targets.isEmpty) return false;
     taggingSegmentIds = targets;
     notifyListeners();
     try {
-      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
-      if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
-      );
+      final finalPersonId = notAPerson
+          ? null
+          : personId.isEmpty
+              ? (await externalActions.createPerson(personName))?.id
+              : personId;
+      if (!notAPerson && (finalPersonId == null || finalPersonId.isEmpty)) return false;
+      final saved = notAPerson
+          ? await _excludeMediaSpeaker(conversationId, targets)
+          : await externalActions.assignSpeaker(
+              conversationId,
+              targets,
+              finalPersonId!,
+              speakerId: applyToSpeaker ? speakerId : null,
+            );
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
-      if (applyToSpeaker) {
-        _manualSpeakerDefaults[speakerId] = finalPersonId;
+      if (notAPerson) {
+        _excludedSpeakers.add(speakerId);
+        _manualSpeakerDefaults.remove(speakerId);
+      } else {
+        _excludedSpeakers.remove(speakerId);
+      }
+      if (applyToSpeaker && !notAPerson) {
+        _manualSpeakerDefaults[speakerId] = finalPersonId!;
       } else {
         _manualSpeakerDefaults.remove(speakerId);
       }
       for (final segment in segments) {
-        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
+        if ((applyToSpeaker || notAPerson) ? segment.speakerId == speakerId : targets.contains(segment.id)) {
           segment.isUser = finalPersonId == 'user';
           segment.personId = segment.isUser ? null : finalPersonId;
+          if (notAPerson) segment.speakerLabelSource = null;
         }
       }
       _segmentsPhotosVersion++;
@@ -3942,12 +3971,14 @@ class CaptureController extends ChangeNotifier
             'type': 'speaker_assigned',
             'speaker_id': speakerId,
             'person_id': finalPersonId,
+            if (notAPerson) 'assign_type': 'not_a_person',
             'person_name': personName,
             'segment_ids': targets,
           }),
         );
       }
-      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      suggestionsBySegmentId
+          .removeWhere((key, value) => targets.contains(key) || (notAPerson && value.speakerId == speakerId));
       return true;
     } catch (_) {
       return false;
@@ -3955,6 +3986,19 @@ class CaptureController extends ChangeNotifier
       taggingSegmentIds = [];
       notifyListeners();
     }
+  }
+
+  Future<bool> _excludeMediaSpeaker(String conversationId, List<String> segmentIds) async {
+    if (_excludeSpeaker != null) return _excludeSpeaker!(conversationId, segmentIds);
+    final result = await executeApi<ServerConversation>(
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/segments/assign-bulk',
+        method: 'PATCH',
+        body: jsonEncode({'segment_ids': segmentIds, 'assign_type': 'not_a_person'}),
+      ),
+      decode: (body) => ServerConversation.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
+    return result is ApiSuccess<ServerConversation>;
   }
 
   @override
@@ -3999,6 +4043,13 @@ class CaptureController extends ChangeNotifier
       }
     }
     segments.addAll(remainSegments);
+    for (final segment in segments) {
+      if (_excludedSpeakers.contains(segment.speakerId)) {
+        segment.isUser = false;
+        segment.personId = null;
+        segment.speakerLabelSource = null;
+      }
+    }
 
     // Refresh people cache if we see unknown personIds (backend-created persons)
     // Check all newSegments, not just remainSegments, to catch updates to existing segments

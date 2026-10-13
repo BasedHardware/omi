@@ -461,6 +461,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       segments: provider.segments,
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
+      onNotAPerson: () => provider.assignSpeakerToConversation(
+          speakerId,
+          '',
+          '',
+          [
+            for (final segment in provider.segments)
+              if (segment.speakerId == speakerId) segment.id,
+          ],
+          notAPerson: true),
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         final saved = await provider.assignSpeakerToConversation(
           speakerId,

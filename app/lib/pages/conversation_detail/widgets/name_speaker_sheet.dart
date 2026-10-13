@@ -143,6 +143,7 @@ Future<void> showNameSpeakerSheet(
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
   Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
+  Future<bool> Function()? onNotAPerson,
   bool unresolvedSpeakers = false,
 }) {
   return showOmiSheet<void>(
@@ -158,6 +159,7 @@ Future<void> showNameSpeakerSheet(
       defaultApplyToSpeaker: defaultApplyToSpeaker,
       onSpeakerAssigned: onSpeakerAssigned,
       onSpeakerRejected: onSpeakerRejected,
+      onNotAPerson: onNotAPerson,
       feedbackContext: context,
     ),
   );
@@ -178,8 +180,11 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final bool defaultApplyToSpeaker;
 
   /// Says the current label is wrong without naming who it is: "Not Me", "Not <name>",
-  /// "Not a Person". Null hides those answers (the live transcript).
+  /// "Not a Person". Null hides the label rejections; [onNotAPerson] can still expose exclusion.
   final Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected;
+
+  /// Exclude a media speaker cluster without assigning or teaching a person.
+  final Future<bool> Function()? onNotAPerson;
 
   /// The page that opened the sheet: its toasts land there once the sheet closes, so they keep the
   /// page's clearance above a pinned bottom action ([OmiFeedbackClearance]).
@@ -195,6 +200,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     this.defaultApplyToSpeaker = false,
     this.feedbackContext,
     this.onSpeakerRejected,
+    this.onNotAPerson,
   });
 
   @override
@@ -402,7 +408,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _buildNewPersonInput(people, userName)
                       else
                         _buildPersonSelector(people, userName),
-                      if (widget.onSpeakerRejected != null && !_isCreatingNewPerson) _buildRejections(people),
+                      if ((widget.onSpeakerRejected != null || widget.onNotAPerson != null) && !_isCreatingNewPerson)
+                        _buildRejections(people),
                       const SizedBox(height: 16),
                       _buildUntaggedSegments(),
                       const SizedBox(height: 8),
@@ -634,12 +641,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Future<void> _reject(SpeakerRejection kind) async {
     final reject = widget.onSpeakerRejected;
-    if (reject == null || loading) return;
+    final exclude = kind == SpeakerRejection.notAPerson ? widget.onNotAPerson : null;
+    if ((reject == null && exclude == null) || loading) return;
     final l10n = context.l10n;
     setLoading(true);
     var saved = false;
     try {
-      saved = await reject(kind);
+      saved = exclude != null ? await exclude() : await reject!(kind);
     } catch (_) {
       saved = false;
     }
@@ -668,14 +676,14 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       child: Wrap(
         spacing: OmiSpacing.xs,
         children: [
-          if (current?.isUser == true)
+          if (widget.onSpeakerRejected != null && current?.isUser == true)
             OmiButton.secondary(
               key: const Key('name_speaker_not_me'),
               label: l10n.speakerTagPromptNotMeAction,
               size: OmiButtonSize.compact,
               onPressed: () => _reject(SpeakerRejection.notMe),
             ),
-          if (person != null)
+          if (widget.onSpeakerRejected != null && person != null)
             OmiButton.secondary(
               key: const Key('name_speaker_not_person'),
               label: l10n.speakerLabelText('notPerson', person.name),

@@ -1562,11 +1562,12 @@ def _assign_manual_speaker(
     use_for_speech_training=True,
     time_range=None,
 ):
-    if assign_type not in {'is_user', 'person_id'}:
+    if assign_type not in {'is_user', 'person_id', 'not_a_person'}:
         raise HTTPException(status_code=400, detail='Invalid assign type')
     value = None if value == 'null' else value
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
+    excluded = assign_type == 'not_a_person'
     try:
         raw, resolved, removed, before = commit_manual_assignment(
             uid,
@@ -1576,8 +1577,12 @@ def _assign_manual_speaker(
             segment_ids=segment_ids,
             speaker_id=speaker_id,
             segment_index=segment_index,
-            use_for_speech_training=use_for_speech_training,
-            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            use_for_speech_training=False if excluded else use_for_speech_training,
+            rejection=(
+                {'kind': 'not_a_person', 'person_id': None}
+                if excluded
+                else {'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None
+            ),
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
