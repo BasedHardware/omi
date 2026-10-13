@@ -11,10 +11,21 @@ from routers import payment
 from models.users import PlanType, Subscription, SubscriptionStatus
 
 
+@pytest.fixture(scope='module')
+def client():
+    app = FastAPI()
+    app.include_router(payment.router)
+    app.dependency_overrides[payment.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
+    with TestClient(app) as client:
+        yield client
+
+
 @pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web'])
 @pytest.mark.parametrize('cancel_at_period_end', [False, True])
 @pytest.mark.parametrize('plan', ['basic', 'plus', 'operator', 'architect', 'unlimited', 'unlimited_v2'])
-def test_v1_response_bytes_do_not_change_with_storefront_flag(monkeypatch, platform, plan, cancel_at_period_end):
+def test_v1_response_bytes_do_not_change_with_storefront_flag(
+    client, monkeypatch, platform, plan, cancel_at_period_end
+):
     monkeypatch.setattr(
         payment.users_db,
         'get_user_subscription',
@@ -40,10 +51,6 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(monkeypatch, platf
     stripe_sub = MagicMock()
     stripe_sub.to_dict.return_value = {'items': {'data': [{'price': {'id': f'price_{plan.upper()}_month'}}]}}
     monkeypatch.setattr(stripe.Subscription, 'retrieve', lambda identifier: stripe_sub)
-    app = FastAPI()
-    app.include_router(payment.router)
-    app.dependency_overrides[payment.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
-    client = TestClient(app)
     headers = {'X-App-Platform': platform, 'X-App-Version': '99.0.0'}
     monkeypatch.delenv('STOREFRONT_LADDER_V1_ENABLED', raising=False)
     before = client.get('/v1/payments/available-plans', headers=headers)
