@@ -160,6 +160,12 @@ void main() {
         filePath: 'too_old_audio.bin',
       );
 
+  testWidgets('a processed recording without a conversation does not claim one was created', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.synced));
+    expect(find.text('Processed'), findsOneWidget);
+    expect(find.text('Conversation created'), findsNothing);
+  });
+
   testWidgets('the row explains the rejection and offers no Retry', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
 

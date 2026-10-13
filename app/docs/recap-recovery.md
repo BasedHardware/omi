@@ -20,10 +20,16 @@ not a creation path for these in-tree clients.
   `DailySummaryCreationApi` uses the shared typed HTTP/auth path and refuses a
   late result after an account switch. Success opens the returned record; the
   recap list reloads server pagination rather than inventing an older first-page
-  row. Home refreshes its preview when the recap page returns.
+  row. Successful recovery invalidates mounted Home readers even when recovery
+  was opened from Settings and Home previously had no recaps. A read generation
+  rejects older responses; failed reads preserve cards and expose retry.
 - Web: Conversations → Generate recap uses `useRecaps.generateForDate`, updates
   the existing store/cache once per ID, and opens the result. Account generation
-  and widget lifetime fence late results. Creation errors leave the list intact.
+  and widget lifetime fence late results. Owner-scoped cache keys keep account
+  snapshots separate. Initial reads, refreshes, and pagination share one read
+  lease; a successful creation/deletion forces older reads to re-read the server
+  before adoption. Creation errors leave the list intact. Read failures are
+  visible in Conversations with a recap-specific retry.
 - macOS: the existing day-row create action already uses this endpoint through
   `APIClient.createDailySummary`; no parallel route is added.
 
@@ -42,7 +48,34 @@ Tracked by [#11821](https://github.com/BasedHardware/omi/issues/11821).
 - [x] Migrate the unused token-dependent client helpers to the shared endpoint.
 - [x] Test response identity, status handling, cancellation, single flight,
   cache de-duplication, and account-switch rejection in the existing CI runners.
+- [x] Publish recovery to Home and fence older recap reads across mutations.
+- [x] Reconcile restored uploads without a job handle through retained-file retry.
+- [x] Test retained file → upload → polling → confirmed processing and persistence.
+- [x] Display failed/processing outcomes honestly on both Offline Sync screens.
 - [ ] Release the mobile and web clients after merge.
+
+## Recording synchronization boundary
+
+`LocalWalSyncImpl.reconcileUploadedWals` is the owner of uploaded recording
+recovery. Uploaded rows with a blank/missing job handle cannot be polled: retained
+audio re-enters the existing deduplicated upload path without spending retry
+budget, while missing local audio stays visible as unavailable. Both changes
+persist before notification; account changes fence asynchronous file checks.
+Accepted jobs remain processing until the terminal-policy boundary confirms
+completion. A valid empty/silent completion remains complete, without endless
+re-upload or a fabricated conversation claim.
+
+Offline Sync rows say **Processed** after confirmed processing. The legacy
+summary and empty-pending state do not claim all work is complete while another
+recording needs attention. Local-copy retention copy states the deletion period
+without promising a cloud audio copy. These changes do not alter retention,
+upload batching, account capacity controls, or the customer's cloud-storage setting.
+
+The backend's October scheduler/gateway/retry fixes are already deployed. This
+change requires mobile and web releases after merge and uses existing backend
+contracts. Existing #21347 read-validation work and #21319 pendant batching work
+remain separate; neither is proven to match this report. Account outcome checks
+remain tracked by [#21360](https://github.com/BasedHardware/omi/issues/21360).
 
 ## Featurebase status reporting
 

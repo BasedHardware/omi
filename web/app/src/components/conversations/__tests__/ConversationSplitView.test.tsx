@@ -10,6 +10,8 @@ const harness = vi.hoisted(() => ({
   conversationsLoading: false,
   recaps: [] as DailySummary[],
   recapsLoading: false,
+  recapsError: null as string | null,
+  refreshRecaps: vi.fn(),
   searchResults: [] as Conversation[],
   searchLoading: false,
   getRecapDetail: vi.fn(),
@@ -62,6 +64,8 @@ vi.mock('@/hooks/useRecaps', () => ({
   useRecaps: () => ({
     recaps: harness.recaps,
     loading: harness.recapsLoading,
+    error: harness.recapsError,
+    refresh: harness.refreshRecaps,
     hasMore: false,
     loadMore: vi.fn(),
     getRecapDetail: harness.getRecapDetail,
@@ -208,6 +212,8 @@ beforeEach(() => {
   harness.conversationsLoading = false;
   harness.recaps = [];
   harness.recapsLoading = false;
+  harness.recapsError = null;
+  harness.refreshRecaps.mockReset();
   harness.searchResults = [];
   harness.searchLoading = false;
   harness.getRecapDetail.mockReset().mockResolvedValue(null);
@@ -218,6 +224,17 @@ beforeEach(() => {
 });
 
 describe('ConversationSplitView review regressions', () => {
+  it('shows recap read failures with a retry instead of an empty account', async () => {
+    harness.recapsError = 'API error: 500';
+    render(<ConversationSplitView />);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Daily Recaps couldn’t load. Try again.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry recaps' }));
+    expect(harness.refreshRecaps).toHaveBeenCalledOnce();
+    expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
+  });
+
   it('clears a removed recap deep link without replacing it from the timeline', async () => {
     const listedRecap = recap('recap-a', '2026-08-11');
     harness.query = 'recap=recap-a';

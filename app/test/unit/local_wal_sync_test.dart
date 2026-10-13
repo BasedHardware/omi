@@ -1001,6 +1001,95 @@ void main() {
       fail('Timed out waiting for $type in DebugLogManager.listLogFiles');
     }
 
+    for (final handle in <String?>[null, '', '   ']) {
+      test('orphaned uploaded WAL with job handle "$handle" requeues retained audio durably', () async {
+        var polls = 0;
+        final local = LocalWalSyncImpl(listener,
+            now: () => now,
+            jobStatusFetcher: (_) async {
+              polls++;
+              return SyncJobFetch(SyncJobFetchOutcome.ok, completed());
+            });
+        final wal = member(retryCount: 2)..jobId = handle;
+        local.testWals = [wal];
+        final path = File('${directory.path}/${wal.filePath}');
+        final original = await path.readAsBytes();
+        final response = await local.reconcileUploadedWals();
+        expect(polls, 0);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.jobId, isNull);
+        expect(wal.retryCount, 2);
+        expect(listener.syncedWals, isEmpty);
+        expect(response.newConversationIds, isEmpty);
+        expect(await path.readAsBytes(), original);
+        final restored = (await WalFileManager.loadWals()).single;
+        expect(restored.status, WalStatus.miss);
+        expect(restored.retryCount, 2);
+      });
+    }
+
+    test('orphaned upload without retained audio stays visible as unavailable, never synced', () async {
+      final local = build(completed());
+      final wal = member()..jobId = null;
+      await File('${directory.path}/${wal.filePath}').delete();
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.corrupted);
+      expect(listener.syncedWals, isEmpty);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.corrupted);
+    });
+
+    test('restored orphan audio completes the retained-file upload and polling lifecycle', () async {
+      var clock = now;
+      var uploads = 0;
+      final wal = member()..jobId = null;
+      final source = File('${directory.path}/${wal.filePath}');
+      final original = await source.readAsBytes();
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => clock,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          fairUseStatusLoader: () async => {'stage': 'none'},
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads++;
+            expect(await files.single.readAsBytes(), original);
+            return UploadFilesResult.queued('recovered-job');
+          },
+        ),
+        jobStatusFetcher: (id) async => SyncJobFetch(
+            SyncJobFetchOutcome.ok,
+            SyncJobStatusResponse(
+                jobId: id,
+                status: 'completed',
+                result: SyncLocalFilesResponse(
+                    newConversationIds: ['recovered-conversation'], updatedConversationIds: []))),
+      );
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.miss);
+      clock = clock.add(const Duration(minutes: 1));
+      await local.syncAll();
+      expect(uploads, 1);
+      expect(wal.status, WalStatus.uploaded);
+      expect(wal.jobId, 'recovered-job');
+      clock = clock.add(SyncJobPoller.minimumInterval);
+      final result = await local.reconcileUploadedWals();
+      expect(result.newConversationIds, ['recovered-conversation']);
+      expect(wal.status, WalStatus.synced);
+      expect(listener.syncedWals, [wal]);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.synced);
+      expect(await source.readAsBytes(), original);
+    });
+
     test('queued then completed 0/0/0 acknowledges the WAL and emits a diagnostic', () async {
       var polls = 0;
       var pollNow = now.subtract(SyncJobPoller.minimumInterval);

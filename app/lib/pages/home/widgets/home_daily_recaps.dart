@@ -11,6 +11,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
 import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/daily_recap_updates.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -38,11 +39,22 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
   final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
+  bool _loadFailed = false;
+  int _readGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    dailyRecapUpdates.addListener(_recapChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+  }
+
+  void _recapChanged() => _refreshRecaps();
+
+  @override
+  void dispose() {
+    dailyRecapUpdates.removeListener(_recapChanged);
+    super.dispose();
   }
 
   /// Reloads the row (pull-to-refresh on Home). A failed read keeps the cards already shown.
@@ -52,13 +64,21 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
 
   Future<void> _refreshRecaps() async {
     if (!mounted) return;
+    final generation = ++_readGeneration;
     setState(() => _loading = _recaps.isEmpty);
-    final result = await widget.load();
-    if (!mounted) return;
-    setState(() {
-      if (result.ok) _recaps = result.items;
-      _loading = false;
-    });
+    try {
+      final result = await widget.load().timeout(const Duration(seconds: 15));
+      if (!mounted || generation != _readGeneration) return;
+      setState(() {
+        if (result.ok) _recaps = result.items;
+        _loadFailed = !result.ok;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted && generation == _readGeneration) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted && generation == _readGeneration) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -73,7 +93,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
       );
 
   Widget _buildRecaps(BuildContext context) {
-    if (!_loading && _recaps.isEmpty) return const SizedBox.shrink();
+    if (!_loading && _recaps.isEmpty) {
+      return _loadFailed
+          ? OmiErrorState(
+              title: context.l10n.dailyRecaps, message: context.l10n.somethingWentWrong, onRetry: _refreshRecaps)
+          : const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -107,6 +132,16 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
             ),
           ),
         ),
+        if (_loadFailed && !_loading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: Row(children: [
+              Expanded(
+                  child: Text(context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
+            ]),
+          ),
       ],
     );
   }

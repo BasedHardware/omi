@@ -406,7 +406,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             OmiSettingsRow.toggle(
               leading: const Icon(Icons.auto_delete),
               title: context.l10n.autoRemoveSyncedCopiesTitle,
-              subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
+              subtitle: context.l10n.autoRemoveSyncedCopiesDays(autoRemoveDays),
               value: autoRemoveOn,
               onChanged: (value) async {
                 SharedPreferencesUtil().autoRemoveSyncedCopies = value;
@@ -831,7 +831,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusConversationCreated);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.statusProcessed);
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:

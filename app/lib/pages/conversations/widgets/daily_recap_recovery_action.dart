@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/daily_recap_updates.dart';
 
 typedef DailyRecapCreator = Future<ApiResult<DailySummary>> Function(String date);
 
@@ -59,6 +60,7 @@ class _DailyRecapRecoveryActionState extends State<DailyRecapRecoveryAction> {
       if (!mounted) return;
       switch (result) {
         case ApiSuccess<DailySummary>(:final data):
+          dailyRecapUpdates.recovered();
           if (widget.onCreated != null) {
             await widget.onCreated!(data);
           } else {

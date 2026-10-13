@@ -14,6 +14,20 @@
       "description": "Same synthetic iOS recovery preview in the light theme.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-sync-needs-attention.png",
+      "platform": "mobile-ios",
+      "description": "Actual legacy Offline Sync widget, synthetic unavailable recording; no false completion message.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-sync-processed.png",
+      "platform": "mobile-ios",
+      "description": "Actual Auto Sync widget, synthetic completed empty processing; no invented conversation or cloud audio claim.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

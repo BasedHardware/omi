@@ -2465,16 +2465,36 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
+    bool changed = false;
+    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
+    // A restored uploaded row with no job handle cannot ever be polled.
+    // Retained audio re-enters the normal deduplicated upload path; missing
+    // audio remains visible as unavailable. Neither is a successful sync.
+    for (final w in _wals.where((w) => w.status == WalStatus.uploaded && (w.jobId?.trim().isEmpty ?? true))) {
+      final exists = await _localFileExists(w);
+      if (!_isCurrent(generation)) return resp;
+      changed = true;
+      if (exists) {
+        w.status = WalStatus.miss;
+        w.jobId = null;
+        w.lastRetryAt = nowSecs;
+      } else {
+        w.markCorrupted();
+      }
+      DebugLogManager.logEvent('reconcile_revert', {
+        'walId': w.id,
+        'outcome': 'missing_job_id',
+        'fileExists': exists,
+        'newStatus': w.status.name,
+      });
+    }
+
     final byJob = <String, List<Wal>>{};
     for (final w in _wals) {
       if (w.status == WalStatus.uploaded && w.jobId != null && w.jobId!.isNotEmpty) {
         byJob.putIfAbsent(w.jobId!, () => []).add(w);
       }
     }
-    if (byJob.isEmpty) return resp;
-
-    bool changed = false;
-    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     // Serial requests let a 429 stop this pass before another request escapes.
     const maxConcurrent = 1;
     final entries = _jobPoller.ordered(byJob.keys).map((id) => MapEntry(id, byJob[id]!)).toList();
@@ -2502,10 +2522,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           case SyncJobFetchOutcome.notFound:
             // Job expired or unknown. Recover from the retained local file.
             for (final w in members) {
-              changed = true;
               final hadJob = w.jobId;
-              w.jobId = null;
               final fileExists = await _localFileExists(w);
+              if (!_isCurrent(generation)) return resp;
+              changed = true;
+              w.jobId = null;
               if (fileExists) {
                 w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
                 // Expiry is not an audio failure. Recovery is already paced by

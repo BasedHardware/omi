@@ -761,7 +761,11 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
   if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
-    final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final raw = jsonDecode(response.body);
+    if (raw is! Map<String, dynamic> || raw['summaries'] is! List) {
+      throw const FormatException('Invalid daily recap list response');
+    }
+    final data = wire.GeneratedDailySummariesResponse.fromJson(raw);
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
