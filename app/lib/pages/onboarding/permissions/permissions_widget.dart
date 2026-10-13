@@ -140,6 +140,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> with WidgetsBindi
       _asked.add(permission);
       final status = await _read(permission);
       if (mounted) {
+        // The toggle landing on: a light confirmation.
+        if (status == OmiPermissionStatus.granted) OmiHaptics.light();
         setState(() {
           _statuses[permission] = status;
           _busy = null;

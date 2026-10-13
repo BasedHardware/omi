@@ -159,6 +159,21 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
     ConnectionGuideSheet.show(context);
   }
 
+  bool _feltFound = false;
+  bool _feltConnected = false;
+
+  /// A light tap when the Omi appears, a firmer one when it is connected: felt, not only seen.
+  void _feelProgress({required bool found, required bool connected}) {
+    if (found && !_feltFound) {
+      _feltFound = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => OmiHaptics.light());
+    }
+    if (connected && !_feltConnected) {
+      _feltConnected = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => OmiHaptics.success());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -170,6 +185,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
         final found = provider.isConnected || devices.isNotEmpty;
         final cantFind = !found && provider.enableInstructions;
         final shown = devices.isNotEmpty ? devices.first : null;
+        _feelProgress(found: found, connected: provider.isConnected);
 
         final Widget visual = found
             ? TweenAnimationBuilder<double>(

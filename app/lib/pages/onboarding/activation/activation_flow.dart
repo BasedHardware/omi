@@ -118,6 +118,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
   Future<void> _allowMicrophone() async {
     final granted = await (widget.requestMicrophone ?? () async => (await Permission.microphone.request()).isGranted)();
     if (granted) {
+      OmiHaptics.light();
       _go(ActivationStage.dictate);
     } else {
       _skipped();
@@ -1250,6 +1251,7 @@ class _RatingAsk extends StatefulWidget {
 class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   static const _gold = Color(0xFFFFC53D); // omi-ux-allow: color-literal -- rating stars in App Store gold
   Timer? _ask;
+  Timer? _starsLanded;
   bool _promptShowing = false;
   bool _asked = false;
   bool _done = false;
@@ -1258,12 +1260,15 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // A light tap as the stars land, then the App Store prompt.
+    _starsLanded = Timer(const Duration(milliseconds: 650), OmiHaptics.light);
     _ask = Timer(const Duration(milliseconds: 1500), _requestReview);
   }
 
   @override
   void dispose() {
     _ask?.cancel();
+    _starsLanded?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
