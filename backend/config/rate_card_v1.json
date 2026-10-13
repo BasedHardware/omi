@@ -297,7 +297,7 @@
     "modulate": {
       "micro_usd_per_hour": 60000,
       "status": "card",
-      "source": "https://platform.modulate.ai/pricing multilingual streaming $0.06/hour"
+      "source": "https://platform.modulate.ai/pricing Multilingual Transcription streaming WebSocket $0.06/hour; live SKU velma-2-stt-streaming (not Velma Triage $0.75/hour)"
     },
     "soniox": {
       "micro_usd_per_hour": 120000,
@@ -305,9 +305,9 @@
       "source": "https://soniox.com/pricing streaming approximate $0.12/hour"
     },
     "deepgram": {
-      "micro_usd_per_hour": 348000,
+      "micro_usd_per_hour": 468000,
       "status": "card",
-      "source": "https://deepgram.com/pricing Nova-3 multilingual streaming $0.0058/minute"
+      "source": "https://deepgram.com/pricing Nova-3 multilingual streaming $0.0058/min + Speaker Diarization $0.0020/min = $0.468/hour; streaming.py always sets diarize=True; optional keyterm prompting excluded"
     },
     "unknown": {
       "micro_usd_per_hour": 258000,
@@ -316,7 +316,7 @@
     }
   },
   "speech_ratio": "0.32",
-  "default_speech_provider": "parakeet",
+  "default_speech_provider": "deepgram",
   "requests": {
     "mcp_api": {
       "micro_usd_per_request": 1000,
@@ -338,5 +338,11 @@
     "status": "measured",
     "source": "Read-only 2026-10-01..09 sample: first 4000 UUID-ordered metadata attempts/day, 36000 documents, 215 Omi-funded confirmed chat_agent gpt-6-luna first attempts (retry ordinal <=1); componentwise median tokens [3,11667,49]. No user identifiers or content projected."
   },
-  "speech_ratio_source": "Coordinator ruling 2026-10-13 and W0: approximate measured 32% speech ratio"
+  "speech_ratio_source": "Coordinator ruling 2026-10-13 and W0: approximate measured 32% speech ratio",
+  "free_speech_basis": {
+    "kind": "most_expensive_free_routable_managed_provider",
+    "provider": "deepgram",
+    "source": "origin/main@f876d1cf324 config/stt_provider_policy.py STREAMING includes Modulate, Soniox, Deepgram, Parakeet; live_stt_registry.py ramps/env and utils/stt/live_router.py language, health, capacity prevent a fixed Free share; no plan-specific provider restriction",
+    "note": "Use conservative maximum because expected Free accepted-speech routing shares are not determinable from configuration. Display callers may supply their routed speech_provider_shares."
+  }
 }

@@ -9,14 +9,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
-V1_SHA256 = '333f224bf4fec44954d92d2e76b1a99cc14d31651b71fa4ac778123281ecd258'
+from config.rate_card_versions import RATE_CARD_SHA256
+
 EXCLUDED_FUNDING = frozenset({'byok', 'custom', 'on_device'})
 
 
 @lru_cache(maxsize=1)
 def _card() -> dict[str, Any]:
     raw = Path(__file__).with_name('rate_card_v1.json').read_bytes()
-    if hashlib.sha256(raw).hexdigest() != V1_SHA256:
+    if hashlib.sha256(raw).hexdigest() != RATE_CARD_SHA256['v1']:
         raise ValueError('rate card v1 changed: publish a new version file')
     value = json.loads(raw)
     if value['version'] != 'v1' or value['unit_usd_micros'] != 1000:
@@ -63,6 +64,7 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
         return exclusion
     if event.get('usage_status') != 'confirmed':
         return _result(Decimal(0), 'missing', 'provider_usage_not_confirmed')
+    tool_reasons = ['tool_use_prompt_tokens_unpriced'] if _d(event.get('tool_use_prompt_tokens', 0)) else []
     key = f"{event.get('provider')}:{event.get('configured_model')}"
     rt = _card()['realtime_models'].get(key)
     if rt:
@@ -73,8 +75,13 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
                 event.get('rate_card_id') == rt['reference_rate_card_id']
                 and event.get('estimated_cost_micro_usd') is not None
             ):
-                return _result(_d(event['estimated_cost_micro_usd']), 'estimated', 'realtime_modality_counts_missing')
-            return _result(Decimal(0), 'missing', 'realtime_modality_counts_missing')
+                return _result(
+                    _d(event['estimated_cost_micro_usd']),
+                    'estimated',
+                    'realtime_modality_counts_missing',
+                    *tool_reasons,
+                )
+            return _result(Decimal(0), 'missing', 'realtime_modality_counts_missing', *tool_reasons)
         rates = rt['rates_micro_usd_per_million']
         cost = Decimal(0)
         for modality in ('text', 'audio', 'image'):
@@ -83,7 +90,7 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
             cost += uncached * rates[f'input_{modality}'] + cached * rates[f'cached_{modality}']
         cost += _d(modalities.get('output_text', 0)) * rates['output_text']
         cost += _d(modalities.get('output_audio', 0)) * rates['output_audio']
-        return _result(cost / 1_000_000, 'complete')
+        return _result(cost / 1_000_000, 'estimated' if tool_reasons else 'complete', *tool_reasons)
     if event.get('unit_type') == 'images':
         cards = [
             c
@@ -109,7 +116,7 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
         event.get('uncached_input_tokens', max(_d(event.get('prompt_tokens', 0)) - cached - written, Decimal(0)))
     )
     output = _d(event.get('output_tokens', 0))
-    if not event.get('output_tokens_include_reasoning', True):
+    if not event.get('output_tokens_include_reasoning', False):
         output += _d(event.get('reasoning_tokens', 0))
     prefix = (
         'long_context_' if uncached + cached + written > card.get('long_context_threshold_tokens', float('inf')) else ''
@@ -137,6 +144,21 @@ def price_llm_attempt(event: Mapping[str, Any]) -> dict[str, Any]:
     if not (uncached + cached + written + output):
         status = 'missing'
         reasons.append('empty_provider_usage')
+    if event.get('provider') == 'gemini':
+        modalities = event.get('modality_tokens') or {}
+        audio = (
+            event.get('has_audio')
+            or 'audio' in (event.get('input_modalities') or [])
+            or any(
+                _d(event.get(name, 0)) for name in ('input_audio_tokens', 'cached_audio_tokens', 'output_audio_tokens')
+            )
+            or any(_d(modalities.get(name, 0)) for name in ('input_audio', 'cached_audio', 'output_audio'))
+        )
+        if audio:
+            reasons.append('audio_modality_rate_missing')
+        reasons.extend(tool_reasons)
+        if (audio or tool_reasons) and status != 'missing':
+            status = 'estimated'
     return _result(cost / 1_000_000, status, *reasons)
 
 
@@ -199,13 +221,29 @@ def budget_units(entitlements: Mapping[str, Any]) -> int | None:
     raise ValueError('unknown budget expression')
 
 
+def _speech_hour_units(mix: Mapping[str, Any]) -> Decimal:
+    # Shares describe accepted speech, not session-start counts. No observed mix:
+    # use the pinned conservative Free-routable managed maximum, never cheapest.
+    shares = mix.get('speech_provider_shares')
+    if shares is None:
+        shares = {mix.get('speech_provider', _card()['default_speech_provider']): 1}
+    if not isinstance(shares, Mapping) or not shares:
+        raise ValueError('speech_provider_shares must be a nonempty provider/share mapping')
+    weights = {provider: _d(share) for provider, share in shares.items()}
+    if sum(weights.values()) != 1:
+        raise ValueError('speech_provider_shares must sum to 1')
+    total = Decimal(0)
+    for provider, share in weights.items():
+        if provider not in _card()['transcription'] or provider == 'unknown':
+            raise ValueError('display speech provider requires a known rate')
+        total += share * Decimal(price_transcription(3600, provider=provider, accepted=True)['micro_units']) / 1_000_000
+    return total
+
+
 def display_equivalents(remaining_units: Any, mix: Mapping[str, Any] | None = None) -> dict[str, float]:
     mix = mix or {}
     remaining = _d(remaining_units)
-    speech = price_transcription(
-        3600, provider=mix.get('speech_provider', _card()['default_speech_provider']), accepted=True
-    )
-    recording_hour = Decimal(speech['micro_units']) / 1_000_000 + _d(mix.get('recording_overhead_units_per_hour', 0))
+    recording_hour = _speech_hour_units(mix) + _d(mix.get('recording_overhead_units_per_hour', 0))
     chat = standard_chat_units() + _d(mix.get('chat_overhead_units', 0))
     return {
         'recording_hours': float(remaining / recording_hour) if recording_hour else 0.0,
