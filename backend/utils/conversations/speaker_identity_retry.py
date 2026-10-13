@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from functools import partial
 from typing import Iterable
@@ -15,10 +16,14 @@ logger = logging.getLogger(__name__)
 MAX_LATE_IDENTITY_JOBS = 2
 MAX_LATE_IDENTITY_CANDIDATES = 128
 MAX_LATE_IDENTITY_PASSES = 8
+MAX_LATE_IDENTITY_WAITERS = 2
+ADMISSION_RECHECK_DELAYS = (5, 15, 30, 60, 120)
 COMPLETION_RECHECK_DELAYS = (5, 15, 30, 60, 120)
 _slots = threading.BoundedSemaphore(MAX_LATE_IDENTITY_JOBS)
+_waiting_slots = threading.BoundedSemaphore(MAX_LATE_IDENTITY_WAITERS)
 _active_lock = threading.Lock()
 _active: set[tuple[str, str]] = set()
+_waiting: set[tuple[str, str]] = set()
 
 
 @dataclass(frozen=True)
@@ -60,26 +65,85 @@ def _retry_batch(
 
 
 def schedule_completed_identity_retries(uid: str, conversation_ids: Iterable[str]) -> bool:
-    """Two batches, 128 distinct candidates and eight passes, including all rechecks.
+    """Two active batches plus two bounded, ID-only admission waiters.
 
-    A waiting batch retains its slot, but no executor thread. Overlapping drain
-    submissions coalesce while active; each candidate enters repair at most once
-    in this batch, even when finalization and upload drain race.
+    Waiters read no conversations/audio and borrow no executor thread. Each
+    admitted batch retains the existing 128-candidate and eight-pass ceilings.
+    Overlapping submissions coalesce across both active and waiting work.
     """
     known = sorted(set(conversation_ids))
     with _active_lock:
-        known = [cid for cid in known if (uid, cid) not in _active]
+        known = [cid for cid in known if (uid, cid) not in _active and (uid, cid) not in _waiting]
         if not known:
             return True
         record_retry('late', 'entry', 'candidate', len(known))
-        if not _slots.acquire(blocking=False):
-            record_retry('late', 'skipped', 'slot_limit', len(known))
-            return False
         candidates = tuple(known[:MAX_LATE_IDENTITY_CANDIDATES])
         keys = {(uid, cid) for cid in candidates}
-        _active.update(keys)
+        if _slots.acquire(blocking=False):
+            _active.update(keys)
+            deferred = False
+        elif _waiting_slots.acquire(blocking=False):
+            _waiting.update(keys)
+            deferred = True
+        else:
+            record_retry('late', 'skipped', 'slot_limit', len(known))
+            return False
     if len(known) > len(candidates):
         record_retry('late', 'skipped', 'scan_limit', len(known) - len(candidates))
+    if deferred:
+        record_retry('late', 'deferred', 'slot_limit', len(candidates))
+        _wait_for_admission(uid, candidates)
+    else:
+        _start_batch(uid, candidates)
+    return True
+
+
+def _wait_for_admission(uid: str, candidates: tuple[str, ...]) -> None:
+    keys = {(uid, cid) for cid in candidates}
+    handed_off = False
+    deadline = time.monotonic() + sum(ADMISSION_RECHECK_DELAYS)
+
+    def release_waiter() -> None:
+        with _active_lock:
+            if not handed_off:
+                _waiting.difference_update(keys)
+            _waiting_slots.release()
+
+    async def wait() -> None:
+        nonlocal handed_off
+        for delay in ADMISSION_RECHECK_DELAYS:
+            remaining = deadline - time.monotonic()
+            if remaining < 0:
+                break
+            await asyncio.sleep(min(delay, remaining))
+            with _active_lock:
+                admitted = time.monotonic() <= deadline and _slots.acquire(blocking=False)
+                if admitted:
+                    # Atomic handoff: overlapping submissions always see the keys.
+                    _active.update(keys)
+                    _waiting.difference_update(keys)
+                    handed_off = True
+            if admitted:
+                # Eligibility and the revision fence use a fresh snapshot here.
+                _start_batch(uid, candidates)
+                return
+        record_retry('late', 'skipped', 'slot_limit', len(candidates))
+
+    coro = wait()
+    try:
+        task = start_background_task(coro, name='speaker_identity_admission')
+    except Exception:
+        coro.close()
+        record_retry('late', 'skipped', 'submission_error', len(candidates))
+        release_waiter()
+        raise
+    # Also releases a waiter cancelled before its coroutine ever starts.
+    task.add_done_callback(lambda _: release_waiter())
+
+
+def _start_batch(uid: str, candidates: tuple[str, ...]) -> None:
+    """Caller owns one active slot and has registered the candidate keys."""
+    keys = {(uid, cid) for cid in candidates}
 
     def release() -> None:
         with _active_lock:
@@ -127,5 +191,3 @@ def schedule_completed_identity_retries(uid: str, conversation_ids: Iterable[str
         current[0].add_done_callback(lambda _: release())
         raise
     task.add_done_callback(lambda _: current[0].add_done_callback(lambda _: release()))
-
-    return True
