@@ -82,7 +82,7 @@
           "interval": "month",
           "amount_minor": 0,
           "currency": "usd",
-          "headline": "$0.00/month",
+          "headline": "$0",
           "subline": null,
           "renewal_line": null
         }

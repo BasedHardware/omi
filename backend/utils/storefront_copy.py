@@ -280,6 +280,14 @@ def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | N
     return None
 
 
+def monthly_headline(amount_minor: int, locale: str | None = None) -> str:
+    """Monthly price line. Free is "$0"; a paid month is "{amount}/month"."""
+    text = copy_for(locale)['prices']
+    if amount_minor == 0:
+        return text['headline_free']
+    return text['headline_month'].format(amount=money(amount_minor))
+
+
 def render_price(
     *,
     price_id: str | None,
@@ -317,7 +325,7 @@ def render_price(
         'interval': 'month',
         'amount_minor': amount_minor,
         'currency': currency,
-        'headline': text['headline_month'].format(amount=money(amount_minor)),
+        'headline': monthly_headline(amount_minor, locale),
         'subline': None,
         'renewal_line': text['renewal_month'] if amount_minor else None,
         'months_free': None,

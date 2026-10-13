@@ -20,6 +20,7 @@ from utils.storefront_copy import (
     current_line,
     header,
     hours_line,
+    monthly_headline,
     plan_name,
     render_price,
     yearly_switch_label,
@@ -159,6 +160,9 @@ def _prices_for(
             locale=locale,
         )
         if switch_yearly and interval == 'year' and monthly_minor is not None:
+            # The toggle can still read Monthly. Keep the headline on the price
+            # the user pays; the subline and CTA carry the yearly offer.
+            payload['headline'] = monthly_headline(monthly_minor, locale)
             payload['cta_label'] = yearly_switch_label(
                 monthly_minor=monthly_minor,
                 annual_minor=row['unit_amount'],
@@ -255,6 +259,12 @@ def build_storefront(
         plan = tier['plan_id']
         if legacy and plan == current_plan:
             continue
+        # Paid users never see a Free card. Cancel-scheduled keeps the current
+        # card and higher tiers only; lower paid tiers are omitted, not blocked.
+        if plan == 'basic' and current_plan != 'basic':
+            continue
+        if resubscribe_only and plan != current_plan and not is_higher_offer(current_plan, plan):
+            continue
         rows: list[dict[str, Any]] = []
         for registration in recognized:
             price_id = registration['price_id']
@@ -304,6 +314,10 @@ def build_storefront(
             action = 'none'
         if switch:
             action = 'checkout'
+        # A checkout button with no price_id cannot be sent. Failed retrieval
+        # on a cancel-scheduled current card stays "current" with no CTA.
+        if is_current and action == 'checkout' and not prices:
+            action = 'current'
         tiers.append(
             StorefrontTier(
                 tier_id=f'{plan}:ladder_v1',
@@ -345,6 +359,8 @@ def build_storefront(
             current_prices = _prices_for([current_row], offered=offered, locale=locale, current=True)
             if resubscribe_only and current_price_id:
                 current_prices = [item for item in current_prices if item.price_id == current_price_id]
+        if action == 'checkout' and not current_prices:
+            action = 'current'
         tiers.append(
             StorefrontTier(
                 tier_id=f'{current_plan}:{"legacy" if legacy else "ladder_v1"}',

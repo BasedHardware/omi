@@ -63,20 +63,34 @@ Same tier, monthly, and not cancel-scheduled: the current card is
 offered, with price-level `cta_label` `Switch to yearly · save {saving}`
 (`saving` is 12× the monthly amount minus the annual amount, formatted in the
 price currency). A price-level `cta_label` overrides the tier label. The
-monthly price is not on that card. Same tier, annual: the monthly price is
-never offered, the card stays `action: current`, and there is no price CTA.
+monthly price is not on that card. That yearly price's `headline` stays the
+user's current monthly price (`$19.99/month`); the yearly offer is only the
+`subline` and the price CTA. The card does not adopt the yearly-equivalent
+headline while the interval toggle reads Monthly. Same tier, annual: the
+monthly price is never offered, the card stays `action: current`, and there
+is no price CTA.
+
 `compact` is true only when the current card has no tier button and no price
 CTA.
 
 `cancel_at_period_end` on a non-legacy paid plan offers checkout only on the
 current tier, with tier `cta_label` `Resubscribe` and only that tier's current
 `price_id`. `yearly_toggle_label` is null. There is no switch-to-yearly
-label, no recommended badge, and the current tier is first. Every other tier
-is `action: none`, `cta_label: null`, and
-`blocked_line: "Resubscribe first to change plans"`. The header is
-`Your {Plan} plan ends {date}` and the current line is
+label, no recommended badge, and the current tier is first. The sheet lists
+that current card and higher tiers only. Every other tier is `action: none`,
+`cta_label: null`, and `blocked_line: "Resubscribe first to change plans"`.
+The header is `Your {Plan} plan ends {date}` and the current line is
 `You're on {Plan} · {$price}/mo` (yearly: `{$price}/yr`). Free cancellation
 does not open checkout. Legacy cancellation still has no checkout anywhere.
+
+Paid plans, including cancel-scheduled, annual, and legacy, omit the Free
+tier from `tiers`. Free is not sent with `action: none` or a blocked line.
+A Free subscriber still receives Free as the current card. Its price headline
+is `$0`.
+
+If the current card has no prices, including when the current Stripe price
+cannot be retrieved, `action` is `current` and `cta_label` is null. That card
+is never `checkout` with `prices: []`.
 
 If the current price cannot be retrieved, `current.interval` is null and the
 current card offers no prices, so a yearly subscriber is not shown a monthly
@@ -95,12 +109,14 @@ triggers return 422. A legacy subscriber's header is always `Your plan`.
 Only active USD recurring month/year prices with `interval_count` 1 are sold.
 The current archived price is still shown. With no usable ladder price, Plus
 and Pro are hidden and Architect stays visible with `action: none`. Free is the
-zero monthly price. No amount is copied out of env or `proposed_prices`.
+zero price with headline `$0`. No amount is copied out of env or `proposed_prices`.
 
 `months_free` is `floor(12 − annual/monthly)` when that value is at least 1.
 `yearly_toggle_label` uses the smallest such value across tiers, or null. It
 is also null while a non-legacy paid cancellation is scheduled.
-Yearly headlines are the annual amount divided by 12, half-up to cents.
+Yearly headlines are the annual amount divided by 12, half-up to cents,
+except the same-tier monthly-to-yearly switch card, whose headline stays the
+current monthly price.
 
 Recording hours are `floor_to_nice(budget × 0.85 / 130)`. Free is fixed at 15.
 Budgets are the plan-catalog usage units when the catalog declares them, and
