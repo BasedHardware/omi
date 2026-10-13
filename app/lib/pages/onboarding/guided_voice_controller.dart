@@ -561,8 +561,9 @@ class GuidedVoiceController extends ChangeNotifier {
         } else {
           answer.submittedMemory ??= answer.text.trim();
         }
-        final saved =
-            answer.isGoal ? await io.saveGoal(answer.submittedGoal!, answer.id) : await io.remember(answer.submittedMemory!);
+        final saved = answer.isGoal
+            ? await io.saveGoal(answer.submittedGoal!, answer.id)
+            : await io.remember(answer.submittedMemory!);
         if (!_current(generation)) return;
         answer.saved = saved;
         if (answer.isGoal) {
