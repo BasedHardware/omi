@@ -112,7 +112,8 @@ class OnboardingPermissionToggle extends StatelessWidget {
             ? denyColor
             : OmiColors.surface3;
     // On the accent track the thumb takes the accent's contrast colour (white on black, black on white).
-    final thumb = on ? OmiColors.onAccent : const Color(0xFFFFFFFF);
+    final thumb =
+        on ? OmiColors.onAccent : const Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- white thumb, as iOS
     return AnimatedContainer(
       duration: motion.standard,
       curve: Curves.easeOut,
