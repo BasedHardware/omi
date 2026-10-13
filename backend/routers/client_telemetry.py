@@ -149,10 +149,6 @@ async def get_client_telemetry_aggregates(
     return JSONResponse(payload)
 
 
-def _query_aggregates(days: int, channel: str) -> tuple[dict[str, Any], bool]:
-    return query_is_stale(days=days, channel=channel)
-
-
 def _query_aggregates_classified(days: int, channel: str) -> tuple[dict[str, Any], bool]:
     """Query with the durable channel roster when one has been seeded.
 
@@ -169,8 +165,6 @@ _ROSTER_HINTS: set[str] = set()
 
 def _roster_owners() -> set[str]:
     """Owners worth a roster lookup: recent ingests plus explicitly enrolled ids."""
-    from database.client_telemetry import recent_owner_ids
-
     owners = set(_ROSTER_HINTS)
     owners.update(recent_owner_ids())
     return owners
@@ -178,7 +172,7 @@ def _roster_owners() -> set[str]:
 
 def note_roster_hint(owner: str) -> None:
     """Ingest path hints the query side which owners are active."""
-    if isinstance(owner, str) and owner.strip():
+    if owner.strip():
         _ROSTER_HINTS.add(owner)
         if len(_ROSTER_HINTS) > 512:
             _ROSTER_HINTS.clear()

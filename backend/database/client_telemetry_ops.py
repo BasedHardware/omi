@@ -15,7 +15,7 @@ sol blockers closed here:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from config.client_telemetry import STALE_AFTER, TelemetryContractError
@@ -29,7 +29,11 @@ from database.client_telemetry import (
     run_telemetry_transaction,
     seal_day,
 )
-from database.client_telemetry import _read, _ref
+
+
+def _telemetry_ref(client: Any, collection: str, document_id: str) -> Any:
+    """Module-bound passthrough so tests patching store internals keep working."""
+    return store.ref(client, collection, document_id)
 
 
 def _default_client():
@@ -44,7 +48,7 @@ PURGE_BATCH = 300
 
 
 def _require_day(day: str) -> None:
-    if not isinstance(day, str) or len(day) != 10 or day[4] != "-" or day[7] != "-":
+    if len(day) != 10 or day[4] != "-" or day[7] != "-":
         raise TelemetryContractError(422, "telemetry_invalid", "day must be YYYY-MM-DD")
 
 
@@ -73,7 +77,7 @@ def seal_settled_day(
     if parsed >= today:
         raise TelemetryContractError(422, "telemetry_invalid", "refuse to seal an unsettled day")
     client = firestore_client if firestore_client is not None else _default_client()
-    current = _read_direct(client, DAYS, day)
+    current = _telemetry_read_direct(client, DAYS, day)
     if current is not None:
         last_accepted = current.get("last_accepted_at")
         if isinstance(last_accepted, str):
@@ -89,8 +93,8 @@ def seal_settled_day(
     return seal_day(day, firestore_client=client, now=moment)
 
 
-def _read_direct(client: Any, collection: str, document_id: str) -> dict[str, Any] | None:
-    snapshot = _ref(client, collection, document_id).get()
+def _telemetry_read_direct(client: Any, collection: str, document_id: str) -> dict[str, Any] | None:
+    snapshot = _telemetry_ref(client, collection, document_id).get()
     if not getattr(snapshot, "exists", False):
         return None
     data = snapshot.to_dict()
@@ -105,7 +109,7 @@ def enroll_channel(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Register an actor's channel in the durable roster."""
-    if not isinstance(owner, str) or not owner.strip():
+    if not owner.strip():
         raise TelemetryContractError(401, "telemetry_unauthorized", "owner is required")
     if channel not in {"production", "beta"}:
         raise TelemetryContractError(422, "telemetry_invalid", "channel must be production or beta")
@@ -116,7 +120,7 @@ def enroll_channel(
     document = {"owner": owner, "channel": channel, "updated_at": moment}
 
     def callback(transaction: Any) -> dict[str, Any]:
-        transaction.set(_ref(client, ROSTER, owner), document)
+        transaction.set(_telemetry_ref(client, ROSTER, owner), document)
         return document
 
     return run_telemetry_transaction(client, callback)
@@ -137,12 +141,12 @@ def channel_roster(
         return {}
     client = firestore_client if firestore_client is not None else _default_client()
     # Any roster document proves the deployment seeded the roster.
-    anchor = _read_direct(client, ROSTER, "__anchor__")
+    anchor = _telemetry_read_direct(client, ROSTER, "__anchor__")
     if anchor is None:
         return None
     mapping: dict[str, str] = {}
     for owner in owners:
-        document = _read_direct(client, ROSTER, owner)
+        document = _telemetry_read_direct(client, ROSTER, owner)
         if isinstance(document, dict) and document.get("channel") in {"production", "beta"}:
             mapping[owner] = document["channel"]
     return mapping

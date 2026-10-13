@@ -14,10 +14,9 @@ from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from typing import Any
 
-from google.cloud import firestore
+from google.cloud import firestore  # type: ignore[import]  # google-cloud-firestore ships no py.typed
 
 from config.client_telemetry import (
-    DAY_SHARD_COUNT,
     SCHEMA_VERSION,
     TelemetryContractError,
     aggregate_visible,
@@ -71,12 +70,12 @@ def recent_owner_ids(*, limit: int = 256) -> set[str]:
     return owners
 
 
-def _ref(client: Any, collection: str, document_id: str) -> Any:
+def ref(client: Any, collection: str, document_id: str) -> Any:
     return client.collection(collection).document(document_id)
 
 
 def _read(transaction: Any, client: Any, collection: str, document_id: str) -> dict[str, Any] | None:
-    snapshot = _ref(client, collection, document_id).get(transaction=transaction)
+    snapshot = ref(client, collection, document_id).get(transaction=transaction)
     if not getattr(snapshot, "exists", False):
         return None
     data = snapshot.to_dict()
@@ -84,7 +83,7 @@ def _read(transaction: Any, client: Any, collection: str, document_id: str) -> d
 
 
 def _read_direct(client: Any, collection: str, document_id: str) -> dict[str, Any] | None:
-    snapshot = _ref(client, collection, document_id).get()
+    snapshot = ref(client, collection, document_id).get()
     if not getattr(snapshot, "exists", False):
         return None
     data = snapshot.to_dict()
@@ -119,7 +118,7 @@ def accept_batch(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Validate and durably accept one batch for the authenticated owner."""
-    if not isinstance(owner, str) or not owner.strip():
+    if not owner.strip():
         raise TelemetryContractError(401, "telemetry_unauthorized", "authenticated owner is required")
     moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:
@@ -226,22 +225,22 @@ def _write_plan(
                 raise TelemetryContractError(
                     503, "telemetry_unavailable", "daily shard document is full; widen DAY_SHARD_COUNT"
                 )
-    transaction.set(_ref(client, RATE, doc_id(owner)), plan["rate"])
+    transaction.set(ref(client, RATE, doc_id(owner)), plan["rate"])
     if plan.get("status") != 200:
         return
     for event_id, document in plan["dedup"].items():
-        transaction.set(_ref(client, DEDUP, dedup_document_id(owner, event_id)), document)
-        transaction.set(_ref(client, OBSERVATIONS, dedup_document_id(owner, event_id)), plan["observations"][event_id])
+        transaction.set(ref(client, DEDUP, dedup_document_id(owner, event_id)), document)
+        transaction.set(ref(client, OBSERVATIONS, dedup_document_id(owner, event_id)), plan["observations"][event_id])
     for attempt_id, document in plan["attempts"].items():
-        transaction.set(_ref(client, ATTEMPTS, doc_id(owner, attempt_id)), document)
+        transaction.set(ref(client, ATTEMPTS, doc_id(owner, attempt_id)), document)
     for day, document in plan["days"].items():
         if previous_days.get(day) == document:
             continue
-        transaction.set(_ref(client, DAYS, day), document)
+        transaction.set(ref(client, DAYS, day), document)
     for shard_id, document in plan.get("shards", {}).items():
         if previous_shards and previous_shards.get(shard_id) == document:
             continue
-        transaction.set(_ref(client, DAY_SHARDS, shard_id), document)
+        transaction.set(ref(client, DAY_SHARDS, shard_id), document)
 
 
 def merge_day_shards(day: str, shards: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -260,7 +259,7 @@ def merge_day_shards(day: str, shards: dict[str, dict[str, Any]]) -> dict[str, A
     }
     for shard_id in sorted(shards):
         shard = shards[shard_id]
-        if not isinstance(shard, dict) or shard.get("day") != day:
+        if shard.get("day") != day:
             continue
         for key, series in shard.get("series", {}).items():
             target = merged["series"].get(key)
@@ -345,7 +344,7 @@ def seal_day(day: str, *, firestore_client: Any = None, now: datetime | None = N
         }
         current["rollup_sealed"] = True
         current["sealed_at"] = iso_z(moment)
-        transaction.set(_ref(client, DAYS, day), current)
+        transaction.set(ref(client, DAYS, day), current)
         return current
 
     return run_telemetry_transaction(client, callback)
@@ -429,11 +428,11 @@ def purge_expired_aggregates(*, firestore_client: Any = None, now: datetime | No
             for prefix in (day, f"{day}#"):
                 if collection == DAY_SHARDS and not prefix.endswith("#"):
                     continue
-                ref = _ref(client, collection, prefix)
-                snapshot = ref.get()
+                document_ref = ref(client, collection, prefix)
+                snapshot = document_ref.get()
                 if not getattr(snapshot, "exists", False):
                     continue
-                delete = getattr(ref, "delete", None)
+                delete = getattr(document_ref, "delete", None)
                 if delete is None:
                     raise TelemetryContractError(503, "telemetry_unavailable", "store cannot delete expired aggregates")
                 delete()

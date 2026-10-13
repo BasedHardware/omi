@@ -474,7 +474,10 @@ def histogram_public(hist: dict[str, Any]) -> dict[str, Any]:
     return {"count": hist["count"], "sum_ms": hist["sum_ms"], "buckets": buckets}
 
 
-def _fail(message: str) -> None:
+from typing import NoReturn
+
+
+def _fail(message: str) -> NoReturn:
     raise TelemetryContractError(422, "telemetry_invalid", message)
 
 
@@ -493,11 +496,15 @@ def _reject_unknown(payload: dict[str, Any], allowed: frozenset[str], label: str
 def _uuid(value: Any, label: str) -> str:
     if not isinstance(value, str):
         _fail("%s must be a UUID" % label)
+    parsed: str | None
     try:
-        parsed = UUID(value)
+        parsed = str(UUID(value))
     except ValueError:
+        parsed = None
+    if parsed is None:
         _fail("%s must be a UUID" % label)
-    return str(parsed)
+    assert parsed is not None
+    return parsed
 
 
 def _enum(value: Any, allowed: frozenset[str], label: str) -> str:
@@ -528,22 +535,18 @@ def _int(value: Any, label: str, low: int, high: int) -> int:
     return value
 
 
-def _optional(attributes: dict[str, Any], key: str) -> Any:
-    if key not in attributes:
-        return None
-    return attributes[key]
-
-
 def _timestamp(value: Any, now: datetime) -> datetime:
     if not isinstance(value, str):
         _fail("occurred_at must be a UTC timestamp")
     text = value[:-1] + "+00:00" if value.endswith("Z") else value
+    parsed: datetime | None
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
+        parsed = None
+    if parsed is None or parsed.tzinfo is None:
         _fail("occurred_at must be a UTC timestamp")
-    if parsed.tzinfo is None:
-        _fail("occurred_at must be a UTC timestamp")
+    assert parsed is not None and parsed.tzinfo is not None
     parsed = parsed.astimezone(timezone.utc)
     if parsed - now > FUTURE_SKEW:
         _fail("occurred_at is too far in the future")
@@ -554,17 +557,6 @@ def _timestamp(value: Any, now: datetime) -> datetime:
 
 def _duration(value: Any, label: str, high: int = STANDARD_DURATION_MAX_MS) -> int:
     return _int(value, label, 0, high)
-
-
-def _label_or_unknown(value: Any) -> str:
-    if not isinstance(value, str):
-        return "unknown"
-    if not value or len(value) > 64:
-        return "unknown"
-    for char in value:
-        if not (char.isalnum() or char in "._:-"):
-            return "unknown"
-    return value
 
 
 def _voice_outcome(reason: str, provided: str | None) -> str:
@@ -607,11 +599,13 @@ def validate_batch(payload: Any, now: datetime) -> tuple[str, list[dict[str, Any
     observations = body.get("observations")
     if not isinstance(observations, list) or not observations:
         _fail("observations must be a non-empty list")
-    if len(observations) > MAX_OBSERVATIONS:
+    observation_list: list[Any] = observations
+    assert isinstance(observation_list, list)
+    if len(observation_list) > MAX_OBSERVATIONS:
         _fail("observations exceeds 100")
     normalized = []
     seen: dict[str, str] = {}
-    for index, raw in enumerate(observations):
+    for index, raw in enumerate(observation_list):
         item = _require_object(raw, "observation %d" % index)
         _check_observation_size(item)
         normalized.append(_normalize_observation(item, now))
@@ -697,7 +691,7 @@ def _upload(attributes: dict[str, Any]):
         latency = _duration(attributes["latency_ms"], "latency_ms")
     operation_id = _uuid(attributes["operation_id"], "operation_id") if "operation_id" in attributes else None
     attempt_id = _uuid(attributes["attempt_id"], "attempt_id")
-    stored = {"attempt_id": attempt_id, "phase": phase, "source": source}
+    stored: dict[str, Any] = {"attempt_id": attempt_id, "phase": phase, "source": source}
     if failure is not None:
         stored["failure_class"] = failure
     if http_status is not None:
@@ -1269,17 +1263,17 @@ def _apply_one(
     # sol blocker: series/voice contributions live in per-day shard documents
     # keyed by day_shard_id(day, series_key); the day summary keeps only small
     # counters and the shard manifest, so no single document can fill up.
-    shard_map = shards if shards is not None else {}
+    shard_map: dict[str, dict[str, Any]] = shards if shards is not None else {}
     shard_id = observation_shard_id(owner, observation)
-    shard = shard_map.get(shard_id)
-    if shard is None:
-        shard = {
-            "schema_version": SCHEMA_VERSION,
-            "day": day,
-            "shard_id": shard_id,
-            "series": {},
-            "voice": {},
-        }
+    blank_shard: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "day": day,
+        "shard_id": shard_id,
+        "series": {},
+        "voice": {},
+    }
+    shard: dict[str, Any] = shard_map.get(shard_id, blank_shard)
+    if shard_id not in shard_map:
         shard_map[shard_id] = shard
     manifest = doc.setdefault("shards", {})
     manifest[shard_id] = True
@@ -1303,6 +1297,7 @@ def _apply_one(
     _add_durations(target, observation)
     voice = observation.get("voice")
     if voice is not None:
+        assert isinstance(voice, dict), "voice payload must be a dict"
         voice_key = canonical_json(
             {
                 "channel": observation["channel"],
@@ -1315,7 +1310,7 @@ def _apply_one(
                 "population": voice["population"],
             }
         )
-        row = shard["voice"].get(voice_key)
+        row: dict[str, Any] | None = shard["voice"].get(voice_key)
         if row is None:
             row = {
                 "day": day,
@@ -1332,10 +1327,11 @@ def _apply_one(
                 "latency_count": 0,
             }
             shard["voice"][voice_key] = row
-        row["count"] += 1
-        row["duration_ms"] += int(voice["duration_ms"])
+        voice_row: dict[str, Any] = row
+        voice_row["count"] = int(voice_row.get("count", 0)) + 1
+        voice_row["duration_ms"] = int(voice_row.get("duration_ms", 0)) + int(voice["duration_ms"])
         if voice.get("latency_present"):
-            row["latency_count"] += 1
+            voice_row["latency_count"] = int(voice_row.get("latency_count", 0)) + 1
     doc["accepted_observations"] = int(doc.get("accepted_observations", 0)) + 1
 
 
