@@ -59,9 +59,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
-        _actionItemsApi = actionItemsApi {
-    unawaited(_preload());
-  }
+        _actionItemsApi = actionItemsApi;
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
@@ -73,6 +71,8 @@ class ActionItemsProvider extends ChangeNotifier {
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
+  Future<void>? _homeWidgetLoad;
+  DateTime? _homeWidgetRefreshedAt;
   Future<void>? _homeTodayLoad;
   bool _homeDayLoaded = false;
   List<ActionItemWithMetadata> _homeDayItems = [];
@@ -131,8 +131,9 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
 
-  /// The task list has loaded at least once (an empty list then really means none are open).
-  bool get hasLoaded => _initialLoadCompleted;
+  /// A bounded snapshot is ready for Home widgets, or the Tasks list has loaded.
+  /// Screen initialization is tracked separately by [ensureLoaded].
+  bool get hasLoaded => _initialLoadCompleted || _homeWidgetRefreshedAt != null;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
   bool get showCompletedView => _showCompletedView;
@@ -233,25 +234,54 @@ class ActionItemsProvider extends ChangeNotifier {
     }).toList();
   }
 
-  Future<void> _preload() async {
-    await ensureLoaded(showShimmer: true);
-    await _migrateCategoryOrderFromPrefs();
-  }
-
-  /// Shares the eager Home preload with the Tasks page's first visible load.
+  /// Full Tasks initialization is demand-driven and coalesced across callers.
   Future<void> ensureLoaded({bool showShimmer = false}) {
     if (_initialLoadCompleted) return Future.value();
-
     final existingLoad = _initialLoad;
     if (existingLoad != null) return existingLoad;
-
+    final generation = _sessionGeneration;
     final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
+      if (generation != _sessionGeneration) return;
       _initialLoadCompleted = loaded;
     });
     _initialLoad = load.whenComplete(() {
-      _initialLoad = null;
+      if (generation == _sessionGeneration) _initialLoad = null;
     });
     return _initialLoad!;
+  }
+
+  /// Home widgets consume a cached first-page snapshot (the same 100-row bound
+  /// as before). This does not initialize screen filters, pagination, migration
+  /// or authoritative Siri reconciliation. Freshness has its own cooldown.
+  Future<void> ensureHomeWidgetPreviewLoaded() {
+    if (_initialLoad != null) return _initialLoad!;
+    if (_initialLoadCompleted) return Future.value();
+    if (_homeWidgetLoad != null) return _homeWidgetLoad!;
+    final refreshedAt = _homeWidgetRefreshedAt;
+    if (refreshedAt != null && DateTime.now().difference(refreshedAt) < _refreshCooldown) {
+      return Future.value();
+    }
+    final generation = _sessionGeneration;
+    final load = _fetchHomeWidgetPreview(generation).whenComplete(() {
+      if (generation == _sessionGeneration) _homeWidgetLoad = null;
+    });
+    _homeWidgetLoad = load;
+    return load;
+  }
+
+  Future<void> _fetchHomeWidgetPreview(int generation) async {
+    try {
+      final response = await _fetchActionItemsPage(limit: 100, offset: 0);
+      // Navigation wins if Tasks was visited while this optional read was pending.
+      if (generation != _sessionGeneration || _initialLoad != null || _initialLoadCompleted) return;
+      if (response == null) return;
+      _actionItems = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).take(100).toList();
+      _homeWidgetRefreshedAt = DateTime.now();
+      SiriIntegration.current.queueUpsertTasks(_actionItems);
+      notifyListeners();
+    } catch (e) {
+      Logger.debug('Error fetching home widget task preview: $e');
+    }
   }
 
   /// Home asks only for incomplete tasks due in the visible window, instead of
@@ -396,6 +426,10 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null && generation == _sessionGeneration) {
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
         await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
+        if (generation != _sessionGeneration) return false;
+        await _migrateCategoryOrderFromPrefs();
+        if (generation != _sessionGeneration) return false;
+        _initialLoadCompleted = true;
         loaded = true;
       }
     } catch (e) {
@@ -1158,6 +1192,10 @@ class ActionItemsProvider extends ChangeNotifier {
     _sessionGeneration++;
     _actionItems = [];
     _loadedPageSetComplete = false;
+    _initialLoadCompleted = false;
+    _initialLoad = null;
+    _homeWidgetLoad = null;
+    _homeWidgetRefreshedAt = null;
     _homeDayItems = [];
     _homeDayLoaded = false;
     _homeTodayLoad = null;
@@ -1305,6 +1343,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sessionGeneration++;
     _refreshDebounceTimer?.cancel();
     _sortDebounce?.cancel();
     _indentDebounce?.cancel();

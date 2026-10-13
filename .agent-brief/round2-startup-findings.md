@@ -145,3 +145,94 @@ This commit includes only the recording-scan fix and its own supporting files.
 
 Only this fix's files should be staged. The concurrent warm-up instrumentation
 workstream owns `perf_warmup_test.dart` and its findings; preserve those changes.
+
+## Demand-driven hidden Tasks tab (astra idea #2)
+
+### Change and preserved behavior
+
+- Removed Home's 350 ms offscreen-tab mount timers. Only the selected slot is
+  admitted, including HomeProvider-driven navigation and initial deep links.
+  Existing IndexedStack slots, keys, TickerMode and RepaintBoundary remain;
+  a visited page stays mounted and retains its state. First selection uses the
+  existing tab skeleton; a cold Tasks page uses its existing shimmer until its
+  post-frame initialization starts. No new UI or copy was introduced.
+- ActionItemsProvider construction now only wires dependencies. Full Tasks
+  initialization remains single-flight and runs on visit, including category
+  migration. ActionItemsPage also initializes when a nonempty Home snapshot
+  exists, rather than treating that preview as full screen readiness.
+- Home widgets independently read a cached, bounded first-page snapshot, with
+  the existing 100-row API bound and three displayed tasks/count semantics.
+  Optional freshness uses a cancellable 250 ms idle check after the first
+  frame and on resume: no scheduled frame or transient animation callback
+  may be pending. It has a separate 30-second freshness cooldown and
+  single-flight read. This is an in-memory snapshot, not a new disk cache.
+  Preview reads do not set screen loading/pagination/filter state, migrate
+  categories, or perform authoritative Siri reconciliation; they only upsert
+  their observed tasks. Typed failures retain the previous snapshot and do not
+  publish a false empty result. Full screen reads retain the production typed
+  API, paging, integration loading and reconciliation behavior.
+- Navigation can start the full load immediately while a preview is pending;
+  these distinct operations can overlap. A late optional response cannot
+  overwrite the navigation load. Owner clearing resets both readiness states
+  and invalidates pending preview responses; disposal also invalidates them.
+
+### Proof and limits
+
+Temporary hermetic probes were run against the real HomePage and real provider,
+then removed to keep the deliverable within the assigned file ownership. Sources
+are retained in `/tmp/omi-tasks-demand-probes/` (copy the Home probe back to
+`app/test/widgets/` and the provider probe to `app/test/unit/` to rerun).
+
+- `/tmp/omi-tasks-probes-final.log`: **4 passed** (one real Home probe and
+  three provider probes). Home probe: Pumped Home past 350 ms
+  and another two seconds: no ActionItemsPage (including offstage widgets) and
+  zero GoalsProvider constructions. HomeProvider selection mounted Tasks and
+  constructed Goals; Home/Tasks round-trip retained the identical page State.
+- Provider probes in the same final log: Constructor made zero
+  requests; overlapping preview callers shared one read; 120 injected rows
+  retained only 100 preview rows without enabling pagination; freshness cache
+  avoided another read. Full initialization issued its own read and shared
+  overlapping callers. A delayed preview could not replace a newer full list.
+  Owner clearing and disposal both discarded pending preview results.
+- This is structural/read-count proof, not a measured first-fling or physical
+  AOT frame-time improvement. The idle check observes frame/animation activity, not every startup
+  subsystem or future response completion. The widget preview still decodes up to 100 rows. Hidden Tasks layout,
+  Goals and task integration work now wait for a visit.
+- `main.dart` was not edited. Production GoalsProvider still calls `init()` on
+  construction there. Removing hidden Tasks mount postpones that read when
+  Tasks is its first consumer; any other startup consumer can still trigger it.
+  A global Goals-init timing change belongs to the main.dart consolidator.
+- Calendar regression proof: `/tmp/omi-tasks-calendar-proof.log`, **2 passed**.
+  The first implementation used `scheduleTask(Priority.idle)`. Flutter reposts
+  zero-delay timers when priority is rejected by an active animation, which
+  stalled the calendar test fake clock. The cancellable periodic idle check
+  avoids that busy polling, and both calendar interactions complete.
+
+### Gates
+
+- Changed-file `flutter analyze --no-pub`: **clean**, no issues found
+  (`/tmp/omi-tasks-analyze-final.log`).
+- Four final mount/provider probes: **passed**
+  (`/tmp/omi-tasks-probes-final.log`); two calendar interactions: **passed**
+  (`/tmp/omi-tasks-calendar-proof.log`).
+- `OMI_PR_BODY_FILE=/tmp/omi-tasks-pr-body.md make preflight`: **passed**, all
+  23 checks (`/tmp/omi-tasks-preflight-final.log`). The local draft declares
+  `UI-Evidence: none` for this scheduling-only change with existing UI primitives.
+  The earlier missing branch changelog and missing local metadata failures were
+  resolved by the recording workstream's fragment and the explicit local body.
+- `cd app && bash test.sh`: **passed**, 5,344 tests with 21 skips, including
+  the separate opt-in spine suite (`/tmp/omi-tasks-tests-final-gate.log`).
+- `bash integration_test/journeys/run_journeys.sh`: **passed**, all six final
+  journeys (`/tmp/omi-tasks-journeys-final.log`), with receipts in
+  `/tmp/omi-tasks-journeys-final/`.
+
+Earlier full runs were interrupted after failures or a stalled calendar test.
+The first had an unrelated ring-custody timeout (isolated rerun: seven passed,
+`/tmp/omi-tasks-ring-recheck.log`). The next exposed the idle-scheduler fake-clock
+spin corrected above. A further run picked up a concurrent new Capture test
+while retaining its earlier compiled controller (expected zero notifications,
+observed four); fresh-process verification passed all six tests
+(`/tmp/omi-tasks-concurrent-capture-recheck.log`). Final receipts, rather than
+these partial/interrupted runs, determine the commit gates. This is a shared
+working tree with other startup changes; it is not an isolated performance
+comparison.

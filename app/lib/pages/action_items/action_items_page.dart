@@ -36,6 +36,7 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+  bool _initialLoadScheduled = true;
 
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
@@ -83,6 +84,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      setState(() => _initialLoadScheduled = false);
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final phase = provider.apiViewState.phase;
@@ -91,7 +93,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
           phase == ApiViewPhase.empty;
-      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
+      if (!typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -471,7 +473,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
-                  child: provider.isLoading && provider.actionItems.isEmpty
+                  child: (provider.isLoading ||
+                              (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
+                          provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
                           ? CustomScrollView(
