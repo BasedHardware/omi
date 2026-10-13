@@ -519,7 +519,6 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 conversations=_object_array_with(**_CONVERSATION_CARD_FIELDS),
                 has_more={"type": "boolean"},
                 effective_limit={"type": "integer"},
-                next_offset={"type": "integer"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),

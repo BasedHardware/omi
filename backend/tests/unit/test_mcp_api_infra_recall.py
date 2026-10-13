@@ -123,7 +123,7 @@ def test_offset_page_emits_keyset_cursor_and_does_not_skip_lookahead(core):
     handler, _, _, _, _ = core
     handler.mcp_conversation_pages.get_mcp_conversation_cards = Mock(return_value=[row('a'), row('b')])
     result = handler.get_conversations('owner', {'limit': 1, 'offset': 5})
-    assert result['has_more'] is True and result['effective_limit'] == 1 and result['next_offset'] == 6
+    assert result['has_more'] is True and result['effective_limit'] == 1
     position = handler.decode_cursor(
         result['next_cursor'],
         kind='get_conversations',

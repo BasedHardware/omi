@@ -1614,7 +1614,11 @@ def get_conversations(
             has_more = len(conversations) > limit
             conversations = conversations[:limit]
         pagination_headers(
-            response, limit=limit, has_more=has_more, next_offset=offset + len(conversations), next_cursor=next_cursor
+            response,
+            limit=limit,
+            has_more=has_more,
+            next_offset=offset + len(conversations) if next_cursor is None else None,
+            next_cursor=next_cursor,
         )
 
         # Filter out locked conversations completely

@@ -222,8 +222,6 @@ def get_conversations(
         "has_more": next_cursor is not None,
         "effective_limit": limit,
     }
-    if offset > 0 and result["has_more"]:
-        result["next_offset"] = offset + len(page)
     if next_cursor is not None:
         result["next_cursor"] = next_cursor
     return result

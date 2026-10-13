@@ -206,6 +206,25 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(response.headers['X-Omi-Has-More'], 'false')
         self.assertEqual(self.client.get('/v1/dev/user/memories?offset=4001&limit=1000').status_code, 413)
 
+    def test_cursor_page_does_not_advertise_an_inferred_offset(self):
+        from unittest.mock import patch
+        from utils.mcp_server.handlers import conversations as handlers
+        from routers import developer
+
+        conversation = {
+            'id': 'next-page',
+            'created_at': '2026-10-01T00:00:00Z',
+            'started_at': None,
+            'finished_at': None,
+            'structured': {'title': 'Budget', 'overview': 'Review', 'category': 'work'},
+        }
+        with patch.object(handlers, 'conversation_cards_page_core', return_value=([conversation], 'next-cursor')):
+            with patch.object(developer, 'populate_folder_names', lambda uid, rows: None):
+                response = self.client.get('/v1/dev/user/conversations?cursor=prior-cursor')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers['X-Omi-Next-Cursor'], 'next-cursor')
+        self.assertNotIn('X-Omi-Next-Offset', response.headers)
+
 
 if __name__ == "__main__":
     unittest.main()
