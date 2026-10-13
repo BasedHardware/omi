@@ -48,23 +48,41 @@ previous 95.50% speech-session rate. The small numerical difference is solely th
 shifted measurement endpoint, with fractional extrapolation and changed traffic;
 there is no remaining semantic gap. See `backend/routers/listen/runtime.py`.
 
-Chat and pusher use accepted work as VALID, successful terminals as GOOD, and
+Pusher uses accepted work as VALID, successful terminals as GOOD, and
 `clamp_min(accepted - success, 0)` as BAD per alert window. Cancelled/abandoned
-work and work with no terminal remain in the denominator. The counters cannot
-distinguish legitimate user cancellation, so none is subtracted. Pusher success
-is a WebSocket session completion, not transcript delivery; chat success is the
-server's terminal done delivery. Accepted and terminal events can straddle window
-boundaries: in-flight sessions are conservatively bad, and completions from an
-older window can offset new failures. This aggregate approximation is not a
-cohort deadline SLI. **Retain the existing chat/pusher critical and fail rules**;
-there is no demotion/deletion recommendation for those four identities.
-Pusher's corrected rate is much lower than the old 99.9685% because the old
-terminal-only population hid cancellations and unmatched accepted sessions.
+work and work with no terminal remain in that denominator. Those counters cannot
+distinguish legitimate user cancellation, so none is subtracted there. Pusher
+success is a WebSocket session completion, not transcript delivery. Accepted and
+terminal events can straddle window boundaries: in-flight sessions are
+conservatively bad, and completions from an older window can offset new failures.
+This aggregate approximation is not a cohort deadline SLI. **Retain the existing
+chat/pusher critical and fail rules**; there is no demotion/deletion
+recommendation for those four identities. Pusher's corrected rate is much lower
+than the old 99.9685% because the old terminal-only population hid cancellations
+and unmatched accepted sessions.
 
-For live window W, bad share is no_transcript / eligible sessions. For chat/pusher,
-it is clamp_min(accepted - success, 0) / accepted. Sparse bad/success series are
-zero-filled only against an observed valid denominator. No traffic burns no
-budget. Missing SLI series is **NoData**, never healthy OK. All seven rules use
+Both chat rules count bad events as explicit terminals
+`outcome=~"failure|stale"`, divided by accepted work `clamp_min(..., 1)`.
+`omi_journey_*` for chat is scraped from Cloud Run
+(`job="cloud-run-application-metrics"`), and per-instance series churn makes
+`sum(increase(accepted)) - sum(increase(success))` invent phantom misses. On
+2026-10-08 the hours ending 16:00Z, 17:00Z, and 18:00Z had failure=0,
+cancelled=0, and stale=0, while the hour ending 17:00Z had success 53.4545
+against accepted 40.7150. `cancelled` stays out of the numerator because it
+includes client disconnects. Chat success in the measured baseline is still the
+server's terminal done delivery over accepts. A total chat outage (accepts with
+no successes) is already paged by the live rules
+`omi-journey-chat-success-critical` and `omi-journey-chat-fail` in
+`alerts/resilience.json`, so chat critical has no 10-minute zero-completion arm.
+Its pending period is five minutes. Chat warning keeps the classic pairs and
+`for: 0s`; it uses the same explicit-failure numerator because a one-minute
+replay of accepted minus success would have paged.
+
+For live window W, bad share is no_transcript / eligible sessions. For pusher,
+it is clamp_min(accepted - success, 0) / accepted. For chat, it is failure|stale
+/ clamp_min(accepted, 1). Sparse bad series are zero-filled only against an
+observed valid denominator. No traffic burns no budget. Missing SLI series is
+**NoData**, never healthy OK. All seven rules use
 Grafana `noDataState=NoData`, `execErrState=Error` and the existing Telegram receiver.
 The live signal warning ORs `absent()` for the session family and independent
 accepted-audio family, plus <1 session outcome with >20 audio accepts in 1h.
@@ -86,32 +104,29 @@ Live and pusher critical keep both short windows. Each of those pairs requires
 stays under that pair's burn threshold: live 5m is 20% < 72%, live 30m is
 20% < 30%, pusher 5m is 20% < 64.8%, and pusher 30m is 20% < 27%.
 
-Chat critical does not use the 5-minute or 30-minute ratio arms. At 2.80
-accepts per five minutes, one miss is a 50% bad share, and that arm paged on
-isolated residual misses while the 99.5% objective and the warning stayed
-healthy. The 30-minute gate of 5 crosses 3% on one miss. Chat critical pages
-when any of these is true:
+Chat critical does not use the 5-minute or 30-minute ratio arms, and it does
+not use a 10-minute zero-completion arm. At 2.80 accepts per five minutes, one
+non-success is a 50% bad share, and that short arm paged on isolated residuals
+while the 99.5% objective stayed healthy. The 30-minute gate of 5 crosses 3%
+on one miss. A total outage remains on `omi-journey-chat-success-critical` and
+`omi-journey-chat-fail`. Chat critical pages when either of these is true, with
+bad events equal to `failure|stale` terminals and the denominator accepted:
 
 - 1h bad share > 7.2% (14.4x), at least 4 bad events, and at least 20 accepts
 - 6h bad share > 3% (6x), at least 7 bad events, and at least 40 accepts
-- 10m zero-completion: at least 5 accepts and fewer than 1 success
 
-The pending period is 2 minutes, so one evaluation blip does not page. At
-0.560 accepts per minute, four misses accumulate in about 7.1 minutes. The
-1-hour arm then stays true until those misses age out, so a 10-minute total
-outage (accepts continue, successes stay at 0) pages about 9.1 minutes after
-it starts. The zero-completion condition is true for about 3.6 minutes around
-the end of that outage, which is longer than the pending period, so that arm
-pages at about 10.2 minutes as well. One to three misses in an hour fail the
-4-event gate. One miss at the 20-accept floor is 5% < 7.2%. One miss at the
-40-accept floor is 2.5% < 3%.
+The pending period is five minutes, so a one-minute counter blip does not page.
+One to three explicit failures in an hour fail the 4-event gate. One failure at
+the 20-accept floor is 5% < 7.2%. One failure at the 40-accept floor is
+2.5% < 3%. Cancelled disconnects do not count as bad on this page.
 
 Warning rules keep the classic pairs, with >=20 long-window and >=5
 short-window valid events. Pusher critical also pages when >=20 accepted
 sessions have fewer than 1 success in ten minutes. Live critical has no
 10-minute zero-completion arm. Each rule's `threshold` and `scope` name exactly
 the windows in its expression. Synthetic exact-expression Prometheus results
-for cancelled and no-terminal chat/pusher outages are in the receipt.
+for cancelled and no-terminal chat/pusher outages are in the receipt. The chat
+cases stay at 0 because a success gap is not an explicit failure or stale terminal.
 Contracts check every journey/window gate against its measured baseline rate,
 that one miss at each critical volume gate stays under that arm's burn
 threshold, and that chat critical receipt intervals stay within bound.
@@ -127,23 +142,64 @@ but the oldest retained data cannot reconstruct full windows.
 | --- | --- | --- | --- |
 | `omi-slo-live-critical` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-live-warning` | 7 / 7 | 173 | 2881 / 2881 |
-| `omi-slo-chat-critical` | 0 / 0 | 2 | 2881 / 2881 |
+| `omi-slo-chat-critical` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-chat-warning` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-pusher-critical` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-pusher-warning` | 8 / 1 | 634 | 2881 / 2881 |
 | `omi-slo-live-signal-dead` | 0 / 0 | 1 | 2881 / 2881 |
 
-Chat critical was re-queried on this same endpoint after its page was redesigned.
-The condition was true on 2 samples, `2026-10-08T16:10:00Z` and
-`2026-10-08T16:55:00Z`, 45 minutes apart. Neither sample has a true neighbor, so
-the 2-minute pending period records 0 firing intervals. At 16:10Z the 1h window
-had 4.02 bad events out of 33.2 accepts and the 6h window had 3.84 bad events,
-under its gate of 7. At 16:55Z the 1h window had 5.32 bad events out of 55.4
-accepts, while the 10m window had 3.99 accepts and 0 successes, below the
-5-accept zero-completion floor; the next sample was healthy, which matches
-in-flight turns completing. These are single-sample crossings, not a sustained
-outage. Spot checks were instant queries of `clamp_min(accepted - success, 0)`,
-accepted, and success at those two timestamps for the 1h, 6h, and 10m windows.
+Chat critical was re-queried on this same endpoint after the numerator changed
+to explicit `failure|stale` terminals. The condition was true on 0 of 2881
+samples, so the five-minute pending period records 0 firing intervals. The
+previous accepted-minus-success expression had been true at
+`2026-10-08T16:10:00Z` and `2026-10-08T16:55:00Z`. Those crossings were counter
+artifacts: instant queries of the hours ending 16:00Z, 17:00Z, and 18:00Z on
+2026-10-08 returned failure=0, cancelled=0, and stale=0. The hour ending 17:00Z
+had success 53.4545 against accepted 40.7150. A 10-minute cancelled or
+never-terminal gap, substituted into the exact expression and executed by
+Prometheus, returns 0. Chat warning was re-queried on the same 300s grid after
+it moved to the same numerator: 0 of 2881 samples.
+
+### One-minute replay
+
+Grafana evaluates every minute, so a 5-minute step under-samples a pending
+period shorter than that step. `.agent-artifacts/slo1m.py` replayed the six burn
+rules with `query_range` step 60s in ten one-day chunks, ending
+`2026-10-13T11:04:42Z` under `ro-prod`. A run pages when
+`last true sample - first true sample + 60s` exceeds `for`.
+
+| UID | True minutes | Runs | Would page |
+| --- | --- | --- | --- |
+| `omi-slo-chat-critical` | 0 | 0 | 0 |
+| `omi-slo-live-critical` | 0 | 0 | 0 |
+| `omi-slo-pusher-critical` | 0 | 0 | 0 |
+| `omi-slo-chat-warning` | 0 | 0 | 0 |
+| `omi-slo-live-warning` | 869 | 10 | 10 |
+| `omi-slo-pusher-warning` | 3777 | 18 | 18 |
+
+The same script on the previous chat warning numerator (accepted minus success,
+`for: 0s`) would have paged 11 single minutes on 2026-10-03 from 11:06Z through
+14:02Z. Spot checks at the query_range sample for 11:06Z, 12:07Z, 12:29Z,
+13:03Z, and 14:02Z showed failure=0, stale=0, and cancelled=0. The
+accepted-minus-success gap was 1.03 to 1.33 events, which put the 6h and 3d
+shares between 0.51% and 0.97%, above the 0.5% slow-burn threshold. The 24h
+share stayed under 1.5%, so the fast pair did not fire. Explicit
+`failure|stale` was 0, which is why the updated warning has no true minutes.
+
+Live warning's 10 episodes are the slow pair only. At each episode start, the
+6h and 3d `no_transcript` shares are above 5%, and the 2h and 24h shares are
+below 15%. The 3d share is 5.002% to 5.199%, with 2,284 to 3,420
+`no_transcript` sessions. That is the measured ~95.5% live rate sitting on the
+95% target for a multi-day slice, not a one-event counter gap.
+
+Pusher warning's 18 episodes are the slow pair only: 6h and 3d
+accepted-minus-success share above 4.5%, while the 24h share stays under the
+13.5% fast threshold. Explicit failure on the 3d window is 1.0 to 40.0;
+cancelled is 5.0 to 748. Most of the gap is accepted work with no success
+terminal. At `2026-10-06T03:31Z`, 6h bad is 702.5 of 14,103 accepts (4.98%),
+of which failure is 3.0 and cancelled is 188.1, and the 3d bad share is 6.45%.
+Pusher is not the Cloud Run chat counter, and this commit leaves that SLI in
+place. Per-episode counts are in the receipt.
 
 All changed rules were queried with 300s steps in sequential one-day chunks.
 The receipt contains every sampled UTC interval and exact expression, with first

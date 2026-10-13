@@ -59,7 +59,8 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
     expr = rule['data'][0]['model']['expr']
     chat_page = journey == 'chat' and severity == 'critical'
     if chat_page:
-        assert expr.count(' > 0) or (') == 3
+        # Two burn arms plus the empty-series zero. No 10-minute zero-completion arm.
+        assert expr.count(' > 0) or (') == 2
     elif journey == 'pusher' and severity == 'critical':
         assert expr.count(' > 0) or (') == 4
     else:
@@ -67,9 +68,14 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
     assert float(rule['annotations']['slo_target']) == target
     thresholds = re.findall(r'> bool ([0-9.]+)', expr)
     if chat_page:
-        # Long windows only: the 5m/30m ratio arms page on one low-volume miss.
+        # Long windows only, counted on explicit failure|stale terminals.
+        # Accepted minus success invents misses when Cloud Run series churn.
         assert thresholds == ['0.072', '0.03']
-        assert '[5m]' not in expr and '[30m]' not in expr
+        assert '[5m]' not in expr and '[30m]' not in expr and '[10m]' not in expr
+        assert ' - ' not in expr
+        assert 'outcome=~"failure|stale"' in expr
+        assert 'cancelled' not in expr
+        assert 'outcome="success"' not in expr
         checked = [('1h', 20, 4, 14.4), ('6h', 40, 7, 6)]
     else:
         assert len(thresholds) == 4
@@ -89,6 +95,15 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
         if journey == 'live':
             assert f'outcome="no_transcript"}}[{window}]' in expr
             assert 'too_short' not in expr
+        elif journey == 'chat':
+            bad = (
+                f'(sum(increase(omi_journey_terminal_total{{{scope},outcome=~"failure|stale"}}[{window}]))'
+                f' or (clamp_min({valid}, 1) * 0))'
+            )
+            denom = f'clamp_min({valid}, 1)'
+            assert f'({bad} / {denom}) > bool ' in expr
+            if bad_minimum is not None:
+                assert f'({bad} >= bool {bad_minimum})' in expr
         else:
             good = f'sum(increase(omi_journey_terminal_total{{{scope},outcome="success"}}[{window}]))'
             bad = f'clamp_min({valid} - ({good} or ({valid} * 0)), 0)'
@@ -97,12 +112,18 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
             if bad_minimum is not None:
                 assert f'({bad} >= bool {bad_minimum})' in expr
     if chat_page:
-        ten = f'sum(increase({metric}{{{scope}}}[10m]))'
-        success = f'sum(increase(omi_journey_terminal_total{{{scope},outcome="success"}}[10m]))'
-        assert f'({ten} >= bool 5)' in expr
-        assert f'(({success} or vector(0)) < bool 1)' in expr
-        assert rule['for'] == '2m'
+        assert '[10m]' not in expr
+        assert rule['for'] == '5m'
+        scope_text = rule['annotations']['scope']
+        assert 'omi-journey-chat-success-critical' in scope_text
+        assert 'omi-journey-chat-fail' in scope_text
+        assert 'alerts/resilience.json' in scope_text
     else:
+        if journey == 'chat':
+            assert ' - ' not in expr
+            assert 'outcome=~"failure|stale"' in expr
+            assert 'cancelled' not in expr
+            assert 'outcome="success"' not in expr
         assert rule['for'] == '0s'
     assert rule['keep_firing_for'] == '0s'
     assert rule['noDataState'] == 'NoData'  # absent SLI must never resolve healthy
@@ -168,7 +189,7 @@ def test_each_minimum_event_gate_fits_measured_baseline_volume(journey, severity
     expr = rule_exports['split'][f'omi-slo-{journey}-{severity}'][0]['data'][0]['model']['expr']
     gates = re.findall(r'\[(\d+)([mhd])\]\)\) >= bool (\d+)', expr)
     if journey == 'chat' and severity == 'critical':
-        expected_gates = 3  # 1h, 6h, and the 10m zero-completion floor
+        expected_gates = 2  # 1h and 6h accepted floors; total outage stays on the live chat rules
     elif journey == 'pusher' and severity == 'critical':
         expected_gates = 5
     else:
@@ -193,7 +214,9 @@ def test_ten_minute_total_outage_pages_at_measured_volume(journey, ending, rule_
     rule = rule_exports['split'][case['uid']][0]
     rate = evidence['baselines'][journey]['valid_events'] / 14400
     assert case['expression'] == backtest.synthetic_expression(rule, rate)
-    assert case['value'] > 0  # exact expression executed by Prometheus, not hand-computed burn
+    # Chat critical counts failure|stale only, so a success gap does not page.
+    # Pusher still treats the same gap as bad. Value is Prometheus's result.
+    assert case['value'] > 0 if journey == 'pusher' else case['value'] == 0
     assert case['outage_minutes'] == 10
     assert math.isclose(case['accepted_per_minute'], rate)
 
@@ -241,28 +264,46 @@ def test_one_miss_at_each_critical_volume_gate_stays_under_the_burn_threshold(jo
 
 def test_chat_critical_burn_arms_ignore_three_isolated_misses(rule_exports):
     expr = rule_exports['split']['omi-slo-chat-critical'][0]['data'][0]['model']['expr']
-    assert ', 0) >= bool 4)' in expr
-    assert ', 0) >= bool 7)' in expr
+    assert 'outcome=~"failure|stale"' in expr
+    assert ' - ' not in expr
+    assert '>= bool 4' in expr
+    assert '>= bool 7' in expr
 
 
-def test_chat_critical_pending_period_pages_a_ten_minute_total_outage(rule_exports):
-    evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
-    rate_per_minute = evidence['baselines']['chat']['valid_events'] / 14400
+def test_chat_critical_uses_explicit_failures_and_five_minute_pending(rule_exports):
     rule = rule_exports['split']['omi-slo-chat-critical'][0]
-    assert rule['for'] == '2m'
-    pending_minutes = 2
-    # Four misses accumulate during the outage; the 1h arm then stays true, so pending fits inside 10 minutes.
-    assert (4 / rate_per_minute) + pending_minutes <= 10
-    # The 10m zero-completion arm stays true for 2/rate minutes, longer than pending.
-    assert pending_minutes < (2 / rate_per_minute)
+    expr = rule['data'][0]['model']['expr']
+    assert rule['for'] == '5m'
+    assert 'outcome=~"failure|stale"' in expr
+    assert ' - ' not in expr
+    assert '[10m]' not in expr
+    assert 'omi-journey-chat-success-critical' in rule['annotations']['scope']
+    assert 'omi-journey-chat-fail' in rule['annotations']['scope']
 
 
 def test_chat_critical_receipt_intervals_stay_within_bound():
     evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
     proof = evidence['rules']['omi-slo-chat-critical']
-    assert proof['for'] == '2m'
+    assert proof['for'] == '5m'
     assert len(proof['sampled_firing_intervals']) <= CHAT_CRITICAL_INTERVAL_BOUND
     assert len(proof['post_warmup_firing_intervals']) <= CHAT_CRITICAL_INTERVAL_BOUND
+
+
+def test_one_minute_replay_does_not_page_critical_or_chat_warning():
+    evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
+    replay = evidence['one_minute_replay']
+    assert replay['step_seconds'] == 60
+    for uid in (
+        'omi-slo-live-critical',
+        'omi-slo-chat-critical',
+        'omi-slo-pusher-critical',
+        'omi-slo-chat-warning',
+    ):
+        proof = replay['rules'][uid]
+        assert proof['would_page'] == 0
+        assert proof['pages'] == []
+        assert proof['failed_days'] == 0
+    assert replay['rules']['omi-slo-chat-critical']['for'] == '5m'
 
 
 def test_vanished_live_families_fire_exact_liveness_expression(rule_exports):

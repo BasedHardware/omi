@@ -69,6 +69,9 @@ def synthetic_expression(rule, rate, outage_minutes=10):
 
     A steady baseline is followed by ten minutes of accepted work with zero
     successes. Cancellation and never-terminal scenarios share those counts.
+    Chat critical counts only explicit failure|stale terminals, so that success
+    gap contributes zero bad events. Pusher still treats the gap as bad via
+    accepted minus success.
     """
 
     def replace(match):
@@ -78,6 +81,8 @@ def synthetic_expression(rule, rate, outage_minutes=10):
         failed = rate * min(minutes, outage_minutes)
         if metric == 'omi_journey_accepted_total':
             value = accepted
+        elif 'outcome=~"failure|stale"' in labels:
+            value = 0
         elif 'outcome="success"' in labels or 'outcome="transcribed"' in labels:
             value = accepted - failed
         elif 'outcome="no_transcript"' in labels:
@@ -187,7 +192,11 @@ def main():
         rate = evidence['baselines'][journey]['valid_events'] / 14400
         expr = synthetic_expression(rule, rate)
         value = float(query(expr, time=end)[0]['value'][1])
-        assert value > 0, (journey, value)
+        # Chat's explicit failure|stale numerator stays at zero for a success gap.
+        if journey == 'chat':
+            assert value == 0, (journey, value)
+        else:
+            assert value > 0, (journey, value)
         for ending in ('cancelled', 'no_terminal'):
             evidence['synthetic_cases'][f'{journey}_{ending}_10m'] = dict(
                 uid=rule['uid'],
