@@ -13,6 +13,12 @@ from utils import dream_agent, dream_context, dream_diagnostics, dream_metrics, 
 from utils.dream_guards import tokens
 
 
+@pytest.fixture(autouse=True)
+def deterministic_read_selection(monkeypatch):
+    # These fixtures stub retrieval, not random cleanup's Firestore boundary.
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
+
+
 def snapshots(count):
     now = datetime(2030, 1, 1, tzinfo=timezone.utc)
     items = [
