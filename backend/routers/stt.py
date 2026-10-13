@@ -237,7 +237,13 @@ async def stt_transcribe(
         # Keep completed-but-unaccounted calls inside the four-slot bound too.
         # This is not a distributed monthly-quota reservation.
         try:
-            await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+            await run_blocking(
+                db_executor,
+                record_usage,
+                uid,
+                transcription_seconds=seconds,
+                usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+            )
         except Exception as error:
             # No idempotency key: withholding a completed transcript encourages
             # a retry and another paid provider call. Do not log exception text.
