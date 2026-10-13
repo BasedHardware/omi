@@ -1079,15 +1079,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled command {args.command!r}")
 
 
-def _default_device_runner(command: Sequence[str]) -> tuple[int, str]:
+def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tuple[int, str]:
     # Default device-tooling seam (adb / xcrun devicectl): a missing binary is
     # exit 127 + message so doctor/run classify it as a remediable failure —
     # DeviceRunnerError from the tooling shims — instead of a raw traceback.
     try:
-        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=180)
+        completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=timeout)
     except OSError as exc:
         return 127, f"{command[0]} not available: {exc}"
+    except subprocess.TimeoutExpired as exc:
+        # A pending Xcode first launch (re-armed by Xcode updates; completion
+        # needs admin rights) makes every xcrun devicectl/simctl call spawn a
+        # hanging `xcodebuild -runFirstLaunch` child. Diagnose it instead of
+        # letting the timeout escape as a raw traceback.
+        first_launch = "pending"
+        try:
+            probe = subprocess.run(
+                ["xcodebuild", "-checkFirstLaunchStatus"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            first_launch = "pending" if probe.returncode != 0 else "complete"
+        except (OSError, subprocess.TimeoutExpired):
+            first_launch = "unknown"
+        diagnosis = (
+            f"{command[0]} timed out after {timeout:g}s; Xcode first launch is {first_launch}. "
+            "If pending, complete it once with admin rights: "
+            "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
+            "(or open Xcode.app and finish the prompt)."
+        )
+        return 124, diagnosis
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+
+def _device_discovery_runner(command: Sequence[str]) -> tuple[int, str]:
+    # Doctor discovery (adb devices / devicectl list) must answer in seconds;
+    # a wedged toolchain should classify fast, not hold the doctor for minutes.
+    return _default_device_runner(command, timeout=25.0)
 
 
 def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
@@ -1102,8 +1132,8 @@ def _dispatch_device(args: argparse.Namespace, repo_root: Path) -> int:
             platforms = args.platform or ["android", "ios"]
             report = device_runner.device_doctor(
                 repo_root,
-                android=device_runner.AndroidTooling(_default_device_runner) if "android" in platforms else None,
-                ios=device_runner.IosTooling(_default_device_runner) if "ios" in platforms else None,
+                android=device_runner.AndroidTooling(_device_discovery_runner) if "android" in platforms else None,
+                ios=device_runner.IosTooling(_device_discovery_runner) if "ios" in platforms else None,
             )
             _emit(report, as_json=args.json)
             statuses = {check["status"] for check in report["checks"]}

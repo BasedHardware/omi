@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -152,6 +153,11 @@ class IosTooling:
             code, out = self._runner(["xcrun", "devicectl", *args])
         except OSError as exc:
             raise DeviceRunnerError(f"xcrun/devicectl not available: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            # Injected runners own their timeouts; surface a hang as tooling
+            # failure instead of a traceback (the CLI default runner already
+            # classifies its own timeouts, this covers custom runners).
+            raise DeviceRunnerError(f"devicectl {' '.join(args)} timed out: {exc}") from exc
         if code != 0:
             raise DeviceRunnerError(f"devicectl {' '.join(args)} failed (exit {code}): {out.strip()[:400]}")
         return out
