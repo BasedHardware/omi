@@ -448,7 +448,8 @@ void _registerRecorderAndLifecycleTests() {
     await flow.saveMemories();
     expect(flow.error, 'memories');
     expect(flow.answers[0].saved, isFalse);
-    expect(io.remembered, ['Edited personal memory 0', 'Personal memory 1', 'Personal memory 2']);
+    // FakeVoiceIO.remember returns before recording when memorySuccess is false.
+    expect(io.remembered, isEmpty);
 
     // Once attempted, memory answers must be locked against edits and unchecking
     expect(flow.answers[0].locked, isTrue);
@@ -467,9 +468,6 @@ void _registerRecorderAndLifecycleTests() {
     expect(flow.allMemoriesSaved, isTrue);
     expect(flow.stage, IntroductionStage.done);
     // Retried writes must preserve the original confirmed content so backend dedupes
-    expect(io.remembered, [
-      'Edited personal memory 0', 'Personal memory 1', 'Personal memory 2',
-      'Edited personal memory 0', 'Personal memory 1', 'Personal memory 2',
-    ]);
+    expect(io.remembered, ['Edited personal memory 0', 'Personal memory 1', 'Personal memory 2']);
   });
 }
