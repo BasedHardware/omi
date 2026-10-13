@@ -23444,6 +23444,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Just talk. Your Omi is listening.'**
   String get onboardingActDictateBodyOmi;
+
+  /// Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile.
+  ///
+  /// In en, this message translates to:
+  /// **'You can set up Voice Profile anytime in Settings.'**
+  String get voiceProfileCardDismissed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

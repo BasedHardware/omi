@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "L'Omi encara no envia àudio. De moment, fes servir el telèfon.",
     "onboardingActNoAudioOmi": "No sentim l'Omi. Comprova que estigui encès i a prop.",
     "onboardingActNoAudioPhone": "Encara no et sentim. Prova de parlar una mica més fort.",
-    "onboardingActDictateBodyOmi": "Només parla. El teu Omi t'escolta."
+    "onboardingActDictateBodyOmi": "Només parla. El teu Omi t'escolta.",
+    "voiceProfileCardDismissed": "Pots configurar el perfil de veu quan vulguis a Configuració."
 }

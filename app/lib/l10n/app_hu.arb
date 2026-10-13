@@ -4138,5 +4138,6 @@
     "onboardingActMicFallbackBody": "Az Omi még nem küld hangot. Egyelőre használd a telefonodat.",
     "onboardingActNoAudioOmi": "Nem halljuk az Omit. Ellenőrizd, hogy be van-e kapcsolva és közel van-e.",
     "onboardingActNoAudioPhone": "Még nem hallunk. Próbálj kicsit hangosabban beszélni.",
-    "onboardingActDictateBodyOmi": "Csak beszélj. Az Omid figyel."
+    "onboardingActDictateBodyOmi": "Csak beszélj. Az Omid figyel.",
+    "voiceProfileCardDismissed": "A hangprofilt bármikor beállíthatod a Beállításokban."
 }

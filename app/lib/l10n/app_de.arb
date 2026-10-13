@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Dein Omi sendet noch keinen Ton. Nutze vorerst dein Handy.",
     "onboardingActNoAudioOmi": "Dein Omi ist nicht zu hören. Ist es an und in der Nähe?",
     "onboardingActNoAudioPhone": "Wir hören dich noch nicht. Sprich etwas lauter.",
-    "onboardingActDictateBodyOmi": "Sprich einfach. Dein Omi hört zu."
+    "onboardingActDictateBodyOmi": "Sprich einfach. Dein Omi hört zu.",
+    "voiceProfileCardDismissed": "Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten."
 }

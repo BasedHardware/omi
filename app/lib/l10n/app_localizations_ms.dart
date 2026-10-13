@@ -13174,4 +13174,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Cakap sahaja. Omi anda sedang mendengar.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
 }

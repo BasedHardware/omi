@@ -13148,4 +13148,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Puhu vain. Omisi kuuntelee.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Voit määrittää ääniprofiilin milloin tahansa asetuksissa.';
 }

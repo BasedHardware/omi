@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omi dar nesiunčia garso. Kol kas naudokite telefoną.",
     "onboardingActNoAudioOmi": "Omi negirdėti. Patikrinkite, ar jis įjungtas ir šalia.",
     "onboardingActNoAudioPhone": "Dar jūsų negirdime. Pabandykite kalbėti šiek tiek garsiau.",
-    "onboardingActDictateBodyOmi": "Tiesiog kalbėkite. Jūsų Omi klauso."
+    "onboardingActDictateBodyOmi": "Tiesiog kalbėkite. Jūsų Omi klauso.",
+    "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose."
 }

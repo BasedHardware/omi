@@ -11479,5 +11479,6 @@
     "onboardingActMicFallbackBody": "Omi এখনও অডিও পাঠাচ্ছে না। আপাতত আপনার ফোন ব্যবহার করুন।",
     "onboardingActNoAudioOmi": "Omi শোনা যাচ্ছে না। এটি চালু আছে ও কাছে আছে কিনা দেখুন।",
     "onboardingActNoAudioPhone": "এখনও আপনাকে শোনা যাচ্ছে না। একটু জোরে বলে দেখুন।",
-    "onboardingActDictateBodyOmi": "শুধু কথা বলুন। আপনার Omi শুনছে।"
+    "onboardingActDictateBodyOmi": "শুধু কথা বলুন। আপনার Omi শুনছে।",
+    "voiceProfileCardDismissed": "সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।"
 }

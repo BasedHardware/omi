@@ -13181,4 +13181,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ.';
+
+  @override
+  String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
 }

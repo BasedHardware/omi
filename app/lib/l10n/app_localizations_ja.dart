@@ -12953,4 +12953,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => '話すだけでOK。Omiが聞いています。';
+
+  @override
+  String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
 }

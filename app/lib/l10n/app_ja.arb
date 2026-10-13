@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omiからまだ音声が届いていません。今はスマートフォンを使いましょう。",
     "onboardingActNoAudioOmi": "Omiの音声が聞こえません。電源が入っていて近くにあるか確認してください。",
     "onboardingActNoAudioPhone": "まだ声が聞こえません。少し大きな声で話してみてください。",
-    "onboardingActDictateBodyOmi": "話すだけでOK。Omiが聞いています。"
+    "onboardingActDictateBodyOmi": "話すだけでOK。Omiが聞いています。",
+    "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。"
 }

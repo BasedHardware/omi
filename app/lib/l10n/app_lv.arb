@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omi vēl nesūta skaņu. Pagaidām izmantojiet tālruni.",
     "onboardingActNoAudioOmi": "Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.",
     "onboardingActNoAudioPhone": "Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.",
-    "onboardingActDictateBodyOmi": "Vienkārši runājiet. Jūsu Omi klausās."
+    "onboardingActDictateBodyOmi": "Vienkārši runājiet. Jūsu Omi klausās.",
+    "voiceProfileCardDismissed": "Balss profilu varat iestatīt jebkurā laikā iestatījumos."
 }

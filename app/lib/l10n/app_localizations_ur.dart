@@ -13157,4 +13157,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'بس بولیں۔ آپ کا Omi سن رہا ہے۔';
+
+  @override
+  String get voiceProfileCardDismissed => 'آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔';
 }

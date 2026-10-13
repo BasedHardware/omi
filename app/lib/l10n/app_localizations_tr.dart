@@ -13156,4 +13156,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Sadece konuş. Omi\'n dinliyor.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
 }

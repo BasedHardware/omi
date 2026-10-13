@@ -13153,4 +13153,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Bicara saja. Omi kamu sedang mendengarkan.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Anda dapat mengatur Profil Suara kapan saja di Pengaturan.';
 }

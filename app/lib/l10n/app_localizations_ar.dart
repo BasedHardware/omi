@@ -13067,4 +13067,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'تحدّث فقط. Omi يستمع.';
+
+  @override
+  String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
 }

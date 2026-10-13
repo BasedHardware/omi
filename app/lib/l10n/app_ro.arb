@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omi nu trimite încă sunet. Deocamdată folosește telefonul.",
     "onboardingActNoAudioOmi": "Nu se aude Omi. Verifică dacă e pornit și aproape.",
     "onboardingActNoAudioPhone": "Încă nu te auzim. Încearcă să vorbești puțin mai tare.",
-    "onboardingActDictateBodyOmi": "Doar vorbește. Omi te ascultă."
+    "onboardingActDictateBodyOmi": "Doar vorbește. Omi te ascultă.",
+    "voiceProfileCardDismissed": "Poți configura profilul vocal oricând din Setări."
 }

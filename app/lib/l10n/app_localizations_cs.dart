@@ -13144,4 +13144,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Prostě mluvte. Vaše Omi poslouchá.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
 }

@@ -13138,4 +13138,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'فقط صحبت کنید. Omi گوش می‌دهد.';
+
+  @override
+  String get voiceProfileCardDismissed => 'هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.';
 }

@@ -11479,5 +11479,6 @@
     "onboardingActMicFallbackBody": "ನಿಮ್ಮ Omi ಇನ್ನೂ ಆಡಿಯೋ ಕಳುಹಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ನಿಮ್ಮ ಫೋನ್ ಬಳಸಿ.",
     "onboardingActNoAudioOmi": "ನಿಮ್ಮ Omi ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಹತ್ತಿರವಿದೆಯೇ ನೋಡಿ.",
     "onboardingActNoAudioPhone": "ಇನ್ನೂ ನಿಮ್ಮ ಧ್ವನಿ ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಸ್ವಲ್ಪ ಜೋರಾಗಿ ಮಾತಾಡಿ ನೋಡಿ.",
-    "onboardingActDictateBodyOmi": "ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ."
+    "onboardingActDictateBodyOmi": "ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ.",
+    "voiceProfileCardDismissed": "ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು."
 }

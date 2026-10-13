@@ -4077,5 +4077,6 @@
     "onboardingActMicFallbackBody": "Omi kamu belum mengirim audio. Pakai ponselmu dulu.",
     "onboardingActNoAudioOmi": "Omi kamu tidak terdengar. Pastikan menyala dan dekat.",
     "onboardingActNoAudioPhone": "Suaramu belum terdengar. Coba bicara sedikit lebih keras.",
-    "onboardingActDictateBodyOmi": "Bicara saja. Omi kamu sedang mendengarkan."
+    "onboardingActDictateBodyOmi": "Bicara saja. Omi kamu sedang mendengarkan.",
+    "voiceProfileCardDismissed": "Anda dapat mengatur Profil Suara kapan saja di Pengaturan."
 }

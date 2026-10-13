@@ -13178,4 +13178,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Проста гаварыце. Omi слухае.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Профіль голасу заўсёды можна наладзіць у Наладах.';
 }

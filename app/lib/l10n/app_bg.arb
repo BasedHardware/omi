@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omi все още не изпраща звук. Засега използвайте телефона си.",
     "onboardingActNoAudioOmi": "Не чуваме Omi. Уверете се, че е включен и наблизо.",
     "onboardingActNoAudioPhone": "Още не ви чуваме. Опитайте да говорите малко по-силно.",
-    "onboardingActDictateBodyOmi": "Просто говорете. Omi слуша."
+    "onboardingActDictateBodyOmi": "Просто говорете. Omi слуша.",
+    "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки."
 }

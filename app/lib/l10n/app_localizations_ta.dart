@@ -13235,4 +13235,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'பேசுங்கள் போதும். உங்கள் Omi கேட்டுக்கொண்டிருக்கிறது.';
+
+  @override
+  String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
 }

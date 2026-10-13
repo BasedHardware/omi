@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "لا يرسل Omi الصوت بعد. استخدم هاتفك الآن.",
     "onboardingActNoAudioOmi": "لا أسمع Omi. تأكد من أنه يعمل وقريب منك.",
     "onboardingActNoAudioPhone": "لا أسمعك بعد. جرّب التحدث بصوت أعلى قليلاً.",
-    "onboardingActDictateBodyOmi": "تحدّث فقط. Omi يستمع."
+    "onboardingActDictateBodyOmi": "تحدّث فقط. Omi يستمع.",
+    "voiceProfileCardDismissed": "يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات."
 }

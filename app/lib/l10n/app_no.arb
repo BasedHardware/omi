@@ -4042,5 +4042,6 @@
     "onboardingActMicFallbackBody": "Omi-en din sender ikke lyd ennå. Bruk telefonen inntil videre.",
     "onboardingActNoAudioOmi": "Hører ikke Omi-en din. Sjekk at den er på og i nærheten.",
     "onboardingActNoAudioPhone": "Hører deg ikke ennå. Prøv å snakke litt høyere.",
-    "onboardingActDictateBodyOmi": "Bare snakk. Omi-en din lytter."
+    "onboardingActDictateBodyOmi": "Bare snakk. Omi-en din lytter.",
+    "voiceProfileCardDismissed": "Du kan sette opp stemmeprofilen når som helst i Innstillinger."
 }

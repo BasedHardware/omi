@@ -13228,4 +13228,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Απλώς μίλα. Το Omi σου ακούει.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.';
 }

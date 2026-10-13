@@ -13198,4 +13198,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Doar vorbește. Omi te ascultă.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
 }

@@ -13167,4 +13167,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Tiesiog kalbėkite. Jūsų Omi klauso.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Balso profilį galite nustatyti bet kada nustatymuose.';
 }

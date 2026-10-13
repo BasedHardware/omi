@@ -13173,4 +13173,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Samo pričajte. Vaš Omi sluša.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Glasovni profil možete podesiti bilo kada u Postavkama.';
 }

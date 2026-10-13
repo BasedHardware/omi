@@ -15931,5 +15931,9 @@
     "onboardingActDictateBodyOmi": "Just talk. Your Omi is listening.",
     "@onboardingActDictateBodyOmi": {
         "description": "Onboarding dictation subtitle when the words come from the connected Omi"
+    },
+    "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
+    "@voiceProfileCardDismissed": {
+        "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."
     }
 }

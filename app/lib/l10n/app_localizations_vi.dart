@@ -13141,4 +13141,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Cứ nói thôi. Omi đang lắng nghe.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
 }

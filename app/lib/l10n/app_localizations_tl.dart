@@ -13248,4 +13248,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Magsalita ka lang. Nakikinig ang Omi mo.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
 }
