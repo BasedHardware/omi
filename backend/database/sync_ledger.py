@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+import math
 from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
@@ -22,6 +23,47 @@ REPEAT_FAILURE_PAUSE = timedelta(hours=24)
 _INVALID_AUDIO_FINGERPRINT = 'decode:sync_invalid_audio'
 
 
+def _coerce_timestamp(value: Any) -> datetime | None:
+    """Safely normalize diverse timestamp representations into an aware UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        clean = value.strip()
+        if not clean:
+            return None
+        try:
+            iso = clean[:-1] + '+00:00' if clean.endswith('Z') or clean.endswith('z') else clean
+            parsed = datetime.fromisoformat(iso)
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+        try:
+            sec = float(clean)
+            if not math.isnan(sec) and not math.isinf(sec) and 0 <= sec <= 253402300799:
+                return datetime.fromtimestamp(sec, timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            pass
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            sec = float(value)
+            if not math.isnan(sec) and not math.isinf(sec) and 0 <= sec <= 253402300799:
+                return datetime.fromtimestamp(sec, timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            pass
+        return None
+    return None
+
+
+def _observed_now(value: Optional[datetime] = None) -> datetime:
+    """Return an aware UTC datetime for the current instant or a caller-supplied instant."""
+    if value is None:
+        return datetime.now(timezone.utc)
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> str | None:
     if key == 'invalid_audio':
         return _INVALID_AUDIO_FINGERPRINT
@@ -33,8 +75,8 @@ def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> 
 def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
     # The pause is always bounded: once ``repeat_failure_pause_until`` passes,
     # the same content is admitted again without operator action.
-    until = existing.get('repeat_failure_pause_until')
-    return isinstance(until, datetime) and until > now
+    until = _coerce_timestamp(existing.get('repeat_failure_pause_until'))
+    return until is not None and until > now
 
 
 def _repeat_failure_updates(
@@ -49,11 +91,11 @@ def _repeat_failure_updates(
             'repeat_failure_first_at': firestore.DELETE_FIELD,
             'repeat_failure_pause_until': firestore.DELETE_FIELD,
         }
-    first = existing.get('repeat_failure_first_at')
+    first = _coerce_timestamp(existing.get('repeat_failure_first_at'))
     same_window = (
         existing.get('repeat_failure_key') == key
         and existing.get('repeat_failure_fingerprint') == fingerprint
-        and isinstance(first, datetime)
+        and first is not None
         and first <= now < first + REPEAT_FAILURE_WINDOW
     )
     count = min(REPEAT_FAILURE_LIMIT, int(existing.get('repeat_failure_count') or 0) + 1) if same_window else 1
@@ -200,11 +242,12 @@ def _claim_transaction(
         )
         return {'outcome': 'owned'}
     if _repeat_failure_capped(existing, now):
-        pause_until = cast(datetime, existing['repeat_failure_pause_until'])
+        pause_until = _coerce_timestamp(existing.get('repeat_failure_pause_until'))
+        seconds_remaining = int((pause_until - now).total_seconds()) + 1 if pause_until is not None else 86400
         return {
             'outcome': 'capped',
             'failure_key': existing.get('repeat_failure_key'),
-            'retry_after': max(1, min(86400, int((pause_until - now).total_seconds()) + 1)),
+            'retry_after': max(1, min(86400, seconds_remaining)),
         }
     if existing.get('job_id') == job_id:
         return {'outcome': 'owned'}
@@ -217,14 +260,13 @@ def _claim_transaction(
         )
         return {'outcome': 'owned'}
 
-    updated_at = existing.get('updated_at')
-    if isinstance(updated_at, datetime):
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=timezone.utc)
-        if (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS and not (
-            missing_owner is not None and existing.get('job_id') == missing_owner
-        ):
-            return {'outcome': 'busy', 'job_id': existing.get('job_id')}
+    updated_at = _coerce_timestamp(existing.get('updated_at'))
+    if (
+        updated_at is not None
+        and (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS
+        and not (missing_owner is not None and existing.get('job_id') == missing_owner)
+    ):
+        return {'outcome': 'busy', 'job_id': existing.get('job_id')}
 
     transaction.set(
         ref,
@@ -240,19 +282,22 @@ def claim_sync_content(
     job_id: str,
     lane: str,
     *,
+    now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
+    if not uid or not content_id or not job_id:
+        return {'outcome': 'invalid_arguments'}
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ledger_ref(client, uid, content_id)
-    now = datetime.now(timezone.utc)
-    claim = _claim_transaction(client.transaction(), ref, job_id, lane, now)
+    effective_now = _observed_now(now)
+    claim = _claim_transaction(client.transaction(), ref, job_id, lane, effective_now)
     owner = claim.get('job_id')
     if claim.get('outcome') == 'busy' and owner and get_sync_job(owner) is None:
         # Redis expires at 24h, before the 48h ledger claim. Re-read the ledger
         # transactionally: only replace the owner whose absence we observed.
         # A concurrent completion/new owner wins; processing checkpoints survive
         # and old worker run tokens are invalidated by the ordinary claim update.
-        claim = _claim_transaction(client.transaction(), ref, job_id, lane, now, missing_owner=owner)
+        claim = _claim_transaction(client.transaction(), ref, job_id, lane, effective_now, missing_owner=owner)
     return claim
 
 
@@ -330,9 +375,12 @@ def bind_sync_content_run_token(
     run_token: str,
     run_epoch: int,
     *,
+    now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> SyncContentRunBinding:
     """Transactionally bind a live Redis run token to its ledger claim."""
+    if not uid or not content_id or not job_id or not run_token:
+        return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _bind_run_token_transaction(
         client.transaction(),
@@ -340,7 +388,7 @@ def bind_sync_content_run_token(
         job_id,
         run_token,
         run_epoch,
-        datetime.now(timezone.utc),
+        _observed_now(now),
     )
 
 
@@ -577,20 +625,22 @@ def mark_sync_content_completed(
     job_id: str,
     result: Dict[str, Any],
     *,
+    now: Optional[datetime] = None,
     run_token: str | None = None,
     run_epoch: int | None = None,
     firestore_client: Any = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
+    if not uid or not content_id or not job_id:
+        return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ledger_ref(client, uid, content_id)
-    now = datetime.now(timezone.utc)
     return _mark_completed_transaction(
         client.transaction(),
         ref,
         job_id,
         result,
-        now,
+        _observed_now(now),
         run_token,
         run_epoch,
     )
@@ -639,6 +689,7 @@ def release_sync_content_claim(
     content_id: str,
     job_id: str,
     *,
+    now: Optional[datetime] = None,
     run_token: str | None = None,
     run_epoch: int | None = None,
     failure_key: str | None = None,
@@ -646,12 +697,14 @@ def release_sync_content_claim(
     firestore_client: Any = None,
 ) -> bool:
     """Atomically free the matching retry claim, returning whether it changed."""
+    if not uid or not content_id or not job_id:
+        return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _release_claim_transaction(
         client.transaction(),
         _ledger_ref(client, uid, content_id),
         job_id,
-        datetime.now(timezone.utc),
+        _observed_now(now),
         run_token,
         run_epoch,
         failure_key,
@@ -700,17 +753,20 @@ def release_sync_content_claim_after_job_retired(
     content_id: str,
     job_id: str,
     *,
+    now: Optional[datetime] = None,
     failure_key: str | None = None,
     failure_fingerprint: str | None = None,
     firestore_client: Any = None,
 ) -> bool:
     """Free an exact retired job claim without treating it as a live worker write."""
+    if not uid or not content_id or not job_id:
+        return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _release_claim_after_job_retired_transaction(
         client.transaction(),
         _ledger_ref(client, uid, content_id),
         job_id,
-        datetime.now(timezone.utc),
+        _observed_now(now),
         failure_key,
         failure_fingerprint,
     )
