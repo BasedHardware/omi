@@ -20,7 +20,7 @@ class _Messages extends ChangeNotifier implements MessageProvider {
   void add(String id, String text, MessageSender sender) {
     messages = [
       ...messages,
-      ServerMessage(id, DateTime.now(), text, sender, MessageType.text, null, false, [], [], []),
+      ServerMessage(id, DateTime.now(), text, sender, MessageType.text, null, false, [], [], [])
     ];
     notifyListeners();
   }

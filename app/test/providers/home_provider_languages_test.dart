@@ -116,12 +116,10 @@ void main() {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
 
-      await provider.loadLanguagesThenSetupPrimary(
-        fetch: () async {
-          provider.clearUserData(); // signs out while the request is in flight
-          return {'Swahili': 'sw'};
-        },
-      );
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData(); // signs out while the request is in flight
+        return {'Swahili': 'sw'};
+      });
 
       expect(provider.availableLanguages.containsKey('Swahili'), isFalse);
       expect(provider.availableLanguages['English'], 'en');
@@ -131,12 +129,10 @@ void main() {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
 
-      await provider.loadLanguagesThenSetupPrimary(
-        fetch: () async {
-          provider.clearUserData();
-          return {'Swahili': 'sw'};
-        },
-      );
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData();
+        return {'Swahili': 'sw'};
+      });
 
       expect(SharedPreferencesUtil().cachedAvailableLanguages, isEmpty);
     });
@@ -172,17 +168,15 @@ void main() {
     Future<HomeProvider> start(WidgetTester tester) async {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
-      await tester.pumpWidget(
-        ChangeNotifierProvider<HomeProvider>.value(
-          value: provider,
-          child: MaterialApp(
-            navigatorKey: globalNavigatorKey,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: const Scaffold(body: SizedBox.shrink()),
-          ),
+      await tester.pumpWidget(ChangeNotifierProvider<HomeProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          navigatorKey: globalNavigatorKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SizedBox.shrink()),
         ),
-      );
+      ));
       // The server has no primary language for this account.
       await provider.setupUserPrimaryLanguage(fetchPrimaryLanguage: () async => null);
       await tester.pump(const Duration(milliseconds: 600));
