@@ -3876,6 +3876,15 @@
             "android",
             "other"
           ]
+        },
+        "exitReason": {
+          "type": "enum",
+          "wire_name": "exit_reason",
+          "values": [
+            "answered",
+            "skipped",
+            "back"
+          ]
         }
       },
       "consumers": [

@@ -174,7 +174,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingFirstCaptureConversationShown | Onboarding First Capture Conversation Shown | latency_ms | active | mobile-instrumentation-presence |
 | onboardingFirstCaptureEmptyResult | Onboarding First Capture Empty Result | none | active | mobile-instrumentation-presence |
 | onboardingFirstCaptureSkipped | Onboarding First Capture Skipped | none | active | mobile-instrumentation-presence |
-| onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform | active | mobile-instrumentation-presence |
+| onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
 
 ## App Review Opportunity decisions
 

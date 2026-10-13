@@ -134,9 +134,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
-    _stepTelemetry; // Start timing the first visible step.
+    final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
+    final initialIndex =
+        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
-    _controller = TabController(length: kPageCount, vsync: this);
+    _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
       _stepTelemetry.enter(_controller!.index);
@@ -164,6 +167,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       end: 1.0,
     ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
 
+    _currentBackgroundImage = _getBackgroundImageForIndex(initialIndex) ?? _currentBackgroundImage;
     // Start initial animations
     _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -353,6 +357,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     // Never leave while the introduction is saving; its own PopScope blocks too.
     if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
     OmiHaptics.selection();
+    _stepTelemetry.skipped = false;
+    _stepTelemetry.exitReason = OnboardingStepCompletedExitReason.back;
     _controller!.animateTo(previous);
   }
 

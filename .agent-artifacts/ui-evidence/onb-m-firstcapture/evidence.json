@@ -117,6 +117,49 @@
       "description": "android first capture: omi-handoff",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-first-capture-delayed.png",
+      "platform": "mobile-ios",
+      "description": "016-mobile-ios-first-capture-delayed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-first-capture-delayed.png",
+      "platform": "mobile-android",
+      "description": "017-mobile-android-first-capture-delayed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-first-capture-short-warning.png",
+      "platform": "mobile-ios",
+      "description": "018-mobile-ios-first-capture-short-warning",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-first-capture-short-warning.png",
+      "platform": "mobile-android",
+      "description": "019-mobile-android-first-capture-short-warning",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-first-capture-back-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "020-mobile-ios-first-capture-back-confirmation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-first-capture-back-confirmation.png",
+      "platform": "mobile-android",
+      "description": "021-mobile-android-first-capture-back-confirmation",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
-  ]
+  ],
+  "review_revision": "Thumb-zone actions; terminal-only empty explanation; iOS App Shortcuts tip on result"
 }

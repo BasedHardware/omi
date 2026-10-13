@@ -9,7 +9,7 @@ enum FirstCapturePhase { ready, starting, recording, processing, result, empty, 
 abstract interface class FirstCaptureIO {
   String get transcript;
   Future<void> start();
-  Future<ServerConversation?> finish();
+  Future<ServerConversation?> finish({bool Function()? isCurrent});
   Future<void> cancel();
 }
 
@@ -31,10 +31,11 @@ class FirstCaptureController extends ChangeNotifier {
   bool _ownsRecording = false;
   int _attempt = 0;
 
-  bool get canFinish => phase == FirstCapturePhase.recording && seconds >= 15;
+  bool get canFinish => phase == FirstCapturePhase.recording;
 
   Future<void> start() async {
-    if (phase == FirstCapturePhase.starting ||
+    if (_disposed ||
+        phase == FirstCapturePhase.starting ||
         phase == FirstCapturePhase.recording ||
         phase == FirstCapturePhase.processing) {
       return;
@@ -73,8 +74,9 @@ class FirstCaptureController extends ChangeNotifier {
   }
 
   Future<void> finish() async {
-    if (!canFinish) return;
+    if (_disposed || !canFinish) return;
     final attempt = _attempt;
+    _ownsRecording = false;
     _timer?.cancel();
 
     seconds = now().difference(_startedAt!).inSeconds;
@@ -85,16 +87,22 @@ class FirstCaptureController extends ChangeNotifier {
     notifyListeners();
     final latency = Stopwatch()..start();
     try {
-      final result = await io.finish().timeout(const Duration(seconds: 90));
-      _ownsRecording = false;
+      final result =
+          await io.finish(isCurrent: () => !_disposed && attempt == _attempt).timeout(const Duration(seconds: 90));
       if (_disposed || attempt != _attempt) return;
-      if (result == null && transcriptObserved) {
+      transcript = io.transcript;
+      transcriptObserved |= transcript.trim().isNotEmpty;
+      if (result == null) {
         // A 404 may mean websocket auto-finalization won the race; never call
         // an observed transcript "not enough speech" without its saved result.
         phase = FirstCapturePhase.delayed;
-      } else if (result == null || result.discarded || result.transcriptSegments.isEmpty) {
+      } else if ((result.status == ConversationStatus.completed && result.transcriptSegments.isEmpty) ||
+          (result.discarded &&
+              (result.status == ConversationStatus.completed || result.status == ConversationStatus.failed))) {
         phase = FirstCapturePhase.empty;
         emit(const OnboardingFirstCaptureEmptyResult());
+      } else if (result.status != ConversationStatus.completed) {
+        phase = FirstCapturePhase.delayed;
       } else {
         conversation = result;
         phase = FirstCapturePhase.result;

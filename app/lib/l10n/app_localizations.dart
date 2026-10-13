@@ -23336,6 +23336,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your recording is taking longer to process. You can check your conversations on Home or try again.'**
   String get firstCaptureDelayed;
+
+  /// No description provided for @firstCaptureEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try that again'**
+  String get firstCaptureEmptyTitle;
+
+  /// No description provided for @firstCaptureShortTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish This Recording?'**
+  String get firstCaptureShortTitle;
+
+  /// No description provided for @firstCaptureShortWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A few more sentences help Omi understand you. About 30 seconds is ideal.'**
+  String get firstCaptureShortWarning;
+
+  /// No description provided for @firstCaptureCancelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave This Recording?'**
+  String get firstCaptureCancelTitle;
+
+  /// No description provided for @firstCaptureCancelWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Going back stops this recording. Keep talking to give Omi a few more sentences.'**
+  String get firstCaptureCancelWarning;
+
+  /// No description provided for @firstCaptureSiriTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: Enable Omi in Shortcuts → Siri.'**
+  String get firstCaptureSiriTip;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

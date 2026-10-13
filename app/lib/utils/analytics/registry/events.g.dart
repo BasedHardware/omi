@@ -2545,15 +2545,24 @@ enum OnboardingStepCompletedPlatform {
   final String wireName;
 }
 
+enum OnboardingStepCompletedExitReason {
+  answered("answered"),
+  skipped("skipped"),
+  back("back");
+  const OnboardingStepCompletedExitReason(this.wireName);
+  final String wireName;
+}
+
 final class OnboardingStepCompleted extends RegisteredEvent {
-  const OnboardingStepCompleted({required this.step, required this.index, required this.elapsedMs, required this.skipped, required this.platform});
+  const OnboardingStepCompleted({required this.step, required this.index, required this.elapsedMs, required this.skipped, required this.platform, required this.exitReason});
   final OnboardingStepCompletedStep step;
   final int index;
   final int elapsedMs;
   final bool skipped;
   final OnboardingStepCompletedPlatform platform;
+  final OnboardingStepCompletedExitReason exitReason;
   @override
   String get wireName => "Onboarding Step Completed";
   @override
-  Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName};
+  Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName, "exit_reason": exitReason.wireName};
 }

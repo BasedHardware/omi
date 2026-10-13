@@ -14,6 +14,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'first_capture_controller.dart';
 import 'first_capture_io.dart';
 import 'first_capture_page.dart';
+import 'first_capture_layout.dart';
 
 /// Keeps completion at persisted index 9. Child capture routes never mark
 /// onboarding complete until the user sees a result, pairs, or explicitly skips.
@@ -43,7 +44,7 @@ class OnboardingCompleteScreen extends StatefulWidget {
 
 class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
   bool _routing = false;
-  bool _declaredOmi = false;
+  bool _pairedOmi = false;
   void _emit(RegisteredEvent event) => (widget.emit ?? const TypedEvents().emit)(event);
   void _property(String key, Object value) =>
       (widget.setProperty ?? PlatformManager.instance.analytics.setUserProperty)(key, value);
@@ -58,12 +59,9 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
 
   void _choose(OnboardingFirstCaptureChoiceSelectedChoice choice) {
     _property('capture_choice', choice.wireName);
-    // "I have an Omi" is an ownership declaration; other paths retain any
-    // already paired Omi rather than confusing the capture source with ownership.
-    _declaredOmi |= choice == OnboardingFirstCaptureChoiceSelectedChoice.omi;
-    final hasOmi = _declaredOmi ||
-        (widget.setProperty == null &&
-            SharedPreferencesUtil().btDevices.any((device) => device.id.isNotEmpty && device.type == DeviceType.omi));
+    // Pairing evidence owns the device property; a selected route is only intent.
+    final hasOmi = _pairedOmi ||
+        SharedPreferencesUtil().btDevices.any((device) => device.id.isNotEmpty && device.type == DeviceType.omi);
     _property('has_omi_device', hasOmi);
     _emit(OnboardingFirstCaptureChoiceSelected(choice: choice));
   }
@@ -92,24 +90,29 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
       paired = await widget.pairDevice!(context);
     } else {
       var failed = false;
-      await Navigator.of(context).push(omiPageRoute(
+      final connected = await Navigator.of(context).push<bool>(omiPageRoute(
         builder: (routeContext) => ConnectDevicePage(
-          onConnected: () => Navigator.of(routeContext).pop(),
+          onConnected: () => Navigator.of(routeContext).pop(true),
           onConnectionFailed: () {
             failed = true;
-            Navigator.of(routeContext).pop();
+            Navigator.of(routeContext).pop(false);
           },
         ),
       ));
       if (!mounted) return;
       if (failed) OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
-      paired = !failed &&
+      paired = connected == true &&
+          !failed &&
           context.read<OnboardingProvider>().isConnected &&
           context.read<OnboardingProvider>().deviceType == DeviceType.omi;
     }
     if (!mounted) return;
     setState(() => _routing = false);
-    if (paired) _complete(); // Home owns the existing CV1 tutorial gate.
+    if (paired) {
+      _pairedOmi = true;
+      _property('has_omi_device', true);
+      _complete();
+    } // Home owns the existing CV1 tutorial gate.
   }
 
   Future<void> _phone() async {
@@ -150,9 +153,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
     final watch = widget.showWatch ?? Theme.of(context).platform == TargetPlatform.iOS;
     return ColoredBox(
         color: OmiColors.surface0,
-        child: SafeArea(
-            child: ListView(padding: const EdgeInsets.all(OmiSpacing.lg), children: [
-          const SizedBox(height: OmiSpacing.xxl),
+        child: FirstCaptureLayout(content: [
           Icon(Icons.mic_none, size: 64, color: OmiColors.textPrimary),
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.firstCaptureTitle, style: OmiType.title1, textAlign: TextAlign.center),
@@ -160,6 +161,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
           Text(context.l10n.firstCaptureDescription,
               style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xxl),
+        ], actions: [
           OmiButton(
               variant: OmiButtonVariant.secondary,
               labelStyle: OmiType.callout.copyWith(
@@ -198,7 +200,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
               key: const Key('onboarding_complete_start'),
               label: context.l10n.firstCaptureSkip,
               onPressed: _routing ? null : _skip),
-        ])));
+        ]));
   }
 }
 
