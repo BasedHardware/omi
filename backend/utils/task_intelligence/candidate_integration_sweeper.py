@@ -140,18 +140,18 @@ async def _recover_recorded_export(
     uid = row['uid']
     candidate_id = row['candidate_id']
     task_id = row['task_id']
-    try:
-        updated = await run_blocking(
-            db_executor,
-            action_items_db.update_action_item,
-            uid,
-            task_id,
-            integration_outbox_db.recorded_export_action_fields(
-                now=now,
-                external_task_id=external_id,
-                export_platform=row.get('export_platform'),
-            ),
+    export_platform = row.get('export_platform')
+
+    def _mark_exported() -> Any:
+        fields = integration_outbox_db.recorded_export_action_fields(
+            now=now,
+            external_task_id=external_id,
+            export_platform=export_platform,
         )
+        return action_items_db.update_action_item(uid, task_id, fields)
+
+    try:
+        updated = await run_blocking(db_executor, _mark_exported)
     except Exception as error:
         logger.error(
             'candidate integration sweep export recovery failed exception_type=%s',
