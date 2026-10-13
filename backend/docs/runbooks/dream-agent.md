@@ -718,7 +718,7 @@ These are offline checks; a deployed canary remains separate acceptance evidence
 
 User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
 sweep host (currently 24 in the production source declarations), along with the
-same global spend/token-price limits, so GET presents the scheduler's allowance.
+same per-user daily spend cap and token accounting rate, so GET presents the scheduler's allowance.
 
 ## Response validation and bounded failed-record retries
 
