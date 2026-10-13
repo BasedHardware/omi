@@ -10,11 +10,13 @@ legacy behavior while a decision remains open.
 from __future__ import annotations
 
 import os
+import logging
 from copy import deepcopy
 from typing import Any, Mapping, Optional
 
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
     ENTITLEMENT_VERSIONS,
+    LADDER_V1_STRIPE_PRICES,
     RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS,
     BILLING_ENV_VAR_PLAN_TYPES,
     CATALOG_AUTHORITY,
@@ -223,16 +225,24 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
         )
 
     plan = PlanType(field('plan', 'basic'))
-    if field('status', 'active') != 'active':
+    if field('status', 'active') not in ('active', 'trialing'):
         return get_entitlement_version(PlanType.basic)
     price = field('current_price_id')
     if price:
-        return resolve_price_entitlements(price, environ)
+        if price in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES or price in configured_billing_price_plans(environ):
+            # Recognized/configured conflicts remain errors; only unknown identity falls back.
+            return resolve_price_entitlements(price, environ)
+        logging.getLogger(__name__).warning(
+            'Unknown current Stripe price; retaining stored plan legacy entitlements: plan=%s', plan.value
+        )
     # Old persisted paid records can predate current_price_id.
     return get_entitlement_version(plan)
 
 
 __all__ = [
+    'ENTITLEMENT_VERSIONS',
+    'LADDER_V1_STRIPE_PRICES',
+    'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
     "get_entitlement_version",
     "resolve_price_entitlements",
     "resolve_subscription_entitlements",
