@@ -1176,8 +1176,10 @@ async def notion_callback(
     error: Optional[str] = Query(None)
 ):
     """Handle Notion OAuth2 callback."""
-    if error and isinstance(error, str):
-        safe_error = html.escape(error, quote=True)
+    if error:
+        # Fail closed on non-string error values: a truthy non-string would
+        # otherwise be silently ignored and flow into token exchange.
+        safe_error = html.escape(error, quote=True) if isinstance(error, str) else "Invalid authorization error."
         return HTMLResponse(content=f"""
         <html>
             <head><style>{get_css()}</style></head>

@@ -176,6 +176,43 @@ class NotionSecuritySanitizationTests(unittest.TestCase):
         self.assertNotIn(payload, body)
         self.assertIn(html.escape(payload), body)
 
+    def test_callback_rejects_non_string_error(self):
+        import asyncio
+
+        # A truthy non-string error must fail closed: it must not be ignored and
+        # allowed to reach token exchange just because code/state are present.
+        with patch.object(main, "get_oauth_state") as mock_state, patch.object(
+            main.requests, "post"
+        ) as mock_post:
+            res = asyncio.run(
+                main.notion_callback(code="valid_code", state="valid_state", error={"weird": True})
+            )
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Invalid authorization error", res.body.decode("utf-8"))
+        mock_post.assert_not_called()
+        mock_state.assert_not_called()
+
+    def test_root_escapes_workspace_name(self):
+        import asyncio
+        import html
+
+        hostile_workspace = '"><script>alert("ws")</script>'
+        tokens = {
+            "access_token": "token_123",
+            "workspace_id": "ws_123",
+            "workspace_name": hostile_workspace,
+            "bot_id": "bot_123",
+        }
+
+        with patch.object(main, "get_notion_tokens", return_value=tokens):
+            res = asyncio.run(main.root(uid="valid-user-123"))
+
+        self.assertIsInstance(res, HTMLResponse)
+        body = res.body.decode("utf-8")
+        self.assertNotIn(hostile_workspace, body)
+        self.assertIn(html.escape(hostile_workspace, quote=True), body)
+
     def test_callback_success_escapes_uid_attribute_breakout(self):
         import asyncio
         from unittest.mock import MagicMock
