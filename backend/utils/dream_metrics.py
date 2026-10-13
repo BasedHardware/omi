@@ -39,6 +39,7 @@ REJECTION_REASONS = {
     'noop',
     'contradictory_spelling',
     'invalid_question_evidence',
+    'consensus_rejected',
 }
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,64 @@ ERROR_TYPES = {
 }
 
 
+# An exact allowlist, rather than logging arbitrary messages beginning with dream_.
+DREAM_VALUE_ERROR_CODES = frozenset(
+    {
+        'dream_reasoning_budget',
+        'dream_sample_plan',
+        'dream_triage_budget',
+        'dream_unknown_cluster',
+        'dream_unknown_target',
+        'dream_no_samples',
+        'dream_settlement_limit',
+        'dream_input_token_budget',
+        'dream_model_context_budget',
+        'dream_invalid_usage',
+        'dream_evidence_token_budget',
+        'dream_transcript_shape',
+        'dream_history_collection',
+        'dream_history_key',
+        'dream_review_read_limit',
+        'dream_temporal_collection',
+        'dream_invalid_target',
+        'dream_invalid_spelling',
+        'dream_unknown_evidence',
+        'dream_invalid_question_evidence',
+        'dream_unsupported_edit',
+        'dream_unsupported_spelling_target',
+        'dream_invalid_task',
+        'dream_invalid_memory',
+        'dream_missing_duplicate',
+        'dream_invalid_entity',
+        'dream_invalid_entity_summary',
+        'dream_invalid_person_merge',
+        'dream_vocabulary_requires_acceptance',
+        'dream_common_word',
+        'dream_invalid_vocabulary',
+        'dream_question_kind',
+        'dream_frame_evidence',
+        'dream_task_evidence',
+        'dream_ungrounded_spelling',
+        'dream_stale_task_evidence',
+        'dream_task_too_recent',
+        'dream_bad_target',
+        'dream_canary_configuration',
+        'dream_canary_existing_owner',
+        'dream_summary_nonempty_field',
+        'dream_summary_insufficient_speech',
+        'dream_summary_placeholder',
+        'dream_summary_ungrounded',
+        'dream_summary_overview_format',
+        'dream_summary_ref_leak',
+    }
+)
+
+
+def error_code(exc):
+    code = exc.args[0] if type(exc) is ValueError and len(exc.args) == 1 else None
+    return code if isinstance(code, str) and code in DREAM_VALUE_ERROR_CODES else None
+
+
 def record_pass(report):
     status = report.get('status', 'failed')
     if status not in {'complete', 'failed', 'deadline', 'not_admitted', 'waiting'}:
@@ -109,16 +168,26 @@ def record_pass(report):
     for key, count in diagnostics['context_budget_counts'].items():
         CONTEXT_BUDGET.labels(key).inc(count)
     logger.info(
-        'Dream pass status=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
+        'Dream pass status=%s error_code=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
+        'samples_requested=%d samples_returned=%d samples_failed=%d consensus_threshold=%d '
+        'samples_attempted=%d samples_capacity_wait=%d capacity_retries=%d '
         'triage_evidence_chars=%d reasoning_evidence_chars=%d '
         'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
         'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
         status,
+        report.get('error_code') if report.get('error_code') in DREAM_VALUE_ERROR_CODES else 'none',
         'full' if report.get('context_mode') == 'full' else 'bounded',
         max(0, int(report.get('input_tokens_estimate', 0))),
         max(0, int(report.get('targets', 0))),
         max(0, int(report.get('records', 0))),
         retries,
+        max(0, int(report.get('samples_requested', 0))),
+        max(0, int(report.get('samples_returned', 0))),
+        max(0, int(report.get('samples_failed', 0))),
+        max(0, int(report.get('consensus_threshold', 0))),
+        max(0, int(report.get('samples_attempted', 0))),
+        max(0, int(report.get('samples_capacity_wait', 0))),
+        max(0, int(report.get('capacity_retries', 0))),
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),

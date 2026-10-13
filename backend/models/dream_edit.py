@@ -2,6 +2,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from models.dream_refs import base_ref
 
 
 class Strict(BaseModel):
@@ -19,9 +20,11 @@ class Edit(Strict):
         'close_task',
         'retire_task',
         'merge_memories',
-    ]
+    ] = Field(
+        description='Spelling corrects a misheard or misspelled name or term. Never rewrite grammar, remove filler, or guess unclear speech.'
+    )
     target: str = Field(
-        description='Supplied record ref to edit. One spelling edit fixes every occurrence in this target.'
+        description='Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.'
     )
     other: str = Field(
         default='',
@@ -54,7 +57,7 @@ class Edit(Strict):
             collection, separator, key = self.target.partition('/')
             if collection != 'conversations' or not separator or not key or '/' in key:
                 raise ValueError('Summary edits require a conversation target')
-            if self.target not in self.evidence or self.other:
+            if base_ref(self.target) not in {base_ref(ref) for ref in self.evidence} or self.other:
                 raise ValueError('Summary edits require their conversation as evidence and no other target')
             limit = 120 if self.kind == 'title' else 1000
             if not self.after.strip() or len(self.after) > limit or self.before == self.after:

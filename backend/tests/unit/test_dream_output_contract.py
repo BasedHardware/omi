@@ -20,6 +20,7 @@ REF = 'memory_items/synthetic'
 @pytest.fixture
 def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
     return Caps().for_uid(UID)
 

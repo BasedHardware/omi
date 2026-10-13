@@ -13982,6 +13982,7 @@
             "type": "array"
           },
           "kind": {
+            "description": "Spelling corrects a misheard or misspelled name or term. Never rewrite grammar, remove filler, or guess unclear speech.",
             "enum": [
               "spelling",
               "title",
@@ -14009,7 +14010,7 @@
             "type": "string"
           },
           "target": {
-            "description": "Supplied record ref to edit. One spelling edit fixes every occurrence in this target.",
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
             "title": "Target",
             "type": "string"
           }
