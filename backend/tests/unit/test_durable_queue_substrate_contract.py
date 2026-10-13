@@ -84,3 +84,11 @@ def test_only_the_periodic_publisher_observes_the_gauge() -> None:
     assert 'publish_all_queue_oldest_ready_ages' in (REPO / 'backend/database/durable_queue_age.py').read_text(
         encoding='utf-8'
     )
+
+
+def test_unknown_companion_is_zero_initialized_for_every_declared_queue() -> None:
+    from utils.metrics import generate_latest
+
+    exported = generate_latest().decode()
+    for queue in OMI_QUEUE_NAMES:
+        assert f'omi_queue_oldest_ready_sample_unknown{{queue="{queue}"}} 0.0' in exported

@@ -87,3 +87,51 @@ def test_validator_rejects_drift_and_activation_without_recognition():
     current = deepcopy(baseline)
     current['plans'][0]['allocations']['transcription']['limit']['value'] -= 1
     assert any('legacy entitlements cannot change' in e for e in validate_compatibility(baseline, current))
+
+
+@pytest.mark.parametrize('status', ['active', 'trialing'])
+def test_paid_status_resolves_price_before_stored_label(status):
+    result = resolve_subscription_entitlements(
+        {'plan': 'unlimited', 'status': status, 'current_price_id': 'price_1TuH6z1F8wnoWYvw7Siv61SX'}, {}
+    )
+    assert result == get_entitlement_version('plus')
+
+
+@pytest.mark.parametrize('status', ['inactive', 'past_due', 'canceled', 'unpaid', 'incomplete'])
+def test_nonpaying_status_demotes_recognized_price(status):
+    assert resolve_subscription_entitlements(
+        {'plan': 'plus', 'status': status, 'current_price_id': 'price_1TuH6z1F8wnoWYvw7Siv61SX'}, {}
+    ) == get_entitlement_version('basic')
+
+
+@pytest.mark.parametrize('status', ['active', 'trialing'])
+def test_unknown_price_preserves_stored_legacy_plan_and_logs(status, caplog):
+    result = resolve_subscription_entitlements(
+        {'plan': 'operator', 'status': status, 'current_price_id': 'price_unknown'}, {}
+    )
+    assert result == get_entitlement_version('operator')
+    assert 'retaining stored plan legacy entitlements' in caplog.text
+
+
+def test_known_price_env_conflict_does_not_fall_back():
+    with pytest.raises(ValueError, match='retained'):
+        resolve_subscription_entitlements(
+            {'plan': 'plus', 'status': 'active', 'current_price_id': 'price_1TuH6z1F8wnoWYvw7Siv61SX'},
+            {'STRIPE_UNLIMITED_MONTHLY_PRICE_ID': 'price_1TuH6z1F8wnoWYvw7Siv61SX'},
+        )
+
+
+def test_missing_ladder_price_id_returns_validation_error():
+    from scripts.entitlement_catalog_validation import validate_entitlement_versions
+
+    catalog = deepcopy(load_catalog())
+    catalog['recognized_stripe_prices'].append({'entitlement_version': 'ladder_v1', 'plan_id': 'plus'})
+    assert any('requires a nonempty price_id' in error for error in validate_entitlement_versions(catalog))
+
+
+def test_generated_exports_include_entitlement_constants():
+    from config import plan_catalog_generated
+
+    assert {'ENTITLEMENT_VERSIONS', 'LADDER_V1_STRIPE_PRICES', 'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS'} <= set(
+        plan_catalog_generated.__all__
+    )
