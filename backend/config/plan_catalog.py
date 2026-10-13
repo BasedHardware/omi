@@ -10,9 +10,15 @@ legacy behavior while a decision remains open.
 from __future__ import annotations
 
 import os
+import logging
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
+    ENTITLEMENT_VERSIONS,
+    LADDER_V1_STRIPE_PRICES,
+    RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS,
     BILLING_ENV_VAR_PLAN_TYPES,
     CATALOG_AUTHORITY,
     CATALOG_REVISION,
@@ -179,7 +185,80 @@ def resolve_stripe_price_plan(
     raise ValueError(f'Price ID {price_id} does not correspond to a known plan.')
 
 
+def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> dict[str, Any]:
+    plan = PlanType(plan)
+    if version == 'legacy':
+        return {
+            'plan_id': plan.value,
+            'entitlement_version': version,
+            'policy': deepcopy(get_plan_definition(plan)),
+            'budget': None,
+        }
+    if version != 'ladder_v1':
+        raise ValueError(f'Unknown entitlement version: {version}')
+    ladder = ENTITLEMENT_VERSIONS[version]
+    if plan.value not in ladder['monthly_budgets']:
+        raise ValueError(f'{plan.value} has no ladder_v1 entitlements')
+    return {
+        'plan_id': plan.value,
+        'entitlement_version': version,
+        'budget': deepcopy(ladder['monthly_budgets'][plan.value]),
+        'rate_card_version': ladder['rate_card_version'],
+        'unit_usd_micros': ladder['unit_usd_micros'],
+    }
+
+
+def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    plan = resolve_stripe_price_plan(price_id, environ)
+    # Unretained env-configured prices preserve legacy semantics; env cannot activate ladder v1.
+    version = RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS.get(price_id, 'legacy')
+    return get_entitlement_version(plan, version)
+
+
+def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Resolve shadow metadata without remote reads; never use for live admission.
+
+    Ladder v1 budgets remain dormant until its policy shape is complete.
+    """
+
+    def field(name: str, default: Any = None) -> Any:
+        return (
+            subscription.get(name, default)
+            if isinstance(subscription, Mapping)
+            else getattr(subscription, name, default)
+        )
+
+    raw_plan = field('plan', 'basic')
+    plan = PlanType.basic if raw_plan == 'free' else PlanType(raw_plan)
+    status = field('status', 'active')
+    period_end = field('current_period_end')
+    inactive_paid_period = (
+        status == 'inactive'
+        and plan in PAID_PLAN_TYPES
+        and period_end is not None
+        and period_end >= datetime.now(timezone.utc).timestamp()
+    )
+    if status not in ('active', 'trialing') and not inactive_paid_period:
+        return get_entitlement_version(PlanType.basic)
+    price = field('current_price_id')
+    if price:
+        if price in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES or price in configured_billing_price_plans(environ):
+            # Recognized/configured conflicts remain errors; only unknown identity falls back.
+            return resolve_price_entitlements(price, environ)
+        logging.getLogger(__name__).warning(
+            'Unknown current Stripe price; retaining stored plan legacy entitlements: plan=%s', plan.value
+        )
+    # Old persisted paid records can predate current_price_id.
+    return get_entitlement_version(plan)
+
+
 __all__ = [
+    'ENTITLEMENT_VERSIONS',
+    'LADDER_V1_STRIPE_PRICES',
+    'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
+    "get_entitlement_version",
+    "resolve_price_entitlements",
+    "resolve_subscription_entitlements",
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',
