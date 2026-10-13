@@ -4044,5 +4044,7 @@
     "onboardingNoOmiYet": "Belum punya Omi?",
     "onboardingOmiOrdered": "Saya sudah memesannya",
     "onboardingOmiNotOrdered": "Belum memesan",
-    "onboardingConnectOmi": "Hubungkan Omi"
+    "onboardingConnectOmi": "Hubungkan Omi",
+    "consentShortMessage": "Omi menyimpan percakapan Anda dengan aman dan memakai AI untuk mengubahnya jadi catatan.",
+    "consentAiProviders": "Pemrosesan AI: {providers}"
 }

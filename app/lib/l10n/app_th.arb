@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
     "onboardingOmiOrdered": "สั่งซื้อแล้ว",
     "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ",
-    "onboardingConnectOmi": "เชื่อมต่อ Omi"
+    "onboardingConnectOmi": "เชื่อมต่อ Omi",
+    "consentShortMessage": "Omi เก็บบทสนทนาของคุณอย่างปลอดภัยและใช้ AI สรุปเป็นโน้ต",
+    "consentAiProviders": "การประมวลผล AI: {providers}"
 }

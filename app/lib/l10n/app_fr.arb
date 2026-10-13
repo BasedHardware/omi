@@ -4044,5 +4044,7 @@
     "onboardingNoOmiYet": "Vous n'avez pas encore votre Omi ?",
     "onboardingOmiOrdered": "Je l'ai commandé",
     "onboardingOmiNotOrdered": "Pas encore commandé",
-    "onboardingConnectOmi": "Connecter Omi"
+    "onboardingConnectOmi": "Connecter Omi",
+    "consentShortMessage": "Omi stocke vos conversations en toute sécurité et utilise l'IA pour en faire des notes.",
+    "consentAiProviders": "Traitement IA : {providers}"
 }

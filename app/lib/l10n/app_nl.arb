@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Heb je je Omi nog niet?",
     "onboardingOmiOrdered": "Ik heb hem besteld",
     "onboardingOmiNotOrdered": "Nog niet besteld",
-    "onboardingConnectOmi": "Omi verbinden"
+    "onboardingConnectOmi": "Omi verbinden",
+    "consentShortMessage": "Omi bewaart je gesprekken veilig en maakt er met AI notities van.",
+    "consentAiProviders": "AI-verwerking: {providers}"
 }

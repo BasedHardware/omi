@@ -13029,4 +13029,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Ühenda Omi';
+
+  @override
+  String get consentShortMessage => 'Omi hoiab su vestlusi turvaliselt ja teeb neist tehisaru abil märkmed.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Tehisaru töötlus: $providers';
+  }
 }

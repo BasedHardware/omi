@@ -12831,4 +12831,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => '连接 Omi';
+
+  @override
+  String get consentShortMessage => 'Omi 会安全保存你的对话，并用 AI 整理成笔记。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI 处理方：$providers';
+  }
 }

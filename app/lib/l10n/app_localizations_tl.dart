@@ -13140,4 +13140,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Ikonekta ang Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Ligtas na sine-save ng Omi ang mga usapan mo at ginagawa itong mga tala gamit ang AI.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Pagproseso ng AI: $providers';
+  }
 }

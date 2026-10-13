@@ -4044,5 +4044,7 @@
     "onboardingNoOmiYet": "Ещё нет Omi?",
     "onboardingOmiOrdered": "Я уже заказал",
     "onboardingOmiNotOrdered": "Ещё не заказал",
-    "onboardingConnectOmi": "Подключите Omi"
+    "onboardingConnectOmi": "Подключите Omi",
+    "consentShortMessage": "Omi надёжно хранит ваши разговоры и с помощью ИИ превращает их в заметки.",
+    "consentAiProviders": "Обработка ИИ: {providers}"
 }

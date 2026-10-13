@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Vēl nav Omi?",
     "onboardingOmiOrdered": "Esmu to pasūtījis",
     "onboardingOmiNotOrdered": "Vēl neesmu pasūtījis",
-    "onboardingConnectOmi": "Savienot Omi"
+    "onboardingConnectOmi": "Savienot Omi",
+    "consentShortMessage": "Omi droši glabā jūsu sarunas un ar MI palīdzību pārvērš tās piezīmēs.",
+    "consentAiProviders": "MI apstrāde: {providers}"
 }

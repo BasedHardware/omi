@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "Яшчэ няма Omi?",
     "onboardingOmiOrdered": "Я ўжо замовіў",
     "onboardingOmiNotOrdered": "Яшчэ не замовіў",
-    "onboardingConnectOmi": "Падключыце Omi"
+    "onboardingConnectOmi": "Падключыце Omi",
+    "consentShortMessage": "Omi надзейна захоўвае вашы размовы і з дапамогай ШІ ператварае іх у нататкі.",
+    "consentAiProviders": "Апрацоўка ШІ: {providers}"
 }

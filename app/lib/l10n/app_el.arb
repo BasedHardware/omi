@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Δεν έχετε ακόμα το Omi σας;",
     "onboardingOmiOrdered": "Το έχω παραγγείλει",
     "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα",
-    "onboardingConnectOmi": "Συνδέστε το Omi"
+    "onboardingConnectOmi": "Συνδέστε το Omi",
+    "consentShortMessage": "Το Omi αποθηκεύει με ασφάλεια τις συνομιλίες σας και τις μετατρέπει σε σημειώσεις με AI.",
+    "consentAiProviders": "Επεξεργασία AI: {providers}"
 }

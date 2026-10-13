@@ -13096,4 +13096,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Поврзете Omi';
+
+  @override
+  String get consentShortMessage => 'Omi безбедно ги чува вашите разговори и со ВИ ги претвора во белешки.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'ВИ обработка: $providers';
+  }
 }

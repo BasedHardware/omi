@@ -12943,4 +12943,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'חיבור Omi';
+
+  @override
+  String get consentShortMessage => 'Omi שומר את השיחות שלכם באופן מאובטח ומשתמש ב-AI כדי להפוך אותן להערות.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'עיבוד AI: $providers';
+  }
 }

@@ -13087,4 +13087,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi csatlakoztatása';
+
+  @override
+  String get consentShortMessage =>
+      'Az Omi biztonságosan tárolja a beszélgetéseidet, és MI segítségével jegyzetekké alakítja őket.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'MI-feldolgozás: $providers';
+  }
 }

@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Sul pole veel Omit?",
     "onboardingOmiOrdered": "Olen selle tellinud",
     "onboardingOmiNotOrdered": "Pole veel tellinud",
-    "onboardingConnectOmi": "Ühenda Omi"
+    "onboardingConnectOmi": "Ühenda Omi",
+    "consentShortMessage": "Omi hoiab su vestlusi turvaliselt ja teeb neist tehisaru abil märkmed.",
+    "consentAiProviders": "Tehisaru töötlus: {providers}"
 }

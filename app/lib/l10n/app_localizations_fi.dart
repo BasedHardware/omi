@@ -13040,4 +13040,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Yhdistä Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Omi tallentaa keskustelusi turvallisesti ja tekee niistä muistiinpanoja tekoälyn avulla.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Tekoälykäsittely: $providers';
+  }
 }

@@ -12969,4 +12969,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'เชื่อมต่อ Omi';
+
+  @override
+  String get consentShortMessage => 'Omi เก็บบทสนทนาของคุณอย่างปลอดภัยและใช้ AI สรุปเป็นโน้ต';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'การประมวลผล AI: $providers';
+  }
 }

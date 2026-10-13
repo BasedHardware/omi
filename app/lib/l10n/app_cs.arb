@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Ještě nemáte Omi?",
     "onboardingOmiOrdered": "Už jsem ho objednal/a",
     "onboardingOmiNotOrdered": "Ještě neobjednáno",
-    "onboardingConnectOmi": "Připojte Omi"
+    "onboardingConnectOmi": "Připojte Omi",
+    "consentShortMessage": "Omi bezpečně ukládá vaše konverzace a pomocí AI z nich dělá poznámky.",
+    "consentAiProviders": "Zpracování AI: {providers}"
 }

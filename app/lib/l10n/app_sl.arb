@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "Še nimate Omi?",
     "onboardingOmiOrdered": "Naročil/a sem ga",
     "onboardingOmiNotOrdered": "Še nisem naročil/a",
-    "onboardingConnectOmi": "Povežite Omi"
+    "onboardingConnectOmi": "Povežite Omi",
+    "consentShortMessage": "Omi varno shrani vaše pogovore in jih z UI spremeni v zapiske.",
+    "consentAiProviders": "Obdelava z UI: {providers}"
 }

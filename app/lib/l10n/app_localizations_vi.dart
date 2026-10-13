@@ -13033,4 +13033,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Kết nối Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Omi lưu trữ cuộc trò chuyện của bạn an toàn và dùng AI để biến chúng thành ghi chú.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Xử lý AI: $providers';
+  }
 }

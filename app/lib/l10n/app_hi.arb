@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "अभी तक आपका Omi नहीं आया?",
     "onboardingOmiOrdered": "मैंने ऑर्डर कर दिया है",
     "onboardingOmiNotOrdered": "अभी ऑर्डर नहीं किया",
-    "onboardingConnectOmi": "Omi कनेक्ट करें"
+    "onboardingConnectOmi": "Omi कनेक्ट करें",
+    "consentShortMessage": "Omi आपकी बातचीत सुरक्षित रूप से सहेजता है और AI से उन्हें नोट्स में बदलता है।",
+    "consentAiProviders": "AI प्रोसेसिंग: {providers}"
 }

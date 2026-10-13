@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Non hai ancora il tuo Omi?",
     "onboardingOmiOrdered": "L'ho ordinato",
     "onboardingOmiNotOrdered": "Non ancora ordinato",
-    "onboardingConnectOmi": "Connetti Omi"
+    "onboardingConnectOmi": "Connetti Omi",
+    "consentShortMessage": "Omi salva le tue conversazioni in modo sicuro e le trasforma in note con l'IA.",
+    "consentAiProviders": "Elaborazione IA: {providers}"
 }

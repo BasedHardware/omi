@@ -13087,4 +13087,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get consentShortMessage => 'Omi మీ సంభాషణలను సురక్షితంగా సేవ్ చేసి, AIతో వాటిని నోట్స్‌గా మారుస్తుంది.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI ప్రాసెసింగ్: $providers';
+  }
 }

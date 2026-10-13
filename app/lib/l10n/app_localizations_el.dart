@@ -13119,4 +13119,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Συνδέστε το Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Το Omi αποθηκεύει με ασφάλεια τις συνομιλίες σας και τις μετατρέπει σε σημειώσεις με AI.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Επεξεργασία AI: $providers';
+  }
 }

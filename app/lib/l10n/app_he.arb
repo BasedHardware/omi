@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "עדיין אין לכם Omi?",
     "onboardingOmiOrdered": "הזמנתי",
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
-    "onboardingConnectOmi": "חיבור Omi"
+    "onboardingConnectOmi": "חיבור Omi",
+    "consentShortMessage": "Omi שומר את השיחות שלכם באופן מאובטח ומשתמש ב-AI כדי להפוך אותן להערות.",
+    "consentAiProviders": "עיבוד AI: {providers}"
 }

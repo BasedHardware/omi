@@ -4044,5 +4044,7 @@
     "onboardingNoOmiYet": "Omi'n henüz yok mu?",
     "onboardingOmiOrdered": "Sipariş verdim",
     "onboardingOmiNotOrdered": "Henüz sipariş vermedim",
-    "onboardingConnectOmi": "Omi'yi bağla"
+    "onboardingConnectOmi": "Omi'yi bağla",
+    "consentShortMessage": "Omi konuşmalarını güvenle saklar ve yapay zekâyla nota dönüştürür.",
+    "consentAiProviders": "Yapay zekâ işleme: {providers}"
 }

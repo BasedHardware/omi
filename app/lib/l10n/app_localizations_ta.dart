@@ -13125,4 +13125,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi-ஐ இணைக்கவும்';
+
+  @override
+  String get consentShortMessage =>
+      'Omi உங்கள் உரையாடல்களைப் பாதுகாப்பாகச் சேமித்து AI மூலம் குறிப்புகளாக மாற்றுகிறது.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI செயலாக்கம்: $providers';
+  }
 }

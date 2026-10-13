@@ -12855,4 +12855,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi 연결';
+
+  @override
+  String get consentShortMessage => 'Omi는 대화를 안전하게 저장하고 AI로 노트로 정리해요.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI 처리: $providers';
+  }
 }

@@ -13059,4 +13059,12 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Conectar Omi';
+
+  @override
+  String get consentShortMessage => 'O Omi guarda suas conversas com segurança e usa IA para transformá-las em notas.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processamento de IA: $providers';
+  }
 }

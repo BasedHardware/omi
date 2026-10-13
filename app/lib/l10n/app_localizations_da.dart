@@ -13023,4 +13023,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Forbind Omi';
+
+  @override
+  String get consentShortMessage => 'Omi gemmer dine samtaler sikkert og bruger AI til at lave dem om til noter.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI-behandling: $providers';
+  }
 }

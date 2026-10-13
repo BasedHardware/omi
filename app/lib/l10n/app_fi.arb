@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Eikö Omi ole vielä saapunut?",
     "onboardingOmiOrdered": "Olen tilannut sen",
     "onboardingOmiNotOrdered": "En ole vielä tilannut",
-    "onboardingConnectOmi": "Yhdistä Omi"
+    "onboardingConnectOmi": "Yhdistä Omi",
+    "consentShortMessage": "Omi tallentaa keskustelusi turvallisesti ja tekee niistä muistiinpanoja tekoälyn avulla.",
+    "consentAiProviders": "Tekoälykäsittely: {providers}"
 }

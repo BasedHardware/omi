@@ -13081,4 +13081,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Подключите Omi';
+
+  @override
+  String get consentShortMessage => 'Omi надёжно хранит ваши разговоры и с помощью ИИ превращает их в заметки.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обработка ИИ: $providers';
+  }
 }

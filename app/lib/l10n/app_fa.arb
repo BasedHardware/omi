@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "هنوز Omi ندارید؟",
     "onboardingOmiOrdered": "سفارش داده‌ام",
     "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
-    "onboardingConnectOmi": "اتصال Omi"
+    "onboardingConnectOmi": "اتصال Omi",
+    "consentShortMessage": "Omi گفتگوهای شما را به‌صورت امن ذخیره می‌کند و با هوش مصنوعی آن‌ها را به یادداشت تبدیل می‌کند.",
+    "consentAiProviders": "پردازش هوش مصنوعی: {providers}"
 }

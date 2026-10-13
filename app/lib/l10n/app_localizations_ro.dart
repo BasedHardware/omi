@@ -13090,4 +13090,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Conectează Omi';
+
+  @override
+  String get consentShortMessage => 'Omi îți păstrează conversațiile în siguranță și le transformă în notițe cu AI.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesare AI: $providers';
+  }
 }

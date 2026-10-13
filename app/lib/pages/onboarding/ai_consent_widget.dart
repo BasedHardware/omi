@@ -41,47 +41,60 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
     super.dispose();
   }
 
+  /// The third-party AI services that receive audio and transcripts. Brand names, not translated.
+  /// Keep in step with the privacy policy and the serving configuration (Apple 5.1.2(i): name who
+  /// receives the data).
+  static const _aiProviders = 'Deepgram, OpenAI';
+
   @override
   Widget build(BuildContext context) {
-    final linkStyle = OmiType.footnote.copyWith(color: OmiColors.textPrimary, decoration: TextDecoration.underline);
+    final l10n = context.l10n;
+    final small = OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4);
+    final link = small.copyWith(color: OmiColors.textPrimary, decoration: TextDecoration.underline);
     return OnboardingStep(
       card: OnboardingCard(
         crossAxisAlignment: CrossAxisAlignment.start,
+        // Same bottom inset as the other steps, so Agree & Continue sits where every Continue does.
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.sm),
         content: [
-          Semantics(header: true, child: Text(context.l10n.dataAndPrivacy, style: OmiType.title1)),
+          Semantics(header: true, child: Text(l10n.dataAndPrivacy, style: OmiType.title2)),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(l10n.consentShortMessage, style: OmiType.subhead.copyWith(height: 1.4)),
           const SizedBox(height: OmiSpacing.md),
-          Text(context.l10n.consentDataMessage, style: OmiType.subhead.copyWith(height: 1.5)),
-          const SizedBox(height: OmiSpacing.md),
+          Text(l10n.consentAiProviders(_aiProviders), style: small),
+          const SizedBox(height: OmiSpacing.xxs),
           RichText(
             text: TextSpan(
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
+              style: small,
               children: [
-                TextSpan(text: context.l10n.yourDataIsProtected),
-                TextSpan(text: context.l10n.privacyPolicy, style: linkStyle, recognizer: _privacyRecognizer),
-                TextSpan(text: context.l10n.and),
-                TextSpan(text: context.l10n.termsOfService, style: linkStyle, recognizer: _termsRecognizer),
-                const TextSpan(text: '.'),
+                TextSpan(text: l10n.privacyPolicy, style: link, recognizer: _privacyRecognizer),
+                const TextSpan(text: '  ·  '),
+                TextSpan(text: l10n.termsOfService, style: link, recognizer: _termsRecognizer),
               ],
             ),
           ),
         ],
         footer: [
-          const SizedBox(height: OmiSpacing.xl),
+          const SizedBox(height: OmiSpacing.md),
+          // The way out sits above the main action, so the thumb lands on Agree & Continue.
+          Align(
+            alignment: Alignment.center,
+            child: OmiButton.tertiary(
+              key: const Key('ai_consent_use_different_account'),
+              label: l10n.useDifferentAccount,
+              size: OmiButtonSize.compact,
+              onPressed: widget.onUseDifferentAccount,
+            ),
+          ),
+          const SizedBox(height: OmiSpacing.xxs),
           OmiButton(
             key: const Key('ai_consent_agree'),
-            label: context.l10n.agreeAndContinue,
+            label: l10n.agreeAndContinue,
             expand: true,
             onPressed: () {
               OmiHaptics.selection();
               widget.onAgree();
             },
-          ),
-          const SizedBox(height: OmiSpacing.xxs),
-          OmiButton.tertiary(
-            key: const Key('ai_consent_use_different_account'),
-            label: context.l10n.useDifferentAccount,
-            expand: true,
-            onPressed: widget.onUseDifferentAccount,
           ),
         ],
       ),

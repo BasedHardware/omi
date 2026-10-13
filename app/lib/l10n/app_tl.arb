@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "Wala ka pang Omi?",
     "onboardingOmiOrdered": "Na-order ko na",
     "onboardingOmiNotOrdered": "Hindi pa naka-order",
-    "onboardingConnectOmi": "Ikonekta ang Omi"
+    "onboardingConnectOmi": "Ikonekta ang Omi",
+    "consentShortMessage": "Ligtas na sine-save ng Omi ang mga usapan mo at ginagawa itong mga tala gamit ang AI.",
+    "consentAiProviders": "Pagproseso ng AI: {providers}"
 }

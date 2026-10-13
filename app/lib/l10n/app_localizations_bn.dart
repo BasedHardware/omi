@@ -13032,4 +13032,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi সংযুক্ত করুন';
+
+  @override
+  String get consentShortMessage => 'Omi আপনার কথোপকথন নিরাপদে সংরক্ষণ করে এবং AI দিয়ে সেগুলোকে নোটে পরিণত করে।';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI প্রক্রিয়াকরণ: $providers';
+  }
 }

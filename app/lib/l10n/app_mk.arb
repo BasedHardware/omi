@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "Сè уште немате Omi?",
     "onboardingOmiOrdered": "Го нарачав",
     "onboardingOmiNotOrdered": "Сè уште не сум нарачал",
-    "onboardingConnectOmi": "Поврзете Omi"
+    "onboardingConnectOmi": "Поврзете Omi",
+    "consentShortMessage": "Omi безбедно ги чува вашите разговори и со ВИ ги претвора во белешки.",
+    "consentAiProviders": "ВИ обработка: {providers}"
 }

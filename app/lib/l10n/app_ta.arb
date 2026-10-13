@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "இன்னும் உங்கள் Omi இல்லையா?",
     "onboardingOmiOrdered": "நான் ஆர்டர் செய்துவிட்டேன்",
     "onboardingOmiNotOrdered": "இன்னும் ஆர்டர் செய்யவில்லை",
-    "onboardingConnectOmi": "Omi-ஐ இணைக்கவும்"
+    "onboardingConnectOmi": "Omi-ஐ இணைக்கவும்",
+    "consentShortMessage": "Omi உங்கள் உரையாடல்களைப் பாதுகாப்பாகச் சேமித்து AI மூலம் குறிப்புகளாக மாற்றுகிறது.",
+    "consentAiProviders": "AI செயலாக்கம்: {providers}"
 }

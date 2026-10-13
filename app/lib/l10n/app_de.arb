@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Hast du dein Omi noch nicht?",
     "onboardingOmiOrdered": "Ich habe es bestellt",
     "onboardingOmiNotOrdered": "Noch nicht bestellt",
-    "onboardingConnectOmi": "Omi verbinden"
+    "onboardingConnectOmi": "Omi verbinden",
+    "consentShortMessage": "Omi speichert deine Gespräche sicher und macht mit KI Notizen daraus.",
+    "consentAiProviders": "KI-Verarbeitung: {providers}"
 }

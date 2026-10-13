@@ -13059,4 +13059,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Prijunkite Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Omi saugiai saugo jūsų pokalbius ir dirbtinio intelekto pagalba paverčia juos užrašais.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'DI apdorojimas: $providers';
+  }
 }

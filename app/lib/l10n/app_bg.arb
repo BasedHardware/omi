@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Все още нямате Omi?",
     "onboardingOmiOrdered": "Поръчал съм го",
     "onboardingOmiNotOrdered": "Още не съм поръчал",
-    "onboardingConnectOmi": "Свържете Omi"
+    "onboardingConnectOmi": "Свържете Omi",
+    "consentShortMessage": "Omi съхранява разговорите ви сигурно и с ИИ ги превръща в бележки.",
+    "consentAiProviders": "ИИ обработка: {providers}"
 }

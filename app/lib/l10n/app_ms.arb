@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Belum ada Omi lagi?",
     "onboardingOmiOrdered": "Saya sudah memesannya",
     "onboardingOmiNotOrdered": "Belum memesan",
-    "onboardingConnectOmi": "Sambungkan Omi"
+    "onboardingConnectOmi": "Sambungkan Omi",
+    "consentShortMessage": "Omi menyimpan perbualan anda dengan selamat dan menggunakan AI untuk menjadikannya nota.",
+    "consentAiProviders": "Pemprosesan AI: {providers}"
 }

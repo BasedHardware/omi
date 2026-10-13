@@ -13074,4 +13074,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get consentShortMessage => 'Omi ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಉಳಿಸಿ AI ಬಳಸಿ ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI ಸಂಸ್ಕರಣೆ: $providers';
+  }
 }

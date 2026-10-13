@@ -13049,4 +13049,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi کو جوڑیں';
+
+  @override
+  String get consentShortMessage => 'Omi آپ کی گفتگو محفوظ طریقے سے رکھتا ہے اور AI سے انہیں نوٹس میں بدلتا ہے۔';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI پروسیسنگ: $providers';
+  }
 }

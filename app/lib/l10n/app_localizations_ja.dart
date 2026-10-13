@@ -12850,4 +12850,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omiを接続';
+
+  @override
+  String get consentShortMessage => 'Omiは会話を安全に保存し、AIでメモにまとめます。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI処理: $providers';
+  }
 }

@@ -11446,5 +11446,7 @@
     "onboardingNoOmiYet": "ఇంకా మీ Omi లేదా?",
     "onboardingOmiOrdered": "నేను ఆర్డర్ చేశాను",
     "onboardingOmiNotOrdered": "ఇంకా ఆర్డర్ చేయలేదు",
-    "onboardingConnectOmi": "Omiని కనెక్ట్ చేయండి"
+    "onboardingConnectOmi": "Omiని కనెక్ట్ చేయండి",
+    "consentShortMessage": "Omi మీ సంభాషణలను సురక్షితంగా సేవ్ చేసి, AIతో వాటిని నోట్స్‌గా మారుస్తుంది.",
+    "consentAiProviders": "AI ప్రాసెసింగ్: {providers}"
 }

@@ -13065,4 +13065,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Povežite Omi';
+
+  @override
+  String get consentShortMessage => 'Omi sigurno čuva vaše razgovore i pomoću AI ih pretvara u bilješke.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'AI obrada: $providers';
+  }
 }

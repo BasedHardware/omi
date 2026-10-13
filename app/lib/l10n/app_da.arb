@@ -4051,5 +4051,7 @@
     "onboardingNoOmiYet": "Har du ikke din Omi endnu?",
     "onboardingOmiOrdered": "Jeg har bestilt den",
     "onboardingOmiNotOrdered": "Ikke bestilt endnu",
-    "onboardingConnectOmi": "Forbind Omi"
+    "onboardingConnectOmi": "Forbind Omi",
+    "consentShortMessage": "Omi gemmer dine samtaler sikkert og bruger AI til at lave dem om til noter.",
+    "consentAiProviders": "AI-behandling: {providers}"
 }

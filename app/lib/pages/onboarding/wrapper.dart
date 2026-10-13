@@ -522,6 +522,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   // Arriving at Connect Omi is a moment, not another form: a plain cross-fade lets the
                   // step's own entrance carry it.
                   fadeOnly: index == kConnectOmiPage,
+                  // Sign-in and consent share their photo: the consent card rises over it, so it
+                  // reads as part of signing in rather than a new page.
+                  rise: index == kAiConsentPage || (index == kAuthPage && !_forward),
                   child: pages[index],
                 ),
               ),
@@ -536,11 +539,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 /// Moves between steps: the new step slides in from the side the reader is heading and fades up,
 /// the old one drifts the other way and fades out. Instant under Reduce Motion.
 class _StepTransition extends StatelessWidget {
-  const _StepTransition({required this.index, required this.forward, required this.child, this.fadeOnly = false});
+  const _StepTransition({
+    required this.index,
+    required this.forward,
+    required this.child,
+    this.fadeOnly = false,
+    this.rise = false,
+  });
 
   final int index;
   final bool forward;
   final bool fadeOnly;
+
+  /// The incoming step rises from the bottom edge (a sheet over the same background); the
+  /// outgoing one sinks back down when going the other way.
+  final bool rise;
   final Widget child;
 
   static const double _shift = 0.08;
@@ -560,13 +573,14 @@ class _StepTransition extends StatelessWidget {
       transitionBuilder: (child, animation) {
         final incoming = child.key == ValueKey(index);
         // An outgoing child runs its animation backwards, ending at its begin offset.
-        final from = fadeOnly ? 0.0 : ((incoming == forward) ? _shift : -_shift);
+        final from = fadeOnly || rise ? 0.0 : ((incoming == forward) ? _shift : -_shift);
+        final Offset begin = rise ? Offset(0, incoming == forward ? 0.35 : 0) : Offset(from, 0);
         return IgnorePointer(
           ignoring: !incoming,
           child: FadeTransition(
             opacity: animation,
             child: SlideTransition(
-              position: Tween<Offset>(begin: Offset(from, 0), end: Offset.zero).animate(animation),
+              position: Tween<Offset>(begin: begin, end: Offset.zero).animate(animation),
               child: child,
             ),
           ),

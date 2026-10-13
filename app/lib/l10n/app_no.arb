@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Har du ikke fått Omi ennå?",
     "onboardingOmiOrdered": "Jeg har bestilt den",
     "onboardingOmiNotOrdered": "Ikke bestilt ennå",
-    "onboardingConnectOmi": "Koble til Omi"
+    "onboardingConnectOmi": "Koble til Omi",
+    "consentShortMessage": "Omi lagrer samtalene dine trygt og gjør dem om til notater med KI.",
+    "consentAiProviders": "KI-behandling: {providers}"
 }

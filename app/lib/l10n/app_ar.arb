@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "ليس لديك Omi بعد؟",
     "onboardingOmiOrdered": "لقد طلبته",
     "onboardingOmiNotOrdered": "لم أطلبه بعد",
-    "onboardingConnectOmi": "اتصل بـ Omi"
+    "onboardingConnectOmi": "اتصل بـ Omi",
+    "consentShortMessage": "يحفظ Omi محادثاتك بأمان ويستخدم الذكاء الاصطناعي لتحويلها إلى ملاحظات.",
+    "consentAiProviders": "معالجة الذكاء الاصطناعي: {providers}"
 }

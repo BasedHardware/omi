@@ -23246,6 +23246,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect Omi'**
   String get onboardingConnectOmi;
+
+  /// Onboarding data & privacy consent: one-line summary of storage and AI processing
+  ///
+  /// In en, this message translates to:
+  /// **'Omi stores your conversations securely and uses AI to turn them into notes.'**
+  String get consentShortMessage;
+
+  /// Onboarding consent: names the third-party AI providers (brand names, not translated)
+  ///
+  /// In en, this message translates to:
+  /// **'AI processing: {providers}'**
+  String consentAiProviders(String providers);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

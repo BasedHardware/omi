@@ -13065,4 +13065,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Підключіть Omi';
+
+  @override
+  String get consentShortMessage => 'Omi надійно зберігає ваші розмови й за допомогою ШІ перетворює їх на нотатки.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обробка ШІ: $providers';
+  }
 }

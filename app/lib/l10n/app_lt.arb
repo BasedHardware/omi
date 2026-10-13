@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Dar neturite Omi?",
     "onboardingOmiOrdered": "Jau užsisakiau",
     "onboardingOmiNotOrdered": "Dar neužsisakiau",
-    "onboardingConnectOmi": "Prijunkite Omi"
+    "onboardingConnectOmi": "Prijunkite Omi",
+    "consentShortMessage": "Omi saugiai saugo jūsų pokalbius ir dirbtinio intelekto pagalba paverčia juos užrašais.",
+    "consentAiProviders": "DI apdorojimas: {providers}"
 }

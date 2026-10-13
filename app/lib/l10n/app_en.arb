@@ -15787,5 +15787,19 @@
     "onboardingConnectOmi": "Connect Omi",
     "@onboardingConnectOmi": {
         "description": "Onboarding connect step title; Omi is the brand name of the wearable"
+    },
+    "consentShortMessage": "Omi stores your conversations securely and uses AI to turn them into notes.",
+    "@consentShortMessage": {
+        "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
+    },
+    "consentAiProviders": "AI processing: {providers}",
+    "@consentAiProviders": {
+        "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
+        "placeholders": {
+            "providers": {
+                "type": "String",
+                "example": "Deepgram, OpenAI"
+            }
+        }
     }
 }

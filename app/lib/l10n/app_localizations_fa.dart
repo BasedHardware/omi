@@ -13030,4 +13030,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'اتصال Omi';
+
+  @override
+  String get consentShortMessage =>
+      'Omi گفتگوهای شما را به‌صورت امن ذخیره می‌کند و با هوش مصنوعی آن‌ها را به یادداشت تبدیل می‌کند.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'پردازش هوش مصنوعی: $providers';
+  }
 }

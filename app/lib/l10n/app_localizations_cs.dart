@@ -13037,4 +13037,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Připojte Omi';
+
+  @override
+  String get consentShortMessage => 'Omi bezpečně ukládá vaše konverzace a pomocí AI z nich dělá poznámky.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Zpracování AI: $providers';
+  }
 }

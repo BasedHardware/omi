@@ -13064,4 +13064,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Savienot Omi';
+
+  @override
+  String get consentShortMessage => 'Omi droši glabā jūsu sarunas un ar MI palīdzību pārvērš tās piezīmēs.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'MI apstrāde: $providers';
+  }
 }

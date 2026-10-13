@@ -4105,5 +4105,7 @@
     "onboardingNoOmiYet": "Még nincs meg az Omid?",
     "onboardingOmiOrdered": "Már megrendeltem",
     "onboardingOmiNotOrdered": "Még nem rendeltem",
-    "onboardingConnectOmi": "Omi csatlakoztatása"
+    "onboardingConnectOmi": "Omi csatlakoztatása",
+    "consentShortMessage": "Az Omi biztonságosan tárolja a beszélgetéseidet, és MI segítségével jegyzetekké alakítja őket.",
+    "consentAiProviders": "MI-feldolgozás: {providers}"
 }

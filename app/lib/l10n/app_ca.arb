@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "Encara no tens l'Omi?",
     "onboardingOmiOrdered": "Ja l'he demanat",
     "onboardingOmiNotOrdered": "Encara no l'he demanat",
-    "onboardingConnectOmi": "Connecta l'Omi"
+    "onboardingConnectOmi": "Connecta l'Omi",
+    "consentShortMessage": "Omi desa les teves converses de manera segura i les converteix en notes amb IA.",
+    "consentAiProviders": "Processament d'IA: {providers}"
 }

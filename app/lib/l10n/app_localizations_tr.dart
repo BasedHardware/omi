@@ -13048,4 +13048,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingConnectOmi => 'Omi\'yi bağla';
+
+  @override
+  String get consentShortMessage => 'Omi konuşmalarını güvenle saklar ve yapay zekâyla nota dönüştürür.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Yapay zekâ işleme: $providers';
+  }
 }

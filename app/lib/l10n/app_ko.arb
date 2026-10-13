@@ -4009,5 +4009,7 @@
     "onboardingNoOmiYet": "아직 Omi가 없으신가요?",
     "onboardingOmiOrdered": "주문했어요",
     "onboardingOmiNotOrdered": "아직 주문하지 않았어요",
-    "onboardingConnectOmi": "Omi 연결"
+    "onboardingConnectOmi": "Omi 연결",
+    "consentShortMessage": "Omi는 대화를 안전하게 저장하고 AI로 노트로 정리해요.",
+    "consentAiProviders": "AI 처리: {providers}"
 }
