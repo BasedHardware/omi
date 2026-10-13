@@ -3658,7 +3658,9 @@ class CaptureController extends ChangeNotifier
     } else {
       request = processInProgressConversationOutcome();
     }
-    _lastProcessRequest = request.then((outcome) => outcome.response);
+    if (confirmedProcessing) {
+      _lastProcessRequest = request.then((outcome) => outcome.response);
+    }
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
