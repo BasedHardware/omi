@@ -89,6 +89,33 @@ void main() {
     expect(adapter.events.where((e) => e.eventName == 'Guided Intro Payoff Continued'), hasLength(2));
   });
 
+  test('continuing a partial typed payoff completes the intro without a false voice failure', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final io = ExperienceIO()..memorySuccess = false;
+    final flow = GuidedVoiceController(io, accountUid: 'fixture');
+    await flow.typeInstead();
+    await flow.submitTyped('I build bicycles.');
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.typeInstead();
+    await flow.submitTyped('Finish my project');
+    await flow.saveAll();
+    expect(flow.stage, IntroductionStage.review);
+    expect(flow.goalSaved, isTrue);
+    await flow.showPayoff('Question', 'Finish my project');
+    flow.continuePayoff();
+    flow.continuePayoff();
+    flow.dispose();
+    await AnalyticsManager.flushPending(force: true);
+    final completed = adapter.events.where((e) => e.eventName == 'Guided Intro Completed').toList();
+    expect(completed, hasLength(1));
+    expect(completed.single.properties['completion_mode'], 'saved');
+    expect(completed.single.properties['voice_result'], 'skipped');
+    expect(completed.single.properties['goal_result'], 'saved');
+  });
+
   test('guided intro events carry bounded funnel properties without content', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);

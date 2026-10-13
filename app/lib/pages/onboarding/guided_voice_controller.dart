@@ -193,7 +193,7 @@ class GuidedVoiceController extends ChangeNotifier {
       completionMode: completionMode,
       voiceResult: voiceSaved
           ? 'success'
-          : completionMode == 'saved'
+          : completionMode == 'saved' && _voiceAttempts > 0
               ? 'failed'
               : 'skipped',
       memorySaved: savedMemoryCount,
@@ -741,6 +741,7 @@ class GuidedVoiceController extends ChangeNotifier {
   void continuePayoff() {
     if (_disposed || _payoffContinued || stage != IntroductionStage.payoff) return;
     _payoffContinued = true;
+    _recordTerminal(completionMode: 'saved');
     payoffLoading = false;
     _recordPayoffShown();
     const TypedEvents().emit(const GuidedIntroPayoffContinued());
