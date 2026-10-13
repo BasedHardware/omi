@@ -1614,6 +1614,17 @@ def _assign_manual_speaker(
                 datetime.now(timezone.utc),
                 assignment_generation=generation,
             )
+    elif person_id or is_user:
+        # A later person/user assignment replaces the exclusion (reversible by
+        # design), so the ignored-voice marker must not outlive that decision.
+        resolved_ids = set(resolved)
+        reassigned = {
+            int(segment['speaker_id'])
+            for segment in raw.get('transcript_segments') or []
+            if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
+        } or ({speaker_id} if speaker_id is not None else set())
+        if reassigned:
+            voice_profiles_db.clear_ignored_voices(uid, resolved_conversation_id, sorted(reassigned))
     _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,

@@ -80,3 +80,38 @@ def test_restore_cannot_replace_a_newer_label_or_another_users_marker():
     assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
     assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
     assert store.rows[path]['manual_speaker_assignments']['speakers']['1'] == decision
+
+
+def test_restore_drops_generation_matched_segment_scoped_exclusions():
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    path = ('users', 'u', 'conversations', 'c1')
+    # Live-sheet bulk exclusion shape: no speakers decision, only segments.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 1,
+            'segments': {
+                's1': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 1},
+                's2': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 1},
+                'keep': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 2},
+            },
+        }
+    }
+    assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
+    raw = store.rows[path]
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        'u', raw['manual_speaker_assignments'], bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    assert set(receipt['segments']) == {'keep'}
+    assert receipt['generation'] == 2
+    assert db.ignored_voice_keys(store.rows[STATE]) == set()
+
+
+def test_positive_assignment_supersedes_marker():
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    db.record_ignored_voice('u', 'c2', 2, NOW, assignment_generation=1, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c1', [1], firestore_client=store) == 1
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c2:2'}
+    assert db.clear_ignored_voices('u', 'c1', [1], firestore_client=store) == 0
+    assert db.clear_ignored_voices('u', 'c1', [], firestore_client=store) == 0

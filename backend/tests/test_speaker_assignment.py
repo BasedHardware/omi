@@ -40,6 +40,7 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
     }
     learning = Mock()
     ignored = Mock()
+    cleared = Mock()
     namespace = dict(
         Optional=Optional,
         List=list,
@@ -48,7 +49,7 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         Any=object,
         datetime=__import__('datetime').datetime,
         timezone=__import__('datetime').timezone,
-        voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored),
+        voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
         teaching_segment_ids=lambda segments, resolved: resolved,
         delete_speech_profile_blob=Mock(),
         run_authorized_person_learning=learning,
@@ -109,8 +110,17 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         ]
     )
     assert ignored.call_count == 2
+    cleared.assert_not_called()
     learning.assert_not_called()
-    for person_id, is_user in [('p1', False), (None, True)]:
-        segments, receipt, _, _ = manual_assignment(raw, person_id=person_id, is_user=is_user, speaker_id=4)
-        assert manual_rejected_speakers(receipt) == {}
-        assert all(s['person_id'] == person_id and s['is_user'] == is_user for s in segments[:2])
+    for assign_type, value in (('person_id', 'p1'), ('is_user', 'true')):
+        # Drive the router path: a positive bulk assignment must retire the
+        # ignored-voice marker that the earlier exclusion recorded.
+        positive = BulkAssignSegmentsRequest(segment_ids=['s1'], assign_type=assign_type, value=value)
+        response = namespace['assign_segments_bulk']('conversation', positive, BackgroundTasks(), uid='u')
+        assert response.transcript_segments[0].person_id == ('p1' if assign_type == 'person_id' else None)
+        assert response.transcript_segments[0].is_user is (assign_type == 'is_user')
+    # Replacing the exclusion with a person/user assignment retires the
+    # ignored-voice marker: the voice leaves Ignored Voices and matching again.
+    cleared.assert_has_calls([call('u', 'conversation', [4]), call('u', 'conversation', [4])])
+    assert cleared.call_count == 2
+    learning.assert_not_called()

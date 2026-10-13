@@ -305,6 +305,7 @@ def remove_ignored_voice(
         decision = speakers.get(str(speaker_id)) or {}
         # Restore eligibility without undoing a newer manual label or guessing
         # which decision created a legacy marker without a generation fence.
+        receipt_changed = False
         if marker.get('assignment_generation') is not None and (
             decision.get('generation') == marker['assignment_generation']
             and not decision.get('person_id')
@@ -312,6 +313,28 @@ def remove_ignored_voice(
         ):
             speakers.pop(str(speaker_id), None)
             receipt['speakers'] = speakers
+            receipt_changed = True
+        # Live-sheet bulk exclusions store segment-scoped decisions; a restore
+        # must drop those too, or the speaker stays manually decided (and
+        # prompt-suppressed) while the marker is gone from Settings.
+        if marker.get('assignment_generation') is not None:
+            segments = {
+                segment_id: entry
+                for segment_id, entry in (receipt.get('segments') or {}).items()
+                if not (
+                    entry.get('speaker_id') == speaker_id
+                    and entry.get('generation') == marker['assignment_generation']
+                    and not entry.get('person_id')
+                    and not entry.get('is_user')
+                )
+            }
+            if segments != dict(receipt.get('segments') or {}):
+                if segments:
+                    receipt['segments'] = segments
+                else:
+                    receipt.pop('segments', None)
+                receipt_changed = True
+        if receipt_changed:
             receipt['generation'] = receipt.get('generation', 0) + 1
             transaction.update(
                 conversation_ref,
@@ -324,3 +347,34 @@ def remove_ignored_voice(
         return True
 
     return run_transactional(client, remove)
+
+
+def clear_ignored_voices(
+    uid: str, conversation_id: str, speaker_ids: List[int], *, firestore_client: Any = None
+) -> int:
+    """Drop ignored-voice markers a newer positive assignment supersedes.
+
+    A later person/user assignment replaces the exclusion (the live sheet is
+    reversible by design), so the marker that keeps the voice listed under
+    Settings > Ignored Voices must not outlive the decision it recorded.
+    """
+
+    if not speaker_ids:
+        return 0
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+    def clear(transaction: Any) -> int:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        ignored = dict(state.get('ignored_voices') or {})
+        removed = 0
+        for speaker_id in speaker_ids:
+            if ignored.pop(ignored_voice_key(conversation_id, speaker_id), None) is not None:
+                removed += 1
+        if removed:
+            transaction.update(ref, {'ignored_voices': ignored})
+        return removed
+
+    return run_transactional(client, clear)
