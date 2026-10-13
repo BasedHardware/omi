@@ -2029,13 +2029,6 @@
       ],
       "reason": "Existing rule outside this admission slice; unchanged fingerprint only, not deployment approval."
     },
-    "omi-llm-gateway-client-reachability": {
-      "sha256": "e6cd0161109e9f7f1b5669beba163c1ebfe13e456eb4a994ced2e38fe2d115a0",
-      "errors": [
-        "missing metrics: llm_gateway_chat_extraction_requests_total, llm_gateway_client_first_byte_seconds_bucket"
-      ],
-      "reason": "Paused by admission hold; unpausing requires reviewed proof and removal of the hold."
-    },
     "omi-queue-oldest-ready": {
       "sha256": "d473be07d4c6670398390eaf713b843b10bf067f07fc24399f8f2022bf1af51f",
       "errors": [

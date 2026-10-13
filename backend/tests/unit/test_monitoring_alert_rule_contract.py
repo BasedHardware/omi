@@ -322,7 +322,8 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     reachability_expr = split["omi-llm-gateway-client-reachability"]["data"][0]["model"]["expr"]
     # Only the initialized circuit gauge is a live client signal; the extraction and
     # first-byte families had zero prod series for 10 days (2026-10-13 backtest).
-    assert reachability_expr == "max(llm_gateway_circuit_open) > bool 0"
+    # Gateway pods export a permanent 0 for this client gauge; scope to client jobs so it cannot mask them.
+    assert reachability_expr == 'max(llm_gateway_circuit_open{job=~"backend-listen-metrics|pusher-metrics"}) > bool 0'
     assert "llm_gateway_chat_extraction_requests_total" not in reachability_expr
     assert "llm_gateway_client_first_byte_seconds_bucket" not in reachability_expr
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
@@ -685,7 +686,10 @@ STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
     'component=~"stt_selection|stt_live_session",to_mode!="unavailable"}[6h]))'
+    ' unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1),'
+    ' "to_mode", "$1", "provider", "(.*)")'
 )
+# Retired providers (e.g. Deepgram) are intentionally unfunded and must not page.
 # to_mode="unavailable" is the no-provider-left sentinel: it can never recover, so
 # including it made the rule fire on every evaluation (2026-10-13 replay).
 STT_FALLBACK_LEG_RECOVERED_EXPR = (

@@ -8238,7 +8238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(llm_gateway_circuit_open) > bool 0",
+          "expr": "max(llm_gateway_circuit_open{job=~\"backend-listen-metrics|pusher-metrics\"}) > bool 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8300,7 +8300,7 @@
       "summary": "A backend process opened its LLM gateway circuit after transport failures and is bypassing the gateway",
       "threshold": "max(llm_gateway_circuit_open) > 0 for 5m",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
-      "scope": "Gateway clients in backend-listen, pusher and llm-gateway pods (llm_gateway_circuit_open is initialized to 0 there). The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
+      "scope": "Gateway clients in backend-listen and pusher pods (llm_gateway_circuit_open is initialized to 0 there). llm-gateway pods are excluded because they import the gauge but never open a client circuit, so their permanent 0 would mask a client series. If both client jobs stop being scraped, the result is NoData (OK); the backend-listen and pusher scrape/up alerts own that case. The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
@@ -12125,7 +12125,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h]))",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -12225,13 +12225,13 @@
       "__panelId__": "16",
       "summary": "A live-STT fallback leg (to_mode) had at least 50 selection or mid-session hops in 6h and recovered none of them",
       "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode (excluding the terminal to_mode=unavailable), for 30m",
-      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
+      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Retired providers (omi_stt_provider_retired == 1, e.g. Deepgram) are excluded so an intentionally unfunded leg cannot page. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
       "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. to_mode=unavailable is the no-provider-left sentinel, never a leg that can recover, so it is excluded (chain-exhaustion alerts own it). job=backend-listen-metrics Counter.",
-      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus evaluation of this exact increase() expression is still owed.",
+      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus replay 2026-10-13 (30m steps, 10 days, after excluding unavailable and retired legs): one real episode, to_mode=parakeet 10-06 13:43 to 10-07 04:13 (capacity_full exhaustion during the L4 stockout), plus two single samples.",
       "safe_next_action": "Identify the to_mode on panel 16. For budget exhaustion see panel 18 and raise the vendor cap. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus evaluation still owed.",
-      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus evaluation still owed."
+      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus replay 2026-10-13 confirmed (see verification).",
+      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus replay 2026-10-13 confirmed (see verification)."
     },
     "labels": {
       "alert_identity": "omi-stt-fallback-leg-dead",

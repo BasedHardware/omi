@@ -900,7 +900,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(llm_gateway_circuit_open) > bool 0",
+          "expr": "max(llm_gateway_circuit_open{job=~\"backend-listen-metrics|pusher-metrics\"}) > bool 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -962,7 +962,7 @@
       "summary": "A backend process opened its LLM gateway circuit after transport failures and is bypassing the gateway",
       "threshold": "max(llm_gateway_circuit_open) > 0 for 5m",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
-      "scope": "Gateway clients in backend-listen, pusher and llm-gateway pods (llm_gateway_circuit_open is initialized to 0 there). The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
+      "scope": "Gateway clients in backend-listen and pusher pods (llm_gateway_circuit_open is initialized to 0 there). llm-gateway pods are excluded because they import the gauge but never open a client circuit, so their permanent 0 would mask a client series. If both client jobs stop being scraped, the result is NoData (OK); the backend-listen and pusher scrape/up alerts own that case. The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
