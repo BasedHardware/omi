@@ -42,3 +42,49 @@ pending official pricing, so these dollar equivalents remain provisional.
 This does not switch Free accounts to ladder v1. Display equivalents use the
 card plus supplied recent-mix overhead per recording hour/chat; these remain
 internal helpers with no API/client surface.
+
+## Persistence and reads
+
+`database.usage_units` projects units into the same `hourly_usage` set/merge
+writes and the existing `llm_gateway_user_days` rollup writes. Sync's content
+marker remains in its existing transaction. Gateway attempt identity remains
+the canonical deduplication boundary, and each immutable attempt includes its
+v1 unit annotation. LLM retries are separate cost attempts; duplicate attempt
+IDs do not add units. Provider counters are never copied into request content.
+
+Live provenance follows the provider serving at flush time. A Deepgram BYOK
+key only excludes cloud Deepgram; Parakeet/Modulate remain Omi-funded, and
+self-hosted Deepgram uses the explicit unknown-provider compute proxy.
+Custom STT is zero for transcription while funded downstream LLM calls still
+consume units. Current listen, sync and proxy counters are estimated as counter
+seconds × 0.32; no producer falsely declares these accepted speech. Sync's
+counter is already initial VAD duration, so its mandated ratio proxy can
+particularly underestimate accepted speech; that basis is recorded. The
+optional accepted-speech hook preserves fractional quantities when available.
+On-device/PTT/import paths without these writers remain coverage gaps.
+
+Firestore write counts are unchanged: ordinary hourly writes 1→1, sync content
+marker transactions 2→2, gateway attempt+day rollup 2→2. There are no new per-event
+write calls or subscriptions reads for projection. MCP/API-only requests have
+no existing durable usage write on cache hits, so strict zero additional writes
+means their request quantities remain explicitly incomplete. Web synthesis
+attempts piggyback the provisional web-tool infra charge on the existing rollup;
+vendor search request fees remain unmeasured.
+
+`get_usage_units(uid, period)` takes a timezone-aware datetime selecting a UTC
+calendar month; annual plans also reset monthly. It reads one projected hourly
+query, at most 31 direct hashed day-rollups, and subscription metadata. It never
+scans attempts or reads user content. Outputs include used units, the price-
+resolved version's budget (legacy has none), feature/funding totals, status
+counts, and coverage gaps. It remains an internal helper with no route/client
+surface. Missing old projections are counted as incomplete lower-bound data;
+no historical document is rewritten or backfilled. Attempt delivery and
+rollups retain their existing best-effort failure contract; complete capture
+cannot be asserted from the rollup alone.
+
+Hourly plan attribution now uses the existing nested-field expansion primitive
+before set/merge. Reporting adds disjoint historical literal dotted fields to
+new nested increments. Root meter/finops counters are unchanged, so monthly
+allowance and finops extraction remain on their existing quantity. Tests use
+the real Firestore protobuf serializer to verify unquoted nested field paths
+and preserve the root-counter readers across both stored shapes.

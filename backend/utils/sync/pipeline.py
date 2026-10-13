@@ -2839,6 +2839,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             transcription_seconds=usage_seconds,
                             speech_seconds=usage_seconds,
                             idempotency_key=content_id,
+                            usage_metadata={"funding": "omi", "provider": sync_provider, "source": "sync_v2"},
                         )
                 except Exception as e:
                     logger.error(
@@ -2847,7 +2848,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     )
                     if content_id:
                         raise
-
             stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
             job_phase = 'finalize'
             failure_phase, failure_class, failure_subtype = (
