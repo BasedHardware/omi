@@ -52,22 +52,43 @@ bounds and capacity-slot cancellation fences allow 660 seconds, including a
 690 seconds only when full mode is configured with a nonempty allowlist; their
 handlers still enforce each UID's own mode. Bounded model/pass/drain/manual/slot deadlines are
 unchanged. Owner leases already have no timed expiry and remain conservative
-on ambiguous cancellation. Before enabling full drains, the Scheduler attempt
-and backend-sync request deadlines must exceed 660 seconds; the checked-in
-Scheduler contract currently allows 300 seconds. These deployment settings are
-not changed here.
+on ambiguous cancellation. `deploy/scheduler/jobs.yaml` sets the prod sweep
+attempt deadline to 720 seconds, above the 690-second HTTP bound. Prod and dev
+canary jobs retain 180 seconds (their handler has a 90-second bound); dev canary
+stays paused, and no dev sweep is declared.
 
-Gateway inspection at this revision: `llm_gateway/gateway/dream_lanes.py` derives
-Dream routes from the desktop reserved artifact and sets
-`timeouts.request_ms=60000` and `retry.max_attempts=1`. There is no Dream input
-size/token ceiling in chat request validation, route artifacts, or the gateway
-chart. The 96000-character SystemOne limit and proactivity request byte limits
-belong to other lanes. The 60-second gateway/provider request deadline can still
-stop a large full call before the backend's 480-second bound. This PR deliberately
-leaves gateway code/config untouched; operators must resolve that external
-constraint before claiming large-context live acceptance. No provider fallback
-is added; reserved-capacity waits keep dirty work and never authorize shared
-Gemini capacity. Existing gateway rejection routing remains gateway-owned.
+`llm_gateway/gateway/dream_lanes.py` derives the Dream routes from the desktop
+reserved artifact. Reasoning now uses `timeouts.request_ms=480000`, matching
+full mode's model/read bound; triage retains 60000 and both stages retain one
+provider attempt. The gateway chart's BackendConfig has `timeoutSec: 960`, so
+the ingress does not impose an earlier 60-second cutoff. There is no Dream input
+size ceiling in chat validation or route artifacts.
+
+The repo's Luna cost card (`llm_gateway/config/cost_rate_cards.yaml`) has a
+272000-token **pricing** threshold, not a maximum input size. No smaller Luna
+context maximum is declared in the gateway. Official
+[GPT-6 Luna limits](https://developers.openai.com/api/docs/models/gpt-6-luna),
+verified 2026-10-13, give a 1050000-token context window and 128000-token maximum
+output. At the requested 16000-token output limit, that leaves 1034000 tokens
+for input; the full-mode hard input-plus-completion fence is 1048576, below
+Luna's total window. No additional shrinking is needed, even at the maximum
+operator-configured full budget. Gemini request-rejection recovery can therefore
+retain the whole admitted request when trying the existing Luna fallback.
+Reservation exhaustion and provider 429 already have **no** Dream provider/LKG
+fallback in `gateway/reserved_fallback.py` and `gateway/resolver.py`; backend
+transport turns those failures into `CapacityWait` and retains dirty work.
+This policy is retained and tested through the executor/transport boundary.
+No shared/pay-as-you-go Gemini route is added.
+
+Cloud Run timeout metadata was read only via managed `ro-prod`/`ro-dev` service
+accounts on 2026-10-13: `backend-sync` in `us-central1` is 3600 seconds in prod
+and 300 seconds in dev. Prod covers the required 690 seconds; dev does not.
+The timeout is not declared in `deploy/runtime_env/_base.yaml` or the env overlays.
+The existing deploy action consumes the rendered common flags without `--timeout`,
+so it preserves the live setting; `scripts/verify_backend_release_vector.py`
+currently enforces only a 300-second minimum. Before enabling full mode on the
+dev HTTP host, raise its request timeout to at least 690 seconds (900 recommended).
+The code change does not alter live Cloud Run settings or enable full mode.
 
 `dry_run(uid, records, vocabulary=...)` uses the same gated projection, planning
 and guards without storage reads, lease/admission, acknowledgement or effects.
@@ -762,7 +783,7 @@ Older targets join before retrieval and must fit the 70% target slice with at mo
 
 The drain selects bounded 100-owner document-ID pages, then ranks by usage weight × age since successful pass (paid weight 2, paid ties first). Priority is page-local: bounded Firestore reads and deterministic page rotation are preferable to scanning every owner or synchronizing a stale global entitlement score. Under continuing capacity and repeated sweeps, advancing only past a contiguous attempted prefix reaches all owners; there is no permanent top-100 cutoff. A capacity wait stops new work and retains untried owners. Current subscription plans are projected outside transactions; cursor completion is compare-and-set on the prior cursor.
 
-Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 300 seconds in the checked-in contract; the backend-sync Cloud Run request timeout must also be at least 240 seconds. Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
+Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 720 seconds in the checked-in contract; full drains require a backend-sync Cloud Run request timeout of at least 690 seconds (prod is 3600; dev is 300 and must be raised before full-mode HTTP enablement). Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
 
 Shared Redis slots default to two (env bound 1–8), expire in 240 seconds, and release by matching token. Reservation evidence is advisory: unknown evidence or an unavailable reservation store admits through the existing gateway route. Explicit 120-second cooldowns and occupied slots still wait. During Redis outages, bounded local slots retain the 240-second cancellation fence and locally observed cooldowns retain their expiry; distributed concurrency evidence is unavailable. Reserved-only Gemini reasoning cannot use provider/LKG fallback for capacity errors. Global USD, per-user caps and owner leases remain authoritative. Runtime-contract tests compare computed reservation keys across backend and gateway envs, including compute project and reservation location.
 
