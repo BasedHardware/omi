@@ -13959,6 +13959,7 @@
             "type": "array"
           },
           "kind": {
+            "description": "Spelling corrects a misheard or misspelled name or term. Never rewrite grammar, remove filler, or guess unclear speech.",
             "enum": [
               "spelling",
               "title",

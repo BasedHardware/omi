@@ -32,6 +32,7 @@ NOW = datetime(2030, 1, 1, tzinfo=timezone.utc)
 @pytest.fixture
 def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', ' someone-else, ' + UID + ', ')
     return Caps().for_uid(UID)
 
@@ -59,6 +60,7 @@ def test_allowlist_defaults_and_budgets(monkeypatch, full):
     monkeypatch.delenv('DREAM_AGENT_CONTEXT_MODE')
     assert context_mode(UID) == 'bounded'
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '')
     assert Caps().for_uid(UID) == Caps()
 

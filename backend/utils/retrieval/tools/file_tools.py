@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 _REQUEST_FIELD_400_MARKERS = ('model', 'messages', 'max_completion_tokens', 'stream')
 _REQUEST_SHAPE_400_CODES = frozenset({'model_not_found'})
 # Gateway-normalized provider rejections (llm_gateway/gateway/schemas.py) that
-# name a field the request itself constructs. The gateway allowlists these
-# params, so this stays a closed set (no upstream body strings).
+# name a field the request itself constructs — including options the gateway
+# injects on the file-chat lanes (reasoning_effort). The gateway allowlists
+# these params, so this stays a closed set (no upstream body strings).
 _REQUEST_SHAPE_PROVIDER_REJECTIONS = frozenset(
     {
         'model_not_found',
@@ -33,10 +34,12 @@ _REQUEST_SHAPE_PROVIDER_REJECTIONS = frozenset(
         'invalid_messages',
         'invalid_output_limit',
         'invalid_stream',
+        'invalid_reasoning_effort',
         'unsupported_model',
         'unsupported_messages',
         'unsupported_output_limit',
         'unsupported_stream',
+        'unsupported_reasoning_effort',
     }
 )
 # Param paths ending in an attachment reference are about the user's file

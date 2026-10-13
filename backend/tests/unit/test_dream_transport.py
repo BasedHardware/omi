@@ -184,7 +184,9 @@ def test_mixed_plan_retains_valid_items_in_every_list(transport):
     response['edits'].insert(1, {**valid['edits'], 'reason': ''})
     sink = {'tokens': 0}
     value = transport(Plan, response, sink=sink)
-    assert value == Plan.model_validate({key: [item] for key, item in valid.items()})
+    expected = Plan.model_validate({key: [item] for key, item in valid.items()})
+    server_time = {'questions': {'__all__': {'created_at'}}}
+    assert value.model_dump(exclude=server_time) == expected.model_dump(exclude=server_time)
     assert sink['dropped_invalid'] == {key: 2 if key == 'edits' else 1 for key in valid}
     assert sink['validation_errors'] == {
         'edits.evidence:too_short': 1,

@@ -6,9 +6,20 @@
 comma-separated `DREAM_AGENT_FULL_CONTEXT_UIDS`; empty/unknown configuration
 keeps bounded behavior. This allowlist does not replace ordinary Dream
 eligibility, mode, Review enablement, admission, USD caps or Undo/suppression.
-No deployment or cohort is enabled by this source change.
+The prod `cloud_run/backend-sync` runtime overlay selects full mode and K=3 for the existing QA owner entry in
+`DREAM_AGENT_UID_ALLOWLIST`; other services/cohorts remain bounded. The allowlist already uses literal code
+configuration, so the full-mode subset follows the same mechanism. Deployment still occurs through the
+ordinary release workflow after this PR lands.
 
-Full mode bypasses triage and uses one reasoning turn in the existing `run_loop`.
+Full mode bypasses triage and runs `DREAM_AGENT_FULL_SAMPLES` independent reasoning samples concurrently
+(default 3, range 1–8). Each sample uses one reasoning turn in the existing `run_loop`, with the same complete
+context and prompt. A failed sample does not cancel siblings. Successful samples vote with a strict majority
+(`returned // 2 + 1`): two of three, both of two, or the only survivor. Repeated items inside one sample count
+once. Edits match on kind, target and NFKC/whitespace-normalized (case-preserving) before/after; questions
+match on exact source ref and quote; vocabulary matches on kind and exact spelling. Other typed plan items
+match on their complete payload. The first sample-order representative survives, then ordinary guards run.
+Counts-only `consensus_rejected` records distinct minority candidates; sample counts and the threshold
+accompany pass metrics.
 `DREAM_AGENT_FULL_CONTEXT_TOKENS` defaults to 400000 input tokens;
 `DREAM_AGENT_FULL_COMPLETION_TOKENS` defaults to 32768 (maximum 32768, including thinking).
 Input admission estimates serialized characters / 4 plus framing, including
@@ -17,10 +28,18 @@ A separate conservative UTF-8 byte upper bound plus completion must fit
 1048576, the reserved model's context window. This final safety fence can admit
 less than the configured estimate, especially for multibyte text; the gateway
 has no count-tokens surface. Neither estimate is represented as observed usage.
-See [the provider model limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
+See [the provider model
+limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
 The existing reservation/USD accounting reserves the combined input/completion
-budget plus one malformed-response retry (865536 tokens, $8.65536 at the default upper-bound rate); daily USD and
-per-user pass caps still apply.
+budget plus one malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this
+reserves 2596608 tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250, intended to cover 24 hourly passes at roughly $8.2 settled usage
+(~$200) plus one ~$26 reservation of headroom. The current ledger is shared by day and retains successful
+reservations; it therefore admits at most nine full passes at this reservation size, before other spend.
+Per-user settlement is required for that intended hourly cadence. The bounded-mode report host retains $60. At 253000 input
+tokens, three unretried calls plus their maximum completions use at most 857304 tokens ($8.57304 at that
+upper-bound rate). Actual observed usage includes thinking and both attempts of any retried sample. Unknown
+usage from a failed sample stays unknown even when survivors produce a successful plan; admission remains
+reserved. Daily USD and per-user caps remain authoritative.
 
 Dirty targets have first priority in oldest-first inspection order, then history
 seeds, then existing linked/lexical/semantic/temporal retrieval order. All fitting
@@ -40,6 +59,14 @@ feedback privacy, edit/attention caps, leases, kill switch and journals remain.
 `task_too_recent` are disabled only for full evidence. Nonempty summary fields
 remain protected, including user titles and section summaries; the other summary
 validation and visibility rules stay intact. Ungrounded spelling becomes Review.
+Evidence and source refs accept `#segment-id`, exact `#start-seconds`, or `#HH:MM:SS` fragments. The base ref
+authorizes the supplied record; the original fragment remains in the proposal. Quotes and independent spelling
+grounding with a fragment inspect only that exact transcript segment. Missing or ambiguous segments do not
+fall back to the entire record. Task evidence retains the segment ID and time coordinates in its typed
+provenance. Server-assigned Review IDs retain the kind prefix and stable identity; model IDs/dates are ignored
+at parsing and again at enqueue. Spelling field descriptions expressly restrict corrections to
+misheard/misspelled names or terms, never grammar, filler removal or guesses at unclear speech.
+
 Full mode allows 25 edits; risky kinds and vocabulary still require Review.
 Encrypted proposal source metadata retains full guard policy through acceptance,
 which still rehydrates and fences current evidence. Bounded proposals keep their
@@ -64,21 +91,11 @@ provider attempt. The gateway chart's BackendConfig has `timeoutSec: 960`, so
 the ingress does not impose an earlier 60-second cutoff. There is no Dream input
 size ceiling in chat validation or route artifacts.
 
-The repo's Luna cost card (`llm_gateway/config/cost_rate_cards.yaml`) has a
-272000-token **pricing** threshold, not a maximum input size. No smaller Luna
-context maximum is declared in the gateway. Official
-[GPT-6 Luna limits](https://developers.openai.com/api/docs/models/gpt-6-luna),
-verified 2026-10-13, give a 1050000-token context window and 128000-token maximum
-output. At the requested 32768-token output limit, that leaves 1017232 tokens
-for input; the full-mode hard input-plus-completion fence is 1048576, below
-Luna's total window. No additional shrinking is needed, even at the maximum
-operator-configured full budget. Gemini request-rejection recovery can therefore
-retain the whole admitted request when trying the existing Luna fallback.
-Reservation exhaustion and provider 429 already have **no** Dream provider/LKG
-fallback in `gateway/reserved_fallback.py` and `gateway/resolver.py`; backend
-transport turns those failures into `CapacityWait` and retains dirty work.
-This policy is retained and tested through the executor/transport boundary.
-No shared/pay-as-you-go Gemini route is added.
+Full samples send the internal `google.dream_reserved_only` request policy. The gateway requires a dedicated
+Gemini primary and disables within-route and last-known-good recovery for these calls, including
+request-rejection recovery on Luna. A sample failure leaves surviving reserved samples available for the vote.
+Reservation exhaustion and provider 429 become `CapacityWait`; when no sample returns, dirty work is retained.
+Bounded requests keep the existing size-safe Luna recovery. No shared/pay-as-you-go Gemini route is added.
 
 Cloud Run timeout metadata was read only via managed `ro-prod`/`ro-dev` service
 accounts on 2026-10-13: `backend-sync` in `us-central1` is 3600 seconds in prod
