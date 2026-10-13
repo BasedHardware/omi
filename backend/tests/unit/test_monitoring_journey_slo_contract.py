@@ -176,7 +176,8 @@ def test_live_slo_liveness_detects_vanished_families_even_without_demand(rule_ex
     rule, raw = rule_exports['split']['omi-slo-live-signal-dead']
     expr = rule['data'][0]['model']['expr']
     assert 'absent(omi_live_session_transcript_outcome_total{job="backend-listen-metrics"})' in expr
-    assert 'absent(omi_live_stt_accepted_total{job="backend-listen-metrics"})' in expr
+    # The accepted counter is sparse until traffic, so its absence after a restart is not a vanished family.
+    assert 'absent(omi_live_stt_accepted_total' not in expr
     assert expr.count('or vector(0)') == 5
     assert 'outcome=' not in expr  # quiet sessions still prove emission
     assert 'journey="live_transcription"' in expr  # retained client-boundary coverage

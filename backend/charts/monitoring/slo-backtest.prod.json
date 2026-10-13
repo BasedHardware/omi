@@ -15,7 +15,8 @@
     "Chat bad share counts failure and stale terminals. Accepted work with no such terminal is not a miss.",
     "No Grafana pending history, notification policy or causal incident proof was read.",
     "The `for` values here are what was replayed. The rules now pend longer (critical 2m, warning 15m); a longer pending duration can only suppress a replayed page, never add one, so these counts are an upper bound.",
-    "Live critical's 1h/5m arm is capped at a 50% bad share (14.4x of the 7.9% budget exceeds 100%). Read-only check on 2026-10-13: the capped arm had 0 true samples over the same 10 days at 15-minute steps; the worst 1h bad share was 24.4%."
+    "Live critical's 1h/5m arm is capped at a 50% bad share (14.4x of the 7.9% budget exceeds 100%). Read-only check on 2026-10-13: the capped arm had 0 true samples over the same 10 days at 15-minute steps; the worst 1h bad share was 24.4%.",
+    "omi-slo-live-signal-dead dropped its absent(omi_live_stt_accepted_total) arm after the replay: that counter is sparse until accepted traffic, so it read as vanished after restarts. Removing an OR arm can only remove true samples."
   ],
   "baselines": {
     "live": {
@@ -323,7 +324,7 @@
       "full_window_results_from_utc": "2026-10-06T11:40:00Z"
     },
     "omi-slo-live-signal-dead": {
-      "expression": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or absent(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
+      "expression": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
       "for": "5m",
       "evaluated_samples": 2881,
       "true_condition_samples": 1,
@@ -367,7 +368,7 @@
     },
     "live_both_families_vanished": {
       "uid": "omi-slo-live-signal-dead",
-      "expression": "vector(1) or vector(1) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or vector(0)",
+      "expression": "vector(1) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or vector(0)",
       "value": 1.0
     }
   },

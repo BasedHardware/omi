@@ -234,7 +234,8 @@ def main():
             result = query(expr, start=chunk, end=min(chunk + 86400, end), step=300)
             for series in result:
                 for t, value in series['values']:
-                    samples[int(t)] = float(value)
+                    # absent() and the vector(0) fallback can both return at one timestamp.
+                    samples[int(t)] = max(samples.get(int(t), 0.0), float(value))
         warmup = 259200 if rule['uid'].endswith('warning') else 21600
         pending = pending_seconds(rule['for'])
         if rule['uid'].endswith('signal-dead'):

@@ -97,9 +97,9 @@ is failure|stale / clamp_min(accepted, 1). For pusher, it is failure|cancelled
 observed valid denominator. No traffic burns no budget. Missing SLI series is
 **NoData**, never healthy OK. All seven rules use Grafana `noDataState=NoData`,
 `execErrState=Error` and the existing Telegram receiver. The live signal
-warning ORs `absent()` for the session family and independent accepted-audio
-family, plus <1 session outcome with >20 audio accepts in 1h. Quiet outcomes
-prove emission.
+warning ORs `absent()` for the session family (initialized at startup), plus
+<1 session outcome with >20 audio accepts in 1h. The accepted-audio counter is
+sparse until traffic, so its absence is not used. Quiet outcomes prove emission.
 
 ## Burn windows and volume
 

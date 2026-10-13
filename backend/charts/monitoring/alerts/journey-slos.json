@@ -746,7 +746,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or absent(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
+          "expr": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -824,7 +824,7 @@
     "annotations": {
       "summary": "Live transcription - delivery counter silent",
       "user_impact": "Live outcome or accepted-audio telemetry disappeared, or accepted audio is not producing session outcomes; journey health is unknown.",
-      "scope": "Eligible-session and accepted-audio metric families; absent either family OR fewer than one session outcome with more than 20 audio accepts in one hour. Quiet/too_short outcomes prove emission.",
+      "scope": "Eligible-session family (initialized at startup) absent OR fewer than one session outcome with more than 20 audio accepts in one hour. Quiet/too_short outcomes prove emission.",
       "verification": "Read-only production counters are ingested; the exact query is included in the 10-day backtest. No notification delivery verified.",
       "safe_next_action": "Check metric-family presence and exporter ingestion even if up is healthy; then compare accepted audio with all session outcomes. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
