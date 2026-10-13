@@ -60,6 +60,11 @@ operator decides to repair anything, through a separately authorized workflow.
   price identity. Missing `current_price_id` is common because legacy raw webhook
   projection omits it; it is not evidence of a wrong price.
 
+Organization admin one-time grants carry `subscription_id=pi_...`. They are
+reported separately as `manual_payment_entitlement`, not reverse subscription
+drift; the restricted subscription reader cannot validate PaymentIntents. No
+organization grant is changed or reinterpreted.
+
 Categories can overlap. Multiple subscriptions are compared using the stored id
 when possible; the command does not pick a winner arbitrarily. JPY amounts and
 discount amounts do not participate in entitlement classification. Creator-app
@@ -81,3 +86,8 @@ categories (`paid_in_stripe_basic_in_firestore`,
 15 minutes and linked to this runbook. Keep unknown prices and ambiguity visible
 as a separate review signal. Do not sum overlapping counts into affected users.
 No alert resource or scheduler is created by this PR.
+
+The older `backend/scripts/support/find_stripe_entitlement_mismatches.py` is an
+existing targeted support auditor. This command adds fixture-only execution,
+aggregate reverse/price/period categories, explicit complete-snapshot checks,
+manual-grant uncertainty and restricted-key mode with projected Firestore reads.

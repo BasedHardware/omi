@@ -213,3 +213,12 @@ def test_drift_metric_labels_are_closed_and_preinitialized():
     metrics.record_report(report)
     for category in DRIFT_CATEGORIES:
         assert metric.labels(category=category)._value.get() == children[category] + report.counts[category]
+
+
+def test_organization_payment_intent_grant_is_not_false_reverse_drift():
+    stored = user('unlimited')
+    stored['subscription'].pop('stripe_subscription_id')
+    stored['subscription']['subscription_id'] = 'pi_fixture_company_payment'
+    report = compare([], [stored])
+    assert report.counts['manual_payment_entitlement'] == 1
+    assert report.counts['paid_in_firestore_no_stripe_entitlement'] == 0

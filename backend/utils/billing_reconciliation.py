@@ -16,6 +16,7 @@ DRIFT_CATEGORIES = (
     'multiple_entitled_subscriptions',
     'unknown_price',
     'unmapped_owner',
+    'manual_payment_entitlement',
 )
 
 
@@ -63,6 +64,17 @@ def reconcile(
         entitled[uid].append(sub)
     for uid, user in by_uid.items():
         stored = user.get('subscription') or {}
+        manual_payment = stored.get('subscription_id')
+        if (
+            isinstance(manual_payment, str)
+            and manual_payment.startswith('pi_')
+            and not stored.get('stripe_subscription_id')
+        ):
+            # Organization admin grants use a one-time PaymentIntent, not a
+            # recurring subscription. Preserve that separate authority.
+            counts['manual_payment_entitlement'] += 1
+            continue
+
         all_candidates = entitled.get(uid, [])
         unknown = [s for s in all_candidates if _price_id(s) not in price_plans]
         counts['unknown_price'] += len(unknown)
