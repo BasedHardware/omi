@@ -46,6 +46,14 @@ DELIBERATELY_REMOVED_ENDPOINTS: frozenset[str] = frozenset(
     }
 )
 
+# GET /v2/payments/plans schema_version 1 landed on main in #21367 behind
+# STOREFRONT_LADDER_V1_ENABLED (default off) and never reached a released
+# decoder. The first consumer is #21363, which accepts only schema_version 2
+# on this same route. The predicate below ignores response drift only for that
+# 1→2 replacement. Once main serves schema 2, any later response break on this
+# route fails the gate again. Do not widen this to other routes.
+UNRELEASED_STOREFRONT_V1_ROUTE = '/v2/payments/plans'
+
 
 class OpenAPICompatibilityError(RuntimeError):
     """The contracts cannot be compared safely."""
@@ -128,11 +136,20 @@ class CompatibilityChecker:
                     operation_path,
                 )
                 self._check_request_body(base_operation, head_operation, operation_path)
-                self._check_responses(base_operation, head_operation, operation_path)
+                if not self._unreleased_storefront_v1_to_v2(route, method, base_operation, head_operation):
+                    self._check_responses(base_operation, head_operation, operation_path)
         return sorted(set(self.issues))
 
     def _issue(self, path: str, message: str) -> None:
         self.issues.append(CompatibilityIssue(path, message))
+
+    def _unreleased_storefront_v1_to_v2(self, route: str, method: str, base_op: Schema, head_op: Schema) -> bool:
+        """True only while this route's published response moves from schema 1 to 2."""
+        if route != UNRELEASED_STOREFRONT_V1_ROUTE or method != 'get':
+            return False
+        return (
+            _schema_version_const(base_op, self.base_refs) == 1 and _schema_version_const(head_op, self.head_refs) == 2
+        )
 
     def _check_security(self, base_op: Schema, head_op: Schema, path: str) -> None:
         if 'security' not in head_op:
@@ -576,6 +593,20 @@ class CompatibilityChecker:
 
 def _mapping(value: object) -> Schema:
     return cast(Schema, value) if isinstance(value, dict) else {}
+
+
+def _schema_version_const(operation: Schema, resolver: LocalReferenceResolver) -> object:
+    """Return the 200 JSON body's schema_version const, or None when it is absent."""
+    response = _mapping(_mapping(operation.get('responses')).get('200'))
+    media = _mapping(_mapping(response.get('content')).get('application/json'))
+    schema = media.get('schema')
+    if schema is None:
+        return None
+    resolved = _mapping(resolver.resolve(schema))
+    version = _mapping(resolved.get('properties')).get('schema_version')
+    if version is None:
+        return None
+    return _mapping(resolver.resolve(version)).get('const')
 
 
 def _list(value: object) -> list[Any]:

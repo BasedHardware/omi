@@ -4,7 +4,9 @@
 (including the existing no-BYOK-validation payment dependency), with the shared
 per-UID `storefront:plans` rate limit (12 requests/minute, boost-exempt,
 fail-open on Redis errors). Its response is `StorefrontResponse`,
-`schema_version: 2`. Clients render server strings verbatim. Sheet chrome
+`schema_version: 2`. Schema 1 on this route never shipped (the ladder flag
+stayed off); the compatibility gate allows only that unpublished 1→2 response
+replacement. Clients render server strings verbatim. Sheet chrome
 (badges, toggle chrome, empty/error) stays in the client. W6 owns rendering;
 these DTOs do not install the sheet by themselves.
 
