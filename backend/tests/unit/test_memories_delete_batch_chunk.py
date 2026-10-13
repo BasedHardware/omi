@@ -9,6 +9,9 @@ commit, so the pre-fix single-batch code fails here.
 """
 
 from contextlib import nullcontext
+from types import SimpleNamespace
+
+import pytest
 
 import database.memories as memories
 
@@ -133,6 +136,10 @@ class _UnlockDocument:
     def collection(self, name):
         return _UnlockCollection(self._db, f"{self._path}/{name}")
 
+    def get(self):
+        payload = self._db.markers.get(self._path)
+        return SimpleNamespace(exists=payload is not None, to_dict=lambda: payload)
+
 
 class _UnlockBatch:
     def __init__(self, db):
@@ -152,6 +159,7 @@ class _UnlockDb:
             "users/u1/memories": [_UnlockDoc("legacy-locked")],
             "users/u1/memory_items": [_UnlockDoc("canonical-locked")],
         }
+        self.markers = {}
         self.filters = []
         self.updates = []
 
@@ -197,3 +205,27 @@ def test_unlock_action_items_bounds_updates_and_invalidates_list(monkeypatch):
     assert len(fake.updates) == 100
     assert all(update['is_locked'] is False and update['updated_at'] for _, update in fake.updates)
     assert invalidations == ['u1']
+
+
+@pytest.mark.parametrize('kind', ['conversations', 'action_items'])
+@pytest.mark.parametrize('limit', [None, 100])
+def test_unlock_helpers_fence_deletion_visible_after_memory_page(monkeypatch, kind, limit):
+    from database import action_items, conversations
+    from database.legal_holds import DestructiveOperationInProgress
+
+    fake = _UnlockDb()
+    fake.docs_by_collection[f'users/u1/{kind}'] = [_UnlockDoc(f'{kind}-locked')]
+    # The earlier memory page has committed before deletion becomes visible.
+    monkeypatch.setattr(memories, 'external_write_fence', lambda *args, **kwargs: nullcontext())
+    assert memories.unlock_all_memories('u1', firestore_client=fake, limit=100) == 2
+    committed = list(fake.updates)
+    fake.markers['account_deletions/u1'] = {'wipe_status': 'in_progress'}
+    module = conversations if kind == 'conversations' else action_items
+    monkeypatch.setattr(module, 'db', fake)
+    invalidations = []
+    cache_name = 'invalidate_people_stats_cache' if kind == 'conversations' else 'bump_action_items_list_version'
+    monkeypatch.setattr(module, cache_name, lambda uid: invalidations.append(uid))
+    with pytest.raises(DestructiveOperationInProgress):
+        getattr(module, f'unlock_all_{kind}')('u1', limit=limit)
+    assert fake.updates == committed
+    assert invalidations == []

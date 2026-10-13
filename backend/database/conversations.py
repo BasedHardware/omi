@@ -3602,23 +3602,23 @@ def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
 
 
 def unlock_all_conversations(uid: str, *, limit: Optional[int] = None) -> int:
-    """
-    Finds all conversations for a user with is_locked: True and updates them to is_locked = False.
-    """
+    """Unlock all locked rows, or one bounded page when limit is supplied."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
 
     from database.locked_content import unlock_query_rows
+    from database.legal_holds import external_write_fence
 
-    total = unlock_query_rows(
-        db,
-        locked_conversations_query,
-        {'is_locked': False},
-        limit=limit,
-        on_commit=lambda: invalidate_people_stats_cache(uid),
-    )
-    logger.info(f"Unlocked all conversations for user {uid}")
-    return total
+    with external_write_fence(uid, firestore_client=db):
+        total = unlock_query_rows(
+            db,
+            locked_conversations_query,
+            {'is_locked': False},
+            limit=limit,
+            on_commit=lambda: invalidate_people_stats_cache(uid),
+        )
+        logger.info(f"Unlocked all conversations for user {uid}")
+        return total
 
 
 # ****************************************

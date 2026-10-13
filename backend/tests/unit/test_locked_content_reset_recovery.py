@@ -44,16 +44,20 @@ def env(monkeypatch):
     state.set.side_effect = lambda value: state_data.update(value)
     db = MagicMock()
     db.collection.return_value.document.return_value.collection.return_value.document.return_value = state
-    locks = {'memories': 0, 'actions': 0, 'conversations': 0}
+    locks = {'memories': 0, 'canonical_memories': 0, 'actions': 0, 'conversations': 0}
     calls = []
 
     def unlock(kind):
         def run(uid, *, limit):
             assert uid == 'test-user'
             calls.append(kind)
-            count = min(locks[kind], limit)
-            locks[kind] -= count
-            return count
+            collections = ('memories', 'canonical_memories') if kind == 'memories' else (kind,)
+            total = 0
+            for collection in collections:
+                count = min(locks[collection], limit)
+                locks[collection] -= count
+                total += count
+            return total
 
         return run
 
@@ -112,7 +116,7 @@ def test_dark_default_does_no_persistence_work(env, monkeypatch):
 def test_idempotent_same_period_and_next_reset(env):
     env.locks.update(memories=2, actions=3, conversations=4)
     env.module.recover_locked_content('test-user', now=NOW)
-    assert env.locks == dict(memories=0, actions=0, conversations=0)
+    assert env.locks == dict(canonical_memories=0, memories=0, actions=0, conversations=0)
     assert env.state_data['completed_period'] == '2026-11'
     assert env.calls == ['memories', 'actions', 'conversations']
     env.signal.assert_called_once_with('test-user')
@@ -137,7 +141,7 @@ def test_redis_eviction_uses_durable_period_marker(env):
 def test_bounded_pass_resumes_until_empty_tail(env):
     env.locks.update(memories=201, actions=150, conversations=99)
     env.module.recover_locked_content('test-user', now=NOW)
-    assert env.locks == dict(memories=101, actions=50, conversations=0)
+    assert env.locks == dict(canonical_memories=0, memories=101, actions=50, conversations=0)
     assert not env.state_data
     for _ in range(2):
         env.redis.next_request()
@@ -151,8 +155,11 @@ def test_partial_child_failure_resumes_without_repeating_committed_writes(env):
     original = env.fakes['database.action_items'].unlock_all_action_items
     env.fakes['database.action_items'].unlock_all_action_items = MagicMock(side_effect=RuntimeError('simulated'))
     env.module.recover_locked_content('test-user', now=NOW)
-    assert env.locks == dict(memories=0, actions=5, conversations=5)
+    assert env.locks == dict(canonical_memories=0, memories=0, actions=5, conversations=5)
     assert not env.state_data
+    env.signal.assert_called_once_with('test-user')
+    env.cache.assert_called_once_with('test-user')
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     assert not any(k.endswith(':lease') for k in env.redis.values)
     env.fakes['database.action_items'].unlock_all_action_items = original
     env.redis.next_request()
@@ -189,7 +196,9 @@ def test_exhausted_or_untrusted_or_override_stays_locked(env, reason):
     env.allowance.return_value = SimpleNamespace(managed=reason in {'byok', 'marketplace_reviewer'}, reason=reason)
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.calls == [] and not env.state_data
-    assert all(value == 3 for value in env.locks.values())
+    assert env.locks == dict(canonical_memories=0, memories=3, actions=3, conversations=3)
+    env.signal.assert_not_called()
+    env.cache.assert_not_called()
 
 
 def test_allowance_rechecked_between_collections(env):
@@ -199,7 +208,7 @@ def test_allowance_rechecked_between_collections(env):
         SimpleNamespace(managed=False, reason='plan_allowance_exhausted'),
     ]
     env.module.recover_locked_content('test-user', now=NOW)
-    assert env.locks == dict(memories=0, actions=3, conversations=3)
+    assert env.locks == dict(canonical_memories=0, memories=0, actions=3, conversations=3)
     assert not env.state_data
 
 
@@ -215,3 +224,57 @@ def test_requests_throttled_before_usage_read(env):
     env.module.recover_locked_content('test-user', now=NOW)
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.allowance.call_count == 1
+
+
+@pytest.mark.parametrize('committed_collections', [1, 2])
+@pytest.mark.parametrize('recheck_failure', ['denied', 'exception'])
+def test_allowance_recheck_repairs_caches_after_committed_pages(env, committed_collections, recheck_failure):
+    env.locks.update(memories=3, canonical_memories=2, actions=3, conversations=3)
+    eligible = SimpleNamespace(managed=True, reason='plan_within_allowance')
+    failure = (
+        SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+        if recheck_failure == 'denied'
+        else RuntimeError('allowance provider unavailable')
+    )
+    env.allowance.side_effect = [eligible] * committed_collections + [failure]
+    env.module.recover_locked_content('test-user', now=NOW)
+    assert env.locks['memories'] == env.locks['canonical_memories'] == 0
+    assert env.locks['actions'] == (0 if committed_collections == 2 else 3)
+    assert env.locks['conversations'] == 3
+    assert env.calls == ['memories', 'actions'][:committed_collections]
+    env.signal.assert_called_once_with('test-user')
+    env.cache.assert_called_once_with('test-user')
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
+    assert not env.state_data
+    assert not any(':done:' in key or key.endswith(':lease') for key in env.redis.values)
+    env.allowance.side_effect = None
+    env.redis.next_request()
+    env.module.recover_locked_content('test-user', now=NOW)
+    assert not any(env.locks.values())
+    assert env.state_data['completed_period'] == '2026-11'
+
+
+@pytest.mark.parametrize('legacy,canonical', [(100, 0), (0, 100), (100, 100), (101, 0), (0, 101), (60, 60)])
+def test_memory_pages_require_conservative_completion_and_retry(env, legacy, canonical):
+    env.locks.update(memories=legacy, canonical_memories=canonical)
+    env.module.recover_locked_content('test-user', now=NOW)
+    assert env.locks['memories'] == max(0, legacy - env.module.PAGE_SIZE)
+    assert env.locks['canonical_memories'] == max(0, canonical - env.module.PAGE_SIZE)
+    assert not env.state_data
+    assert not any(':done:' in key for key in env.redis.values)
+    env.redis.next_request()
+    env.module.recover_locked_content('test-user', now=NOW)
+    assert not any(env.locks.values())
+    assert env.state_data['completed_period'] == '2026-11'
+
+
+def test_initial_enablement_drains_backlog_midmonth(env):
+    env.locks.update(memories=101, canonical_memories=101, actions=101, conversations=101)
+    midmonth = datetime(2026, 11, 15, tzinfo=timezone.utc)
+    env.module.recover_locked_content('test-user', now=midmonth)
+    assert env.locks == dict(memories=1, canonical_memories=1, actions=1, conversations=1)
+    assert not env.state_data
+    env.redis.next_request()
+    env.module.recover_locked_content('test-user', now=midmonth)
+    assert not any(env.locks.values())
+    assert env.state_data['completed_period'] == '2026-11'

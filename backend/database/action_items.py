@@ -1411,23 +1411,23 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
 
 
 def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
-    """
-    Finds all action items for a user with is_locked: True and updates them to is_locked = False.
-    """
+    """Unlock all locked rows, or one bounded page when limit is supplied."""
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
 
     from database.locked_content import unlock_query_rows
+    from database.legal_holds import external_write_fence
 
-    total = unlock_query_rows(
-        db,
-        locked_items_query,
-        {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
-        limit=limit,
-    )
-    bump_action_items_list_version(uid)
-    logger.info(f"Unlocked all action items for user {uid}")
-    return total
+    with external_write_fence(uid, firestore_client=db):
+        total = unlock_query_rows(
+            db,
+            locked_items_query,
+            {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
+            limit=limit,
+        )
+        bump_action_items_list_version(uid)
+        logger.info(f"Unlocked all action items for user {uid}")
+        return total
 
 
 # ============================================================================
