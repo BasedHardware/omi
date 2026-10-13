@@ -1425,7 +1425,10 @@ def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
             {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
             limit=limit,
         )
-        bump_action_items_list_version(uid)
+        # An empty locked query is a duplicate unlock. Bumping would only
+        # invalidate the list cache; no row was rewritten.
+        if total:
+            bump_action_items_list_version(uid)
         logger.info(f"Unlocked all action items for user {uid}")
         return total
 

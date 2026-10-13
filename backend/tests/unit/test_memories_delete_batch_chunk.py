@@ -214,6 +214,63 @@ def _allow_unlocked_data_plane(monkeypatch):
     monkeypatch.setattr(marker, 'get_data_plane_firestore_client', lambda: _UnlockDb())
 
 
+@pytest.mark.parametrize('limit', [None, 100])
+def test_unlock_action_items_empty_locked_query_does_not_bump_list_cache(monkeypatch, limit):
+    import database.action_items as action_items
+
+    fake = _UnlockDb()
+    fake.docs_by_collection['users/u1/action_items'] = []
+    invalidations = []
+    monkeypatch.setattr(action_items, 'db', fake)
+    _allow_unlocked_data_plane(monkeypatch)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: invalidations.append(uid))
+    assert action_items.unlock_all_action_items('u1', limit=limit) == 0
+    assert fake.updates == []
+    assert invalidations == []
+
+
+def test_has_recoverable_locked_content_stops_at_the_first_locked_collection(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        'users/u1/conversations': [_UnlockDoc('conversation-locked')],
+        'users/u1/memories': [_UnlockDoc('legacy-locked')],
+        'users/u1/memory_items': [_UnlockDoc('canonical-locked')],
+        'users/u1/action_items': [_UnlockDoc('task-locked')],
+    }
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is True
+    assert [path for path, *_rest in fake.filters] == ['users/u1/conversations']
+
+
+def test_has_recoverable_locked_content_checks_every_paid_lock_field(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        'users/u1/action_items': [_UnlockDoc('task-locked')],
+    }
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is True
+    assert fake.filters == [
+        ('users/u1/conversations', 'is_locked', '==', True),
+        ('users/u1/memories', 'is_locked', '==', True),
+        ('users/u1/memory_items', 'promotion.is_locked', '==', True),
+        ('users/u1/action_items', 'is_locked', '==', True),
+    ]
+
+
+def test_has_recoverable_locked_content_is_false_when_nothing_is_locked(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {}
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is False
+    assert len(fake.filters) == 4
+
+
 def test_unlock_action_items_bounds_updates_and_invalidates_list(monkeypatch):
     import database.action_items as action_items
 

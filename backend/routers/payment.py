@@ -16,6 +16,7 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
+from database.locked_content import has_recoverable_locked_content
 from database.redis_db import set_credits_invalidation_signal
 from config.plan_catalog import plan_uses_overage
 from utils.subscription_state_machine import (
@@ -690,12 +691,15 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 
-        # Check if user is trying to upgrade to the same plan. A previous
-        # attempt may already have stored this paid price and then failed the
-        # unlock fence. Run unlock before the 400 so a fence or data-plane
-        # rejection stays a 500 and the client can retry.
+        # Same price as the stored plan. A previous attempt may have stored
+        # this paid price and then failed the unlock fence. Replay the
+        # unbounded unlock only when locked rows remain, then clear free-tier
+        # fair use before the 400. The response body stays the installed-client
+        # contract. A fence or data-plane error stays a 500 so the client retries.
         if current_price_id == request.price_id:
-            _unlock_paid_content(uid)
+            if has_recoverable_locked_content(uid):
+                _unlock_paid_content(uid)
+            clear_fair_use_on_upgrade(uid)
             raise HTTPException(
                 status_code=400,
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
@@ -970,9 +974,12 @@ async def stripe_webhook(
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     # The paid plan is already stored. Stripe retries this
-                    # delivery when unlock raises, so do not acknowledge it
-                    # until an attempt runs after the gate clears.
+                    # delivery when unlock raises. Do not acknowledge it until
+                    # unlock and the idempotent fair-use clear both finish:
+                    # the first delivery writes metadata uid only after that
+                    # clear, so this retry is what drops free_exhausted.
                     await run_blocking(db_executor, _unlock_paid_content, uid)
+                    await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     return {"status": "success", "message": "Subscription already processed."}
                 elif 'cancel_old_subscription' in checkout_decision.effects:
                     # Cancel the old subscription to prevent double-charging

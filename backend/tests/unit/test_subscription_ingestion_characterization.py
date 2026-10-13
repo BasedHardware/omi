@@ -284,7 +284,7 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
     result = run(lane)
     if duplicate:
         assert result == {'status': 'success', 'message': 'Subscription already processed.'}
-        assert [name for name, _ in lane.calls] == ['conversations', 'memories', 'actions']
+        assert [name for name, _ in lane.calls] == ['conversations', 'memories', 'actions', 'fair_use']
     else:
         assert lane.current.plan == PlanType.plus
         assert [name for name, _ in lane.calls] == (['stripe_cancel'] if stored_plan == PlanType.plus else []) + [
@@ -383,18 +383,25 @@ def test_checkout_session_completed_retries_unlock_after_fence_clears(lane, monk
     assert _call_names(lane).count('conversations') == 2
     assert 'memories' not in _call_names(lane)
 
+    assert 'fair_use' not in _call_names(lane)
+
     blocked['on'] = False
     third = _post_webhook()
     assert third.status_code == 200
     assert third.json()['status'] == 'success'
+    assert third.json().get('message', 'Subscription already processed.') == 'Subscription already processed.'
+    assert 'stripe_metadata' not in _call_names(lane)
+    assert 'notification' not in _call_names(lane)
     assert _call_names(lane).count('write') == 1
     assert _call_names(lane).count('conversations') == 3
     assert 'memories' in _call_names(lane)
     assert 'actions' in _call_names(lane)
+    assert _call_names(lane).count('fair_use') == 1
+    assert _call_names(lane).index('fair_use') > _call_names(lane).index('actions')
 
 
-def _arm_cross_plan_upgrade(lane, monkeypatch):
-    prices = {'current': 'price_plus'}
+def _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_plus'):
+    prices = {'current': current_price}
 
     def stripe_sub(price_id):
         return {
@@ -457,6 +464,7 @@ def test_upgrade_subscription_retries_unlock_after_fence_clears(lane, monkeypatc
 
     _arm_cross_plan_upgrade(lane, monkeypatch)
     monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
+    monkeypatch.setattr(payment, 'has_recoverable_locked_content', lambda uid: True)
     request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited')
 
     with pytest.raises(HTTPException) as first:
@@ -475,6 +483,7 @@ def test_upgrade_subscription_retries_unlock_after_fence_clears(lane, monkeypatc
     assert _call_names(lane).count('modify') == 1
     assert _call_names(lane).count('conversations') == 2
     assert 'memories' not in _call_names(lane)
+    assert 'fair_use' not in _call_names(lane)
 
     blocked['on'] = False
     with pytest.raises(HTTPException) as third:
@@ -486,6 +495,73 @@ def test_upgrade_subscription_retries_unlock_after_fence_clears(lane, monkeypatc
     assert _call_names(lane).count('conversations') == 3
     assert 'memories' in _call_names(lane)
     assert 'actions' in _call_names(lane)
+    assert _call_names(lane).count('fair_use') == 1
+    assert _call_names(lane).index('fair_use') > _call_names(lane).index('actions')
+
+
+_ALREADY_SUBSCRIBED = "You are already subscribed to this plan. Please select a different plan to upgrade or downgrade."
+
+
+def test_already_subscribed_replays_unlock_only_when_locked_content_remains(lane, monkeypatch):
+    _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_unlimited')
+    locked = {'on': False}
+    monkeypatch.setattr(payment, 'has_recoverable_locked_content', lambda uid: locked['on'])
+    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited')
+
+    with pytest.raises(HTTPException) as first:
+        payment.upgrade_subscription_endpoint(request, uid='fixture-user')
+    assert first.value.status_code == 400
+    assert first.value.detail == _ALREADY_SUBSCRIBED
+    assert _call_names(lane) == ['fair_use']
+
+    locked['on'] = True
+    lane.calls.clear()
+    with pytest.raises(HTTPException) as second:
+        payment.upgrade_subscription_endpoint(request, uid='fixture-user')
+    assert second.value.status_code == 400
+    assert second.value.detail == _ALREADY_SUBSCRIBED
+    assert _call_names(lane) == ['conversations', 'memories', 'actions', 'fair_use']
+
+
+def test_checkout_duplicate_retry_does_not_ack_until_fair_use_clears(lane, monkeypatch):
+    blocked = {'unlock': True, 'fair_use': True}
+
+    def conversations(uid):
+        lane.calls.append(('conversations', (uid,)))
+        if blocked['unlock']:
+            raise DestructiveOperationInProgress('live deletion marker')
+
+    def fair_use(uid):
+        lane.calls.append(('fair_use', (uid,)))
+        if blocked['fair_use']:
+            raise RuntimeError('fair-use clear failed')
+
+    monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
+    monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', fair_use)
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.event = _checkout_event()
+
+    first = _post_webhook()
+    assert first.status_code == 500
+    assert 'success' not in first.text
+    assert 'fair_use' not in _call_names(lane)
+
+    blocked['unlock'] = False
+    second = _post_webhook()
+    assert second.status_code == 500
+    assert 'success' not in second.text
+    assert _call_names(lane).count('fair_use') == 1
+    assert 'memories' in _call_names(lane)
+    assert 'actions' in _call_names(lane)
+
+    blocked['fair_use'] = False
+    third = _post_webhook()
+    assert third.status_code == 200
+    assert third.json()['status'] == 'success'
+    assert third.json().get('message', 'Subscription already processed.') == 'Subscription already processed.'
+    assert 'stripe_metadata' not in _call_names(lane)
+    assert _call_names(lane).count('fair_use') == 2
+    assert _call_names(lane).count('write') == 1
 
 
 def test_stale_guard_decision_is_not_rechecked_after_stripe_lookup(lane, monkeypatch):
