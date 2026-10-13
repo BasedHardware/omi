@@ -1398,7 +1398,7 @@ def process_segment(
                     owner_reserved=owner_reserved,
                 )
                 logger.info('event=sync_final_pass outcome=%s', final_outcome['outcome'])
-            if final_segments:
+            if final_segments and sync_enabled_for(uid):
                 transcript_segments = final_segments
                 for segment in transcript_segments:
                     segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
