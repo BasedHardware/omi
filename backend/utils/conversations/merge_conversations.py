@@ -76,6 +76,23 @@ def _coerce_dt(value):
 _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _merge_order_key(conv: Dict) -> datetime:
+    """Return the timestamp used to order sources during a merge.
+
+    Prefers ``started_at`` (when audio capture began). When absent or
+    unparseable (e.g. an API/integration import or a legacy doc), falls back
+    to ``created_at``. Falls back to ``_UTC_MIN`` if neither is available so
+    the sort remains total.
+    """
+    started = _coerce_dt(conv.get("started_at"))
+    if started is not None:
+        return started
+    created = _coerce_dt(conv.get("created_at"))
+    if created is not None:
+        return created
+    return _UTC_MIN
+
+
 def _photo_created_at_sort_key(photo: Dict) -> datetime:
     created_at = coerce_utc_datetime(photo.get("created_at"))
     if created_at is None:
@@ -181,8 +198,7 @@ def validate_merge_compatibility(
 
     # Generate warnings for large gaps (but don't reject)
     warnings = []
-    _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-    sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get("started_at")) or _UTC_MIN)
+    sorted_convs = sorted(conversations, key=_merge_order_key)
 
     for i in range(1, len(sorted_convs)):
         prev_finished = _coerce_dt(sorted_convs[i - 1].get("finished_at"))
@@ -252,10 +268,9 @@ def perform_merge_async(
         # details and rationale.
         conversations = _normalize_conversation_timestamps(conversations)
 
-        # Sort by started_at (earliest first). _UTC_MIN keeps sort total even
-        # if a doc has no (or an unparseable) started_at.
-        _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
-        sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
+        # Sort by started_at, falling back to created_at (earliest first).
+        # _UTC_MIN keeps sort total even if a doc has neither timestamp.
+        sorted_convs = sorted(conversations, key=_merge_order_key)
 
         # 2. Merge raw data
         merged_segments = _merge_transcript_segments(sorted_convs)
