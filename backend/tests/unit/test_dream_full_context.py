@@ -32,6 +32,7 @@ NOW = datetime(2030, 1, 1, tzinfo=timezone.utc)
 @pytest.fixture
 def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', ' someone-else, ' + UID + ', ')
     return Caps().for_uid(UID)
 
@@ -52,13 +53,14 @@ def edit(kind='title', target='conversations/a', **kw):
 
 def test_allowlist_defaults_and_budgets(monkeypatch, full):
     assert context_mode(UID) == 'full'
-    assert full.tokens == 416000 and full.completion_tokens == 16000 and full.edits == 25
+    assert full.tokens == 432768 and full.completion_tokens == 32768 and full.edits == 25
     assert Caps().for_uid('stranger') == Caps()
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'unknown')
     assert context_mode(UID) == 'bounded'
     monkeypatch.delenv('DREAM_AGENT_CONTEXT_MODE')
     assert context_mode(UID) == 'bounded'
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '')
     assert Caps().for_uid(UID) == Caps()
 
@@ -68,7 +70,7 @@ def test_hard_budget_cannot_be_raised(monkeypatch, full):
     monkeypatch.setenv('DREAM_AGENT_FULL_COMPLETION_TOKENS', '999999999')
     caps = Caps().for_uid(UID)
     assert caps.tokens == FULL_CONTEXT_WINDOW
-    assert caps.completion_tokens == 16000
+    assert caps.completion_tokens == 32768
     huge = {'memory_items/large': {'content': '界' * 400000}}
     assert not dream_prompt.fits_full(huge, caps)
     assert dream_prompt.select_full_records(huge, caps) == {}
@@ -197,7 +199,7 @@ def test_full_guards_and_tool_backstop(full):
 
 
 def test_full_dry_run_privacy_caps_and_raw_plan(full, monkeypatch):
-    records = {'conversations/a': conversation()}
+    records = {f'conversations/{i}': conversation() for i in range(30)}
     private = Feedback(
         component='notes',
         failure_class='spelling',
@@ -207,7 +209,7 @@ def test_full_dry_run_privacy_caps_and_raw_plan(full, monkeypatch):
         error_rate=0,
         reproduction='toy garden toy garden',
     )
-    plan = Plan(edits=[edit() for _ in range(30)], feedback=[private])
+    plan = Plan(edits=[edit(target=f'conversations/{i}') for i in range(30)], feedback=[private])
 
     async def turn(*args):
         return Turn(value=plan, tokens=100)
@@ -277,7 +279,7 @@ def test_gateway_full_completion_and_timeout(full, monkeypatch):
             UID, dream_transport.MAIN_LANE, dream_prompt.full_mount(full), [], completion_limit=full.completion_tokens
         )
     )
-    assert client.post.call_args.kwargs['json']['max_completion_tokens'] == 16000
+    assert client.post.call_args.kwargs['json']['max_completion_tokens'] == 32768
     assert client.post.call_args.kwargs['timeout'].read == 480
     assert client.post.call_args.kwargs['json']['model'] == dream_transport.MAIN_LANE
 

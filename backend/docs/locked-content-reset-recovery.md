@@ -41,8 +41,8 @@ Flag off adds no persistence reads. Completed requests pay a Redis get; cold don
 cache pays one state read. An active unfinished pass costs one state read, at most
 400 lock-document reads and 400 updates, plus three existing allowance lookups
 (each finite-plan lookup can scan up to the month's hourly usage rows). Memory
-pages are independent, so conservative total-count completion can require an extra
-empty pass. Over-cap users retry at most once per minute while making requests;
+pages are independent. Completion waits when either collection returns a full
+page; two short pages finish in the same pass. Over-cap users retry at most once per minute while making requests;
 they incur allowance reads but no content updates. Large backlogs drain over
 multiple requests, not necessarily on the first request alone.
 

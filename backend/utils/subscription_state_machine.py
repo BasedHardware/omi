@@ -69,6 +69,10 @@ class ResolvedStripeEvent:
     active_paid: Subscription | None = None
     billing_owner_confirmed: bool = False
     schedule_status: str | None = None
+    # Candidate projects a paid plan only via the early-terminal grace (a
+    # canceled snapshot paid through its period end). Stale-downgrade protection
+    # must still see it as a downgrade-shaped candidate.
+    grace_paid: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,7 +114,10 @@ def transition(current: Subscription | None, event: ResolvedStripeEvent) -> Tran
         return Transition(current)
     candidate = event.candidate
     adopted = False
-    if candidate.plan not in PAID_PLAN_TYPES:
+    # A grace candidate (canceled but paid through period end) keeps paid access,
+    # yet a newer stored paid sub or a different active paid sub still wins: the
+    # event may belong to an old subscription redelivered after a replacement.
+    if candidate.plan not in PAID_PLAN_TYPES or event.grace_paid:
         if preserves_current_paid_subscription(current, event.subscription_id, event.now):
             return Transition(current, outcome='preserved_current')
         if event.active_paid and event.active_paid.stripe_subscription_id != event.subscription_id:

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,7 +57,12 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
     monkeypatch.setattr(
-        dream_reads, 'read_record', lambda uid, ref, **kwargs: {'structured': {'title': 'Synthetic sync'}}
+        dream_reads,
+        'read_record',
+        lambda uid, ref, **kwargs: {
+            'structured': {'title': 'Synthetic sync'},
+            'transcript_segments': [{'text': 'Qorby'}],
+        },
     )
     return db
 
@@ -289,8 +295,11 @@ def test_untitled_summary_target_is_visible_in_report():
     assert dream_report.target_label('conversations/synthetic', None) == 'Deleted item'
 
 
-def test_full_manual_endpoint_uses_one_turn_and_persists_only_guarded_plan(store, client, monkeypatch):
+@pytest.mark.parametrize('samples', [1, 3])
+def test_full_manual_endpoint_uses_samples_and_persists_only_guarded_plan(store, client, monkeypatch, samples):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', str(samples))
+    monkeypatch.setenv('DREAM_AGENT_DAILY_USD', '60')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
     dream_store.mark_dirty(UID, [('conversations', 'c1')])
     seen = []
@@ -328,12 +337,50 @@ def test_full_manual_endpoint_uses_one_turn_and_persists_only_guarded_plan(store
     response = client.post('/v1/dream/runs', json={})
     assert response.status_code == 200, response.text
     run = response.json()
-    assert run['status'] == 'complete' and run['tokens'] == 10
-    assert seen == [(dream_transport.MAIN_LANE, 480, 16000)]
+    assert run['status'] == 'complete' and run['tokens'] == 10 * samples
+    assert seen == [(dream_transport.MAIN_LANE, 480, 32768)] * samples
     stored = review_store.decode_doc(UID, store.rows[('users', UID, 'dream_runs', run['run_id'])])['source']
     assert stored['context_mode'] == 'full'
+    assert stored['samples_requested'] == stored['samples_returned'] == samples
     assert stored['rejected'] == {'nonempty_field': 1}
     assert not stored['proposed']['edits'] and len(stored['proposed']['feedback']) == 1
     assert 'raw_plan' not in stored and 'admitted_records' not in stored
     assert stored['targets'] == stored['records'] == 1
     assert dream_store.dirty_count(UID) == 0
+
+
+@pytest.mark.parametrize('samples', [1, 3])
+def test_full_manual_json_retry_stays_in_one_lease_and_preserves_usage(store, client, monkeypatch, samples):
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', str(samples))
+    monkeypatch.setenv('DREAM_AGENT_DAILY_USD', '60')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
+    dream_store.mark_dirty(UID, [('conversations', 'c1')])
+    gateway = type('Client', (), {'post': AsyncMock()})()
+    gateway.post.side_effect = [
+        httpx.Response(
+            200,
+            request=httpx.Request('POST', 'https://synthetic.invalid'),
+            json={
+                'usage': {'prompt_tokens': 30, 'completion_tokens': 20},
+                'choices': [{'message': {'content': content}, 'finish_reason': 'stop'}],
+            },
+        )
+        for content in ['{"edits":[{"reason":"unterminated', *['{}'] * samples]
+    ]
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: gateway)
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
+    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert run['status'] == 'complete' and run['tokens'] == 50 * (samples + 1)
+    stored = review_store.decode_doc(UID, store.rows[('users', UID, 'dream_runs', run['run_id'])])['source']
+    assert stored['response_retries'] == 1 and stored['usage_unknown'] is False
+    assert stored['cost_usd'] == pytest.approx(50 * (samples + 1) * Caps().max_usd_per_token)
+    state = dream_store.state_ref(store, UID).get().to_dict()
+    assert state['manual_runs'] == 1 and state['lease'] is None
+    assert gateway.post.await_count == samples + 1 and dream_store.dirty_count(UID) == 0
+    assert stored['samples_returned'] == samples and stored['samples_failed'] == 0
+    assert 'raw_plan' not in stored and 'admitted_records' not in stored

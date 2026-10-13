@@ -48,6 +48,15 @@ flowchart LR
   </Tab>
 </Tabs>
 
+## Saved phone recordings
+
+Phone recordings made with **Transcribe Later** are saved locally until the user
+selects **Process Now**. The app uploads one recording to
+`POST /v2/sync-local-files` and polls the returned job ID. Once speech is
+transcribed, that explicit selection keeps the conversation visible, including
+short recordings. Silence or an empty transcription creates no conversation.
+Automatic offline fallback recordings still follow the usual relevance policy.
+
 ## WebSocket Endpoint
 
 <Warning>

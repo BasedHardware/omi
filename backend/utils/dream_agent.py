@@ -21,7 +21,9 @@ from config.dream_agent import (
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
+from models.dream_refs import base_ref, has_ref
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
+from utils.dream_consensus import majority
 from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -83,12 +85,71 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
                 ),
             )
             usage_sink['admitted_records'] = selected
-        main = await run_loop(active_mount, messages, partial(invoke, uid, dream_transport.MAIN_LANE))
-        if main.reason != 'stopped':
-            raise ValueError('dream_reasoning_budget')
+        sample_usage: list[dict[str, Any]] = [
+            {'tokens': 0, 'usage_unknown': False, 'returned': False} for _ in range(caps.samples)
+        ]
+
+        async def sample(sink):
+            async def sample_turn(active, framed):
+                sink['reasoning_attempted'] = True
+                previous_unknown = sink['usage_unknown']
+                sink['usage_unknown'] = True
+                try:
+                    if turn is not None:
+                        result = await turn(uid, dream_transport.MAIN_LANE, active, framed)
+                        sink['tokens'] += result.tokens
+                        sink['usage_unknown'] = previous_unknown
+                        return result
+                    return await dream_transport.model_turn(
+                        uid,
+                        dream_transport.MAIN_LANE,
+                        active,
+                        framed,
+                        usage_sink=sink,
+                        completion_limit=caps.completion_tokens,
+                    )
+                except (dream_transport.PreTokenFailure, dream_transport.httpx.HTTPStatusError):
+                    sink['usage_unknown'] = previous_unknown
+                    raise
+
+            result = await run_loop(active_mount, messages, sample_turn)
+            if result.reason != 'stopped':
+                raise ValueError('dream_reasoning_budget')
+            if not isinstance(result.value, Plan):
+                raise ValueError('dream_sample_plan')
+            sink['returned'] = True
+            return result.value
+
+        try:
+            results = await asyncio.gather(*(sample(sink) for sink in sample_usage), return_exceptions=True)
+        finally:
+            if usage_sink is not None:
+                usage_sink['samples_requested'] = caps.samples
+                usage_sink['samples_returned'] = sum(sink['returned'] for sink in sample_usage)
+                usage_sink['samples_failed'] = caps.samples - usage_sink['samples_returned']
+                usage_sink['reasoning_attempted'] = any(sink.get('reasoning_attempted') for sink in sample_usage)
+                usage_sink['reasoning_evidence_chars'] = caps.samples * evidence_chars(messages)
+                usage_sink['tokens'] += sum(sink['tokens'] for sink in sample_usage)
+                usage_sink['usage_unknown'] = any(sink['usage_unknown'] for sink in sample_usage)
+                usage_sink['response_retries'] = sum(sink.get('response_retries', 0) for sink in sample_usage)
+                usage_sink['model_lanes'] = [lane for sink in sample_usage for lane in sink.get('model_lanes', [])]
+                for field in ('rejected', 'validation_errors', 'dropped_invalid'):
+                    counts = Counter(usage_sink.get(field, {}))
+                    for sink in sample_usage:
+                        counts.update(sink.get(field, {}))
+                    usage_sink[field] = dict(counts)
+        plans = [result for result in results if isinstance(result, Plan)]
         if usage_sink is not None:
-            usage_sink['raw_plan'] = main.value.model_dump(mode='python')
-        return dream_guards.filter_plan(main.value, selected, usage_sink=usage_sink), main.tokens
+            usage_sink['samples_returned'] = len(plans)
+            usage_sink['samples_failed'] = caps.samples - len(plans)
+        if not plans:
+            raise next(result for result in results if isinstance(result, BaseException))
+        plan = majority(plans, usage_sink=usage_sink)
+        if usage_sink is not None:
+            usage_sink['raw_plan'] = plan.model_dump(mode='python')
+        return dream_guards.filter_plan(plan, selected, usage_sink=usage_sink), sum(
+            sink['tokens'] for sink in sample_usage
+        )
 
     triage_tokens = triage_budget(caps)
     # The byte-based transport gate remains authoritative, including schema.
@@ -103,7 +164,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
     )
     if triage.reason != 'stopped':
         raise ValueError('dream_triage_budget')
-    refs = list(dict.fromkeys(ref for c in triage.value.clusters for ref in c.refs))
+    refs = list(dict.fromkeys(base_ref(ref) for c in triage.value.clusters for ref in c.refs))
     if any(ref not in records for ref in refs):
         raise ValueError('dream_unknown_cluster')
     if not refs:
@@ -206,7 +267,9 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
         if reason == 'ungrounded_spelling':
             sink.setdefault('rejected', {}).setdefault(reason, 0)
             sink['rejected'][reason] += 1
-            if len(proposed['questions']) < 3:
+            if not dream_guards.verbatim_quote(edit.before, evidence[edit.target]):
+                sink['rejected']['invalid_question_evidence'] = sink['rejected'].get('invalid_question_evidence', 0) + 1
+            elif len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
     result = {
         'plan': proposed,
@@ -216,7 +279,15 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     }
     result['raw_plan'] = sink.get('raw_plan', Plan().model_dump(mode='python'))
     if caps.context_mode == 'full':
-        result.update(context_mode='full', input_tokens_estimate=sink.get('input_tokens_estimate', 0))
+        result.update(
+            context_mode='full',
+            input_tokens_estimate=sink.get('input_tokens_estimate', 0),
+            response_retries=sink.get('response_retries', 0),
+            samples_requested=sink.get('samples_requested', 0),
+            samples_returned=sink.get('samples_returned', 0),
+            samples_failed=sink.get('samples_failed', 0),
+            consensus_threshold=sink.get('consensus_threshold', 0),
+        )
     return result
 
 
@@ -405,7 +476,14 @@ async def _run_admitted_pass(
                 remaining = caps.edits
                 for edit in plan.edits:
                     key = dream_tools.edit_key(edit, records)
-                    if edit.target not in records or any(ref not in records for ref in edit.evidence):
+                    if grounding[key] == 'ungrounded_spelling' and not dream_guards.verbatim_quote(
+                        edit.before, records[edit.target]
+                    ):
+                        report.setdefault('rejected', {}).setdefault('invalid_question_evidence', 0)
+                        report['rejected']['invalid_question_evidence'] += 1
+                        outcomes.append({'key': key, 'status': 'invalid_question_evidence'})
+                        continue
+                    if edit.target not in records or any(not has_ref(ref, records) for ref in edit.evidence):
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
                     try:
@@ -460,7 +538,7 @@ async def _run_admitted_pass(
                     outcomes.append(
                         {'tool': 'slow_task', 'status': await effect(dream_tools.propose_task, task, records)}
                     )
-                terms = [t for t in plan.vocabulary if all(ref in records for ref in t.evidence)]
+                terms = [t for t in plan.vocabulary if all(has_ref(ref, records) for ref in t.evidence)]
                 for term in terms[:remaining]:
                     remaining -= 1
                     policy = apply_policy('vocabulary', automatic)
@@ -480,7 +558,7 @@ async def _run_admitted_pass(
                     )
             finally:
                 dream_writing.reset(token)
-            report['usage_complete'] = True
+            report['usage_complete'] = not report['usage_unknown']
             report['status'] = 'complete'
             success = True
     except IdlePass:

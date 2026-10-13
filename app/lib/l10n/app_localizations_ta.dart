@@ -1778,6 +1778,9 @@ class AppLocalizationsTa extends AppLocalizations {
       'பதிவில் பல பேச்சாளர்கள் உள்ளனர் என்று தோன்றுகிறது. நீங்கள் ஒரு조용한் இடத்தில் இருக்கிறீர்கள் என்பதை உறுதிசெய்து மீண்டும் முயற்சி செய்யவும்.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'போதுமான பேச்சு கண்டறிக்கப்படவில்லை. மேலும் பேச மற்றும் மீண்டும் முயற்சி செய்யவும்.';
 
   @override
@@ -9916,6 +9919,33 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get memoryGraph => 'நினைவு வரைபடம்';
+
+  @override
+  String guidedVoiceExperience(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'unavailable': 'Voice transcription is unavailable right now. Type your answer instead.',
+        'type': 'Type Your Answer Instead',
+        'typing': 'Your answer',
+        'heard': 'Here\'s what I heard',
+        'transcribing': 'Got it, transcribing…',
+        'confirm': 'Use This Answer',
+        'answer': 'Save Answer',
+        'retry': 'Try Speaking Again',
+        'title': 'Here\'s what I\'ll remember',
+        'question': 'What should I focus on this week?',
+        'fallback': 'I’ll use these to help you.',
+        'thinking': 'Thinking about your answers…',
+        'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
+        'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
+        'retryTranscription': 'Retry transcription',
+        'namePrompt': 'My name is ___, and I usually ___.',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String voiceIntroduction(String part) {

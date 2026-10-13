@@ -443,6 +443,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._reservation_state_context: ContextVar[dict[str, State]] = ContextVar(
             'gateway_vertex_reservations', default={}
         )
+        self._thinking_budget_context: ContextVar[int | None] = ContextVar(
+            'gateway_dream_thinking_budget', default=None
+        )
         self._reservations = ReservationState()
         self._model_unavailable_at: dict[str, float] = {}
 
@@ -457,13 +460,17 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._reject_byok(credentials)
         origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
-        parsed = await self._generate_content(
-            payload,
-            anchor=provider_ref.model,
-            credentials=credentials,
-            timeout_ms=timeout_ms,
-            origin_model=origin_model,
-        )
+        token = self._thinking_budget_context.set(request.get('_dream_thinking_budget'))
+        try:
+            parsed = await self._generate_content(
+                payload,
+                anchor=provider_ref.model,
+                credentials=credentials,
+                timeout_ms=timeout_ms,
+                origin_model=origin_model,
+            )
+        finally:
+            self._thinking_budget_context.reset(token)
         accounting = vertex_usage_from_response(parsed)
         normalized = _vertex_to_openai_response(
             parsed,
@@ -783,12 +790,26 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         if capacity != ptr.REQUEST_TYPE_DEDICATED:
             raise ProviderFailure(FailureClass.INVALID_CONFIG)
         endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
+        adapted = ptr.model_payload(payload, model)
+        thinking_budget = self._thinking_budget_context.get()
+        if thinking_budget is not None:
+            # Select the control for the model actually holding the reservation,
+            # after model_payload's legacy low-thinking defaults. Capacity and
+            # endpoints remain dedicated; other callers keep those defaults.
+            generation_config = adapted.get('generationConfig', {})
+            config = dict(generation_config) if isinstance(generation_config, Mapping) else {}
+            config['thinkingConfig'] = (
+                {'thinkingLevel': 'high'}
+                if ptr.RESERVATIONS[model].thinking_level
+                else {'thinkingBudget': thinking_budget}
+            )
+            adapted['generationConfig'] = config
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                json=ptr.model_payload(payload, model),
+                json=adapted,
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
@@ -1162,6 +1183,16 @@ _PROVIDER_REJECTION_PARAMS = {
     'stream_options': 'stream',
 }
 
+# Attachment-shaped param suffixes under ``messages``: rejections naming them
+# are about the user's file, not the request the gateway constructed.
+_ATTACHMENT_PARAM_SUFFIXES = (
+    '.file.file_id',
+    '.file',
+    '.file_id',
+    '.image_url',
+    '.image_url.url',
+)
+
 
 def _provider_rejection(body: bytes) -> ProviderRejection:
     """Extract only allowlisted provider error semantics from a bounded body preview."""
@@ -1186,6 +1217,16 @@ def _provider_rejection(body: bytes) -> ProviderRejection:
         prefix = 'invalid'
     if prefix is not None:
         raw_param = error.get('param')
+        if isinstance(raw_param, str) and raw_param.endswith(_ATTACHMENT_PARAM_SUFFIXES):
+            # Attachment-shaped params (stale file id, unreadable image) live
+            # under ``messages`` but are about the user's file, not our request
+            # shape. Keep them distinguishable so composition boundaries do
+            # not report unreadable input as a server fault.
+            return (
+                ProviderRejection.INVALID_ATTACHMENT
+                if prefix == 'invalid'
+                else ProviderRejection.UNSUPPORTED_ATTACHMENT
+            )
         root_param = raw_param.split('[', 1)[0].split('.', 1)[0] if isinstance(raw_param, str) else ''
         bounded_param = _PROVIDER_REJECTION_PARAMS.get(root_param, 'other')
         return ProviderRejection(f'{prefix}_{bounded_param}')
