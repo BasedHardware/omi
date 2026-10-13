@@ -15,6 +15,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
@@ -81,13 +82,15 @@ abstract class ActivationCapture {
 class PipelineActivationCapture implements ActivationCapture {
   PipelineActivationCapture(BuildContext context, {this.expectDevice = false})
       : _capture = context.read<CaptureProvider>(),
-        _conversations = context.read<ConversationProvider>();
+        _conversations = context.read<ConversationProvider>(),
+        _home = context.read<HomeProvider>();
 
   /// The reader connected an Omi: wait for it to stream rather than taking over with the phone.
   final bool expectDevice;
 
   final CaptureProvider _capture;
   final ConversationProvider _conversations;
+  final HomeProvider _home;
   final ValueNotifier<String> _live = ValueNotifier('');
   int _startIndex = 0;
   bool _device = false;
@@ -108,6 +111,10 @@ class PipelineActivationCapture implements ActivationCapture {
   // 16 kHz mono PCM16. The server takes 5–180 s; a few sentences is plenty.
   static const _bytesPerSecond = 16000 * 2;
   static const _minVoiceSeconds = 6;
+
+  /// Words the reader must have said for the audio to be worth a voiceprint: silence, a TV or
+  /// someone else talking makes few or no words of the reader's own.
+  static const _minVoiceWords = 10;
   static const _maxVoiceSeconds = 170;
 
   @override
@@ -204,8 +211,9 @@ class PipelineActivationCapture implements ActivationCapture {
 
   /// Uploads the dictation as the reader's voice profile, in the background: it never holds up the
   /// notes, and a failure only means the Home card or Settings asks for it later.
-  Future<void> _enrollVoice(Uint8List pcm) async {
+  Future<void> _enrollVoice(Uint8List pcm, String heard) async {
     if (pcm.length < _minVoiceSeconds * _bytesPerSecond || SharedPreferencesUtil().hasSpeakerProfile) return;
+    if (_wordsOf(heard).length < _minVoiceWords) return;
     File? file;
     try {
       final directory = await getTemporaryDirectory();
@@ -213,6 +221,7 @@ class PipelineActivationCapture implements ActivationCapture {
           .writeAsBytes(WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes());
       if (await uploadProfile(file).timeout(const Duration(seconds: 45))) {
         SharedPreferencesUtil().hasSpeakerProfile = true;
+        _home.setSpeakerProfile(true);
         PlatformManager.instance.analytics.speechProfileUploadSucceeded();
         PlatformManager.instance.analytics.speechProfileEmbeddingStored();
       }
@@ -255,7 +264,7 @@ class PipelineActivationCapture implements ActivationCapture {
         await _capture.stopStreamRecording(resumeHandedOffPendant: expectDevice);
         _phoneStarted = false;
       }
-      unawaited(_enrollVoice(_voice.takeBytes()));
+      unawaited(_enrollVoice(_voice.takeBytes(), transcript));
       // Ends the conversation now instead of after the usual silence, and adds it to Home.
       await _capture.forceProcessingCurrentConversation();
       final conversation = await created.future.timeout(timeout);

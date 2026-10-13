@@ -19,6 +19,7 @@ import 'package:omi/pages/onboarding/activation/onboarding_plans_sheet.dart';
 import 'package:omi/pages/onboarding/connect_omi/connect_omi_step.dart';
 import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
@@ -135,6 +136,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       _rememberStep(_controller!.index);
       // Read the ending's flag from Connect Omi on, so it is decided when the reader leaves it.
       if (_controller!.index >= kConnectOmiPage) unawaited(_resolveEnding());
+      // Control, as before the activation: start the memory graph and read the setup page's flag
+      // while the reader does the voice introduction, so the setup page has them ready.
+      if (_controller!.index == kSpeechProfilePage && _ending == OnboardingEnding.voiceIntro) {
+        _knowledgeGraphPrebuildFuture ??= _prebuildKnowledgeGraph().catchError((_) {});
+        _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled();
+      }
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
@@ -229,15 +236,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const OnboardingPlansSheet());
   }
 
-  Future<void> _completeOnboarding() async {
-    if (_finishing) return;
+  /// Saves onboarding as done and opens Home. False when the save failed (the step stays, so the
+  /// reader can tap again).
+  Future<bool> _completeOnboarding() async {
+    if (_finishing) return false;
     _finishing = true;
     final saved = await OnboardingSyncRuntime.enqueue(completed: true);
     _finishing = false;
-    if (!mounted || !context.mounted) return;
+    if (!mounted || !context.mounted) return false;
     if (!saved) {
       OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      return;
+      return false;
     }
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
@@ -247,6 +256,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
     routeToPage(context, const HomePageWrapper(), replace: true);
+    return true;
   }
 
   void _leaveConnectOmi(OnboardingDeviceChoice choice) {
@@ -278,7 +288,34 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     final ending = await _resolveEnding();
     if (!mounted) return;
     OnboardingActivationExperiment.remember(SharedPreferencesUtil().uid, ending);
+    // The arm the reader actually sees (a slow flag read falls back to control while PostHog may
+    // still log the flag call as treatment): compare arms on this, not on the flag exposure.
+    PlatformManager.instance.analytics.track('Onboarding Ending Shown', properties: {'ending': ending.wireName});
+    PlatformManager.instance.analytics.setUserProperty('Onboarding Ending', ending.wireName);
     _controller!.animateTo(kSpeechProfilePage);
+  }
+
+  Future<void> _prebuildKnowledgeGraph() async {
+    try {
+      final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      final nodes = current['nodes'] as List<dynamic>? ?? const [];
+      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
+      if (hasGraph) return;
+    } catch (_) {
+      // Continue to rebuild below.
+    }
+
+    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
+    final status = rebuildResult['status'];
+    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
+    if (status == 'canonical_up_to_date') {
+      return;
+    }
+    await KnowledgeGraphApi.waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
   }
 
   /// Control: after the voice introduction, the knowledge graph when shown, otherwise the setup
@@ -324,7 +361,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           showPaywall: _showPaywall,
           onFinished: () {
             PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
-            _completeOnboarding();
+            return _completeOnboarding();
           },
         );
     }
@@ -360,7 +397,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   // ---- Resume and back ----------------------------------------------------------------------
 
   /// Per-account key so a different account signing in on this phone starts at the Name step.
-  String get _resumeKey => 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
+  /// v2: the redesign renumbered the steps, so a step saved by an older build is not reused.
+  String get _resumeKey => 'onboarding/resumeStep.v2/${SharedPreferencesUtil().uid}';
 
   void _rememberStep(int index) {
     if (widget.forceAuthPage || !kProgressSteps.contains(index)) return;
@@ -546,7 +584,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _controller!.animateTo(kCompletePage);
         },
       ),
-      OnboardingCompleteScreen(onComplete: _completeOnboarding),
+      OnboardingCompleteScreen(onComplete: () => unawaited(_completeOnboarding())),
     ];
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,
@@ -558,7 +596,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return PopScope(
       // System back and the iOS swipe step back one step, like the on-screen back button. On the
       // first step (and Auth / consent) back leaves onboarding as usual.
-      canPop: previous == null && index != kConnectOmiPage && index != kActivationPage,
+      canPop: previous == null &&
+          index != kConnectOmiPage &&
+          index != kActivationPage &&
+          // Control's last screens: Android back must not drop the reader out of onboarding.
+          index != kSetupPage &&
+          index != kCompletePage,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goBack();
       },

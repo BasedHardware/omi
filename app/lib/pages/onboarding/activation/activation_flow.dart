@@ -58,7 +58,8 @@ class ActivationFlow extends StatefulWidget {
   final bool showWearTips;
 
   /// Called once at the very end; Home follows.
-  final VoidCallback onFinished;
+  /// Saves onboarding as done and leaves for Home; false when the save failed (the reader can retry).
+  final Future<bool> Function() onFinished;
 
   /// Shows the paywall after the rating ask, last before Home; completes when it is closed.
   final Future<void> Function()? showPaywall;
@@ -89,6 +90,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
   String _heard = '';
   ActivationResult? _result;
   bool _finished = false;
+  bool _paywallShown = false;
 
   void _track(String step) =>
       PlatformManager.instance.analytics.track('Onboarding Activation Step', properties: {'step': step});
@@ -165,8 +167,12 @@ class _ActivationFlowState extends State<ActivationFlow> {
   Future<void> _afterRating() async {
     if (_finished) return;
     _finished = true;
-    await widget.showPaywall?.call();
-    widget.onFinished();
+    if (!_paywallShown) {
+      _paywallShown = true;
+      await widget.showPaywall?.call();
+    }
+    // A failed save (the wrapper says so) must not strand the reader: Continue tries again.
+    if (!await widget.onFinished()) _finished = false;
   }
 
   @override
@@ -474,6 +480,11 @@ class _DictationStepState extends State<_DictationStep> {
   @override
   void initState() {
     super.initState();
+    // From the moment the step opens, so a start that hangs (waiting for the Omi, the microphone)
+    // still ends in Continue.
+    _stuckTimer = Timer(const Duration(seconds: 25), () {
+      if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _stuck = true);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final start = await widget.capture.start();
       if (!mounted) return;
@@ -489,9 +500,6 @@ class _DictationStepState extends State<_DictationStep> {
       if (_started) {
         _quietTimer = Timer(const Duration(seconds: 12), () {
           if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _quiet = true);
-        });
-        _stuckTimer = Timer(const Duration(seconds: 25), () {
-          if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _stuck = true);
         });
       }
     });
@@ -1212,14 +1220,23 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
     widget.onDone();
   }
 
+  /// Continue always reaches [widget.onDone], so a failed save can be retried.
+  void _continue() {
+    if (!mounted) return;
+    _done = true;
+    widget.onDone();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Not every iOS build makes the app inactive under the pop-up (the simulator never does). The
     // pop-up takes every touch while it is up, so the first tap here after asking means it closed.
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) {
-        if (_asked) _leave();
+      // After the tap has been handled: a tap on Continue has then already moved on (or retried a
+      // failed save), and this cue must not count the same tap twice.
+      onPointerUp: (_) {
+        if (_asked) Future<void>(_leave);
       },
       child: _buildStage(context),
     );
@@ -1249,7 +1266,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
         key: const Key('activation_continue_rating'),
         label: context.l10n.continueButton,
         expand: true,
-        onPressed: _leave,
+        onPressed: _continue,
       ),
     );
   }

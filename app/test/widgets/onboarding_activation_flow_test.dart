@@ -66,6 +66,7 @@ void main() {
     Completer<void>? paywall,
     _FakeCapture Function()? capture,
     Future<bool> Function()? requestMicrophone,
+    Future<bool> Function()? finish,
   }) async {
     final captures = <_FakeCapture>[];
     _FakeCapture next() {
@@ -99,7 +100,10 @@ void main() {
               events.add('paywall');
               return paywall?.future ?? Future.value();
             },
-            onFinished: () => events.add('finished'),
+            onFinished: () async {
+              events.add('finished');
+              return finish == null ? true : await finish();
+            },
           ),
         ),
       ),
@@ -178,7 +182,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(run.events, ['review']);
     await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50)); // The cue runs once the tap is handled.
     expect(run.events, ['review', 'paywall', 'finished'], reason: 'the closed pop-up leads to the paywall');
   });
 
@@ -275,8 +279,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('when nothing is heard for a while, Continue appears; late words bring the check back',
-      (tester) async {
+  testWidgets('when nothing is heard for a while, Continue appears; late words bring the check back', (tester) async {
     final run = await pump(tester);
     await tester.pump(const Duration(seconds: 4));
     expect(find.byKey(const Key('activation_continue_dictation')), findsNothing);
@@ -287,5 +290,21 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('activation_continue_dictation')), findsNothing);
     expect(find.byKey(const Key('activation_dictation_done')), findsOneWidget);
+  });
+
+  testWidgets('a failed final save keeps Continue working; the paywall is not shown twice', (tester) async {
+    var attempts = 0;
+    final run = await pump(tester, finish: () async => ++attempts > 1);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.tap(find.text('Skip'));
+    await tester.pump(const Duration(seconds: 5));
+    await tapKey(tester, 'activation_continue_congrats');
+    await tester.pump(const Duration(seconds: 2));
+
+    await tapKey(tester, 'activation_continue_rating');
+    expect(run.events, ['review', 'paywall', 'finished'], reason: 'first save fails');
+    await tapKey(tester, 'activation_continue_rating');
+    expect(run.events, ['review', 'paywall', 'finished', 'finished'], reason: 'retried without a second paywall');
+    expect(attempts, 2);
   });
 }
