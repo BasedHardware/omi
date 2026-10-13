@@ -30,6 +30,10 @@ DECLARED_SPARSE = {
     'omi_live_stt_accepted_total': 'Provider/platform/environment children appear only on accepted STT traffic.',
     'omi_live_stt_terminal_total': 'Provider/outcome/phase children appear only at live-STT termination.',
     'omi_listen_accepted_total': 'Source/platform children appear only when a listen session is accepted.',
+    'omi_client_journey_terminal_total': (
+        'Client journey children are traffic-created to bound cardinality. Journey SLOs zero-fill only the '
+        'bad numerator against an observed valid denominator; absence is owned by scrape/signal health.'
+    ),
 }
 
 

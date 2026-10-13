@@ -758,9 +758,10 @@ specifically for failures that stay green on every other signal, and are documen
 Thresholds on these rules are set from measured production distributions, not intuition, and the
 measurement belongs in the rule's `threshold` annotation and in the runbook.
 
-A rule must not be added for a signal that is not yet ingested. `omi-journey-signal-dead` excludes
-`journey="chat_response"` because that counter is emitted from Cloud Run, which Prometheus does not
-scrape; adding it before an ingestion path exists would page permanently and get muted.
+A rule must not be added for a signal that is not yet ingested. The Cloud Run bridge now ingests
+`journey="chat_response"`; `omi-journey-signal-dead` covers it with a chat-agent traffic gate.
+[Proposed journey SLOs](./SLOS.md) record measured ingestion, targets and backtests; sync/upload
+remains withheld until a valid terminal-outcome pair is ingested.
 
 Parakeet stream-capacity alerts use the existing `parakeet_active_streams` gauge divided by ready Parakeet replicas:
 

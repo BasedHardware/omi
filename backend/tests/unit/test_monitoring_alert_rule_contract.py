@@ -588,6 +588,9 @@ def test_every_alerted_journey_is_covered_by_the_liveness_rule():
     """
     for export_name, rules in _all_rule_exports().items():
         liveness = rules[SIGNAL_DEAD_RULE]["data"][0]["model"]["expr"]
+        # Client live delivery has a distinct, traffic-gated counter-silence
+        # warning. Do not weaken coverage or mutate the existing generic rule.
+        liveness += " " + rules["omi-slo-live-signal-dead"]["data"][0]["model"]["expr"]
         covered = set(JOURNEY_SELECTOR.findall(liveness))
         covered |= (
             set(re.findall(r'journey=~"([a-z_|]+)"', liveness)[0].split("|"))
