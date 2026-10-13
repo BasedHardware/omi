@@ -1242,7 +1242,7 @@ def _merge_segments(
     return segments
 
 
-def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
+def _segments_as_objects(segments: List[Dict[str, Any]], stt_provider: Optional[str] = None) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
@@ -1250,6 +1250,7 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
         TranscriptSegment(
             text=normalize_brand_terms(str(segment['text']).strip().capitalize()),
             speaker=segment['speaker'],
+            stt_provider=stt_provider,
             is_user=segment['is_user'],
             person_id=None,
             start=round(segment['start'] - starts_at, 2),
@@ -1260,10 +1261,10 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
 
 
 def postprocess_words(
-    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0, *, stt_provider: Optional[str] = None
 ) -> List[TranscriptSegment]:
     cleaned_words = _words_cleaning(words)
     user_speaker_id = _retrieve_user_speaker_id(cleaned_words, skip_n_seconds)
     segments = _merge_segments(cleaned_words, skip_n_seconds, user_speaker_id)
-    segments_objs = _segments_as_objects(segments)
+    segments_objs = _segments_as_objects(segments, stt_provider=stt_provider)
     return segments_objs

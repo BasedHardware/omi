@@ -35,6 +35,7 @@ from database.audio_timeline import (
     span_blob_metadata,
     strip_extension as _strip_extension,
 )
+from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.observability.fallback import record_fallback
 from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
 from utils.other.deferred_delete import DeferredDeleter
@@ -1018,6 +1019,12 @@ def download_and_decode_chunk_blob(
         return None
 
 
+def download_audio_chunk_pcm(uid: str, path: str, sample_rate: int = 16000) -> bytes | None:
+    """Bounded read of a single stored chunk for server coverage probes."""
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return download_and_decode_chunk_blob(bucket, path, uid, sample_rate, download_kwargs={'timeout': 5, 'retry': None})
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -1195,7 +1202,7 @@ def download_audio_chunks_and_merge(
                     merged_data.extend(bytes(gap_samples * 2))
             merged_data.extend(pcm_data)
             cursor = start + len(pcm_data) / (sample_rate * 2)
-    elif fill_gaps and timestamps and chunk_results:
+    elif timestamps and chunk_results and (fill_gaps or sync_safety_wal_enabled()):
         # Sort timestamps to ensure proper ordering
         sorted_timestamps = sorted(timestamps)
         first_timestamp = sorted_timestamps[0]
@@ -1209,19 +1216,27 @@ def download_audio_chunks_and_merge(
 
             # Calculate gap from current position to this chunk's start
             gap_seconds = timestamp - current_time
-            if gap_seconds > 0:
+            if gap_seconds > 0 and fill_gaps:
                 # Insert silence: 16-bit mono = 2 bytes per sample
                 gap_samples = int(gap_seconds * sample_rate)
                 silence_bytes = bytes(gap_samples * 2)  # Zero bytes for silence
                 merged_data.extend(silence_bytes)
                 logger.debug(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
 
+            chunk_duration = len(pcm_data) / (sample_rate * 2)
+            if gap_seconds < 0 and sync_safety_wal_enabled():
+                # Preserve the union of coverage, including fully nested chunks.
+                trim_samples = min(len(pcm_data) // 2, round(-gap_seconds * sample_rate))
+                pcm_data = pcm_data[trim_samples * 2 :]
             merged_data.extend(pcm_data)
 
             # Update current time based on chunk duration
             # PCM16 mono: 2 bytes per sample
-            chunk_duration = len(pcm_data) / (sample_rate * 2)
-            current_time = timestamp + chunk_duration
+            current_time = (
+                max(current_time, timestamp + chunk_duration)
+                if sync_safety_wal_enabled()
+                else timestamp + chunk_duration
+            )
     else:
         # Original behavior - just concatenate without gap filling
         for timestamp in timestamps:

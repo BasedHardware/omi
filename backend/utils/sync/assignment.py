@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_live_dedupe import sync_live_dedupe_active_for
+from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
@@ -449,8 +450,10 @@ def assign_in_transaction(
             segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
         indexed_new = list(zip(segment_indices, new))
         live_row = next((row for row in records if row['id'] == canonical), None)
+        fleet_live_dedupe = bool(result['sync_live_target'] and sync_safety_wal_enabled())
         live_dedupe = bool(
-            plan_target is not None
+            not fleet_live_dedupe
+            and plan_target is not None
             and canonical == plan_target_id
             and live_row is not None
             and result['sync_live_target']
@@ -495,8 +498,15 @@ def assign_in_transaction(
                 origin,
                 existing,
                 new,
+                fuzzy_live_overlap=fleet_live_dedupe,
                 text_match_slop_seconds=(
-                    600 if plan_target and (smart_live_target or not plan_target.get('sync_content_revision')) else 0
+                    60
+                    if fleet_live_dedupe
+                    else (
+                        600
+                        if plan_target and (smart_live_target or not plan_target.get('sync_content_revision'))
+                        else 0
+                    )
                 ),
                 # A bound safety WAL can mix one duplicate with genuinely new speech.
                 # Near-exact text, duration, and time are enough to drop that one line;

@@ -108,3 +108,35 @@ bridge's redirect tombstone remains available to owner detail reads and manual
 speaker assignment: the assignment transaction follows the survivor chain and
 maps the donor's selected speaker number through stable segment IDs so it never
 labels a different survivor voice.
+
+## Fleet safety-WAL dual-write suppression
+
+`SYNC_SAFETY_WAL_DEDUPE_ENABLED` is on in dev/prod runtime config for Cloud Run
+backend, backend-sync, backend-sync-backfill and backend-integration; code defaults
+off. No UID allowlist or S1 claim is required. Set it to `false` on all four
+services and deploy their updated runtime env to disable coverage cuts, fuzzy
+transcript drops and legacy playback overlap trimming. Provider stamps remain.
+
+Before VAD/STT, a bounded stored-audio energy probe must establish a unique clock
+offset (at most 90 seconds). Coverage uses spans or decoded chunk durations, unions
+adjacent intervals, and retains one-second margins. Missing/ambiguous fingerprints,
+unsupported WAVs and lookup failures retain the original WAL. Genuine uncovered
+gaps remain separate WAVs; corrected timestamps survive VAD and audio storage.
+Existing S1-mapped paths retain their frame-based handling. Compatible temporal
+candidates may supply coverage evidence, but this does not change assignment:
+timestamp hints still cannot adopt live rows.
+
+Live-target transcript dedupe compares normalized token sequences/sets at 0.8,
+requires at least five tokens on each side and keeps 60-second slop after every
+revision. Two consistent text matches can estimate skew when the audio probe
+abstains. Legacy playback trims overlapping heads, including nested chunks.
+
+Observe `sync_safety_wal_seconds_skipped_total`,
+`sync_safety_wal_segments_deduped_total`, `sync_safety_wal_audio_bytes_not_stored_total`
+(by reason) and `event=sync_safety_wal_coverage` per job. Audio byte counters measure
+suppressed decoded PCM bytes, not final Opus billing. Deploy through the existing
+release workflow; verify genuine-gap recovery and dedupe rates before extending
+rollout. Risks: short/noisy probes abstain; repeated similar long utterances may
+fuzzy-match within slop. No historical transcript rewrite. Client 30-second edge
+suppression remains separate. PR #20688 touches VAD/cleanup hunks in `pipeline.py`;
+#21362 touches client WAL recovery, outside these server changes.

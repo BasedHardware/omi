@@ -9,6 +9,10 @@ Text+slop is batch-gated and length-gated so short repeated phrases ("yeah",
 
 from __future__ import annotations
 
+import re
+from difflib import SequenceMatcher
+from statistics import median
+
 _MERGE_TEXT_DUP_SLOP_SECONDS = 10 * 60
 _MERGE_TEXT_DUP_DURATION_RATIO = 0.25
 # Short backchannels are common twice in one conversation; never text-dedupe them.
@@ -55,6 +59,55 @@ def _is_text_clock_offset_duplicate(
     return False
 
 
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+", text.lower(), flags=re.UNICODE)
+
+
+def fuzzy_live_match(left: str, right: str) -> bool:
+    """Cross-provider wording, with a five-token floor on both sides."""
+    a, b = _tokens(left), _tokens(right)
+    if min(len(a), len(b)) < 5:
+        return False
+    aset, bset = set(a), set(b)
+    token_ratio = 2 * len(aset & bset) / (len(aset) + len(bset))
+    return max(token_ratio, SequenceMatcher(None, a, b, autojunk=False).ratio()) >= 0.8
+
+
+def _fuzzy_survivors(existing: list[dict], incoming: list, slop: float, offset: float | None) -> list:
+    # Consistent independent lines can estimate the offset when the audio probe
+    # abstained. Never derive it from timestamps alone or one repeated phrase.
+    matches = []
+    matched_live = set()
+    for segment in incoming:
+        start = float(segment['timestamp'])
+        candidates = [
+            item
+            for item in existing
+            if abs(start - item['abs_start']) <= 90 and fuzzy_live_match(segment.get('text', ''), item['text'])
+        ]
+        if candidates:
+            closest = min(candidates, key=lambda item: abs(start - item['abs_start']))
+            if id(closest) not in matched_live:
+                matches.append(closest['abs_start'] - start)
+                matched_live.add(id(closest))
+    if offset is None:
+        center = median(matches) if len(matches) >= 2 else 0.0
+        offset = (
+            center
+            if len(matches) >= 2 and sum(abs(value - center) <= 2 for value in matches) >= max(2, len(matches) * 0.8)
+            else 0.0
+        )
+    return [
+        segment
+        for segment in incoming
+        if not any(
+            abs(float(segment['timestamp']) + offset - item['abs_start']) <= slop
+            and fuzzy_live_match(segment.get('text', ''), item['text'])
+            for item in existing
+        )
+    ]
+
+
 def dedupe_segments_for_merge(
     conversation_started_at: float,
     existing_segments: list,
@@ -63,6 +116,8 @@ def dedupe_segments_for_merge(
     text_match_slop_seconds: float = _MERGE_TEXT_DUP_SLOP_SECONDS,
     duration_ratio_slop: float = _MERGE_TEXT_DUP_DURATION_RATIO,
     single_match_slop_seconds: float = 0,
+    fuzzy_live_overlap: bool = False,
+    estimated_offset_seconds: float | None = None,
 ) -> list:
     """Return incoming segments that are not already represented on the conversation.
 
@@ -112,6 +167,22 @@ def dedupe_segments_for_merge(
 
     if not survivors or not existing_text_index:
         return survivors
+
+    if fuzzy_live_overlap:
+        # Batch and streaming engines split the same speech at different words.
+        # Compare short contiguous live windows as well as individual segments;
+        # never concatenate across a real pause.
+        ordered = sorted(existing_text_index, key=lambda item: item['abs_start'])
+        windows = list(ordered)
+        for index, first in enumerate(ordered):
+            text, end = first['text'], first['abs_start'] + first['duration']
+            for following in ordered[index + 1 : index + 3]:
+                if following['abs_start'] - end > 15:
+                    break
+                text += ' ' + following['text']
+                end = max(end, following['abs_start'] + following['duration'])
+                windows.append(dict(text=text, abs_start=first['abs_start'], duration=end - first['abs_start']))
+        return _fuzzy_survivors(windows, survivors, max(60.0, text_match_slop_seconds), estimated_offset_seconds)
 
     text_dup_flags = []
     close_dup_flags = []

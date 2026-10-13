@@ -541,6 +541,7 @@ environment_shared:
           TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
           TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+          SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -709,6 +710,7 @@ environment_shared:
             value: 'true'
             category: rollout
           SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -865,6 +867,7 @@ environment_shared:
             value: 'true'
             category: rollout
           SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -1015,6 +1018,7 @@ environment_shared:
             value: 'true'
             category: rollout
           SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+          SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout

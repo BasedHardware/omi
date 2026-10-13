@@ -151,6 +151,7 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
+from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
 from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync import recording_lineage as sync_recording_lineage
 from utils.sync.recording_lineage import (
@@ -1320,6 +1321,8 @@ def process_segment(
             language = user_language if (single_language_mode and user_language) else detected_language
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
+            for segment in transcript_segments:
+                segment.stt_provider = model
             if transcript_segments:
                 if empty_retried:
                     _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
@@ -1420,6 +1423,16 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
+        from config.sync_safety_wal import sync_safety_wal_enabled
+        from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
+
+        if sync_safety_wal_enabled() and assigned.get('sync_live_target'):
+            removed = len(transcript_segments) - len(survivors)
+            SEGMENTS_DEDUPED.labels(reason='live_overlap').inc(removed)
+            if removed and audio_bytes and private_cloud_sync_enabled:
+                AUDIO_BYTES_NOT_STORED.labels(reason='transcript_overlap').inc(
+                    suppressed_pcm_bytes(audio_bytes, survivors)
+                )
         if recovered_via_retry:
             # The 'recovered' event fires at the provider boundary; this one
             # confirms the recovered segment actually persisted. Measured
@@ -2067,6 +2080,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
+        safety_coverage_paths = set()
         coverage_suppressed_all = False
         wav_paths = []
         decoded_frames: dict[str, list[int]] = {}
@@ -2221,6 +2235,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         audio_start_seconds,
                         audio_end_seconds,
                     )
+            safety_coverage_paths.update(wav_paths)
+            wav_paths, safety_generated = await apply_safety_wal_coverage(
+                uid,
+                wav_paths,
+                target_conversation_id,
+                run_blocking=run_blocking,
+                db_executor=db_executor,
+                storage_executor=storage_executor,
+                job_ref=_bounded_correlation_ref(job_id),
+                protected_paths=source_frame_maps,
+                capture_partition={'source': source, 'client_device_id': client_device_id, 'is_locked': should_lock},
+            )
+            safety_coverage_paths.update(safety_generated)
+            coverage_suppressed_all = coverage_suppressed_all or not wav_paths
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -3048,6 +3076,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             set_byok_keys({})
             set_byok_uid(None)
             if not preserve_retry_material:
+                await run_blocking(storage_executor, _cleanup_files, list(safety_coverage_paths))
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 await run_blocking(storage_executor, _cleanup_files, wav_paths)
                 try:
