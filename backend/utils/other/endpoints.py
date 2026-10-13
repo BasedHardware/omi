@@ -257,6 +257,11 @@ def get_current_user_uid(
     # headers are present.
     validate_byok_request(uid)
 
+    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
+        from utils.locked_content_recovery import recover_locked_content
+
+        recover_locked_content(uid)
+
     return uid
 
 

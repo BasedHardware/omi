@@ -1444,13 +1444,22 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
 
 
 @_account_write_gated
-def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
     """
     database = _get_db(firestore_client)
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
+
+    if limit is not None and not 1 <= limit <= 499:
+        raise ValueError('unlock limit must be between 1 and 499')
+
+    def locked_docs(ref: Any, field: str) -> Any:
+        query = ref.where(filter=FieldFilter(field, '==', True))
+        if limit is not None:
+            query = query.select([]).limit(limit)
+        return query.stream()
 
     def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
         batch = database.batch()
@@ -1469,11 +1478,11 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         return total
 
     legacy_count = commit_updates(
-        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+        locked_docs(legacy_ref, 'is_locked'),
         {'is_locked': False},
     )
     canonical_count = commit_updates(
-        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+        locked_docs(canonical_ref, 'promotion.is_locked'),
         {'promotion.is_locked': False},
     )
     logger.info(
@@ -1482,6 +1491,7 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         legacy_count,
         canonical_count,
     )
+    return legacy_count + canonical_count
 
 
 # **************************************

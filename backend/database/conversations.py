@@ -3601,19 +3601,25 @@ def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
     conversation_ref.update({'starred': starred})
 
 
-def unlock_all_conversations(uid: str):
+def unlock_all_conversations(uid: str, *, limit: Optional[int] = None) -> int:
     """
     Finds all conversations for a user with is_locked: True and updates them to is_locked = False.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
 
+    if limit is not None:
+        if not 1 <= limit <= 499:
+            raise ValueError('unlock limit must be between 1 and 499')
+        locked_conversations_query = locked_conversations_query.select([]).limit(limit)
     batch = db.batch()
     docs = locked_conversations_query.stream()
     count = 0
+    total = 0
     for doc in docs:
         batch.update(doc.reference, {'is_locked': False})
         count += 1
+        total += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
             invalidate_people_stats_cache(uid)
@@ -3622,7 +3628,11 @@ def unlock_all_conversations(uid: str):
     if count > 0:
         batch.commit()
         invalidate_people_stats_cache(uid)
+    if limit is not None:
+        # Retry also repairs invalidation after an ambiguous successful commit.
+        invalidate_people_stats_cache(uid)
     logger.info(f"Unlocked all conversations for user {uid}")
+    return total
 
 
 # ****************************************
