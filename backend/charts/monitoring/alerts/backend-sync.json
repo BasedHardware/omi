@@ -980,7 +980,7 @@
       "severity": "warning",
       "instatus_component": "speech-processing"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
