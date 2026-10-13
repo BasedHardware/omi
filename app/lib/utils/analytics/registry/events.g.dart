@@ -152,6 +152,36 @@ final class DeviceScanEmpty extends RegisteredEvent {
   Map<String, Object> get properties => {"after_seconds": afterSeconds};
 }
 
+enum DeviceConnectFailureShownFailureReason {
+  bluetoothOff("bluetooth_off"),
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied"),
+  locationPermissionMissing("location_permission_missing"),
+  notFoundOrDropped("not_found_or_dropped"),
+  staleBond("stale_bond"),
+  unknown("unknown");
+  const DeviceConnectFailureShownFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DeviceConnectFailureShownPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DeviceConnectFailureShownPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DeviceConnectFailureShown extends RegisteredEvent {
+  const DeviceConnectFailureShown({required this.failureReason, required this.platform});
+  final DeviceConnectFailureShownFailureReason failureReason;
+  final DeviceConnectFailureShownPlatform platform;
+  @override
+  String get wireName => "Device Connect Failure Shown";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
 enum DeviceConnectFailedErrorClass {
   timeout("timeout"),
   bluetoothOff("bluetooth_off"),

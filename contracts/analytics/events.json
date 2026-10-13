@@ -184,6 +184,42 @@
       "correlation": null
     },
     {
+      "id": "deviceConnectFailureShown",
+      "wire_name": "Device Connect Failure Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "failureReason": {
+          "type": "enum",
+          "wire_name": "failure_reason",
+          "values": [
+            "bluetooth_off",
+            "bluetooth_permission_denied",
+            "nearby_devices_denied",
+            "location_permission_missing",
+            "not_found_or_dropped",
+            "stale_bond",
+            "unknown"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "deviceConnectFailed",
       "wire_name": "Device Connect Failed",
       "status": "active",
