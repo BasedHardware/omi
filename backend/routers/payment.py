@@ -24,6 +24,7 @@ from utils.subscription_state_machine import (
     ResolvedStripeEvent,
     transition,
 )
+from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
@@ -952,7 +953,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
             )
             if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
-                # If user already has a Stripe subscription, verify it's not the same one
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
@@ -971,7 +971,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         )
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
-            if persisted is False:
+            if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)

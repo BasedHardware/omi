@@ -359,3 +359,50 @@ def test_failed_newer_claim_does_not_advance_success_order():
     ledger.claim_event(new, 'new', now=NOW, client=db)
     ledger.finish_event(new, 'new', succeeded=False, now=NOW, client=db)
     assert ledger.claim_event(event('evt-old', 100), 'old', now=NOW, client=db).out_of_order is False
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_unresolved_checkout_retains_legacy_cache_effects_when_gate_off(lane, monkeypatch, enabled):
+    import stripe
+
+    db = StrictFirestore()
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setattr(ledger, '_client', lambda client: db)
+    lane.stripe_obj = lifecycle_event('customer.subscription.updated', 'active')['data']['object']
+    lane.stripe_obj['items']['data'][0]['price']['id'] = 'price_unknown'
+    lane.event = event(kind='checkout.session.completed')
+    lane.event['data']['object'] = stripe.checkout.Session.construct_from(
+        {
+            'id': 'cs-fixture',
+            'client_reference_id': 'fixture-user',
+            'metadata': {},
+            'customer': 'cus-fixture',
+            'subscription': 'sub-current',
+        },
+        'fixture',
+    )
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert lane.current is None
+    assert [name for name, _ in lane.calls] == (['customer'] if enabled else ['customer', 'credits', 'trial_cache'])
+    if enabled:
+        assert receipt(db)['outcome'] == 'failed'
+    else:
+        assert db.rows == {}
+
+
+def test_invalid_signature_real_sdk_parser_precedes_ledger(monkeypatch):
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true')
+    monkeypatch.setattr(payment.stripe_utils, 'endpoint_secret', 'whsec_offline_fixture')
+
+    async def forbidden(*args):
+        pytest.fail('invalid signature entered billing dispatch')
+
+    monkeypatch.setattr(payment, 'dispatch_with_ledger', forbidden)
+
+    class Request:
+        async def body(self):
+            return b'{}'
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(payment.stripe_webhook(Request(), 't=100,v1=deadbeef'))
+    assert error.value.status_code == 400
