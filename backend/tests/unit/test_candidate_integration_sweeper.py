@@ -670,7 +670,7 @@ def test_scheduler_job_exists_only_for_prod():
     job = next(item for item in jobs if item['name'] == 'candidate-integration-sweep')
     sequencer = next(item for item in jobs if item['name'] == 'sync-backfill-uid-sequencer')
     host = 'https://backend-sync-hhibjajaja-uc.a.run.app'
-    assert job['lifecycle'] == 'planned'
+    assert 'lifecycle' not in job  # active: backend-sync serves the route since 7741a1a
     assert job['schedule'] == '*/15 * * * *'
     assert job['attempt_deadline'] == '120s'
     assert job['state'] == 'ENABLED'
